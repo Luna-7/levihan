@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-parchment: #FBF7EC;
+    --bg-card: #FFFBF0;
+    --ink-dark: #22372B;
+    --ink-brown: #4A3A2C;
+    --border-green: #1B4332;
+    --border-gold: #C29641;
+    --pixel-purple: #6A4C93;
+    --gold-accent: #E5A93C;
+  }
+}
+
+.font-pixel {
+  font-family: 'Press Start 2P', 'DotGothic16', monospace;
+}
+
+.font-retro-jp {
+  font-family: 'DotGothic16', 'Noto Sans SC', monospace, sans-serif;
+}
+
+.font-vt {
+  font-family: 'VT323', monospace;
+}
+
+/* 8-bit crisp pixel rendering */
+.pixel-art {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Retro pixel box shadow */
+.pixel-box {
+  box-shadow: 
+    -3px 0 0 0 var(--border-green),
+    3px 0 0 0 var(--border-green),
+    0 -3px 0 0 var(--border-green),
+    0 3px 0 0 var(--border-green);
+}
+
+.pixel-box-sm {
+  box-shadow: 
+    -2px 0 0 0 #2D2319,
+    2px 0 0 0 #2D2319,
+    0 -2px 0 0 #2D2319,
+    0 2px 0 0 #2D2319;
+}
+
+.pixel-box-purple {
+  box-shadow: 
+    -2px 0 0 0 #4C356F,
+    2px 0 0 0 #4C356F,
+    0 -2px 0 0 #4C356F,
+    0 2px 0 0 #4C356F;
+}
+
+.pixel-box-gold {
+  box-shadow: 
+    -2px 0 0 0 #A8761E,
+    2px 0 0 0 #A8761E,
+    0 -2px 0 0 #A8761E,
+    0 2px 0 0 #A8761E;
+}
+
+/* Stitched dashed border effect */
+.border-stitched {
+  border: 3px solid #1B4332;
+  outline: 2px dashed #C8A359;
+  outline-offset: -7px;
+}
+
+/* Ruled paper background for Today's Log */
+.paper-ruled {
+  background-color: #FAF5E8;
+  background-image: repeating-linear-gradient(
+    transparent,
+    transparent 27px,
+    #E4D9C3 27px,
+    #E4D9C3 28px
+  );
+  line-height: 28px;
+}
+
+/* Custom scrollbar matching retro parchment style */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #EFE8D6;
+  border: 1px solid #D5C9AF;
+}
+::-webkit-scrollbar-thumb {
+  background: #2D4C3A;
+  border: 2px solid #EFE8D6;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #E5A93C;
+}

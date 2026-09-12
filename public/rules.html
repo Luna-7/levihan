@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>群规则（8.1修改版） · 利韩の手帐本</title>
+<style>
+:root{
+  --paper:#FBF3E8; --paper-2:#F6E9D8; --ink:#5B4636; --ink-2:#8C7661;
+  --ink-3:#B4A288; --line:#D9C4A8; --tape:#E9D8C3; --warn:#C8604F;
+  --shadow:0 3px 0 rgba(140,118,97,.16),0 6px 14px rgba(140,118,97,.12);
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0;background:var(--paper);
+  background-image:radial-gradient(var(--line) 1.1px, transparent 1.1px);
+  background-size:22px 22px;color:var(--ink);
+  font-family:"Comic Sans MS","Chalkboard SE","Comic Neue","Yuanti SC","Hiragino Maru Gothic ProN","PingFang SC",system-ui,sans-serif;
+  font-size:15px;line-height:1.9;-webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:900px;margin:0 auto;padding:40px 20px 110px;}
+.sheet{
+  background:var(--paper-2);border:3px solid var(--ink);
+  border-radius:22px 20px 24px 18px;box-shadow:var(--shadow);
+  padding:44px 46px 46px;position:relative;
+}
+.sheet::before{
+  content:attr(data-tape);position:absolute;top:-13px;left:50%;
+  transform:translateX(-50%) rotate(-2deg);
+  background:var(--tape);color:var(--ink-2);font-size:11px;letter-spacing:.35em;
+  padding:3px 22px;border:1px dashed rgba(140,118,97,.45);
+  white-space:nowrap;box-shadow:var(--shadow);
+}
+.stamp{
+  position:absolute;top:20px;right:26px;width:76px;height:76px;
+  border:3px solid var(--warn);color:var(--warn);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  font-size:12px;line-height:1.05;font-weight:bold;letter-spacing:.04em;
+  transform:rotate(11deg);opacity:.78;
+  box-shadow:inset 0 0 0 2px rgba(200,96,79,.35);
+}
+
+.doc-toc{
+  background:#FFF6E6;border:2px dashed var(--line);border-radius:12px;
+  padding:16px 20px;margin:6px 0 30px;
+}
+.doc-toc .tt{font-size:12px;letter-spacing:.3em;color:var(--ink-2);margin:0 0 10px;}
+.doc-toc ol{margin:0;padding-left:22px;}
+.doc-toc li{margin:4px 0;}
+.doc-toc a{color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--ink-3);}
+.doc-toc a:hover{color:#9a4034;border-bottom-color:#9a4034;}
+
+.doc h1,.doc-head h1{
+  font-size:31px;line-height:1.25;margin:0 0 22px;padding-bottom:16px;
+  border-bottom:3px dashed var(--line);
+}
+.doc h2{
+  font-size:22px;line-height:1.35;margin:38px 0 14px;padding-left:13px;
+  border-left:6px solid var(--ink);scroll-margin-top:20px;
+}
+.doc h3{font-size:18px;margin:28px 0 10px;color:#4a382a;scroll-margin-top:20px;}
+.doc h4{font-size:16px;margin:22px 0 8px;color:var(--ink-2);scroll-margin-top:20px;}
+.doc p{margin:0 0 15px;}
+.doc strong{color:#453425;}
+.doc em{color:var(--ink-2);}
+.doc a{color:#9a4034;text-decoration:underline;text-underline-offset:2px;}
+.doc ul,.doc ol{margin:0 0 16px;padding-left:28px;}
+.doc li{margin:5px 0;}
+.tbl-wrap{overflow-x:auto;margin:18px 0;padding-bottom:4px;}
+.doc table{border-collapse:collapse;width:100%!important;margin:0;font-size:13.5px;line-height:1.65;}
+.doc th,.doc td{border:1.5px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top;}
+.doc th{background:var(--tape);color:var(--ink);font-weight:bold;white-space:nowrap;}
+.doc tr:nth-child(even) td{background:rgba(255,255,255,.5);}
+.doc hr{border:0;border-top:2px dashed var(--line);margin:28px 0;}
+
+.totop{
+  position:fixed;right:22px;bottom:26px;z-index:20;
+  font-size:13px;padding:10px 16px;border:2px solid var(--ink);
+  background:var(--paper);color:var(--ink);border-radius:999px;
+  text-decoration:none;box-shadow:var(--shadow);
+}
+.totop:hover{background:#fff;}
+footer{margin-top:30px;text-align:center;color:var(--ink-3);font-size:12px;line-height:1.9;}
+footer a{color:var(--ink-2);text-decoration:underline;text-underline-offset:2px;}
+
+@media(max-width:680px){
+  .wrap{padding:26px 12px 90px;}
+  .sheet{padding:30px 20px 34px;border-radius:18px;}
+  .doc h1{font-size:24px;}
+  .stamp{width:60px;height:60px;font-size:10px;top:14px;right:14px;}
+}
+</style>
+</head>
+<body id="top">
+<div class="wrap">
+  <div class="sheet" data-tape="利韩土豆社群 · 群规">
+    <div class="stamp">群<br>规</div>
+    <header class="doc-head"><h1 id="群规则8.1修改版">群规则（8.1修改版）</h1></header>
+    <div class="doc-toc">
+      <p class="tt">目 录</p>
+      <ol>
+      <li><a href="#一绝对铁律红线">一、绝对铁律（红线）</a></li>
+      <li><a href="#二群友自治原则">二、群友自治原则</a></li>
+      <li><a href="#三群内治理权执行底线与补充">三、群内治理权执行底线与补充</a></li>
+      <li><a href="#四群资源与文件管理">四、群资源与文件管理</a></li>
+      <li><a href="#五外部社区宣传管理">五、外部社区宣传管理</a></li>
+      <li><a href="#六管理员角色说明">六、管理员角色说明</a></li>
+      <li><a href="#七规则维护管理员配置">七、规则维护管理员配置</a></li>
+      <li><a href="#八沉睡成员清理机制">八、沉睡成员清理机制</a></li>
+    </ol>
+    </div>
+    <article class="doc">
+      <p>利韩土豆社群 · 管理组制定</p>
+      <p>本群以 💚💜<strong>利威尔 × 韩吉</strong> 为唯一不可动摇的创作与讨论核心。</p>
+      <p>在这里，你可以——</p>
+      <p>干饭：分享利韩粮仓，互相投喂同人图文；</p>
+      <p>唠嗑：聊原作剧情、角色解读、日常碎碎念；</p>
+      <p>躺平：享受一个和平、温暖、互不冒犯的磕CP乌托邦。</p>
+      <p>群不关注外部社区的纷争与风向，不参与任何跨圈对立，不将外部恩怨带入本群。这里只属于利韩，只属于同好之间的善意。</p>
+      <p>本群不接受任何以私人价值观进行的道德绑架，没有人应该被“磕CP就该怎样”或<strong>“利韩群应该怎样”</strong>的个人喜好审判与定义，遇到不喜欢的话题、人，可暂时潜水或群内屏蔽特定人。</p>
+      <p>你喜欢你的，我热爱我的，彼此尊重即是最好的同好关系。</p>
+
+      <h2 id="一绝对铁律红线">一、绝对铁律（红线）</h2>
+      <p>🚫 禁止讨论：利韩除外利、韩与其他任何角色的CP搭配、水仙</p>
+      <p>🚫 禁止对其他CP粉丝群体的评价与避雷，包括但不限于讨论针对其他CP的避雷挂人、贬低、或引述外部冲突。</p>
+      <p>🚫 逆位 R18 禁止（含性转/百合等明确逆位内容）。</p>
+      <p>🚫 严禁将群内汉化资源外传至其他平台或进行商业贩卖。</p>
+
+      <h2 id="二群友自治原则">二、群友自治原则</h2>
+      <p>除上述红线外，其余一切均属个人喜好与价值观范畴（如原作剧情解读、创作偏好等）。涉及特定偏好（如特定伦理、重口、性转、微逆位等）的内容，须在开头标注明确预警（如 [预警: 性转]），图片须使用文件/折叠形式发送。</p>
+
+      <h2 id="三群内治理权执行底线与补充">三、群内治理权执行底线与补充</h2>
+      <p>1. 严禁争论升级至人身攻击。意见不合请各退一步，管理员将优先处理将争吵升级的一方。</p>
+      <p>2. 同一争议话题连续讨论不得超过10条消息，请私聊解决。</p>
+
+      <h2 id="四群资源与文件管理">四、群资源与文件管理</h2>
+      <p>1. 严禁上传未经授权的外部汉化文件；群文件按统一格式命名。</p>
+      <p>2. 禁止在群内发布或分享AI生成图文/视频。</p>
+
+      <h2 id="五外部社区宣传管理">五、外部社区宣传管理</h2>
+      <p>外部反黑、澄清、维权、宣传信息严禁私自发群。必须先私聊管理员审核，审核通过后以群公告形式统一发布。同一事件仅限发布一次公告，禁止二次转播。</p>
+
+      <h2 id="六管理员角色说明">六、管理员角色说明</h2>
+      <p>管理员均为兼职同好志愿者，非全天候监控。管理员日常发言代表个人，仅在明确履职时代表管理组。</p>
+
+      <h2 id="七规则维护管理员配置">七、规则维护管理员配置</h2>
+      <p>管理组长期招募规则维护管理员，有意向者可私聊联系群主。</p>
+
+      <h2 id="八沉睡成员清理机制">八、沉睡成员清理机制</h2>
+      <p>群满员时将启动沉睡清理。清理前连续7天发布唤醒公告，未发言者将被移出，随时欢迎重新加群。</p>
+    </article>
+  </div>
+</div>
+<a class="totop" href="#top">↑ 回到顶部</a>
+</body>
+</html>
