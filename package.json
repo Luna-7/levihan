@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "pages:build": "vite build"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1131.0",
@@ -21,8 +22,7 @@
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "react-pinch-zoom-pan": "^1.4.5",
-    "vite": "^6.2.3"
+    "react-pinch-zoom-pan": "^1.4.5"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
@@ -31,7 +31,7 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3",
-    "@types/express": "^4.17.21"
+    "@types/express": "^4.17.21",
+    "vite": "^6.2.3"
   }
 }

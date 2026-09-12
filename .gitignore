@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Cloudflare Wrangler
+.wrangler/
+wrangler.toml
+wrangler.jsonc
