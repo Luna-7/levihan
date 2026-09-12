@@ -8,7 +8,7 @@ import { GROUP_INFO, POTATO_EGG_QUOTES } from './data/initialData';
 import { soundManager } from './utils/audio';
 
 export default function App() {
-  // Navigation State: 'home' (群主页与群规) | 'resources' (公共资源库) | 'doujinshi' (同人本专区)
+  // Navigation State: 'home' (群主页与群规) | 'resources' (资源外链) | 'doujinshi' (土豆粮仓驻地)
   const [activeTab, setActiveTab] = useState<'home' | 'resources' | 'doujinshi'>('home');
   const [isSoundMuted, setIsSoundMuted] = useState<boolean>(soundManager.isMuted());
   const [chestOpened, setChestOpened] = useState<boolean>(false);
@@ -29,11 +29,11 @@ export default function App() {
       .join(' ');
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(groupText).then(
-        () => showToast(`已成功复制全部QQ群号！📋`),
-        () => showToast(`群号：${groupText}`)
+        () => showToast(`已复制全部QQ群号！📋`),
+        () => showToast(`QQ群：${groupText}`)
       );
     } else {
-      showToast(`群号：${groupText}`);
+      showToast(`QQ群：${groupText}`);
     }
   };
 
@@ -41,7 +41,7 @@ export default function App() {
     soundManager.playCoin();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(code).then(
-        () => showToast(`已成功复制提取码：${code} 📋`),
+        () => showToast(`已复制提取码：${code} 📋`),
         () => showToast(`提取码为：${code}`)
       );
     } else {
@@ -63,35 +63,10 @@ export default function App() {
   };
 
   return (
-    <main className="min-h-screen py-3 sm:py-6 px-2 sm:px-4 flex flex-col items-center justify-start bg-[#F4EEDC]">
-      {/* Top Notice Status Bar */}
-      <div className="w-full max-w-4xl flex items-center justify-between px-2 text-xs font-retro-jp text-[#7A6958] mb-1">
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full bg-[#27AE60] animate-pulse" />
-          <span className="font-bold text-[#1E4334]">利韩土豆群 · 调查兵团粮仓驻地</span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleCopyGroupNumber}
-            className="hover:text-[#1E4334] underline cursor-pointer"
-          >
-            QQ群: {GROUP_INFO.qqGroupNumber} 📋
-          </button>
-          <span className="text-[#D5C9AF]">|</span>
-          <span className="text-[#9A7D0A] font-pixel text-[11px]">
-            {activeTab === 'home'
-              ? '兵团驻地'
-              : activeTab === 'resources'
-              ? '公共资源库'
-              : '同人本专区'}
-          </span>
-        </div>
-      </div>
-
-      {/* Main Retro Stitched Pixel Frame */}
+    <main className="min-h-screen py-2 xs:py-4 sm:py-6 md:py-8 px-1.5 xs:px-2 sm:px-4 flex flex-col items-center justify-start bg-[#F4EEDC] transition-all duration-300">
+      {/* Main Retro Stitched Pixel Frame with Fluid Adaptive Padding & Border */}
       <RetroPixelFrame onOpenChest={handleOpenChest} chestOpened={chestOpened}>
-        {/* Header with Branding, Group Station info, and 3 Navigation Tabs */}
+        {/* Header is now the beautiful and unified green HeaderCard of 利韩土豆群 */}
         <HeaderCard
           activeTab={activeTab}
           onSelectTab={setActiveTab}
@@ -115,7 +90,7 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 2: 保留公共资源库 (动画Cut/官方资料/AO3/140+Pixiv画师) */}
+        {/* VIEW 2: 公共资源库 (动画Cut/官方资料/AO3/140+Pixiv画师) */}
         {activeTab === 'resources' && (
           <ResourceHub
             onCopyCode={handleCopyExtractionCode}

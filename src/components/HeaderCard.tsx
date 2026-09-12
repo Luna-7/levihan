@@ -15,11 +15,12 @@ export const HeaderCard: React.FC<Props> = ({
   onSelectTab,
   isSoundMuted,
   onToggleSound,
+  onCopyGroupNumber,
 }) => {
   return (
-    <header className="relative mb-3 space-y-2">
-      {/* Sleek Minimal Top Header Banner */}
-      <div className="bg-[#1E4334] text-[#FAF5E8] border-2 border-[#153025] rounded-md px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-xs relative overflow-hidden flex items-center justify-between">
+    <header className="relative mb-4 space-y-2.5 sm:space-y-3.5 transition-all duration-300">
+      {/* Sleek Minimal Top Header Banner - responsive padding and border */}
+      <div className="bg-[#1E4334] text-[#FAF5E8] border-2 sm:border-[3px] border-[#153025] rounded-md px-3 py-2.5 xs:px-4 xs:py-3.5 shadow-md relative overflow-hidden flex items-center justify-between gap-3 transition-all">
         {/* Background pixel star accent */}
         <div className="absolute top-2 left-6 opacity-20 pointer-events-none">
           <PixelStar size={14} />
@@ -28,43 +29,48 @@ export const HeaderCard: React.FC<Props> = ({
           <PixelStar size={12} />
         </div>
 
-        {/* Title */}
-        <div className="flex items-center gap-2 relative z-10">
-          <span className="text-2xl">🥔</span>
-          <div>
+        {/* Title and Badge Info */}
+        <div className="flex items-center gap-2 relative z-10 min-w-0">
+          <span className="text-xl sm:text-2xl shrink-0">🥔</span>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="font-pixel text-lg sm:text-2xl text-[#F9E79F] tracking-wide font-black">
+              <h1 className="font-pixel text-sm xs:text-base sm:text-xl md:text-2xl text-[#F9E79F] tracking-wide font-black truncate">
                 利韩土豆群
               </h1>
-              <span className="hidden sm:inline-block">
-                <PixelPotion size={18} />
+              <span className="hidden xs:inline-block shrink-0">
+                <PixelPotion size={16} />
               </span>
             </div>
-            <div className="font-pixel text-[11px] text-[#D5F5E3] tracking-wider">
-              LEVI × HANGE · 同好交流 & 资源归档站
+            <div className="flex flex-col mt-1 sm:mt-1.5">
+              <span className="font-pixel text-[9px] xs:text-[10px] sm:text-[11px] text-[#F9E79F] tracking-wider font-bold">
+                LEVI × HANGE
+              </span>
+              <span className="font-retro-jp text-[8px] xs:text-[9px] sm:text-[10px] text-[#D5F5E3] tracking-wider mt-0.5">
+                同好交流 & 资源站
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Sound Toggle */}
+        {/* Sound Toggle - Styled to blend in perfectly with the bg-[#1E4334] background */}
         <button
           onClick={onToggleSound}
-          className="text-xs px-2 py-1 rounded-xs bg-[#FAF5E8] hover:bg-[#EAE2CE] text-[#1E3A2B] font-retro-jp border border-[#153025] cursor-pointer shadow-2xs flex items-center gap-1 shrink-0"
+          className="text-xs px-2 py-1 rounded-xs bg-[#1E4334] text-[#1E4334] border border-[#1E4334] cursor-pointer flex items-center gap-1 shrink-0 select-none transition-colors"
           title={isSoundMuted ? '开启音效' : '静音'}
         >
           <span>{isSoundMuted ? '🔇' : '🔊'}</span>
-          <span className="hidden sm:inline text-[11px]">{isSoundMuted ? '静音' : '音效'}</span>
+          <span className="hidden xs:inline text-[10px] sm:text-[11px] font-bold">{isSoundMuted ? '静音' : '音效'}</span>
         </button>
       </div>
 
-      {/* Navigation Tabs */}
-      <nav aria-label="主要导航" className="flex items-center justify-start gap-1.5">
+      {/* Navigation Tabs - responsive tab paddings, margins and gap sizes */}
+      <nav aria-label="主要导航" className="flex flex-wrap items-center justify-start gap-1.5 sm:gap-2">
         <button
           onClick={() => {
             soundManager.playBlip();
             onSelectTab('home');
           }}
-          className={`px-3 py-1 text-xs font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 ${
+          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 ${
             activeTab === 'home'
               ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-2xs'
               : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
@@ -79,14 +85,14 @@ export const HeaderCard: React.FC<Props> = ({
             soundManager.playBlip();
             onSelectTab('resources');
           }}
-          className={`px-3 py-1 text-xs font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 ${
+          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 ${
             activeTab === 'resources'
               ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-2xs'
               : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
           }`}
         >
           <span>📚</span>
-          <span>公共资源库</span>
+          <span>资源外链</span>
         </button>
 
         <button
@@ -94,14 +100,14 @@ export const HeaderCard: React.FC<Props> = ({
             soundManager.playBlip();
             onSelectTab('doujinshi');
           }}
-          className={`px-3 py-1 text-xs font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 ${
+          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 ${
             activeTab === 'doujinshi'
               ? 'bg-[#5B3F8A] text-[#F9E79F] border-[#5B3F8A] font-bold shadow-2xs'
               : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
           }`}
         >
           <span>🔒</span>
-          <span>同人本专区</span>
+          <span>土豆粮仓驻地</span>
         </button>
       </nav>
     </header>

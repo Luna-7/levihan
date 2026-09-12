@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ResourceLink, PixivArtist } from '../types';
 import { RESOURCE_LINKS, PIXIV_ARTISTS_DATA } from '../data/initialData';
 import { soundManager } from '../utils/audio';
+import { AuNovelReader } from './AuNovelReader';
 
 interface Props {
   onCopyCode: (code: string) => void;
@@ -35,10 +36,9 @@ export const ResourceHub: React.FC<Props> = ({
   onShowToast,
   onGoToDoujin,
 }) => {
-  const [activeTab, setActiveTab] = useState<'all' | 'anime' | 'creative' | 'manga' | 'ao3' | 'pixiv' | 'doujin'>('all');
+  const [activeTab, setActiveTab] = useState<'anime' | 'creative' | 'manga' | 'au-novel' | 'ao3' | 'pixiv' | 'doujin'>('anime');
   const [selectedArtists, setSelectedArtists] = useState<Set<string>>(new Set());
   const [visitedArtists, setVisitedArtists] = useState<Set<string>>(new Set());
-  const [pixivSearch, setPixivSearch] = useState('');
 
   // Load visited Pixiv artists from localStorage
   useEffect(() => {
@@ -80,10 +80,14 @@ export const ResourceHub: React.FC<Props> = ({
 
   const handleToggleArtist = (idOrUrl: string) => {
     soundManager.playBlip();
-    const next = new Set(selectedArtists);
+    const next = new Set<string>(selectedArtists);
     if (next.has(idOrUrl)) {
       next.delete(idOrUrl);
     } else {
+      if (next.size >= 5) {
+        onShowToast('⚠️ 一次最多只能选中 5 位画师哦，以保证浏览器能顺利一次性全部打开！🌸');
+        return;
+      }
       next.add(idOrUrl);
     }
     setSelectedArtists(next);
@@ -91,58 +95,47 @@ export const ResourceHub: React.FC<Props> = ({
 
   const handleOpenSelected = () => {
     if (selectedArtists.size === 0) {
-      onShowToast('先点击画师卡片多选几个吧～');
+      onShowToast('请先选择 1-5 位画师卡片 🎨');
       return;
     }
+    
+    soundManager.playCoin();
     let opened = 0;
     const nextVisited = new Set<string>(visitedArtists);
 
     PIXIV_ARTISTS_DATA.forEach((a) => {
       const key = a.id || a.url;
       if (selectedArtists.has(key) && a.url) {
-        const w = window.open(a.url, '_blank');
-        if (w) {
-          opened++;
-          nextVisited.add(key);
-          try {
-            w.opener = null;
-          } catch {
-            // ignore
-          }
-        }
+        window.open(a.url, '_blank');
+        nextVisited.add(key);
+        opened++;
       }
     });
 
     saveVisited(nextVisited);
     setSelectedArtists(new Set<string>());
-    soundManager.playCoin();
-    if (opened) {
-      onShowToast(`已批量打开 ${opened} 位画师主页，并标记为已读！`);
-    } else {
-      onShowToast('弹出窗口被浏览器拦截，请在地址栏允许弹出窗口后重试');
+    
+    if (opened > 0) {
+      onShowToast(`🚀 已执行打开 ${opened} 位画师！若只弹出一个，请点击地址栏右侧“始终允许本站弹出窗口” 🔓`);
     }
   };
 
-  const handleSelectAllPixiv = () => {
+  const handleClearSelection = () => {
     soundManager.playBlip();
-    const next = new Set<string>();
-    PIXIV_ARTISTS_DATA.forEach((a) => next.add(a.id || a.url));
-    setSelectedArtists(next);
-    onShowToast(`已全选 ${next.size} 位画师！`);
+    setSelectedArtists(new Set<string>());
+    onShowToast('已清空已选画师 🧹');
   };
 
   const handleResetDonePixiv = () => {
     soundManager.playBlip();
     saveVisited(new Set<string>());
-    onShowToast('已重置画师「已读」标记');
+    onShowToast('已重置所有已读标记 👁️');
   };
-
-  const filteredArtists = PIXIV_ARTISTS_DATA.filter((a) =>
-    a.name.toLowerCase().includes(pixivSearch.toLowerCase())
-  );
 
   const animeLinks = RESOURCE_LINKS.filter((r) => r.category === 'anime');
   const creativeLinks = RESOURCE_LINKS.filter((r) => r.category === 'creative');
+  const cutLinks = creativeLinks.filter((item) => item.title.toLowerCase().includes('cut'));
+  const mmdLinks = creativeLinks.filter((item) => item.title.toLowerCase().includes('mmd') || item.title.includes('模型'));
   const mangaLinks = RESOURCE_LINKS.filter((r) => r.category === 'manga' || r.category === 'link');
 
   const renderResourceGrid = (links: ResourceLink[]) => (
@@ -214,21 +207,17 @@ export const ResourceHub: React.FC<Props> = ({
           <div className="bg-[#1E4334] text-[#F9E79F] px-2.5 py-0.5 text-xs font-pixel rounded-xs tracking-wider">
             RESOURCE ARCHIVES
           </div>
-          <span className="text-xs font-retro-jp text-[#5B4636] font-bold">
-            📚 利韩粮仓 · 资源导航
-          </span>
         </div>
 
         {/* Tab Filters */}
         <div className="flex flex-wrap gap-1">
           {[
-            { key: 'all', label: '全部' },
             { key: 'anime', label: '📺 动漫原片' },
             { key: 'creative', label: '🎬 二创素材' },
             { key: 'manga', label: '📖 漫画/资料' },
+            { key: 'au-novel', label: '📜 官方AU小说' },
             { key: 'ao3', label: '🌐 AO3镜像' },
             { key: 'pixiv', label: '🎨 PIXIV墙' },
-            { key: 'doujin', label: '🔒 同人本专区' },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -252,8 +241,15 @@ export const ResourceHub: React.FC<Props> = ({
         </div>
       </div>
 
+      {/* 📜 官方AU小说专区 */}
+      {(activeTab === 'au-novel') && (
+        <div className="mb-6">
+          <AuNovelReader onShowToast={onShowToast} />
+        </div>
+      )}
+
       {/* AO3 SECTION */}
-      {(activeTab === 'all' || activeTab === 'ao3') && (
+      {(activeTab === 'ao3') && (
         <div className="mb-4 bg-[#FFFEEF] border border-[#D5C9AF] rounded-sm p-3">
           <div className="flex items-center gap-2 text-xs font-pixel text-[#1E4334] font-bold mb-2">
             <span>🌐 AO3 访问 / 镜像速查</span>
@@ -264,17 +260,19 @@ export const ResourceHub: React.FC<Props> = ({
           </div>
 
           <div className="space-y-3 text-xs font-retro-jp">
-            <div>
-              <span className="font-bold text-[#1E4334] block mb-1">★ 官方主站入口:</span>
+            <div className="flex items-center justify-between gap-1.5 sm:gap-3 p-2 bg-[#EAF2EE] border border-[#B3D1C2] rounded-xs text-[11px] sm:text-xs font-retro-jp w-full">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-bold text-[#1E4334] shrink-0">★ 官方主站入口</span>
+                <span className="text-[10px] sm:text-[11px] text-[#7A6958] hidden xs:inline truncate">(最安全，部分网络需代理)</span>
+              </div>
               <a
                 href="https://archiveofourown.org/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs rounded-xs hover:bg-[#2A5C47] transition-all shadow-xs"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#1E4334] text-[#F9E79F] font-pixel text-[10px] sm:text-xs rounded-xs hover:bg-[#2A5C47] transition-all shadow-2xs shrink-0"
               >
                 <span>archiveofourown.org ↗</span>
               </a>
-              <span className="text-[11px] text-[#7A6958] ml-2">最安全最全，部分网络需梯子/代理</span>
             </div>
 
             <div>
@@ -308,47 +306,54 @@ export const ResourceHub: React.FC<Props> = ({
       )}
 
       {/* SECTION 1: 📺 动漫原片 */}
-      {(activeTab === 'all' || activeTab === 'anime') && animeLinks.length > 0 && (
+      {(activeTab === 'anime') && animeLinks.length > 0 && (
         <div className="mb-4">
           <div className="text-xs font-pixel text-[#1E4334] font-bold mb-2 flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <span>📺</span>
               <span>动漫原片全集</span>
             </span>
-            <span className="text-[11px] font-retro-jp text-[#7A6958]">
-              点击直接复制提取码并跳转
-            </span>
           </div>
           {renderResourceGrid(animeLinks)}
         </div>
       )}
 
-      {/* SECTION 2: 🎬 二创素材 (Cut & MMD) */}
-      {(activeTab === 'all' || activeTab === 'creative') && creativeLinks.length > 0 && (
-        <div className="mb-4">
-          <div className="text-xs font-pixel text-[#1E4334] font-bold mb-2 flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <span>🎬</span>
-              <span>二创素材 ( Cut 剪辑与 MMD 模型包 )</span>
-            </span>
-            <span className="text-[11px] font-retro-jp text-[#7A6958]">
-              点击直接复制提取码并跳转
-            </span>
-          </div>
-          {renderResourceGrid(creativeLinks)}
+      {/* SECTION 2: 🎬 二创素材 (Cut & MMD Split) */}
+      {(activeTab === 'creative') && creativeLinks.length > 0 && (
+        <div className="space-y-6">
+          {cutLinks.length > 0 && (
+            <div>
+              <div className="text-xs font-pixel text-[#1E4334] font-bold mb-2.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span>🎬</span>
+                  <span>Cut 剪辑素材</span>
+                </span>
+              </div>
+              {renderResourceGrid(cutLinks)}
+            </div>
+          )}
+
+          {mmdLinks.length > 0 && (
+            <div>
+              <div className="text-xs font-pixel text-[#1E4334] font-bold mb-2.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span>📦</span>
+                  <span>MMD 模型包</span>
+                </span>
+              </div>
+              {renderResourceGrid(mmdLinks)}
+            </div>
+          )}
         </div>
       )}
 
       {/* SECTION 3: 📖 漫画与原画资料 */}
-      {(activeTab === 'all' || activeTab === 'manga') && mangaLinks.length > 0 && (
+      {(activeTab === 'manga') && mangaLinks.length > 0 && (
         <div className="mb-4">
           <div className="text-xs font-pixel text-[#1E4334] font-bold mb-2 flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <span>📖</span>
               <span>漫画全集、手稿与资料</span>
-            </span>
-            <span className="text-[11px] font-retro-jp text-[#7A6958]">
-              点击直接复制提取码并跳转
             </span>
           </div>
           {renderResourceGrid(mangaLinks)}
@@ -356,40 +361,42 @@ export const ResourceHub: React.FC<Props> = ({
       )}
 
       {/* PIXIV JUMP WALL */}
-      {(activeTab === 'all' || activeTab === 'pixiv') && (
+      {(activeTab === 'pixiv') && (
         <div className="mb-4 bg-[#FFFEEF] border border-[#D5C9AF] rounded-sm p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 mb-2 border-b border-[#E8E1CE]">
-            <div className="flex items-center gap-2">
-              <span className="font-pixel text-xs text-[#1E4334] font-bold">
-                🎨 PIXIV 关注画师跳转墙 ({filteredArtists.length} 位)
+          <div className="pb-2.5 mb-2.5 border-b border-[#E8E1CE] space-y-2.5">
+            {/* Title */}
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-pixel text-xs sm:text-sm text-[#1E4334] font-bold">
+                🎨 PIXIV画师跳转墙 ({PIXIV_ARTISTS_DATA.length} 位)
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={pixivSearch}
-                onChange={(e) => setPixivSearch(e.target.value)}
-                placeholder="搜索画师名称..."
-                className="px-2 py-1 text-xs font-retro-jp bg-[#FAF5E8] border border-[#D5C9AF] rounded-xs focus:outline-none w-32 sm:w-40"
-              />
+            {/* Symmetric & Evenly Distributed Action Control Grid (Exactly 3 Buttons) */}
+            <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 w-full">
               <button
-                onClick={handleSelectAllPixiv}
-                className="px-2 py-1 bg-[#EAE2CE] hover:bg-[#DDD3BD] text-[#4A3828] text-xs font-retro-jp rounded-xs border border-[#C5B495] cursor-pointer"
+                onClick={handleClearSelection}
+                className="py-1.5 px-3 bg-[#FAF5E8] hover:bg-[#EAE2CE] text-[#5B4636] border border-[#D5C9AF] text-xs font-retro-jp rounded-xs font-bold transition-all text-center flex items-center justify-center gap-1 cursor-pointer select-none"
               >
-                全选
+                <span>🧹</span> 清空选择
+              </button>
+              <button
+                onClick={handleResetDonePixiv}
+                className="py-1.5 px-3 bg-[#FAF5E8] hover:bg-[#EAE2CE] text-[#8C7A68] border border-[#D5C9AF] text-xs font-retro-jp rounded-xs transition-all text-center flex items-center justify-center gap-1 cursor-pointer select-none"
+              >
+                <span>👁️</span> 重置已读
               </button>
               <button
                 onClick={handleOpenSelected}
-                className="px-2.5 py-1 bg-[#1E4334] hover:bg-[#2A5C47] text-[#F9E79F] text-xs font-pixel rounded-xs cursor-pointer shadow-xs"
+                className="py-1.5 px-3 bg-[#1E4334] hover:bg-[#2A5C47] text-[#F9E79F] border border-[#153025] text-xs font-pixel rounded-xs font-bold transition-all text-center flex items-center justify-center gap-1 cursor-pointer shadow-2xs select-none"
+                title="一键在新标签页中批量打开所有选中画师(最大限制为5个)"
               >
-                批量打开 ({selectedArtists.size})
+                <span>🚀</span> 确认批量打开 ({selectedArtists.size})
               </button>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-1.5 max-h-80 overflow-y-auto pr-1">
-            {filteredArtists.map((artist) => {
+            {PIXIV_ARTISTS_DATA.map((artist) => {
               const key = artist.id || artist.url;
               const isSelected = selectedArtists.has(key);
               const isVisited = visitedArtists.has(key);
@@ -414,15 +421,6 @@ export const ResourceHub: React.FC<Props> = ({
                 </div>
               );
             })}
-          </div>
-
-          <div className="mt-2 text-right">
-            <button
-              onClick={handleResetDonePixiv}
-              className="text-[11px] font-retro-jp text-[#8C7A68] hover:underline cursor-pointer"
-            >
-              重置画师已读标记
-            </button>
           </div>
         </div>
       )}

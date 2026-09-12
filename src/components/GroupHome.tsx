@@ -14,6 +14,7 @@ export const GroupHome: React.FC<Props> = ({
   onShowToast,
 }) => {
   const [copiedMap, setCopiedMap] = useState<Record<string, boolean>>({});
+  const [isGroupsExpanded, setIsGroupsExpanded] = useState(false);
 
   const handleCopyText = (label: string, text: string) => {
     soundManager.playCoin();
@@ -34,65 +35,109 @@ export const GroupHome: React.FC<Props> = ({
   };
 
   return (
-    <div className="space-y-3.5 text-[#2C241D]">
+    <div className="space-y-4 sm:space-y-6 text-[#2C241D]">
       {/* 1. QQ GROUPS & RECRUITMENT & VERIFICATION */}
-      <section className="bg-[#FFFEEF] border-2 border-[#1E4334] rounded-md p-3.5 sm:p-4 shadow-xs space-y-3">
-        {/* 4 QQ Groups Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {GROUP_INFO.qqGroups.map((group) => {
-            const isCopied = !!copiedMap[group.number];
-            return (
-              <div
-                key={group.id}
-                onClick={() => handleCopyText(group.name, group.number)}
-                className="bg-[#FAF5E8] border border-[#C5B495] hover:border-[#1E4334] rounded-xs p-2.5 cursor-pointer transition-all hover:shadow-xs group text-center"
-              >
-                <div className="text-xs font-pixel text-[#8C7A68]">
-                  {group.name}
-                </div>
-                <div className="font-pixel text-sm text-[#1E4334] font-bold tracking-wider my-0.5 group-hover:text-[#B7791F]">
-                  {group.number}
-                </div>
-                <div className="text-[10px] font-retro-jp text-[#8C7A68]">
-                  {isCopied ? '已复制 ✓' : '复制群号'}
-                </div>
+      <section id="group-info-section" className="bg-[#FFFEEF] border-2 sm:border-[3px] border-[#1E4334] rounded-md p-3 xs:p-4 sm:p-5 md:p-6 shadow-xs space-y-3.5">
+        {/* 土豆分群 Collapsible Card Dropdown */}
+        <div className="space-y-2">
+          <button
+            onClick={() => {
+              soundManager.playBlip();
+              setIsGroupsExpanded(!isGroupsExpanded);
+            }}
+            className="w-full flex items-center justify-between px-3.5 py-3 bg-[#FAF5E8] hover:bg-[#EAE2CE] border border-[#C5B495] hover:border-[#1E4334] rounded-xs text-[#1E4334] cursor-pointer transition-all shadow-2xs select-none"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm">🥔</span>
+              <span className="font-pixel text-xs sm:text-sm font-bold tracking-wide">
+                土豆分群
+              </span>
+            </div>
+            <span className="font-pixel text-[10px] sm:text-xs text-[#8C7A68]">
+              {isGroupsExpanded ? '▲ 收起' : '▼ 展开'}
+            </span>
+          </button>
+
+          {isGroupsExpanded && (
+            <div className="space-y-2.5 p-2.5 bg-[#FAF5E8] border border-[#D5C9AF] rounded-xs">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
+                {GROUP_INFO.qqGroups.map((group) => {
+                  const isCopied = !!copiedMap[group.number];
+                  return (
+                    <div
+                      key={group.id}
+                      onClick={() => handleCopyText(group.name, group.number)}
+                      className="bg-[#FFFEEF] border border-[#C5B495] hover:border-[#1E4334] rounded-xs px-3.5 py-2.5 cursor-pointer transition-colors flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-[10px] sm:text-[11px] font-pixel text-[#8C7A68] truncate">
+                          {group.name}
+                        </div>
+                        <div className="font-pixel text-xs sm:text-sm text-[#1E4334] font-bold tracking-wider mt-0.5">
+                          {group.number}
+                        </div>
+                      </div>
+                      <span className="font-retro-jp text-[10px] sm:text-xs text-[#B7791F] font-bold shrink-0">
+                        {isCopied ? '已复制 ✓' : '📋'}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+
+              {/* 入群验证放进四个群下拉模块里 */}
+              <div className="p-2.5 sm:p-3 bg-[#FEF9E7] border border-[#F1C40F] rounded-xs text-xs sm:text-sm font-retro-jp text-[#7D6608] leading-relaxed flex flex-col xs:flex-row xs:items-center justify-between gap-1.5">
+                <div>
+                  <span className="font-bold text-[#B7950B] font-pixel mr-1.5 text-xs sm:text-sm">入群验证:</span>
+                  “{GROUP_INFO.verificationRequirement}”
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyText('入群验证', GROUP_INFO.verificationRequirement)}
+                  className="px-2 py-0.5 bg-[#FAF5E8] hover:bg-[#F9E79F] border border-[#D5C9AF] text-[#B7950B] font-pixel text-[10px] rounded-xs cursor-pointer self-start xs:self-auto shrink-0"
+                >
+                  {copiedMap[GROUP_INFO.verificationRequirement] ? '已复制验证 ✓' : '复制验证 📋'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Recruitment Group */}
-        <div className="bg-[#FAF0E6] border border-[#D35400] rounded-xs p-2.5 flex items-center justify-between gap-2 text-xs font-retro-jp">
-          <div className="text-[#7E5109]">
-            <span className="font-bold text-[#D35400] font-pixel mr-1">招募群: 979246377</span>
-            <span>(汉化 / 资源整理 / 群管理)</span>
+        {/* 招募群：分为两行，去除复制按钮，点击整张卡片即可复制 */}
+        <div
+          onClick={() => handleCopyText('招募群群号', '979246377')}
+          className="bg-[#FAF0E6] hover:bg-[#FBE8D8] border-2 border-[#D35400] hover:border-[#BA4A00] rounded-xs p-3 sm:p-3.5 cursor-pointer transition-all shadow-2xs flex items-center justify-between gap-3 select-none"
+          title="点击卡片即可复制招募群号：979246377"
+        >
+          <div className="space-y-1 font-retro-jp">
+            <div className="font-bold text-[#D35400] font-pixel text-xs sm:text-sm">
+              招募群: 979246377
+            </div>
+            <div className="text-[11px] sm:text-xs text-[#8E5109]">
+              ( 汉化 / 资源整理 / 群管理 )
+            </div>
           </div>
 
-          <button
-            onClick={() => handleCopyText('招聘群群号', '979246377')}
-            className="px-2.5 py-0.5 bg-[#D35400] hover:bg-[#BA4A00] text-[#FFFEEF] font-pixel text-xs rounded-xs border border-[#A04000] cursor-pointer transition-all shrink-0"
-          >
-            {copiedMap['979246377'] ? '已复制' : '复制'}
-          </button>
-        </div>
-
-        {/* Verification Requirement */}
-        <div className="p-2.5 bg-[#FEF9E7] border border-[#F1C40F] rounded-xs text-xs font-retro-jp text-[#7D6608] leading-relaxed">
-          <span className="font-bold text-[#B7950B] font-pixel mr-1">入群验证:</span>
-          “{GROUP_INFO.verificationRequirement}”
+          <div className="shrink-0 text-right font-pixel text-xs">
+            {copiedMap['979246377'] && (
+              <span className="text-[#27AE60] bg-[#E8F8F5] px-2 py-1 rounded-xs border border-[#A2D9CE] inline-block font-retro-jp">
+                已复制 979246377 ✓
+              </span>
+            )}
+          </div>
         </div>
       </section>
 
       {/* 2. CORE MANIFESTO & REDLINES */}
-      <section className="bg-[#FAF5E8] border-2 border-[#1E4334] rounded-md p-3.5 sm:p-4 shadow-xs space-y-3">
+      <section id="manifesto-section" className="bg-[#FAF5E8] border-2 sm:border-[3px] border-[#1E4334] rounded-md p-3 xs:p-4 sm:p-5 md:p-6 shadow-xs space-y-4">
         {/* Manifesto Body */}
-        <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-xs p-3.5 font-retro-jp text-xs sm:text-sm text-[#3D3025] leading-relaxed space-y-2.5">
-          <p className="font-bold text-[#1E4334]">
+        <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-xs p-3.5 sm:p-5 md:p-6 font-retro-jp text-xs sm:text-sm md:text-base text-[#3D3025] leading-relaxed space-y-3.5">
+          <p className="font-bold text-[#1E4334] text-sm sm:text-base md:text-lg">
             本群以 <span className="text-[#27AE60]">💚</span><span className="text-[#8E44AD]">💜</span> 利威尔 × 韩吉 为唯一不可动摇的创作与讨论核心。
           </p>
 
-          <div className="space-y-1 text-[#4A3B2C]">
-            <p className="font-bold text-[#5B4636]">在这里，你可以——</p>
+          <div className="space-y-1.5 text-[#4A3B2C]">
+            <p className="font-bold text-[#5B4636] text-sm sm:text-base">在这里，你可以——</p>
             <p>● <b>干饭：</b>分享利韩粮仓，互相投喂同人图文；</p>
             <p>● <b>唠嗑：</b>聊原作剧情、角色解读、日常碎碎念；</p>
             <p>● <b>躺平：</b>享受一个和平、温暖、互不冒犯的磕CP乌托邦。</p>
@@ -110,51 +155,43 @@ export const GroupHome: React.FC<Props> = ({
             你喜欢你的，我热爱我的，彼此尊重即是最好的同好关系。
           </p>
 
-          <p className="text-[11px] text-[#8C7A68] italic pt-1 border-t border-dashed border-[#EAE2CE]">
+          <p className="text-[11px] sm:text-xs text-[#8C7A68] italic pt-2 border-t border-dashed border-[#EAE2CE]">
             加入本社群即视为认可上述定位。如与个人预期存在较大差异，可自行选择退出。
           </p>
-        </div>
-
-        {/* Redlines */}
-        <div className="bg-[#FFF5F5] border border-[#E6B0AA] rounded-xs p-3 space-y-1.5 font-retro-jp text-xs">
-          <div className="font-pixel text-xs font-bold text-[#C0392B] flex items-center gap-1">
-            <span>🚫</span>
-            <span>速读版群规则 · 红线（碰即处理）：</span>
+          <div className="pt-2 flex justify-end">
+            <a href="/report.html" target="_blank" rel="noopener noreferrer" className="text-xs sm:text-sm text-[#1E4334] font-bold hover:underline flex items-center gap-1">
+              <span>📊</span> CP社群调查分析报告 ➔
+            </a>
           </div>
-
-          <ul className="text-[#900C3F] space-y-1 pl-1">
-            <li>● 讨论利、韩与其他任何角色的CP搭配、水仙及相关内容；</li>
-            <li>● 逆位 R18 禁止（含性转/百合等明确逆位内容）；</li>
-            <li>● 把外部社区的纷争、反黑、恩怨带进群内；</li>
-            <li>● 群内汉化资源外传、盗印转卖。</li>
-          </ul>
         </div>
+
+
       </section>
 
       {/* 3. QUICK NAVIGATION TILES */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <button
           onClick={onNavigateToResources}
-          className="bg-[#FFFEEF] border border-[#1E4334] hover:border-[#EAA83B] rounded-md p-3 cursor-pointer transition-all hover:shadow-xs group flex items-center justify-between text-left"
+          className="bg-[#FFFEEF] border border-[#1E4334] hover:border-[#EAA83B] rounded-md p-3 sm:p-4 cursor-pointer transition-all hover:shadow-xs group flex items-center justify-between text-left"
         >
-          <div className="flex items-center gap-2 font-pixel text-xs sm:text-sm font-bold text-[#1E4334] group-hover:text-[#B7791F]">
+          <div className="flex items-center gap-2 font-pixel text-xs sm:text-sm md:text-base font-bold text-[#1E4334] group-hover:text-[#B7791F]">
             <span>📚</span>
-            <span>公共资源库</span>
+            <span>资源外链</span>
           </div>
-          <span className="font-pixel text-xs text-[#1E4334] group-hover:translate-x-1 transition-transform">
+          <span className="font-pixel text-xs sm:text-sm text-[#1E4334] group-hover:translate-x-1 transition-transform">
             进入 ➔
           </span>
         </button>
 
         <button
           onClick={onNavigateToDoujin}
-          className="bg-[#FFFEEF] border border-[#5B3F8A] hover:border-[#9B59B6] rounded-md p-3 cursor-pointer transition-all hover:shadow-xs group flex items-center justify-between text-left"
+          className="bg-[#FFFEEF] border border-[#5B3F8A] hover:border-[#9B59B6] rounded-md p-3 sm:p-4 cursor-pointer transition-all hover:shadow-xs group flex items-center justify-between text-left"
         >
-          <div className="flex items-center gap-2 font-pixel text-xs sm:text-sm font-bold text-[#5B3F8A] group-hover:text-[#7D3C98]">
+          <div className="flex items-center gap-2 font-pixel text-xs sm:text-sm md:text-base font-bold text-[#5B3F8A] group-hover:text-[#7D3C98]">
             <span>🔒</span>
-            <span>同人本专区</span>
+            <span>土豆粮仓驻地</span>
           </div>
-          <span className="font-pixel text-xs text-[#5B3F8A] group-hover:translate-x-1 transition-transform">
+          <span className="font-pixel text-xs sm:text-sm text-[#5B3F8A] group-hover:translate-x-1 transition-transform">
             进入 ➔
           </span>
         </button>
