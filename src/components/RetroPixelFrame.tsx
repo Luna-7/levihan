@@ -98,7 +98,7 @@ export const RetroPixelFrame: React.FC<Props> = ({
         <footer className="mt-4 pt-3 border-t-2 border-dashed border-[#D5C9AF] text-center">
           <div className="bg-[#1E4334] text-[#FAF5E8] px-2.5 py-1.5 xs:px-3 xs:py-2 rounded-xs flex flex-col sm:flex-row items-center justify-between gap-2 shadow-xs text-xs">
             <div className="flex items-center gap-1.5 font-pixel text-[#F9E79F] font-bold text-[10px] xs:text-xs">
-              <span>🥔 利韩土豆群</span>
+              <span>🥔 利韩土豆仓</span>
               <span className="text-[#FAF5E8] font-normal">· 调查兵团粮仓</span>
             </div>
 

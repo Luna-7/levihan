@@ -35,7 +35,7 @@ export const HeaderCard: React.FC<Props> = ({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="font-pixel text-sm xs:text-base sm:text-xl md:text-2xl text-[#F9E79F] tracking-wide font-black truncate">
-                利韩土豆群
+                利韩土豆仓
               </h1>
               <span className="hidden xs:inline-block shrink-0">
                 <PixelPotion size={16} />

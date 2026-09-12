@@ -159,7 +159,7 @@ export const GroupHome: React.FC<Props> = ({
             加入本社群即视为认可上述定位。如与个人预期存在较大差异，可自行选择退出。
           </p>
           <div className="pt-2 flex justify-end">
-            <a href="/report.html" target="_blank" rel="noopener noreferrer" className="text-xs sm:text-sm text-[#1E4334] font-bold hover:underline flex items-center gap-1">
+            <a href="/cp-community-survey-report.html" target="_blank" rel="noopener noreferrer" className="text-xs sm:text-sm text-[#1E4334] font-bold hover:underline flex items-center gap-1">
               <span>📊</span> CP社群调查分析报告 ➔
             </a>
           </div>
