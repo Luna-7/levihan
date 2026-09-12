@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="SVOaU6A2PORlhe19nSBYHD">
+<head data-page-node-id="iBS8DxYFkhDPk30SGlySoH">
+    <link rel="icon" href="data:," data-page-node-id="qndr2qgwt6XlbIkd3VldNk">
+<meta charset="UTF-8" data-page-node-id="i9PpcgE6pi2SXOVgE8VkFE">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>塔塔开 · 利韩土豆群游戏小屋</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" data-page-node-id="9hzCqJN4aO5lPgaV2wRyJ2">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin data-page-node-id="RK5dk3ulgcrvGlpypBbBcS">
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&family=VT323&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet" data-page-node-id="iG4VWS4UXmZhYby6oApgKX">
+<style>
+  :root{
+    --bg:#F6F1E3; --parchment:#FBF7EC; --card:#FFFBF0;
+    --ink:#22372B; --ink-brown:#4A3A2C; --ink-soft:#7A6A55;
+    --border-green:#1B4332; --green-mid:#2D4C3A;
+    --gold:#C29641; --gold-accent:#E5A93C; --gold-stitch:#C8A359;
+    --purple:#6A4C93; --red:#B3402F;
+    --line:#E4D9C3;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{background:var(--bg);}
+  body{font-family:'Noto Sans SC','DotGothic16',sans-serif;background:var(--bg);color:var(--ink-brown);
+    min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;
+    padding:14px 8px 24px;overscroll-behavior:none;}
+  ::selection{background:var(--gold-accent);color:#18392B;}
+  .font-pixel{font-family:'Press Start 2P',monospace;}
+  .px-heart{display:inline-block;width:22px;height:19px;background:#6A4C93;
+    clip-path:polygon(12.5% 0,37.5% 0,37.5% 12.5%,62.5% 12.5%,62.5% 0,87.5% 0,100% 12.5%,100% 37.5%,
+      87.5% 50%,87.5% 62.5%,75% 75%,62.5% 87.5%,62.5% 100%,37.5% 100%,37.5% 87.5%,25% 75%,
+      12.5% 62.5%,12.5% 50%,0 37.5%,0 12.5%);}
+
+  /* ===== 主框架（复刻站点 RetroPixelFrame） ===== */
+  .frame{width:100%;max-width:560px;position:relative;
+    background:var(--parchment);border:4px solid var(--border-green);border-radius:6px;
+    outline:2px dashed var(--gold-stitch);outline-offset:-10px;
+    padding:14px 10px 12px;box-shadow:8px 8px 0 rgba(34,42,32,.16);}
+  .frame .corner{position:absolute;z-index:5;}
+  .frame .corner.tl{top:-13px;left:-13px;}
+  .frame .corner.tr{top:-13px;right:-13px;}
+  .frame .corner.bl{bottom:-13px;left:-13px;}
+  .frame .corner.br{bottom:-13px;right:-13px;}
+
+  /* ===== 标题 ===== */
+  .title{text-align:center;margin:6px 0 2px;}
+  .title h1{font-family:'DotGothic16','Noto Sans SC',sans-serif;font-size:34px;letter-spacing:8px;
+    color:var(--border-green);font-weight:400;display:inline-block;position:relative;}
+  .title h1::before,.title h1::after{content:"⚔";font-size:18px;margin:0 10px;color:var(--gold-accent);}
+  .subtitle{text-align:center;font-family:'VT323',monospace;font-size:15px;color:var(--ink-soft);
+    letter-spacing:1px;margin-bottom:14px;}
+
+  /* ===== 子类目标签 ===== */
+  .tabs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0 14px;}
+  .tab{font-family:'DotGothic16','Noto Sans SC',sans-serif;font-size:14px;letter-spacing:2px;
+    padding:7px 16px;background:var(--card);color:var(--ink-soft);
+    border:2px solid var(--line);box-shadow:2px 2px 0 rgba(34,42,32,.12);cursor:pointer;user-select:none;}
+  .tab.active{background:var(--green-mid);color:#F9E79F;border-color:var(--border-green);
+    box-shadow:2px 2px 0 #12281F;}
+  .tab.locked{background:repeating-linear-gradient(45deg,#F3EDDD,#F3EDDD 6px,#EBE3CE 6px,#EBE3CE 12px);
+    color:#B4A88E;cursor:not-allowed;}
+  .tab:not(.active):not(.locked):hover{border-color:var(--gold-accent);color:var(--border-green);}
+  .tab:active{transform:translate(2px,2px);box-shadow:none;}
+
+  /* ===== 游戏区 ===== */
+  .stage{position:relative;background:#12281F;border:3px solid var(--border-green);
+    outline:2px dashed var(--gold-stitch);outline-offset:-9px;
+    box-shadow:4px 4px 0 rgba(34,42,32,.2);overflow:hidden;
+    display:flex;justify-content:center;width:fit-content;margin:0 auto;}
+  .stage.panel-locked{width:100%;}
+  /* 游戏设计分辨率 720x1280（9:16），iframe 必须严格保持该比例，
+     否则引擎按固定宽度缩放会垂直裁切：顶部落点与底部水果被遮挡。
+     ⚠ 禁止用 JS 改写 iframe 宽高——引擎初始化期间容器尺寸被脚本改动会画布损坏；
+     全部用纯 CSS：高度 = min(屏宽反算高度, 78vh, 760px)，永远 9:16、单屏、无裁切 */
+  .stage iframe{display:block;border:0;background:#12281F;
+    height:min(calc((100vw - 44px) * 16 / 9), min(78vh, 760px));
+    aspect-ratio:720/1280;width:auto;}
+  .panel-locked{display:none;height:min(78vh,760px);flex-direction:column;align-items:center;
+    justify-content:center;gap:14px;background:repeating-linear-gradient(45deg,#F3EDDD,#F3EDDD 10px,#EBE3CE 10px,#EBE3CE 20px);}
+  .panel-locked .lock{font-size:44px;filter:grayscale(.4);}
+  .panel-locked .t{font-family:'DotGothic16','Noto Sans SC',sans-serif;font-size:20px;letter-spacing:4px;color:#B4A88E;}
+  .panel-locked .s{font-family:'VT323',monospace;font-size:16px;color:#B4A88E;letter-spacing:1px;}
+
+  .tip{margin-top:12px;text-align:center;font-size:12.5px;color:var(--ink-soft);line-height:1.9;}
+  .tip b{color:var(--border-green);}
+
+  /* ===== 返回主页按钮 ===== */
+  .btn-home{display:flex;align-items:center;justify-content:center;gap:6px;
+    margin:14px auto 0;padding:8px 22px;
+    font-family:'DotGothic16','Noto Sans SC',sans-serif;font-size:14px;letter-spacing:2px;
+    background:var(--green-mid);color:#F9E79F;border:2px solid var(--border-green);
+    box-shadow:3px 3px 0 #12281F;text-decoration:none;user-select:none;transition:all .15s;}
+  .btn-home:hover{background:var(--border-green);}
+  .btn-home:active{transform:translate(3px,3px);box-shadow:none;}
+
+  /* ===== 手机端适配 ===== */
+  @media (max-width:480px){
+    body{padding:10px 6px 18px;}
+    .frame{padding:12px 8px 10px;box-shadow:5px 5px 0 rgba(34,42,32,.16);}
+    .title h1{font-size:26px;letter-spacing:5px;}
+    .title h1::before,.title h1::after{font-size:14px;margin:0 7px;}
+    .subtitle{font-size:13px;margin-bottom:6px;}
+    .tabs{margin:4px 0 8px;gap:6px;}
+    .tab{font-size:12px;letter-spacing:1px;padding:5px 12px;}
+    /* 手机上高度同时受 62vh 约束，保证整页一屏放下、无滚动 */
+    .stage iframe{height:min(calc((100vw - 40px) * 16 / 9), min(62vh, 760px));}
+    .tip{margin-top:8px;font-size:11px;line-height:1.65;}
+    .btn-home{margin-top:10px;padding:7px 18px;font-size:12px;}
+  }
+</style>
+</head>
+<body data-page-node-id="WiB6n3UDCe6B50RlJbxK9o">
+  <div class="frame" data-page-node-id="09x2HvRMMoXy30iUJMNJa1">
+    <span class="px-heart corner tl" data-page-node-id="bDU7djrNZTjbkZpQYcAmV8"></span><span class="px-heart corner tr" data-page-node-id="SdrDFQy7SKhHYbEF1gdek2"></span>
+    <span class="px-heart corner bl" data-page-node-id="mAzPMB49YWph1W815piaUd"></span><span class="px-heart corner br" data-page-node-id="SICvFWrvdzBGJqGNdmzX0t"></span>
+
+    <div class="title" data-page-node-id="UtimwkWEREwXjhQtqf7tA6"><h1 data-page-node-id="JKgmLPui8xg3yEABTOYidJ">塔塔开</h1></div>
+    <div class="subtitle" data-page-node-id="WbflvXwImMj2ziFLMmkU8i">— 利韩土豆群 · 游戏小屋 · TATAKAI —</div>
+
+    <div class="tabs" id="tabs" data-page-node-id="1KtxydZ0mUmYWJCBkt4Hha">
+      <div class="tab active" data-panel="game" data-page-node-id="ccpxTPpGkzbIlHpA9hQNX7">🍉 合成大西瓜</div>
+      <div class="tab locked" title="敬请期待" data-page-node-id="mqsZ76C5bRD6cZoX5oZ6Sn">🔒 待续</div>
+      <div class="tab locked" title="敬请期待" data-page-node-id="krrSWBAPtZrDKYi05vSIFm">🔒 待续</div>
+    </div>
+
+    <div class="stage" id="stage-game" data-page-node-id="ADaszvUlujn4YAA3Vikzwh">
+      <iframe id="gameFrame" src="./daxigua/index.html" allow="autoplay" data-page-node-id="OXdMwEqsksq8w5r02RdrGN"></iframe>
+    </div>
+    <div class="stage panel-locked" id="stage-locked" data-page-node-id="NGZMZUh73DQ9cdMdrkcAir">
+      <div class="lock" data-page-node-id="iaYZ35EWvv3XepdFhxEeFl">📦</div>
+      <div class="t" data-page-node-id="LSHRgyoJD8hXmn9lerV7q9">新玩法 合成中…</div>
+      <div class="s" data-page-node-id="IhvSB7ppLGBbqw3oAYOjDH">NEXT GAME COMING SOON · 敬请期待</div>
+    </div>
+
+    <div class="tip">
+      ⚠️注：图片来源于网络侵删
+    </div>
+
+    <a class="btn-home" href="/">🏠 返回主页</a>
+  </div>
+
+<script>
+  const tabs=document.querySelectorAll('.tab');
+  const stageGame=document.getElementById('stage-game');
+  const stageLocked=document.getElementById('stage-locked');
+  tabs.forEach(tab=>{
+    tab.addEventListener('click',()=>{
+      if(tab.classList.contains('locked')){
+        stageGame.style.display='none';
+        stageLocked.style.display='flex';
+        document.querySelector('.tab.active').classList.remove('active');
+        return;
+      }
+      stageGame.style.display='block';
+      stageLocked.style.display='none';
+      document.querySelector('.tab.active')?.classList.remove('active');
+      tab.classList.add('active');
+    });
+  });
+  /* 游戏画布尺寸完全由 CSS 控制（见 .stage iframe 注释），禁止 JS 改写 */
+</script>
+</body>
+</html>
