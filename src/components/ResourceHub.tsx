@@ -39,6 +39,7 @@ export const ResourceHub: React.FC<Props> = ({
   const [activeTab, setActiveTab] = useState<'anime' | 'creative' | 'manga' | 'au-novel' | 'ao3' | 'pixiv' | 'doujin'>('anime');
   const [selectedArtists, setSelectedArtists] = useState<Set<string>>(new Set());
   const [visitedArtists, setVisitedArtists] = useState<Set<string>>(new Set());
+  const [blockedNotice, setBlockedNotice] = useState<{ count: number; artists: PixivArtist[] } | null>(null);
 
   // Load visited Pixiv artists from localStorage
   useEffect(() => {
@@ -84,8 +85,8 @@ export const ResourceHub: React.FC<Props> = ({
     if (next.has(idOrUrl)) {
       next.delete(idOrUrl);
     } else {
-      if (next.size >= 5) {
-        onShowToast('⚠️ 一次最多只能选中 5 位画师哦，以保证浏览器能顺利一次性全部打开！🌸');
+      if (next.size >= 20) {
+        onShowToast('⚠️ 一次最多选中 20 位画师，以避免同时打开过多标签页导致浏览器卡顿哦！🌸');
         return;
       }
       next.add(idOrUrl);
@@ -93,30 +94,62 @@ export const ResourceHub: React.FC<Props> = ({
     setSelectedArtists(next);
   };
 
+  const handleOpenSingleArtist = (artist: PixivArtist, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    soundManager.playBlip();
+    const key = artist.id || artist.url;
+    const nextVisited = new Set<string>(visitedArtists);
+    nextVisited.add(key);
+    saveVisited(nextVisited);
+    window.open(artist.url, '_blank', 'noopener,noreferrer');
+  };
+
   const handleOpenSelected = () => {
     if (selectedArtists.size === 0) {
-      onShowToast('请先选择 1-5 位画师卡片 🎨');
+      onShowToast('请先点击卡片选中画师 🎨');
       return;
     }
     
     soundManager.playCoin();
     let opened = 0;
+    const targetArtists: PixivArtist[] = [];
     const nextVisited = new Set<string>(visitedArtists);
 
     PIXIV_ARTISTS_DATA.forEach((a) => {
       const key = a.id || a.url;
       if (selectedArtists.has(key) && a.url) {
-        window.open(a.url, '_blank');
-        nextVisited.add(key);
-        opened++;
+        targetArtists.push(a);
+      }
+    });
+
+    const blocked: PixivArtist[] = [];
+
+    // Attempt to open each selected artist
+    targetArtists.forEach((a, index) => {
+      const key = a.id || a.url;
+      try {
+        // Modern browsers block window.open calls after the first one if not explicitly allowed
+        const win = window.open(a.url, '_blank', 'noopener,noreferrer');
+        if (!win || win.closed || typeof win.closed === 'undefined') {
+          blocked.push(a);
+        } else {
+          opened++;
+          nextVisited.add(key);
+        }
+      } catch (err) {
+        blocked.push(a);
       }
     });
 
     saveVisited(nextVisited);
-    setSelectedArtists(new Set<string>());
-    
-    if (opened > 0) {
-      onShowToast(`🚀 已执行打开 ${opened} 位画师！若只弹出一个，请点击地址栏右侧“始终允许本站弹出窗口” 🔓`);
+
+    if (blocked.length > 0) {
+      setBlockedNotice({ count: blocked.length, artists: blocked });
+      onShowToast(`⚠️ 浏览器安全策略仅允许打开 ${opened} 个标签，已拦截 ${blocked.length} 个！请在下方快捷栏点击或在地址栏允许弹出窗口 🔓`);
+    } else if (opened > 0) {
+      onShowToast(`🚀 已成功在新标签页打开全部 ${opened} 位画师！`);
+      setBlockedNotice(null);
+      setSelectedArtists(new Set<string>());
     }
   };
 

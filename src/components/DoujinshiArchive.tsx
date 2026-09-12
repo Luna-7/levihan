@@ -1,569 +1,654 @@
-import React, { useState } from 'react';
-import { DOUJINSHI_BOOKS } from '../data/initialData';
-import { DoujinshiBook } from '../types';
+import React, { useState, useEffect } from 'react';
+import { ReactPinchZoomPan } from 'react-pinch-zoom-pan';
+import {
+  DOUJIN_ARCHIVE_DATA,
+  CLOUDFLARE_R2_CONFIG,
+} from '../data/doujinArchiveData';
+import { DoujinBookItem } from '../types/doujinArchive';
 import { soundManager } from '../utils/audio';
+import { r2Service, R2ConfigState } from '../services/r2Client';
 
 interface Props {
-  onCopyCode: (code: string) => void;
+  onCopyCode?: (code: string) => void;
   onShowToast: (msg: string) => void;
 }
 
-interface MangaPreviewItem {
-  id: string;
-  title: string;
-  chapter: string;
-  pageLabel: string;
-  badge: string;
-  desc: string;
-  bucketUrl: string;
-  sampleQuotes: string;
-}
+export const DoujinshiArchive: React.FC<Props> = ({ onShowToast }) => {
+  // 归档数据状态（优先加载远端 R2 archive.json，兜底使用本地 Excel 录入数据）
+  const [books, setBooks] = useState<DoujinBookItem[]>(DOUJIN_ARCHIVE_DATA);
+  const [isLoadingArchive, setIsLoadingArchive] = useState<boolean>(false);
 
-const MANGA_COVER_PREVIEWS: MangaPreviewItem[] = [
-  {
-    id: 'prev-1',
-    title: '利韩同人本 A-Z 全卷',
-    chapter: 'VOLUME 01 · 卷首扉页',
-    pageLabel: 'PAGE 01 / 漫画首页',
-    badge: '存储桶同步',
-    desc: '日本知名利韩社团经典开卷扉页，高清原稿已挂载至云端存储桶。',
-    bucketUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    sampleQuotes: '「利威尔，不管墙外是什么样，我们都要一起去看。」',
-  },
-  {
-    id: 'prev-2',
-    title: '《夜明けの歌》（黎明之歌）',
-    chapter: 'CHAPTER 01 · 正剧篇首卷',
-    pageLabel: 'PAGE 01 / 漫画首页',
-    badge: '高精扫描',
-    desc: '王政篇严肃向长篇作品漫画第1页精修扫描，静默中交付后背的经典分镜。',
-    bucketUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    sampleQuotes: '「喂，四眼，别死了。听到了没有？」',
-  },
-  {
-    id: 'prev-3',
-    title: '《自由の翼の下で》',
-    chapter: 'ACT 01 · 原作深度向',
-    pageLabel: 'PAGE 01 / 卷首彩页',
-    badge: '单行本精校',
-    desc: '玛雷远征前夕，两代团长与士兵长身份切换的深邃回想篇扉页。',
-    bucketUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    sampleQuotes: '「把心脏献给全人类吧——心臓を捧げよ！」',
-  },
-  {
-    id: 'prev-4',
-    title: '《紅茶と眼鏡の引力》',
-    chapter: 'SCENE 01 · 兵团生活喜剧',
-    pageLabel: 'PAGE 01 / 漫画首页',
-    badge: '精修全彩',
-    desc: '调查兵团驻地轻喜剧漫画首页，红茶与实验烧杯碰撞的温存日常。',
-    bucketUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    sampleQuotes: '「韩吉！你的实验试管为什么会掉进我的红茶杯里？！」',
-  },
-];
+  // R2 逻辑层状态与配置
+  const [r2Config, setR2Config] = useState<R2ConfigState>(r2Service.getConfig());
+  const [showR2Panel, setShowR2Panel] = useState<boolean>(false);
+  const [r2ConnectionStatus, setR2ConnectionStatus] = useState<
+    'ready' | 'testing' | 'connected' | 'error'
+  >('ready');
+  const [r2StatusMessage, setR2StatusMessage] = useState<string>('R2 S3 API 逻辑层已就绪');
 
-export const DoujinshiArchive: React.FC<Props> = ({ onCopyCode, onShowToast }) => {
-  // Page is locked by default - requires password: levihan
-  const [unlocked, setUnlocked] = useState(false);
-  const [passkeyInput, setPasskeyInput] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'canon' | 'sweet' | 'serious' | 'au' | 'artbook'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPreview, setSelectedPreview] = useState<MangaPreviewItem | null>(null);
+  // 搜索与多维筛选
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('全部');
+  const [selectedTag, setSelectedTag] = useState<string>('全部');
 
-  const handleUnlockSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const code = passkeyInput.trim().toLowerCase();
-    if (code === 'levihan') {
-      soundManager.playFanfare();
-      setUnlocked(true);
-      onShowToast('🎉 密码核验通过！欢迎查阅土豆粮仓驻地！');
-    } else {
-      soundManager.playBlip();
-      onShowToast('密码错误，请重新输入（提示随时刷新）');
-    }
-  };
+  // 当前正在无缝长图阅读的书籍
+  const [readingBook, setReadingBook] = useState<DoujinBookItem | null>(null);
 
-  const handleAutoJump = (url: string, code?: string) => {
-    soundManager.playCoin();
-    if (code) {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(code).then(
-          () => onShowToast(`已自动复制提取码【${code}】并跳转网盘！📋`),
-          () => onShowToast(`提取码为：${code}`)
-        );
-      } else {
-        onShowToast(`提取码为：${code}`);
+  // 动态探测与检测到的内页总数
+  const [detectedPages, setDetectedPages] = useState<number | null>(null);
+  const [isDetectingPages, setIsDetectingPages] = useState<boolean>(false);
+
+  // 缩放模式：'seamless'（竖向无缝瀑布流长图） | 'zoom'（利用 react-pinch-zoom-pan 支持手势双指捏合缩放/平移）
+  const [interactiveZoom, setInteractiveZoom] = useState<boolean>(false);
+
+  // 统计所有标签（动态汇总当前数据中的所有标签）
+  const allCategories = ['全部', '漫画本', '小说本', '插画集'];
+  const dynamicTags = Array.from(new Set(books.flatMap((b) => b.tags || [])));
+  const allTags = ['全部', ...dynamicTags];
+
+  // 组件挂载时自动尝试同步 R2 远端归档
+  useEffect(() => {
+    handleRefreshArchive(false);
+  }, []);
+
+  // 刷新归档数据 (尝试从 R2 获取 archive.json)
+  const handleRefreshArchive = async (showToastNotice = true) => {
+    setIsLoadingArchive(true);
+    try {
+      const loaded = await r2Service.loadArchiveData();
+      if (loaded && loaded.length > 0) {
+        setBooks(loaded);
+        if (showToastNotice) {
+          onShowToast(`已同步 R2 存储桶归档数据，共 ${loaded.length} 部作品 📦`);
+        }
       }
-    } else {
-      onShowToast('正在为您跳转至网盘... ↗');
+    } catch (err) {
+      console.warn('Failed to load remote archive:', err);
+    } finally {
+      setIsLoadingArchive(false);
     }
-    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const filteredBooks = DOUJINSHI_BOOKS.filter((book) => {
-    const matchCat = categoryFilter === 'all' || book.category === categoryFilter;
+  // 测试与 Cloudflare R2 存储桶的 HTTPS/S3 API 连通性
+  const handleTestR2Connection = async () => {
+    soundManager.playBlip();
+    setR2ConnectionStatus('testing');
+    setR2StatusMessage('正在请求 R2 端点探测连通性...');
+
+    try {
+      // 探测首本 lh-001/image01.webp 样本资源
+      const testUrl = r2Service.getObjectUrl('lh-001/image01.webp');
+      const probe = await r2Service.probeResource(testUrl);
+
+      if (probe.ok) {
+        setR2ConnectionStatus('connected');
+        setR2StatusMessage(`连接畅通！HTTP 状态码: ${probe.status} (${probe.contentType || 'image'})`);
+        onShowToast('Cloudflare R2 存储桶资源请求通畅 🚀');
+      } else {
+        // 尝试探测根目录
+        const rootProbe = await r2Service.probeResource(r2Config.cdnBaseUrl);
+        if (rootProbe.status !== 0) {
+          setR2ConnectionStatus('connected');
+          setR2StatusMessage(`R2 域可访问 (状态码 ${rootProbe.status})，请确保存储桶公共读或图片已上传`);
+          onShowToast(`R2 域响应正常 (${rootProbe.status})`);
+        } else {
+          setR2ConnectionStatus('error');
+          setR2StatusMessage('探测受阻：请检查 CORS 跨域规则或公开访问权限');
+          onShowToast('R2 端点暂未返回响应，请确保存储桶公开访问或配置 CORS');
+        }
+      }
+    } catch (e: any) {
+      setR2ConnectionStatus('error');
+      setR2StatusMessage(`请求异常: ${e?.message || '网络或跨域受阻'}`);
+    }
+  };
+
+  // 保存自定义 R2 配置 (例如用户提供了自己的公开 CDN 域名或 S3 密钥)
+  const handleSaveR2Config = (newConfig: Partial<R2ConfigState>) => {
+    r2Service.updateConfig(newConfig);
+    setR2Config(r2Service.getConfig());
+    onShowToast('R2 逻辑层配置已更新并持久化至本地 ⚙️');
+  };
+
+  // 点击卡片直接进入查看来源于 R2 的无缝长图
+  const handleOpenBookReader = async (book: DoujinBookItem) => {
+    soundManager.playBlip();
+    setReadingBook(book);
+    setDetectedPages(book.pages || 30);
+    onShowToast(`正在开启《${book.titleZh}》无缝长图画廊 📖`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // 后台非阻塞动态探测实际存在页数
+    setIsDetectingPages(true);
+    try {
+      const realPages = await r2Service.detectBookPages(book, Math.max(book.pages || 30, 40));
+      if (realPages && realPages > 0) {
+        setDetectedPages(realPages);
+      }
+    } catch (e) {
+      // 维持默认页数
+    } finally {
+      setIsDetectingPages(false);
+    }
+  };
+
+  // 退出阅读器
+  const handleCloseReader = () => {
+    soundManager.playBlip();
+    setReadingBook(null);
+    setInteractiveZoom(false);
+    setDetectedPages(null);
+  };
+
+  // 过滤同人本列表
+  const filteredBooks = books.filter((book) => {
+    const matchCat = selectedCategory === '全部' || (book.category || '漫画本') === selectedCategory;
+    const matchTag = selectedTag === '全部' || book.tags.includes(selectedTag);
+    const q = searchQuery.trim().toLowerCase();
     const matchSearch =
-      book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      book.authorOrCircle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (book.source && book.source.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (book.translator && book.translator.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (book.typesetter && book.typesetter.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      book.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchCat && matchSearch;
+      !q ||
+      book.titleZh.toLowerCase().includes(q) ||
+      (book.titleJp && book.titleJp.toLowerCase().includes(q)) ||
+      book.circle.toLowerCase().includes(q) ||
+      (book.source && book.source.toLowerCase().includes(q)) ||
+      (book.translator && book.translator.toLowerCase().includes(q)) ||
+      (book.typesetter && book.typesetter.toLowerCase().includes(q)) ||
+      book.tags.some((t) => t.toLowerCase().includes(q));
+
+    return matchCat && matchTag && matchSearch;
   });
 
-  return (
-    <div className="space-y-4 text-[#2C241D]">
-      {/* Header Banner */}
-      <section className="bg-[#FAF5E8] border-2 border-[#5B3F8A] rounded-md p-3.5 sm:p-5 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-dashed border-[#D5C9AF] pb-3 mb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🔒</span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-pixel text-lg sm:text-xl text-[#5B3F8A] font-black tracking-wide">
-                  土豆粮仓驻地
-                </h2>
-                <span className="bg-[#5B3F8A] text-[#F9E79F] text-[10px] font-pixel px-2 py-0.5 rounded-xs">
-                  TOP SECRET
-                </span>
-              </div>
-            </div>
-          </div>
+  // ==========================================
+  // 📖 无缝长图阅读模式 (基于 Cloudflare R2 CDN 映射 + react-pinch-zoom-pan)
+  // ==========================================
+  if (readingBook) {
+    const totalPages = detectedPages || readingBook.pages || 30;
+    const pagesList = Array.from({ length: totalPages }, (_, i) => i + 1);
 
-          <div className="flex items-center gap-2">
-            {unlocked && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-pixel text-[#27AE60] bg-[#E8F8F5] border border-[#A2D9CE] px-2 py-1 rounded-xs flex items-center gap-1">
-                  <span>✓</span>
-                  <span>已解锁认证</span>
-                </span>
-                <button
-                  onClick={() => {
-                    soundManager.playBlip();
-                    window.location.reload();
-                  }}
-                  className="text-xs font-retro-jp px-2 py-1 bg-[#FAF5E8] hover:bg-[#EAE2CE] border border-[#D5C9AF] text-[#5B4636] rounded-xs cursor-pointer flex items-center gap-1"
-                  title="提示随时刷新页面"
-                >
-                  <span>🔄</span>
-                  <span>随时刷新</span>
-                </button>
-                <button
-                  onClick={() => {
-                    soundManager.playBlip();
-                    setUnlocked(false);
-                    setPasskeyInput('');
-                    onShowToast('已重新锁定驻地 🔒');
-                  }}
-                  className="text-xs font-retro-jp px-2 py-1 bg-[#FAF5E8] hover:bg-[#F3EAD5] border border-[#BFA985] text-[#8C7A68] rounded-xs cursor-pointer"
-                  title="重新锁定驻地"
-                >
-                  锁定
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+    // 长图主体内容：无间隙、块级排列、消除所有图片缝隙
+    const renderLongStripContent = () => (
+      <div className="w-full max-w-2xl mx-auto bg-[#181D1A] rounded-lg overflow-hidden border-2 border-[#1E4334] shadow-xl">
+        {pagesList.map((pageNum) => {
+          const pageUrl = r2Service.getPageUrl(readingBook, pageNum);
 
-        {/* Protection / Anti-resell Notice */}
-        <div className="space-y-2">
-          <div className="p-2.5 bg-[#FBF0EE] border-l-4 border-[#C0392B] rounded-r-xs font-retro-jp text-xs text-[#900C3F] space-y-1">
-            <div className="font-bold flex items-center gap-1.5">
-              <span>⚠️</span>
-              <span>【绝对禁令】严禁商用倒卖与公开二次传播：</span>
+          return (
+            <div key={pageNum} className="relative w-full block m-0 p-0 leading-none">
+              <img
+                src={pageUrl}
+                alt={`${readingBook.titleZh} 第 ${pageNum} 页`}
+                loading={pageNum <= 4 ? 'eager' : 'lazy'}
+                referrerPolicy="no-referrer"
+                className="w-full h-auto block m-0 p-0 border-0 align-top select-none"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  target.style.display = 'none';
+                  const parent = target.parentElement;
+                  if (parent) {
+                    parent.className =
+                      'w-full py-10 px-4 bg-[#1E2621] border-b border-dashed border-[#34483B] text-center text-[#A69C8E] font-retro-jp space-y-1 block';
+                    parent.innerHTML = `
+                      <div class="text-sm font-pixel text-[#F9E79F]">第 ${pageNum} / ${totalPages} 页</div>
+                      <div class="text-[11px] text-[#C4B7A6] mt-0.5">R2 路径: ${readingBook.bookFolder || readingBook.id}/image${pageNum.toString().padStart(2, '0')}.webp</div>
+                      <div class="text-[9px] text-[#7A6958]">若图片未显示，请确保存储桶已开启 Public Access 或文件已同步</div>
+                    `;
+                  }
+                }}
+              />
             </div>
-            <p className="leading-relaxed">
-              本驻地收录的汉化作品为利韩同好自发翻译与精修，<b>严禁上传至闲鱼/拼多多/微店有偿贩卖</b>，严禁搬运至外网公开社交平台打扰原作者。
-            </p>
-          </div>
-        </div>
+          );
+        })}
+      </div>
+    );
 
-        {/* Lock Screen / Passkey Form if locked */}
-        {!unlocked && (
-          <div className="mt-4 p-4 sm:p-6 bg-[#FFFEEF] border-2 border-dashed border-[#5B3F8A] rounded-sm text-center space-y-3">
-            <div className="w-10 h-10 mx-auto bg-[#5B3F8A] text-[#F9E79F] rounded-full flex items-center justify-center text-xl shadow-xs">
-              🗝️
-            </div>
-            <div className="space-y-1">
-              <h3 className="font-pixel text-sm sm:text-base text-[#5B3F8A] font-bold">
-                请输入进入密码
-              </h3>
-              <p className="font-retro-jp text-xs text-[#7A6958]">
-                为保护群内同好汉化嵌字成果，进入本驻地请输入密码认证（提示随时刷新）
+    return (
+      <div id="seamless-doujin-reader" className="relative w-full select-text pb-12">
+        {/* 顶部快捷导航与手势缩放控制条 */}
+        <div className="sticky top-2 z-40 mb-3 px-3 py-2 bg-[#FAF5E8]/95 border border-[#1E4334] rounded-lg shadow-md backdrop-blur-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={handleCloseReader}
+              className="px-2.5 py-1 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs rounded-xs hover:bg-[#2B5E4A] cursor-pointer transition-all flex items-center gap-1 shrink-0 shadow-xs"
+            >
+              <span>←</span>
+              <span>返回列表</span>
+            </button>
+            <div className="min-w-0">
+              <h2 className="font-pixel text-xs sm:text-sm font-bold text-[#1E3A2B] truncate">
+                {readingBook.titleZh}
+              </h2>
+              <p className="text-[10px] font-retro-jp text-[#7A6958] truncate">
+                作者：{readingBook.circle} · 共 {totalPages} 页{' '}
+                {isDetectingPages ? '(动态校准中...)' : '· R2 动态长图'}
               </p>
             </div>
-
-            <form onSubmit={handleUnlockSubmit} className="max-w-md mx-auto flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
-              <input
-                type="password"
-                value={passkeyInput}
-                onChange={(e) => setPasskeyInput(e.target.value)}
-                placeholder="请输入访问密码..."
-                autoFocus
-                className="px-3.5 py-2 text-xs font-pixel bg-[#FAF5E8] border-2 border-[#5B3F8A] rounded-xs w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-[#5B3F8A] text-center tracking-widest"
-              />
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <button
-                  type="submit"
-                  className="flex-1 sm:flex-initial px-4 py-2 bg-[#5B3F8A] hover:bg-[#4A2D78] text-[#F9E79F] font-pixel text-xs rounded-xs border border-[#3E2266] cursor-pointer transition-all shadow-xs active:scale-95 whitespace-nowrap"
-                >
-                  确认进入 🗝️
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundManager.playBlip();
-                    window.location.reload();
-                  }}
-                  className="px-3 py-2 bg-[#FAF5E8] hover:bg-[#EAE2CE] text-[#5B4636] border border-[#D5C9AF] font-retro-jp text-xs rounded-xs cursor-pointer transition-all whitespace-nowrap"
-                  title="提示随时刷新"
-                >
-                  🔄 刷新
-                </button>
-              </div>
-            </form>
-
-            <div className="text-[11px] font-retro-jp text-[#8C7A68] pt-1">
-              提示：请输入兵团同好口令进入（提示随时刷新）
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Unlocked Content */}
-      {unlocked && (
-        <div className="space-y-4">
-          {/* 1. 漫画首页精选预览 · 链接存储桶 */}
-          <section className="bg-[#FFFEEF] border-2 border-[#1E4334] rounded-md p-3.5 sm:p-5 shadow-xs space-y-3.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-dashed border-[#D5C9AF] pb-2.5">
-              <div className="flex items-center gap-2">
-                <span className="text-xl sm:text-2xl">📖</span>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-pixel text-sm sm:text-base text-[#1E4334] font-bold">
-                      漫画首页精选预览 · 链接存储桶
-                    </h3>
-                    <span className="text-[10px] font-retro-jp px-1.5 py-0.5 bg-[#E8F8F5] text-[#27AE60] border border-[#A2D9CE] rounded-xs font-bold">
-                      云端存储桶直链已连接
-                    </span>
-                  </div>
-                  <p className="text-[11px] font-retro-jp text-[#7A6958] mt-0.5">
-                    打开驻地即览精选同人本漫画首页与卷首扉页，点击可直达云端存储桶查阅完整高清原卷（提示随时刷新）
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <a
-                  href="https://pan.quark.cn/s/ee4920b9c9f7#/list/share"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] font-pixel text-xs rounded-xs transition-all shadow-xs cursor-pointer"
-                  title="进入云端存储桶完整目录"
-                >
-                  <span>📦 链接云端存储桶 ↗</span>
-                </a>
-                <button
-                  onClick={() => {
-                    soundManager.playBlip();
-                    window.location.reload();
-                  }}
-                  className="px-2.5 py-1.5 bg-[#FAF5E8] hover:bg-[#EAE2CE] text-[#5B4636] border border-[#D5C9AF] font-retro-jp text-xs rounded-xs transition-all cursor-pointer"
-                  title="提示随时刷新页面"
-                >
-                  <span>🔄 刷新</span>
-                </button>
-              </div>
-            </div>
-
-            {/* 漫画首页精选预览卡片网格 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {MANGA_COVER_PREVIEWS.map((preview) => (
-                <div
-                  key={preview.id}
-                  className="bg-[#FAF5E8] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-xs p-3 flex flex-col justify-between transition-all hover:shadow-xs group"
-                >
-                  <div className="space-y-2">
-                    {/* Simulated Stylized Manga Page Preview */}
-                    <div className="relative bg-[#FBF9F2] border border-[#C5B495] rounded-xs p-3 text-center overflow-hidden shadow-2xs">
-                      <div className="absolute top-1 left-1 text-[9px] font-pixel px-1 py-0.2 bg-[#1E4334] text-[#F9E79F] rounded-xs">
-                        {preview.pageLabel}
-                      </div>
-                      <div className="absolute top-1 right-1 text-[9px] font-retro-jp px-1 py-0.2 bg-[#EAE2CE] text-[#7A6958] rounded-xs">
-                        {preview.badge}
-                      </div>
-
-                      {/* Stylized Manga Cover Frame */}
-                      <div className="my-4 pt-2 pb-1 border-y border-dashed border-[#D5C9AF]">
-                        <div className="text-[10px] font-pixel text-[#8C7A68] tracking-widest uppercase">
-                          進撃の巨人 · LEVI × HANGE
-                        </div>
-                        <div className="font-pixel text-xs sm:text-sm font-black text-[#1E3A2B] my-1 tracking-wide line-clamp-1">
-                          {preview.title}
-                        </div>
-                        <div className="text-[10px] font-retro-jp text-[#B7791F] font-bold">
-                          {preview.chapter}
-                        </div>
-                      </div>
-
-                      {/* Manga Quote Snippet */}
-                      <p className="text-[10px] font-retro-jp text-[#5D4E41] italic line-clamp-2 px-1">
-                        {preview.sampleQuotes}
-                      </p>
-                    </div>
-
-                    <p className="text-[11px] font-retro-jp text-[#6B5A4B] leading-relaxed">
-                      {preview.desc}
-                    </p>
-                  </div>
-
-                  {/* Actions for this preview */}
-                  <div className="mt-3 pt-2 border-t border-dashed border-[#D5C9AF] flex items-center justify-between gap-1.5 text-xs font-retro-jp">
-                    <button
-                      onClick={() => setSelectedPreview(preview)}
-                      className="text-[11px] text-[#1E4334] hover:text-[#2A5C47] font-bold underline cursor-pointer"
-                    >
-                      🔍 预览大图
-                    </button>
-                    <a
-                      href={preview.bucketUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] font-pixel text-[10px] rounded-xs transition-all shadow-2xs"
-                    >
-                      <span>直达存储桶 ↗</span>
-                    </a>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* 2. Controls Bar: Category Filters & Search */}
-          <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-md p-2.5 sm:p-3 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
-            {/* Categories */}
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                { key: 'all', label: '全部作品' },
-                { key: 'canon', label: '📖 原作深度向' },
-                { key: 'serious', label: '⚔️ 严肃正剧' },
-                { key: 'sweet', label: '☕ 治愈日常' },
-                { key: 'au', label: '🌆 现代平行AU' },
-                { key: 'artbook', label: '🎨 全彩画集特典' },
-              ].map((cat) => (
-                <button
-                  key={cat.key}
-                  onClick={() => {
-                    soundManager.playBlip();
-                    setCategoryFilter(cat.key as typeof categoryFilter);
-                  }}
-                  className={`px-2.5 py-1 text-xs font-retro-jp rounded-xs border transition-all cursor-pointer ${
-                    categoryFilter === cat.key
-                      ? 'bg-[#5B3F8A] text-[#F9E79F] border-[#5B3F8A] font-bold shadow-xs'
-                      : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Search */}
-            <div className="flex items-center gap-1.5">
-              <input
-                type="text"
-                placeholder="搜索名称/作者/来源/汉化/嵌字..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="px-2.5 py-1 text-xs font-retro-jp bg-[#FAF5E8] border border-[#BFA985] rounded-xs w-full sm:w-56 focus:outline-none"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="text-xs text-[#8C7A68] hover:text-[#1E4334] px-1 cursor-pointer"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
           </div>
 
-          {/* 3. Book Cards Grid: Every file module explicitly writes: 名称、作者、来源、汉化、嵌字 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            {filteredBooks.map((book) => (
-              <div
-                key={book.id}
-                className="bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#5B3F8A] rounded-sm p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-xs space-y-3"
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* 切换 react-pinch-zoom-pan 手势缩放平移 */}
+            <button
+              onClick={() => {
+                soundManager.playBlip();
+                setInteractiveZoom(!interactiveZoom);
+                onShowToast(
+                  !interactiveZoom
+                    ? '已开启双指捏合缩放/平移模式 (Pinch Zoom Pan) 🔍'
+                    : '已切回常规长图滚动模式 📜'
+                );
+              }}
+              className={`px-2.5 py-1 font-pixel text-[10px] rounded-xs cursor-pointer transition-all border ${
+                interactiveZoom
+                  ? 'bg-[#B7791F] text-[#FFFEEF] border-[#B7791F] font-bold shadow-xs'
+                  : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#EAE2CE]'
+              }`}
+              title="使用 react-pinch-zoom-pan 进行双指捏合缩放与全向平移"
+            >
+              {interactiveZoom ? '🔍 缩放平移中' : '🔍 捏合缩放'}
+            </button>
+
+            <button
+              onClick={() => {
+                soundManager.playBlip();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="px-2 py-1 bg-[#FAF5E8] hover:bg-[#EAE2CE] border border-[#D5C9AF] text-[#5B4636] font-pixel text-[10px] rounded-xs cursor-pointer"
+              title="回到顶端"
+            >
+              ↑ 顶端
+            </button>
+          </div>
+        </div>
+
+        {/* 缩放/平移或常规无缝长图展示区 */}
+        {interactiveZoom ? (
+          <div className="w-full bg-[#181D1A] rounded-lg overflow-hidden border-2 border-[#1E4334] shadow-xl p-1 touch-none">
+            <div className="text-center py-1.5 text-[10px] font-retro-jp text-[#F9E79F] bg-[#1E2621] rounded-xs mb-2 flex items-center justify-center gap-2">
+              <span>💡 提示：在画面中支持触摸双指捏合放大、拖动平移。</span>
+              <button
+                onClick={() => setInteractiveZoom(false)}
+                className="underline hover:text-white cursor-pointer"
               >
-                <div className="space-y-2.5">
-                  {/* Top Badges */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-pixel text-[10px] bg-[#5B3F8A] text-[#F9E79F] px-2 py-0.5 rounded-xs font-bold">
-                        {book.coverTag}
-                      </span>
-                      <span className="font-retro-jp text-[11px] bg-[#FAF5E8] text-[#6B5A4B] border border-[#D5C9AF] px-1.5 py-0.2 rounded-xs">
-                        {book.format}
-                      </span>
-                      {book.pages && (
-                        <span className="font-retro-jp text-[10px] text-[#8C7A68]">
-                          {book.pages}
-                        </span>
-                      )}
-                    </div>
-
-                    <span
-                      className={`text-[10px] font-retro-jp px-1.5 py-0.5 rounded-xs shrink-0 ${
-                        book.platform === '百度网盘'
-                          ? 'bg-[#EBF5FB] text-[#2980B9] border border-[#AED6F1]'
-                          : 'bg-[#FEF9E7] text-[#B7950B] border border-[#F9E79F]'
-                      }`}
-                    >
-                      {book.platform}
-                    </span>
-                  </div>
-
-                  {/* 5 Required File Module Fields: 名称、作者、来源、汉化、嵌字 */}
-                  <div className="bg-[#FAF5E8] border border-[#E0D5BE] rounded-xs p-2.5 space-y-1.5 text-xs font-retro-jp">
-                    <div className="flex items-start gap-1.5">
-                      <span className="font-bold text-[#1E4334] shrink-0 w-12 text-right">【名称】</span>
-                      <span className="font-bold text-[#1E3A2B] break-words flex-1">{book.title}</span>
-                    </div>
-                    <div className="flex items-start gap-1.5">
-                      <span className="font-bold text-[#B7791F] shrink-0 w-12 text-right">【作者】</span>
-                      <span className="text-[#5B4636] flex-1">{book.authorOrCircle}</span>
-                    </div>
-                    <div className="flex items-start gap-1.5">
-                      <span className="font-bold text-[#7A6958] shrink-0 w-12 text-right">【来源】</span>
-                      <span className="text-[#6B5A4B] flex-1">{book.source || '日本同人展会原刊 / 即卖会'}</span>
-                    </div>
-                    <div className="flex items-start gap-1.5">
-                      <span className="font-bold text-[#27AE60] shrink-0 w-12 text-right">【汉化】</span>
-                      <span className="text-[#2D5A3A] flex-1">{book.translator || '利韩土豆汉化组'}</span>
-                    </div>
-                    <div className="flex items-start gap-1.5">
-                      <span className="font-bold text-[#8E44AD] shrink-0 w-12 text-right">【嵌字】</span>
-                      <span className="text-[#5B3F8A] flex-1">{book.typesetter || '兵团精修嵌字工坊'}</span>
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  <p className="font-retro-jp text-[11px] sm:text-xs text-[#5D4E41] leading-relaxed bg-[#FFFDF7] p-2 rounded-xs border border-[#EDE5D3]">
-                    {book.description}
-                  </p>
+                切回滚屏
+              </button>
+            </div>
+            {/* react-pinch-zoom-pan 容器 */}
+            <ReactPinchZoomPan
+              initialScale={1}
+              maxScale={3}
+              render={({ x, y, scale }) => (
+                <div
+                  style={{
+                    transform: `translate3d(${x}px, ${y}px, 0) scale(${scale})`,
+                    transformOrigin: '0 0',
+                  }}
+                  className="w-full transition-transform duration-75"
+                >
+                  {renderLongStripContent()}
                 </div>
+              )}
+            />
+          </div>
+        ) : (
+          renderLongStripContent()
+        )}
 
-                {/* Minimal Footer Action Bar with Auto-Jump & Bucket preview link */}
-                <div className="pt-2.5 border-t border-dashed border-[#E0D5BE] flex items-center justify-between text-xs font-retro-jp">
-                  <div className="flex items-center gap-1.5">
-                    {book.code ? (
-                      <span className="font-pixel text-[11px] text-[#B7791F] bg-[#FAF5E8] border border-[#EAE2CE] px-2 py-0.5 rounded-xs">
-                        提取码 {book.code}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-[#A69B88]">免提取码</span>
-                    )}
+        {/* 阅读完毕底部操作 */}
+        <div className="w-full max-w-2xl mx-auto mt-4 p-4 bg-[#FAF5E8] border border-[#D5C9AF] rounded-md text-center space-y-2 font-retro-jp">
+          <p className="text-xs text-[#5B4636] font-bold">已浏览至末尾（共 {totalPages} 页）</p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={handleCloseReader}
+              className="px-3.5 py-1.5 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs rounded-xs hover:bg-[#2B5E4A] cursor-pointer shadow-xs"
+            >
+              返回本子列表 📚
+            </button>
+            <button
+              onClick={() => {
+                soundManager.playBlip();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="px-3 py-1.5 bg-[#FFFEEF] text-[#5B4636] border border-[#D5C9AF] text-xs rounded-xs cursor-pointer hover:bg-white"
+            >
+              回到顶部
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-                    {book.bucketPreviewUrl && (
-                      <a
-                        href={book.bucketPreviewUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] text-[#1E4334] hover:underline font-bold"
-                        title="在存储桶中打开"
-                      >
-                        📦 存储桶直达
-                      </a>
-                    )}
-                  </div>
+  // ==========================================
+  // 📚 典藏本列表主视图 (coverFile 映射为 Cloudflare R2 CDN 链接)
+  // ==========================================
+  return (
+    <div id="doujinshi-archive-root" className="space-y-3 text-[#2C241D] select-text">
+      {/* 典藏公约红线轻量提示 */}
+      <div className="p-2 px-3 bg-[#FBF0EE] border-l-3 border-[#C0392B] rounded-r-xs font-retro-jp text-[11px] text-[#900C3F] flex items-center justify-between gap-2">
+        <div>
+          <span className="font-bold">⚠️ 典藏公约：</span>
+          本专区由利韩同好自发汉化嵌字。<b>严禁倒卖商用、严禁转传闲鱼微店</b>，请共同守护创作者的心血。
+        </div>
 
-                  <button
-                    onClick={() => handleAutoJump(book.downloadUrl, book.code)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#1E4334] hover:bg-[#2B5E4A] text-[#FAF5E8] font-pixel text-xs rounded-xs cursor-pointer transition-all shadow-xs active:scale-95"
-                  >
-                    <span>跳转下载</span>
-                    <span>↗</span>
-                  </button>
-                </div>
-              </div>
-            ))}
+        {/* R2 逻辑层状态指示徽章 */}
+        <button
+          onClick={() => {
+            soundManager.playBlip();
+            setShowR2Panel(!showR2Panel);
+          }}
+          className="shrink-0 px-2 py-0.5 bg-[#FFFEEF] hover:bg-[#FAF5E8] border border-[#D5C9AF] text-[10px] font-pixel rounded-xs text-[#1E4334] cursor-pointer flex items-center gap-1 shadow-2xs"
+          title="展开/折叠 Cloudflare R2 逻辑层与 S3 API 连接信息"
+        >
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              r2ConnectionStatus === 'connected'
+                ? 'bg-emerald-500 animate-pulse'
+                : r2ConnectionStatus === 'error'
+                ? 'bg-rose-500'
+                : 'bg-amber-500'
+            }`}
+          />
+          <span>R2 状态</span>
+          <span className="text-[8px]">{showR2Panel ? '▲' : '▼'}</span>
+        </button>
+      </div>
+
+      {/* Cloudflare R2 S3 逻辑层状态与配置面板（可折叠） */}
+      {showR2Panel && (
+        <div className="bg-[#1E2621] text-[#FAF5E8] border-2 border-[#1E4334] rounded-md p-3 space-y-2.5 font-retro-jp text-xs shadow-md">
+          <div className="flex items-center justify-between border-b border-[#34483B] pb-1.5">
+            <div className="flex items-center gap-2">
+              <span className="font-pixel text-xs text-[#F9E79F]">
+                ⚡ Cloudflare R2 S3 API 逻辑层
+              </span>
+              <span className="px-1.5 py-0.2 bg-[#2B5E4A] text-[#F9E79F] font-pixel text-[9px] rounded-xs">
+                AWS SDK / S3 API 已接入
+              </span>
+            </div>
+            <button
+              onClick={() => setShowR2Panel(false)}
+              className="text-[#A69C8E] hover:text-white px-1 text-xs cursor-pointer"
+            >
+              ✕
+            </button>
           </div>
 
-          {filteredBooks.length === 0 && (
-            <div className="p-8 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-sm text-xs font-retro-jp text-[#8C7A68]">
-              没有找到匹配的同人本，换个关键词搜搜看吧～（提示随时刷新）
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+            <div className="space-y-1">
+              <div className="text-[#A69C8E]">
+                账户 ID (Account ID):{' '}
+                <span className="text-[#F9E79F] font-mono select-all">
+                  {r2Config.accountId}
+                </span>
+              </div>
+              <div className="text-[#A69C8E] truncate">
+                S3 API 端点:{' '}
+                <span className="text-[#F9E79F] font-mono select-all text-[10px]">
+                  {r2Config.s3ApiEndpoint}
+                </span>
+              </div>
+              <div className="text-[#A69C8E]">
+                存储规则:{' '}
+                <span className="text-[#58D68D] font-mono">
+                  lh-XXX/ 目录结构 (如 lh-001/image01.webp)
+                </span>
+              </div>
             </div>
-          )}
 
-          {/* Bottom Copyright & Etiquette Pledge */}
-          <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-sm p-3 text-[11px] font-retro-jp text-[#7A6958] leading-relaxed flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-            <div>
-              <span className="font-bold text-[#5B3F8A]">📖 读者公约：</span>
-              本站所有资源收集自网络公开同好交流及群友私藏分享。原作《进击的巨人》版权归谏山创老师及讲谈社所有；同人志著作权归原作者与绘制社团所有；汉化精修嵌字归汉化同好所有。严禁倒卖商用！
+            <div className="space-y-1">
+              <div className="text-[#A69C8E] truncate">
+                公开 CDN 基础链接:{' '}
+                <input
+                  type="text"
+                  value={r2Config.cdnBaseUrl}
+                  onChange={(e) =>
+                    handleSaveR2Config({ cdnBaseUrl: e.target.value.trim() })
+                  }
+                  className="w-full mt-0.5 px-2 py-1 bg-[#141A17] border border-[#34483B] rounded-xs text-[#F9E79F] font-mono text-[10px] focus:outline-none focus:border-[#F9E79F]"
+                  placeholder="https://pub-xxxx.r2.dev"
+                />
+              </div>
             </div>
-            <div className="shrink-0 text-[10px] text-[#8C7A68] italic">
-              提示随时刷新 · 土豆粮仓驻地
+          </div>
+
+          {/* 状态与诊断操作 */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-dashed border-[#34483B] text-[10px]">
+            <div className="flex items-center gap-1.5 text-[#C4B7A6]">
+              <span className="font-bold">状态:</span>
+              <span
+                className={
+                  r2ConnectionStatus === 'connected'
+                    ? 'text-[#58D68D] font-bold'
+                    : r2ConnectionStatus === 'error'
+                    ? 'text-[#E74C3C] font-bold'
+                    : 'text-[#F9E79F]'
+                }
+              >
+                {r2StatusMessage}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleTestR2Connection}
+                disabled={r2ConnectionStatus === 'testing'}
+                className="px-2.5 py-1 bg-[#2B5E4A] hover:bg-[#3B7E64] text-[#F9E79F] font-pixel text-[9px] rounded-xs cursor-pointer transition-all disabled:opacity-50"
+              >
+                {r2ConnectionStatus === 'testing' ? '探测中...' : '📡 探测 R2 连通性'}
+              </button>
+              <button
+                onClick={() => handleRefreshArchive(true)}
+                disabled={isLoadingArchive}
+                className="px-2.5 py-1 bg-[#B7791F] hover:bg-[#D4AC0D] text-[#1E2621] font-pixel text-[9px] rounded-xs font-bold cursor-pointer transition-all disabled:opacity-50"
+              >
+                {isLoadingArchive ? '同步中...' : '🔄 刷新归档数据'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Lightbox Modal for Full Manga First Page Preview */}
-      {selectedPreview && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3">
-          <div className="bg-[#FFFEEF] border-4 border-[#1E4334] rounded-md max-w-lg w-full p-4 sm:p-5 shadow-2xl relative space-y-3 font-retro-jp">
+      {/* 筛选与搜索栏 */}
+      <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-md p-2.5 space-y-2">
+        {/* 分类栏与标签 */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-retro-jp">
+          <span className="text-[10px] font-pixel text-[#8C7A68] mr-1">分类:</span>
+          {allCategories.map((cat) => (
             <button
-              onClick={() => setSelectedPreview(null)}
-              className="absolute top-2 right-2 text-[#5B4636] hover:text-[#1E4334] font-bold text-sm px-2 py-1 cursor-pointer"
+              key={cat}
+              onClick={() => {
+                soundManager.playBlip();
+                setSelectedCategory(cat);
+              }}
+              className={`px-2 py-0.5 rounded-xs border transition-all cursor-pointer text-[11px] ${
+                selectedCategory === cat
+                  ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-xs'
+                  : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
+              }`}
             >
-              ✕ 关闭
+              {cat}
             </button>
+          ))}
 
-            <div className="text-center border-b border-dashed border-[#D5C9AF] pb-2">
-              <span className="text-[10px] font-pixel px-2 py-0.5 bg-[#1E4334] text-[#F9E79F] rounded-xs">
-                {selectedPreview.pageLabel}
-              </span>
-              <h3 className="font-pixel text-sm sm:text-base font-black text-[#1E3A2B] mt-1">
-                {selectedPreview.title}
-              </h3>
-              <p className="text-xs text-[#B7791F] font-bold mt-0.5">
-                {selectedPreview.chapter}
-              </p>
-            </div>
-
-            <div className="bg-[#FAF5E8] border border-[#C5B495] rounded-xs p-4 text-center space-y-2">
-              <div className="text-xs text-[#5D4E41] leading-relaxed">
-                {selectedPreview.desc}
-              </div>
-              <div className="p-3 bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-xs italic text-xs text-[#2D5A3A]">
-                {selectedPreview.sampleQuotes}
-              </div>
-              <div className="text-[10px] text-[#8C7A68]">
-                云端存储桶完整原件包含全部页面、跨页插图及日文原版对比。
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-2 pt-2 border-t border-dashed border-[#D5C9AF]">
-              <span className="text-[11px] text-[#7A6958]">提示随时刷新</span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setSelectedPreview(null)}
-                  className="px-3 py-1.5 bg-[#FAF5E8] hover:bg-[#EAE2CE] text-[#5B4636] border border-[#D5C9AF] rounded-xs text-xs cursor-pointer"
-                >
-                  关闭预览
-                </button>
-                <a
-                  href={selectedPreview.bucketUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] font-pixel text-xs rounded-xs cursor-pointer"
-                >
-                  <span>直达存储桶浏览 ↗</span>
-                </a>
-              </div>
-            </div>
+          <span className="text-[10px] font-pixel text-[#8C7A68] ml-2 mr-1">标签:</span>
+          <div className="flex flex-wrap gap-1">
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => {
+                  soundManager.playBlip();
+                  setSelectedTag(tag);
+                }}
+                className={`px-1.5 py-0.5 rounded-xs border text-[10px] font-retro-jp transition-all cursor-pointer ${
+                  selectedTag === tag
+                    ? 'bg-[#B7791F] text-[#FFFEEF] border-[#B7791F] font-bold'
+                    : 'bg-[#FAF5E8] text-[#7A6958] border-[#E0D5BE] hover:bg-white'
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
           </div>
+        </div>
+
+        {/* 搜索框 */}
+        <div className="flex items-center gap-1.5 pt-1 border-t border-dashed border-[#E0D5BE]">
+          <input
+            type="text"
+            placeholder="快速检索标题、作者、汉化、嵌字或标签..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="px-2.5 py-1 text-xs font-retro-jp bg-[#FAF5E8] border border-[#BFA985] rounded-xs w-full focus:outline-none focus:border-[#1E4334]"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="text-xs text-[#8C7A68] hover:text-[#1E4334] px-1 cursor-pointer"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 典藏本卡片网格：点击直接进入查看长图 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {filteredBooks.map((book) => {
+          // 通过 R2 逻辑层动态生成封面 CDN 地址
+          const coverUrl = r2Service.getCoverUrl(book);
+
+          return (
+            <div
+              key={book.id}
+              onClick={() => handleOpenBookReader(book)}
+              className="bg-[#FFFEEF] border border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-3 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2"
+              title="点击直接打开查看无缝长图"
+            >
+              <div className="space-y-2">
+                {/* 顶部标题与分类徽章 */}
+                <div className="flex items-start justify-between gap-1.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-pixel text-[9px] px-1.5 py-0.2 bg-[#1E4334] text-[#F9E79F] rounded-xs font-bold">
+                        {book.category || '漫画本'}
+                      </span>
+                      <span className="px-1.5 py-0.2 bg-[#E8F8F5] text-[#117A65] border border-[#A3E4D7] text-[9px] font-pixel rounded-xs">
+                        R2 存储
+                      </span>
+                      {book.pages && (
+                        <span className="text-[10px] font-retro-jp text-[#8C7A68]">
+                          {book.pages}P
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-pixel text-xs sm:text-[13px] font-bold text-[#1E3A2B] group-hover:text-[#B7791F] mt-1 break-words leading-snug transition-colors">
+                      {book.titleZh}
+                    </h3>
+                    {book.titleJp && (
+                      <div className="text-[10px] font-retro-jp text-[#8C7A68] italic truncate">
+                        {book.titleJp}
+                      </div>
+                    )}
+                  </div>
+
+                  <span className="text-[9px] font-pixel text-[#B7791F] shrink-0 font-bold">
+                    #{book.id}
+                  </span>
+                </div>
+
+                {/* 封面图片展示区 (来源 Cloudflare R2 CDN 链接映射，悬浮显示点击阅读长图) */}
+                <div className="relative w-full aspect-[4/3] bg-[#FAF5E8] border border-[#E0D5BE] rounded-xs overflow-hidden group-hover:border-[#1E4334] flex items-center justify-center transition-colors">
+                  <img
+                    src={coverUrl}
+                    alt={book.titleZh}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.classList.add('flex-col', 'p-2', 'text-center');
+                        parent.innerHTML = `
+                          <div class="text-xl">📖</div>
+                          <div class="font-pixel text-[10px] text-[#1E4334] mt-1 font-bold">${book.titleZh}</div>
+                          <div class="text-[9px] text-[#8C7A68] mt-0.5 font-mono">${book.bookFolder || book.id}/${book.coverFile || 'image01.webp'}</div>
+                          <div class="text-[8px] text-[#B7791F] mt-0.5">点击进入长图画廊</div>
+                        `;
+                      }
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <span className="px-3 py-1.5 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs rounded-xs shadow-lg flex items-center gap-1">
+                      <span>📖 点击阅读长图</span>
+                      <span>→</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* 字段区：“作者”、来源、汉化、嵌字 */}
+                <div className="bg-[#FAF5E8] border border-[#EBE3D0] rounded-xs p-2 space-y-1 text-[11px] font-retro-jp">
+                  <div className="flex items-start gap-1">
+                    <span className="font-bold text-[#8C6B38] shrink-0 w-10 text-right">作者:</span>
+                    <span className="text-[#3E342B] font-bold flex-1 break-words">
+                      {book.circle || '未知'}
+                    </span>
+                  </div>
+
+                  {book.source && (
+                    <div className="flex items-start gap-1">
+                      <span className="font-bold text-[#7A6958] shrink-0 w-10 text-right">来源:</span>
+                      <span className="text-[#5B4636] flex-1 break-words">{book.source}</span>
+                    </div>
+                  )}
+
+                  {book.translator && (
+                    <div className="flex items-start gap-1">
+                      <span className="font-bold text-[#27AE60] shrink-0 w-10 text-right">汉化:</span>
+                      <span className="text-[#2D5A3A] flex-1 break-words">{book.translator}</span>
+                    </div>
+                  )}
+
+                  {book.typesetter && (
+                    <div className="flex items-start gap-1">
+                      <span className="font-bold text-[#6A4C93] shrink-0 w-10 text-right">嵌字:</span>
+                      <span className="text-[#4E376B] flex-1 break-words">{book.typesetter}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 标签 tags 列表 */}
+                <div className="flex flex-wrap gap-1">
+                  {book.tags.map((tag, tIdx) => (
+                    <span
+                      key={tIdx}
+                      className={`text-[9px] font-retro-jp px-1.5 py-0.2 rounded-xs border ${
+                        tag === '预警' || tag === '含R18'
+                          ? 'bg-[#FADBD8] text-[#C0392B] border-[#F1948A]'
+                          : 'bg-[#F4EEDF] text-[#7A6958] border-[#DECFA9]'
+                      }`}
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* 底部引导栏：简约提示点击即看长图 */}
+              <div className="pt-2 border-t border-dashed border-[#E0D5BE] flex items-center justify-between text-[10px] font-retro-jp text-[#8C7A68]">
+                <span>共 {book.pages || 30} 页</span>
+                <span className="text-[#1E4334] font-pixel text-[10px] group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                  <span>进入长图阅读</span>
+                  <span>→</span>
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {filteredBooks.length === 0 && (
+        <div className="p-8 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
+          没有检索到符合条件的同人本，您可以清空搜索条件或调整分类～
         </div>
       )}
     </div>
