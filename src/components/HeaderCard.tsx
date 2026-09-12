@@ -63,21 +63,21 @@ export const HeaderCard: React.FC<Props> = ({
         </button>
       </div>
 
-      {/* Navigation Tabs - responsive tab paddings, margins and gap sizes */}
-      <nav aria-label="主要导航" className="flex flex-wrap items-center justify-start gap-1.5 sm:gap-2">
+      {/* Navigation Tabs - responsive tab paddings, dynamic alignment and balanced grid on mobile & desktop */}
+      <nav aria-label="主要导航" className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 w-full">
         <button
           onClick={() => {
             soundManager.playBlip();
             onSelectTab('home');
           }}
-          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 ${
+          className={`w-full justify-center px-2 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1 sm:gap-1.5 min-w-0 select-none ${
             activeTab === 'home'
               ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-2xs'
               : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
           }`}
         >
-          <span>🏠</span>
-          <span>兵团驻地</span>
+          <span className="shrink-0">🏠</span>
+          <span className="truncate">兵团驻地</span>
         </button>
 
         <button
@@ -85,14 +85,14 @@ export const HeaderCard: React.FC<Props> = ({
             soundManager.playBlip();
             onSelectTab('resources');
           }}
-          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 ${
+          className={`w-full justify-center px-2 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1 sm:gap-1.5 min-w-0 select-none ${
             activeTab === 'resources'
               ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-2xs'
               : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
           }`}
         >
-          <span>📚</span>
-          <span>资源外链</span>
+          <span className="shrink-0">📚</span>
+          <span className="truncate">资源外链</span>
         </button>
 
         <button
@@ -100,14 +100,14 @@ export const HeaderCard: React.FC<Props> = ({
             soundManager.playBlip();
             onSelectTab('doujinshi');
           }}
-          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 ${
+          className={`w-full justify-center px-2 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1 sm:gap-1.5 min-w-0 select-none ${
             activeTab === 'doujinshi'
               ? 'bg-[#5B3F8A] text-[#F9E79F] border-[#5B3F8A] font-bold shadow-2xs'
               : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
           }`}
         >
-          <span>🔒</span>
-          <span>土豆粮仓驻地</span>
+          <span className="shrink-0">🔒</span>
+          <span className="truncate">土豆粮仓驻地</span>
         </button>
 
         <button
@@ -115,14 +115,14 @@ export const HeaderCard: React.FC<Props> = ({
             soundManager.playBlip();
             window.open('/tatakaru.html', '_blank', 'noopener,noreferrer');
           }}
-          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 ${
+          className={`w-full justify-center px-2 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1 sm:gap-1.5 min-w-0 select-none ${
             activeTab === 'tatakaru'
               ? 'bg-[#B3402F] text-[#F9E79F] border-[#B3402F] font-bold shadow-2xs'
               : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
           }`}
         >
-          <span>⚔️</span>
-          <span>塔塔开</span>
+          <span className="shrink-0">⚔️</span>
+          <span className="truncate">塔塔开</span>
         </button>
       </nav>
     </header>
