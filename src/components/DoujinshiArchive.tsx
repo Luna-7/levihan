@@ -11,9 +11,16 @@ import { r2Service, R2ConfigState } from '../services/r2Client';
 interface Props {
   onCopyCode?: (code: string) => void;
   onShowToast: (msg: string) => void;
+  onGoToResources?: () => void;
 }
 
-export const DoujinshiArchive: React.FC<Props> = ({ onShowToast }) => {
+export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources }) => {
+  // 游客研发中门禁状态（默认锁定，普通游客显示“研发中”；开发与管理人员可输入暗号解锁测试内部模块）
+  const [isDevUnlocked, setIsDevUnlocked] = useState<boolean>(false);
+  const [showUnlockModal, setShowUnlockModal] = useState<boolean>(false);
+  const [inputSecret, setInputSecret] = useState<string>('');
+  const [unlockError, setUnlockError] = useState<string>('');
+
   // 归档数据状态（优先加载远端 R2 archive.json，兜底使用本地 Excel 录入数据）
   const [books, setBooks] = useState<DoujinBookItem[]>(DOUJIN_ARCHIVE_DATA);
   const [isLoadingArchive, setIsLoadingArchive] = useState<boolean>(false);
@@ -157,6 +164,188 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast }) => {
 
     return matchCat && matchTag && matchSearch;
   });
+
+  // 暗号验证与解锁处理
+  const handleVerifySecret = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const val = inputSecret.trim().toLowerCase();
+    // 允许研发调试通行口令
+    if (['potato', 'lh', 'levi-hange', '利韩', '利韩土豆', '139', '0721'].includes(val)) {
+      soundManager.playCoin();
+      setIsDevUnlocked(true);
+      setShowUnlockModal(false);
+      setInputSecret('');
+      setUnlockError('');
+      onShowToast('已解锁土豆粮仓内部研发测试模块 🛠️');
+    } else {
+      soundManager.playBlip();
+      setUnlockError('通行口令不正确，请重新输入');
+    }
+  };
+
+  // ==========================================
+  // 🚧 游客研发中展示视图（普通游客默认无法访问内部模块）
+  // ==========================================
+  if (!isDevUnlocked) {
+    return (
+      <div id="doujin-under-dev-view" className="space-y-4 text-[#2C241D]">
+        {/* 顶部醒目施工横幅 */}
+        <div className="bg-[#1E4334] text-[#FAF5E8] border-2 sm:border-[3px] border-[#153025] rounded-md p-4 sm:p-6 shadow-md relative overflow-hidden text-center space-y-3">
+          <div className="absolute top-2 left-3 opacity-15 text-2xl select-none pointer-events-none">🚧</div>
+          <div className="absolute top-2 right-3 opacity-15 text-2xl select-none pointer-events-none">⚙️</div>
+          <div className="absolute bottom-2 left-8 opacity-15 text-2xl select-none pointer-events-none">🥔</div>
+          <div className="absolute bottom-2 right-8 opacity-15 text-2xl select-none pointer-events-none">📐</div>
+
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#2B5E4A] border border-[#3B7E64] text-[#F9E79F] text-xs font-pixel rounded-xs shadow-xs">
+            <span>🚧</span>
+            <span>UNDER DEVELOPMENT</span>
+          </div>
+
+          <div className="space-y-1">
+            <h2 className="font-pixel text-lg sm:text-2xl text-[#F9E79F] font-bold tracking-wide">
+              土豆粮仓驻地 · 正在研发施工
+            </h2>
+            <p className="font-retro-jp text-xs sm:text-sm text-[#D5F5E3] max-w-xl mx-auto leading-relaxed">
+              为了提供更优质的浏览与阅读体验，本专区正在进行深度优化与升级。
+            </p>
+          </div>
+
+          {/* 进度条与状态展示 */}
+          <div className="max-w-md mx-auto bg-[#142B21] border border-[#2B5E4A] rounded-xs p-3 space-y-2 text-left">
+            <div className="flex items-center justify-between text-[11px] font-pixel text-[#F9E79F]">
+              <span className="flex items-center gap-1">
+                <span className="animate-spin text-xs">⚙️</span>
+                <span>核心模块研发进度</span>
+              </span>
+              <span>85%</span>
+            </div>
+            {/* Retro Pixel Progress Bar */}
+            <div className="w-full bg-[#0D1C16] border border-[#2B5E4A] h-3 rounded-xs overflow-hidden p-0.5">
+              <div className="bg-gradient-to-r from-[#D4AC0D] to-[#58D68D] h-full rounded-2xs w-[85%] transition-all duration-500 animate-pulse" />
+            </div>
+          </div>
+        </div>
+
+        {/* 详细说明卡片 */}
+        <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-md p-4 sm:p-5 space-y-3 font-retro-jp shadow-xs">
+          <div className="flex items-center gap-2 text-sm font-pixel text-[#1E4334] font-bold border-b border-dashed border-[#D5C9AF] pb-2">
+            <span>🥔</span>
+            <span>游客访问指引</span>
+          </div>
+
+          <div className="space-y-2 text-xs sm:text-sm text-[#5B4636] leading-relaxed">
+            <p className="flex items-start gap-1.5">
+              <span className="text-[#C0392B] font-bold shrink-0">✦</span>
+              <span>
+                <b>暂未对外开放：</b>当前同人本画廊与在线阅读器仍在持续调优，暂不对普通游客开放访问，敬请关注后续版本公告。
+              </span>
+            </p>
+            <p className="flex items-start gap-1.5">
+              <span className="text-[#27AE60] font-bold shrink-0">✦</span>
+              <span>
+                <b>公开资源可正常使用：</b>进击的巨人动画利韩全季 Cut、官方广播剧、访谈考据及 140+ Pixiv 画师外链均可在<b>【资源外链】</b>专区无障碍获取。
+              </span>
+            </p>
+            <p className="flex items-start gap-1.5">
+              <span className="text-[#8E44AD] font-bold shrink-0">✦</span>
+              <span>
+                <b>同好交流与答疑：</b>欢迎前往<b>【兵团驻地】</b>查看群规并加入 QQ 同好交流群。
+              </span>
+            </p>
+          </div>
+
+          {/* 快捷导航与内部人员通道 */}
+          <div className="pt-3 border-t border-dashed border-[#D5C9AF] flex flex-wrap items-center justify-between gap-2.5">
+            <button
+              onClick={() => {
+                soundManager.playBlip();
+                if (onGoToResources) onGoToResources();
+              }}
+              className="px-4 py-2 bg-[#1E4334] text-[#F9E79F] hover:bg-[#2B5E4A] font-pixel text-xs rounded-xs cursor-pointer transition-all shadow-xs flex items-center gap-1.5"
+            >
+              <span>📚 前往【资源外链】专区</span>
+              <span>➔</span>
+            </button>
+
+            <button
+              onClick={() => {
+                soundManager.playBlip();
+                setShowUnlockModal(true);
+              }}
+              className="px-3 py-1.5 bg-[#FAF5E8] hover:bg-[#F3EAD5] text-[#7A6958] hover:text-[#1E4334] border border-[#D5C9AF] font-retro-jp text-xs rounded-xs cursor-pointer transition-all flex items-center gap-1"
+              title="仅限管理与开发人员测试调试使用"
+            >
+              <span>🛠️ 内部调试通道</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 内部测试暗号解锁弹窗 */}
+        {showUnlockModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-[#FAF5E8] border-2 border-[#1E4334] rounded-md max-w-sm w-full p-4 shadow-2xl space-y-3 font-retro-jp">
+              <div className="flex items-center justify-between border-b border-[#D5C9AF] pb-2">
+                <div className="flex items-center gap-1.5 font-pixel text-xs text-[#1E4334] font-bold">
+                  <span>🛠️</span>
+                  <span>内部测试通行鉴权</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowUnlockModal(false);
+                    setUnlockError('');
+                  }}
+                  className="text-xs text-[#7A6958] hover:text-black cursor-pointer px-1"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-[#5B4636]">
+                请输入内部测试通行口令以提前预览土豆粮仓内部模块：
+              </p>
+
+              <form onSubmit={handleVerifySecret} className="space-y-2.5">
+                <input
+                  type="text"
+                  placeholder="输入测试口令..."
+                  value={inputSecret}
+                  onChange={(e) => {
+                    setInputSecret(e.target.value);
+                    setUnlockError('');
+                  }}
+                  autoFocus
+                  className="w-full px-2.5 py-1.5 bg-[#FFFEEF] border border-[#1E4334] rounded-xs text-xs font-mono text-[#1E4334] focus:outline-none focus:ring-1 focus:ring-[#1E4334]"
+                />
+
+                {unlockError && (
+                  <p className="text-[11px] text-[#C0392B] font-bold">{unlockError}</p>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUnlockModal(false);
+                      setUnlockError('');
+                    }}
+                    className="px-3 py-1 bg-[#FAF5E8] border border-[#D5C9AF] text-xs rounded-xs cursor-pointer text-[#5B4636]"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs rounded-xs cursor-pointer hover:bg-[#2B5E4A] shadow-xs"
+                  >
+                    确认解锁
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // ==========================================
   // 📖 无缝长图阅读模式 (基于 Cloudflare R2 CDN 映射 + react-pinch-zoom-pan)
@@ -321,6 +510,24 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast }) => {
   // ==========================================
   return (
     <div id="doujinshi-archive-root" className="space-y-3 text-[#2C241D] select-text">
+      {/* 内部测试模式顶部提示栏 */}
+      <div className="bg-[#2B5E4A] text-[#FAF5E8] border border-[#153025] px-3 py-1.5 rounded-xs flex items-center justify-between text-xs font-retro-jp shadow-xs">
+        <div className="flex items-center gap-1.5 text-[11px]">
+          <span className="font-pixel text-[#F9E79F]">🛠️ 内部研发预览模式（已解锁）</span>
+          <span className="hidden sm:inline text-[#A3E4D7] text-[10px]">普通游客当前看到的是“研发中”页面</span>
+        </div>
+        <button
+          onClick={() => {
+            soundManager.playBlip();
+            setIsDevUnlocked(false);
+            onShowToast('已退出内部调试模式，恢复游客研发中视图 🔒');
+          }}
+          className="px-2 py-0.5 bg-[#142B21] hover:bg-[#0D1C16] text-[#F9E79F] text-[10px] font-pixel rounded-xs border border-[#3B7E64] cursor-pointer transition-colors"
+        >
+          重新锁定
+        </button>
+      </div>
+
       {/* 典藏公约红线轻量提示 */}
       <div className="p-2 px-3 bg-[#FBF0EE] border-l-3 border-[#C0392B] rounded-r-xs font-retro-jp text-[11px] text-[#900C3F] flex items-center justify-between gap-2">
         <div>
