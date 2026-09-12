@@ -9,5 +9,3 @@ coverage/
 
 # Cloudflare Wrangler
 .wrangler/
-wrangler.toml
-wrangler.jsonc
