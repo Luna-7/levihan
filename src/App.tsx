@@ -8,8 +8,8 @@ import { GROUP_INFO, POTATO_EGG_QUOTES } from './data/initialData';
 import { soundManager } from './utils/audio';
 
 export default function App() {
-  // Navigation State: 'home' (群主页与群规) | 'resources' (资源外链) | 'doujinshi' (土豆粮仓驻地)
-  const [activeTab, setActiveTab] = useState<'home' | 'resources' | 'doujinshi'>('home');
+  // Navigation State: 'home' (群主页与群规) | 'resources' (资源外链) | 'doujinshi' (土豆粮仓驻地) | 'tatakaru' (游戏小屋)
+  const [activeTab, setActiveTab] = useState<'home' | 'resources' | 'doujinshi' | 'tatakaru'>('home');
   const [isSoundMuted, setIsSoundMuted] = useState<boolean>(soundManager.isMuted());
   const [chestOpened, setChestOpened] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);

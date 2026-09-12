@@ -3,8 +3,8 @@ import { PixelPotion, PixelStar } from './PixelIcons';
 import { soundManager } from '../utils/audio';
 
 interface Props {
-  activeTab: 'home' | 'resources' | 'doujinshi';
-  onSelectTab: (tab: 'home' | 'resources' | 'doujinshi') => void;
+  activeTab: 'home' | 'resources' | 'doujinshi' | 'tatakaru';
+  onSelectTab: (tab: 'home' | 'resources' | 'doujinshi' | 'tatakaru') => void;
   isSoundMuted: boolean;
   onToggleSound: () => void;
   onCopyGroupNumber: () => void;
@@ -108,6 +108,21 @@ export const HeaderCard: React.FC<Props> = ({
         >
           <span>🔒</span>
           <span>土豆粮仓驻地</span>
+        </button>
+
+        <button
+          onClick={() => {
+            soundManager.playBlip();
+            window.open('/tatakaru.html', '_blank', 'noopener,noreferrer');
+          }}
+          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 ${
+            activeTab === 'tatakaru'
+              ? 'bg-[#B3402F] text-[#F9E79F] border-[#B3402F] font-bold shadow-2xs'
+              : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
+          }`}
+        >
+          <span>⚔️</span>
+          <span>塔塔开</span>
         </button>
       </nav>
     </header>
