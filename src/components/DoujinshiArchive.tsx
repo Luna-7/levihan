@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ReactPinchZoomPan } from 'react-pinch-zoom-pan';
 import {
   DOUJIN_ARCHIVE_DATA,
 } from '../data/doujinArchiveData';
 import { DoujinBookItem } from '../types/doujinArchive';
 import { soundManager } from '../utils/audio';
-import { cosService, COSConfigState } from '../services/cosClient';
+import { cosService } from '../services/cosClient';
 
 interface Props {
   onCopyCode?: (code: string) => void;
@@ -18,14 +17,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const [books, setBooks] = useState<DoujinBookItem[]>(DOUJIN_ARCHIVE_DATA);
   const [isLoadingArchive, setIsLoadingArchive] = useState<boolean>(false);
 
-  // COS 逻辑层状态与配置
-  const [cosConfig, setCosConfig] = useState<COSConfigState>(cosService.getConfig());
-  const [showCosPanel, setShowCOSPanel] = useState<boolean>(false);
-  const [cosConnectionStatus, setCosConnectionStatus] = useState<
-    'ready' | 'testing' | 'connected' | 'error'
-  >('ready');
-  const [cosStatusMessage, setCosStatusMessage] = useState<string>('COS S3 API 逻辑层已就绪');
-
   // 搜索与多维筛选
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('全部');
@@ -37,9 +28,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   // 动态探测与检测到的内页总数
   const [detectedPages, setDetectedPages] = useState<number | null>(null);
   const [isDetectingPages, setIsDetectingPages] = useState<boolean>(false);
-
-  // 缩放模式：'seamless'（竖向无缝瀑布流长图） | 'zoom'（利用 react-pinch-zoom-pan 支持手势双指捏合缩放/平移）
-  const [interactiveZoom, setInteractiveZoom] = useState<boolean>(false);
 
   // 统计所有标签（动态汇总当前数据中的所有标签）
   const allCategories = ['全部', '漫画本', '小说本', '插画集'];
@@ -69,47 +57,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     }
   };
 
-  // 测试与 腾讯云 COS 存储桶的 HTTPS/S3 API 连通性
-  const handleTestCosConnection = async () => {
-    soundManager.playBlip();
-    setCosConnectionStatus('testing');
-    setCosStatusMessage('正在请求 COS 端点探测连通性...');
-
-    try {
-      // 探测首本 lh-001/image01.webp 样本资源
-      const testUrl = cosService.getObjectUrl('lh-001/image01.webp');
-      const probe = await cosService.probeResource(testUrl);
-
-      if (probe.ok) {
-        setCosConnectionStatus('connected');
-        setCosStatusMessage(`连接畅通！HTTP 状态码: ${probe.status} (${probe.contentType || 'image'})`);
-        onShowToast('腾讯云 COS 存储桶资源请求通畅 🚀');
-      } else {
-        // 尝试探测根目录
-        const rootProbe = await cosService.probeResource(cosConfig.cdnBaseUrl);
-        if (rootProbe.status !== 0) {
-          setCosConnectionStatus('connected');
-          setCosStatusMessage(`COS 域可访问 (状态码 ${rootProbe.status})，请确保存储桶公共读或图片已上传`);
-          onShowToast(`COS 域响应正常 (${rootProbe.status})`);
-        } else {
-          setCosConnectionStatus('error');
-          setCosStatusMessage('探测受阻：请检查 CORS 跨域规则或公开访问权限');
-          onShowToast('COS 端点暂未返回响应，请确保存储桶公开访问或配置 CORS');
-        }
-      }
-    } catch (e: any) {
-      setCosConnectionStatus('error');
-      setCosStatusMessage(`请求异常: ${e?.message || '网络或跨域受阻'}`);
-    }
-  };
-
-  // 保存自定义 COS 配置 (例如用户提供了自己的公开 CDN 域名或 S3 密钥)
-  const handleSaveCosConfig = (newConfig: Partial<COSConfigState>) => {
-    cosService.updateConfig(newConfig);
-    setCosConfig(cosService.getConfig());
-    onShowToast('COS 逻辑层配置已更新并持久化至本地 ⚙️');
-  };
-
   // 点击卡片直接进入查看来源于 COS 的无缝长图
   const handleOpenBookReader = async (book: DoujinBookItem) => {
     soundManager.playBlip();
@@ -136,7 +83,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const handleCloseReader = () => {
     soundManager.playBlip();
     setReadingBook(null);
-    setInteractiveZoom(false);
     setDetectedPages(null);
   };
 
@@ -217,34 +163,13 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                 {readingBook.titleZh}
               </h2>
               <p className="text-[10px] font-retro-jp text-[#7A6958] truncate">
-                作者：{readingBook.circle} · 共 {totalPages} 页{' '}
-                {isDetectingPages ? '(动态校准中...)' : '· COS 动态长图'}
+                作者：{readingBook.circle} · 共 {totalPages} 页
+                {isDetectingPages ? '（动态校准中...）' : ''}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* 切换 react-pinch-zoom-pan 手势缩放平移 */}
-            <button
-              onClick={() => {
-                soundManager.playBlip();
-                setInteractiveZoom(!interactiveZoom);
-                onShowToast(
-                  !interactiveZoom
-                    ? '已开启双指捏合缩放/平移模式 (Pinch Zoom Pan) 🔍'
-                    : '已切回常规长图滚动模式 📜'
-                );
-              }}
-              className={`px-2.5 py-1 font-pixel text-[10px] rounded-xs cursor-pointer transition-all border ${
-                interactiveZoom
-                  ? 'bg-[#B7791F] text-[#FFFEEF] border-[#B7791F] font-bold shadow-xs'
-                  : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#EAE2CE]'
-              }`}
-              title="使用 react-pinch-zoom-pan 进行双指捏合缩放与全向平移"
-            >
-              {interactiveZoom ? '🔍 缩放平移中' : '🔍 捏合缩放'}
-            </button>
-
             <button
               onClick={() => {
                 soundManager.playBlip();
@@ -258,38 +183,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           </div>
         </div>
 
-        {/* 缩放/平移或常规无缝长图展示区 */}
-        {interactiveZoom ? (
-          <div className="w-full bg-[#181D1A] rounded-lg overflow-hidden border-2 border-[#1E4334] shadow-xl p-1 touch-none">
-            <div className="text-center py-1.5 text-[10px] font-retro-jp text-[#F9E79F] bg-[#1E2621] rounded-xs mb-2 flex items-center justify-center gap-2">
-              <span>💡 提示：在画面中支持触摸双指捏合放大、拖动平移。</span>
-              <button
-                onClick={() => setInteractiveZoom(false)}
-                className="underline hover:text-white cursor-pointer"
-              >
-                切回滚屏
-              </button>
-            </div>
-            {/* react-pinch-zoom-pan 容器 */}
-            <ReactPinchZoomPan
-              initialScale={1}
-              maxScale={3}
-              render={({ x, y, scale }) => (
-                <div
-                  style={{
-                    transform: `translate3d(${x}px, ${y}px, 0) scale(${scale})`,
-                    transformOrigin: '0 0',
-                  }}
-                  className="w-full transition-transform duration-75"
-                >
-                  {renderLongStripContent()}
-                </div>
-              )}
-            />
-          </div>
-        ) : (
-          renderLongStripContent()
-        )}
+        {/* 无缝长图展示区 */}
+        {renderLongStripContent()}
 
         {/* 阅读完毕底部操作 */}
         <div className="w-full max-w-2xl mx-auto mt-4 p-4 bg-[#FAF5E8] border border-[#D5C9AF] rounded-md text-center space-y-2 font-retro-jp">
@@ -322,135 +217,12 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   return (
     <div id="doujinshi-archive-root" className="space-y-3 text-[#2C241D] select-text">
       {/* 典藏公约红线轻量提示 */}
-      <div className="p-2 px-3 bg-[#FBF0EE] border-l-3 border-[#C0392B] rounded-r-xs font-retro-jp text-[11px] text-[#900C3F] flex items-center justify-between gap-2">
+      <div className="p-2 px-3 bg-[#FBF0EE] border-l-3 border-[#C0392B] rounded-r-xs font-retro-jp text-[11px] text-[#900C3F] flex items-center">
         <div>
           <span className="font-bold">⚠️ 典藏公约：</span>
           本专区由利韩同好自发汉化嵌字。<b>严禁倒卖商用、严禁转传闲鱼微店</b>，请共同守护创作者的心血。
         </div>
-
-        {/* COS 逻辑层状态指示徽章 */}
-        <button
-          onClick={() => {
-            soundManager.playBlip();
-            setShowCOSPanel(!showCosPanel);
-          }}
-          className="shrink-0 px-2 py-0.5 bg-[#FFFEEF] hover:bg-[#FAF5E8] border border-[#D5C9AF] text-[10px] font-pixel rounded-xs text-[#1E4334] cursor-pointer flex items-center gap-1 shadow-2xs"
-          title="展开/折叠 腾讯云 COS 逻辑层与 S3 API 连接信息"
-        >
-          <span
-            className={`w-1.5 h-1.5 rounded-full ${
-              cosConnectionStatus === 'connected'
-                ? 'bg-emerald-500 animate-pulse'
-                : cosConnectionStatus === 'error'
-                ? 'bg-rose-500'
-                : 'bg-amber-500'
-            }`}
-          />
-          <span>COS 状态</span>
-          <span className="text-[8px]">{showCosPanel ? '▲' : '▼'}</span>
-        </button>
       </div>
-
-      {/* 腾讯云 COS S3 逻辑层状态与配置面板（可折叠） */}
-      {showCosPanel && (
-        <div className="bg-[#1E2621] text-[#FAF5E8] border-2 border-[#1E4334] rounded-md p-3 space-y-2.5 font-retro-jp text-xs shadow-md">
-          <div className="flex items-center justify-between border-b border-[#34483B] pb-1.5">
-            <div className="flex items-center gap-2">
-              <span className="font-pixel text-xs text-[#F9E79F]">
-                ⚡ 腾讯云 COS S3 API 逻辑层
-              </span>
-              <span className="px-1.5 py-0.2 bg-[#2B5E4A] text-[#F9E79F] font-pixel text-[9px] rounded-xs">
-                AWS SDK / S3 API 已接入
-              </span>
-            </div>
-            <button
-              onClick={() => setShowCOSPanel(false)}
-              className="text-[#A69C8E] hover:text-white px-1 text-xs cursor-pointer"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
-            <div className="space-y-1">
-              <div className="text-[#A69C8E]">
-                COS 地域 (Region):{' '}
-                <span className="text-[#F9E79F] font-mono select-all">
-                  {cosConfig.region || '待配置'}
-                </span>
-              </div>
-              <div className="text-[#A69C8E]">
-                存储桶名:{' '}
-                <span className="text-[#F9E79F] font-mono select-all">
-                  {cosConfig.bucketName || '待配置（含 APPID 后缀）'}
-                </span>
-              </div>
-              <div className="text-[#A69C8E] truncate">
-                S3 API 端点:{' '}
-                <span className="text-[#F9E79F] font-mono select-all text-[10px]">
-                  {cosConfig.s3ApiEndpoint}
-                </span>
-              </div>
-              <div className="text-[#A69C8E]">
-                存储规则:{' '}
-                <span className="text-[#58D68D] font-mono">
-                  lh-XXX/ 目录结构 (如 lh-001/image01.webp)
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <div className="text-[#A69C8E] truncate">
-                公开 CDN 基础链接:{' '}
-                <input
-                  type="text"
-                  value={cosConfig.cdnBaseUrl}
-                  onChange={(e) =>
-                    handleSaveCosConfig({ cdnBaseUrl: e.target.value.trim() })
-                  }
-                  className="w-full mt-0.5 px-2 py-1 bg-[#141A17] border border-[#34483B] rounded-xs text-[#F9E79F] font-mono text-[10px] focus:outline-none focus:border-[#F9E79F]"
-                  placeholder="https://doujin-archive-125xxxxxxx.cos.ap-guangzhou.myqcloud.com"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 状态与诊断操作 */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-dashed border-[#34483B] text-[10px]">
-            <div className="flex items-center gap-1.5 text-[#C4B7A6]">
-              <span className="font-bold">状态:</span>
-              <span
-                className={
-                  cosConnectionStatus === 'connected'
-                    ? 'text-[#58D68D] font-bold'
-                    : cosConnectionStatus === 'error'
-                    ? 'text-[#E74C3C] font-bold'
-                    : 'text-[#F9E79F]'
-                }
-              >
-                {cosStatusMessage}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleTestCosConnection}
-                disabled={cosConnectionStatus === 'testing'}
-                className="px-2.5 py-1 bg-[#2B5E4A] hover:bg-[#3B7E64] text-[#F9E79F] font-pixel text-[9px] rounded-xs cursor-pointer transition-all disabled:opacity-50"
-              >
-                {cosConnectionStatus === 'testing' ? '探测中...' : '📡 探测 COS 连通性'}
-              </button>
-              <button
-                onClick={() => handleRefreshArchive(true)}
-                disabled={isLoadingArchive}
-                className="px-2.5 py-1 bg-[#B7791F] hover:bg-[#D4AC0D] text-[#1E2621] font-pixel text-[9px] rounded-xs font-bold cursor-pointer transition-all disabled:opacity-50"
-              >
-                {isLoadingArchive ? '同步中...' : '🔄 刷新归档数据'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 筛选与搜索栏 */}
       <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-md p-2.5 space-y-2">
