@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { ReactPinchZoomPan } from 'react-pinch-zoom-pan';
 import {
   DOUJIN_ARCHIVE_DATA,
-  CLOUDFLARE_R2_CONFIG,
 } from '../data/doujinArchiveData';
 import { DoujinBookItem } from '../types/doujinArchive';
 import { soundManager } from '../utils/audio';
-import { r2Service, R2ConfigState } from '../services/r2Client';
+import { cosService, COSConfigState } from '../services/cosClient';
 
 interface Props {
   onCopyCode?: (code: string) => void;
@@ -21,17 +20,17 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const [inputSecret, setInputSecret] = useState<string>('');
   const [unlockError, setUnlockError] = useState<string>('');
 
-  // 归档数据状态（优先加载远端 R2 archive.json，兜底使用本地 Excel 录入数据）
+  // 归档数据状态（优先加载远端 COS archive.json，兜底使用本地 Excel 录入数据）
   const [books, setBooks] = useState<DoujinBookItem[]>(DOUJIN_ARCHIVE_DATA);
   const [isLoadingArchive, setIsLoadingArchive] = useState<boolean>(false);
 
-  // R2 逻辑层状态与配置
-  const [r2Config, setR2Config] = useState<R2ConfigState>(r2Service.getConfig());
-  const [showR2Panel, setShowR2Panel] = useState<boolean>(false);
-  const [r2ConnectionStatus, setR2ConnectionStatus] = useState<
+  // COS 逻辑层状态与配置
+  const [cosConfig, setCosConfig] = useState<COSConfigState>(cosService.getConfig());
+  const [showCosPanel, setShowCOSPanel] = useState<boolean>(false);
+  const [cosConnectionStatus, setCosConnectionStatus] = useState<
     'ready' | 'testing' | 'connected' | 'error'
   >('ready');
-  const [r2StatusMessage, setR2StatusMessage] = useState<string>('R2 S3 API 逻辑层已就绪');
+  const [cosStatusMessage, setCosStatusMessage] = useState<string>('COS S3 API 逻辑层已就绪');
 
   // 搜索与多维筛选
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -53,20 +52,20 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const dynamicTags = Array.from(new Set(books.flatMap((b) => b.tags || [])));
   const allTags = ['全部', ...dynamicTags];
 
-  // 组件挂载时自动尝试同步 R2 远端归档
+  // 组件挂载时自动尝试同步 COS 远端归档
   useEffect(() => {
     handleRefreshArchive(false);
   }, []);
 
-  // 刷新归档数据 (尝试从 R2 获取 archive.json)
+  // 刷新归档数据 (尝试从 COS 获取 archive.json)
   const handleRefreshArchive = async (showToastNotice = true) => {
     setIsLoadingArchive(true);
     try {
-      const loaded = await r2Service.loadArchiveData();
+      const loaded = await cosService.loadArchiveData();
       if (loaded && loaded.length > 0) {
         setBooks(loaded);
         if (showToastNotice) {
-          onShowToast(`已同步 R2 存储桶归档数据，共 ${loaded.length} 部作品 📦`);
+          onShowToast(`已同步 COS 存储桶归档数据，共 ${loaded.length} 部作品 📦`);
         }
       }
     } catch (err) {
@@ -76,48 +75,48 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     }
   };
 
-  // 测试与 Cloudflare R2 存储桶的 HTTPS/S3 API 连通性
-  const handleTestR2Connection = async () => {
+  // 测试与 腾讯云 COS 存储桶的 HTTPS/S3 API 连通性
+  const handleTestCosConnection = async () => {
     soundManager.playBlip();
-    setR2ConnectionStatus('testing');
-    setR2StatusMessage('正在请求 R2 端点探测连通性...');
+    setCosConnectionStatus('testing');
+    setCosStatusMessage('正在请求 COS 端点探测连通性...');
 
     try {
       // 探测首本 lh-001/image01.webp 样本资源
-      const testUrl = r2Service.getObjectUrl('lh-001/image01.webp');
-      const probe = await r2Service.probeResource(testUrl);
+      const testUrl = cosService.getObjectUrl('lh-001/image01.webp');
+      const probe = await cosService.probeResource(testUrl);
 
       if (probe.ok) {
-        setR2ConnectionStatus('connected');
-        setR2StatusMessage(`连接畅通！HTTP 状态码: ${probe.status} (${probe.contentType || 'image'})`);
-        onShowToast('Cloudflare R2 存储桶资源请求通畅 🚀');
+        setCosConnectionStatus('connected');
+        setCosStatusMessage(`连接畅通！HTTP 状态码: ${probe.status} (${probe.contentType || 'image'})`);
+        onShowToast('腾讯云 COS 存储桶资源请求通畅 🚀');
       } else {
         // 尝试探测根目录
-        const rootProbe = await r2Service.probeResource(r2Config.cdnBaseUrl);
+        const rootProbe = await cosService.probeResource(cosConfig.cdnBaseUrl);
         if (rootProbe.status !== 0) {
-          setR2ConnectionStatus('connected');
-          setR2StatusMessage(`R2 域可访问 (状态码 ${rootProbe.status})，请确保存储桶公共读或图片已上传`);
-          onShowToast(`R2 域响应正常 (${rootProbe.status})`);
+          setCosConnectionStatus('connected');
+          setCosStatusMessage(`COS 域可访问 (状态码 ${rootProbe.status})，请确保存储桶公共读或图片已上传`);
+          onShowToast(`COS 域响应正常 (${rootProbe.status})`);
         } else {
-          setR2ConnectionStatus('error');
-          setR2StatusMessage('探测受阻：请检查 CORS 跨域规则或公开访问权限');
-          onShowToast('R2 端点暂未返回响应，请确保存储桶公开访问或配置 CORS');
+          setCosConnectionStatus('error');
+          setCosStatusMessage('探测受阻：请检查 CORS 跨域规则或公开访问权限');
+          onShowToast('COS 端点暂未返回响应，请确保存储桶公开访问或配置 CORS');
         }
       }
     } catch (e: any) {
-      setR2ConnectionStatus('error');
-      setR2StatusMessage(`请求异常: ${e?.message || '网络或跨域受阻'}`);
+      setCosConnectionStatus('error');
+      setCosStatusMessage(`请求异常: ${e?.message || '网络或跨域受阻'}`);
     }
   };
 
-  // 保存自定义 R2 配置 (例如用户提供了自己的公开 CDN 域名或 S3 密钥)
-  const handleSaveR2Config = (newConfig: Partial<R2ConfigState>) => {
-    r2Service.updateConfig(newConfig);
-    setR2Config(r2Service.getConfig());
-    onShowToast('R2 逻辑层配置已更新并持久化至本地 ⚙️');
+  // 保存自定义 COS 配置 (例如用户提供了自己的公开 CDN 域名或 S3 密钥)
+  const handleSaveCosConfig = (newConfig: Partial<COSConfigState>) => {
+    cosService.updateConfig(newConfig);
+    setCosConfig(cosService.getConfig());
+    onShowToast('COS 逻辑层配置已更新并持久化至本地 ⚙️');
   };
 
-  // 点击卡片直接进入查看来源于 R2 的无缝长图
+  // 点击卡片直接进入查看来源于 COS 的无缝长图
   const handleOpenBookReader = async (book: DoujinBookItem) => {
     soundManager.playBlip();
     setReadingBook(book);
@@ -128,7 +127,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     // 后台非阻塞动态探测实际存在页数
     setIsDetectingPages(true);
     try {
-      const realPages = await r2Service.detectBookPages(book, Math.max(book.pages || 30, 40));
+      const realPages = await cosService.detectBookPages(book, Math.max(book.pages || 30, 40));
       if (realPages && realPages > 0) {
         setDetectedPages(realPages);
       }
@@ -348,7 +347,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   }
 
   // ==========================================
-  // 📖 无缝长图阅读模式 (基于 Cloudflare R2 CDN 映射 + react-pinch-zoom-pan)
+  // 📖 无缝长图阅读模式 (基于 腾讯云 COS CDN 映射 + react-pinch-zoom-pan)
   // ==========================================
   if (readingBook) {
     const totalPages = detectedPages || readingBook.pages || 30;
@@ -358,7 +357,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     const renderLongStripContent = () => (
       <div className="w-full max-w-2xl mx-auto bg-[#181D1A] rounded-lg overflow-hidden border-2 border-[#1E4334] shadow-xl">
         {pagesList.map((pageNum) => {
-          const pageUrl = r2Service.getPageUrl(readingBook, pageNum);
+          const pageUrl = cosService.getPageUrl(readingBook, pageNum);
 
           return (
             <div key={pageNum} className="relative w-full block m-0 p-0 leading-none">
@@ -377,7 +376,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                       'w-full py-10 px-4 bg-[#1E2621] border-b border-dashed border-[#34483B] text-center text-[#A69C8E] font-retro-jp space-y-1 block';
                     parent.innerHTML = `
                       <div class="text-sm font-pixel text-[#F9E79F]">第 ${pageNum} / ${totalPages} 页</div>
-                      <div class="text-[11px] text-[#C4B7A6] mt-0.5">R2 路径: ${readingBook.bookFolder || readingBook.id}/image${pageNum.toString().padStart(2, '0')}.webp</div>
+                      <div class="text-[11px] text-[#C4B7A6] mt-0.5">COS 路径: ${readingBook.bookFolder || readingBook.id}/image${pageNum.toString().padStart(2, '0')}.webp</div>
                       <div class="text-[9px] text-[#7A6958]">若图片未显示，请确保存储桶已开启 Public Access 或文件已同步</div>
                     `;
                   }
@@ -407,7 +406,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
               </h2>
               <p className="text-[10px] font-retro-jp text-[#7A6958] truncate">
                 作者：{readingBook.circle} · 共 {totalPages} 页{' '}
-                {isDetectingPages ? '(动态校准中...)' : '· R2 动态长图'}
+                {isDetectingPages ? '(动态校准中...)' : '· COS 动态长图'}
               </p>
             </div>
           </div>
@@ -506,7 +505,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   }
 
   // ==========================================
-  // 📚 典藏本列表主视图 (coverFile 映射为 Cloudflare R2 CDN 链接)
+  // 📚 典藏本列表主视图 (coverFile 映射为 腾讯云 COS CDN 链接)
   // ==========================================
   return (
     <div id="doujinshi-archive-root" className="space-y-3 text-[#2C241D] select-text">
@@ -535,43 +534,43 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           本专区由利韩同好自发汉化嵌字。<b>严禁倒卖商用、严禁转传闲鱼微店</b>，请共同守护创作者的心血。
         </div>
 
-        {/* R2 逻辑层状态指示徽章 */}
+        {/* COS 逻辑层状态指示徽章 */}
         <button
           onClick={() => {
             soundManager.playBlip();
-            setShowR2Panel(!showR2Panel);
+            setShowCOSPanel(!showCosPanel);
           }}
           className="shrink-0 px-2 py-0.5 bg-[#FFFEEF] hover:bg-[#FAF5E8] border border-[#D5C9AF] text-[10px] font-pixel rounded-xs text-[#1E4334] cursor-pointer flex items-center gap-1 shadow-2xs"
-          title="展开/折叠 Cloudflare R2 逻辑层与 S3 API 连接信息"
+          title="展开/折叠 腾讯云 COS 逻辑层与 S3 API 连接信息"
         >
           <span
             className={`w-1.5 h-1.5 rounded-full ${
-              r2ConnectionStatus === 'connected'
+              cosConnectionStatus === 'connected'
                 ? 'bg-emerald-500 animate-pulse'
-                : r2ConnectionStatus === 'error'
+                : cosConnectionStatus === 'error'
                 ? 'bg-rose-500'
                 : 'bg-amber-500'
             }`}
           />
-          <span>R2 状态</span>
-          <span className="text-[8px]">{showR2Panel ? '▲' : '▼'}</span>
+          <span>COS 状态</span>
+          <span className="text-[8px]">{showCosPanel ? '▲' : '▼'}</span>
         </button>
       </div>
 
-      {/* Cloudflare R2 S3 逻辑层状态与配置面板（可折叠） */}
-      {showR2Panel && (
+      {/* 腾讯云 COS S3 逻辑层状态与配置面板（可折叠） */}
+      {showCosPanel && (
         <div className="bg-[#1E2621] text-[#FAF5E8] border-2 border-[#1E4334] rounded-md p-3 space-y-2.5 font-retro-jp text-xs shadow-md">
           <div className="flex items-center justify-between border-b border-[#34483B] pb-1.5">
             <div className="flex items-center gap-2">
               <span className="font-pixel text-xs text-[#F9E79F]">
-                ⚡ Cloudflare R2 S3 API 逻辑层
+                ⚡ 腾讯云 COS S3 API 逻辑层
               </span>
               <span className="px-1.5 py-0.2 bg-[#2B5E4A] text-[#F9E79F] font-pixel text-[9px] rounded-xs">
                 AWS SDK / S3 API 已接入
               </span>
             </div>
             <button
-              onClick={() => setShowR2Panel(false)}
+              onClick={() => setShowCOSPanel(false)}
               className="text-[#A69C8E] hover:text-white px-1 text-xs cursor-pointer"
             >
               ✕
@@ -581,15 +580,21 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
             <div className="space-y-1">
               <div className="text-[#A69C8E]">
-                账户 ID (Account ID):{' '}
+                COS 地域 (Region):{' '}
                 <span className="text-[#F9E79F] font-mono select-all">
-                  {r2Config.accountId}
+                  {cosConfig.region || '待配置'}
+                </span>
+              </div>
+              <div className="text-[#A69C8E]">
+                存储桶名:{' '}
+                <span className="text-[#F9E79F] font-mono select-all">
+                  {cosConfig.bucketName || '待配置（含 APPID 后缀）'}
                 </span>
               </div>
               <div className="text-[#A69C8E] truncate">
                 S3 API 端点:{' '}
                 <span className="text-[#F9E79F] font-mono select-all text-[10px]">
-                  {r2Config.s3ApiEndpoint}
+                  {cosConfig.s3ApiEndpoint}
                 </span>
               </div>
               <div className="text-[#A69C8E]">
@@ -605,12 +610,12 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                 公开 CDN 基础链接:{' '}
                 <input
                   type="text"
-                  value={r2Config.cdnBaseUrl}
+                  value={cosConfig.cdnBaseUrl}
                   onChange={(e) =>
-                    handleSaveR2Config({ cdnBaseUrl: e.target.value.trim() })
+                    handleSaveCosConfig({ cdnBaseUrl: e.target.value.trim() })
                   }
                   className="w-full mt-0.5 px-2 py-1 bg-[#141A17] border border-[#34483B] rounded-xs text-[#F9E79F] font-mono text-[10px] focus:outline-none focus:border-[#F9E79F]"
-                  placeholder="https://pub-xxxx.r2.dev"
+                  placeholder="https://doujin-archive-125xxxxxxx.cos.ap-guangzhou.myqcloud.com"
                 />
               </div>
             </div>
@@ -622,24 +627,24 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
               <span className="font-bold">状态:</span>
               <span
                 className={
-                  r2ConnectionStatus === 'connected'
+                  cosConnectionStatus === 'connected'
                     ? 'text-[#58D68D] font-bold'
-                    : r2ConnectionStatus === 'error'
+                    : cosConnectionStatus === 'error'
                     ? 'text-[#E74C3C] font-bold'
                     : 'text-[#F9E79F]'
                 }
               >
-                {r2StatusMessage}
+                {cosStatusMessage}
               </span>
             </div>
 
             <div className="flex items-center gap-2">
               <button
-                onClick={handleTestR2Connection}
-                disabled={r2ConnectionStatus === 'testing'}
+                onClick={handleTestCosConnection}
+                disabled={cosConnectionStatus === 'testing'}
                 className="px-2.5 py-1 bg-[#2B5E4A] hover:bg-[#3B7E64] text-[#F9E79F] font-pixel text-[9px] rounded-xs cursor-pointer transition-all disabled:opacity-50"
               >
-                {r2ConnectionStatus === 'testing' ? '探测中...' : '📡 探测 R2 连通性'}
+                {cosConnectionStatus === 'testing' ? '探测中...' : '📡 探测 COS 连通性'}
               </button>
               <button
                 onClick={() => handleRefreshArchive(true)}
@@ -719,8 +724,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
       {/* 典藏本卡片网格：点击直接进入查看长图 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {filteredBooks.map((book) => {
-          // 通过 R2 逻辑层动态生成封面 CDN 地址
-          const coverUrl = r2Service.getCoverUrl(book);
+          // 通过 COS 逻辑层动态生成封面 CDN 地址
+          const coverUrl = cosService.getCoverUrl(book);
 
           return (
             <div
@@ -738,7 +743,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                         {book.category || '漫画本'}
                       </span>
                       <span className="px-1.5 py-0.2 bg-[#E8F8F5] text-[#117A65] border border-[#A3E4D7] text-[9px] font-pixel rounded-xs">
-                        R2 存储
+                        COS 存储
                       </span>
                       {book.pages && (
                         <span className="text-[10px] font-retro-jp text-[#8C7A68]">
@@ -761,7 +766,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                   </span>
                 </div>
 
-                {/* 封面图片展示区 (来源 Cloudflare R2 CDN 链接映射，悬浮显示点击阅读长图) */}
+                {/* 封面图片展示区 (来源 腾讯云 COS CDN 链接映射，悬浮显示点击阅读长图) */}
                 <div className="relative w-full aspect-[4/3] bg-[#FAF5E8] border border-[#E0D5BE] rounded-xs overflow-hidden group-hover:border-[#1E4334] flex items-center justify-center transition-colors">
                   <img
                     src={coverUrl}

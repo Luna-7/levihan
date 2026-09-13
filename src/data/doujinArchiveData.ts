@@ -1,30 +1,32 @@
 import { DoujinBookItem } from '../types/doujinArchive';
 
 /**
- * Cloudflare R2 存储桶配置与 CDN 链接映射
- * 
- * 账户 ID: a0c9d308416fd43fed5546a5c7d444c4
- * S3 API: https://a0c9d308416fd43fed5546a5c7d444c4.r2.cloudflarestorage.com
- * 
- * 您的实际存储规则：
+ * 腾讯云 COS 存储桶配置与 CDN 链接映射（原 Cloudflare R2 已迁移至腾讯云 COS）
+ *
+ * 腾讯云 COS S3 兼容 API：https://cos.<region>.myqcloud.com
+ *
+ * 存储规则（与旧桶保持一致）：
  * 1. 文件名与目录格式：lh-001/
  * 2. 封面默认为：image01.webp（即 lh-001/image01.webp）
  * 3. 内页无缝长图为：image01.webp, image02.webp, image03.webp ... image30.webp
  */
-export const CLOUDFLARE_R2_CONFIG = {
-  accountId: 'a0c9d308416fd43fed5546a5c7d444c4',
-  s3ApiEndpoint: 'https://a0c9d308416fd43fed5546a5c7d444c4.r2.cloudflarestorage.com',
-  bucketName: 'doujin-archive',
-  // 公开 CDN 访问域名（开启 R2 Public Bucket 获得的公开域名）
-  cdnBaseUrl: 'https://pub-a0c9d308416fd43fed5546a5c7d444c4.r2.dev',
+export const TENCENT_COS_CONFIG = {
+  // TODO: 迁移后请填写你的 COS 地域（如 ap-guangzhou / ap-shanghai / ap-beijing）
+  region: 'ap-guangzhou',
+  // S3 兼容端点（跟随 region 变化）
+  s3ApiEndpoint: 'https://cos.ap-guangzhou.myqcloud.com',
+  // TODO: 换成你的桶名（必须带 APPID 后缀，如 doujin-archive-125xxxxxxx）
+  bucketName: '',
+  // TODO: 换成你的公开访问域名（默认 https://<桶名>.cos.<region>.myqcloud.com，或绑定的自定义 CDN 域名）
+  cdnBaseUrl: '',
 };
 
 /**
- * 辅助方法：生成 Cloudflare R2 封面图 CDN 直链
+ * 辅助方法：生成腾讯云 COS 封面图直链
  * 规则：若已传完整 URL 则直接使用；否则映射为 {cdnBaseUrl}/{bookFolder}/{coverFile || 'image01.webp'}
  */
-export const getR2CoverUrl = (book: DoujinBookItem, customCdnUrl?: string): string => {
-  const base = (customCdnUrl || CLOUDFLARE_R2_CONFIG.cdnBaseUrl).replace(/\/$/, '');
+export const getCosCoverUrl = (book: DoujinBookItem, customCdnUrl?: string): string => {
+  const base = (customCdnUrl || TENCENT_COS_CONFIG.cdnBaseUrl).replace(/\/$/, '');
   const folder = (book.bookFolder || book.id).replace(/^\/|\/$/g, '');
   const coverFileName = book.coverFile || 'image01.webp';
 
@@ -36,20 +38,20 @@ export const getR2CoverUrl = (book: DoujinBookItem, customCdnUrl?: string): stri
 };
 
 /**
- * 辅助方法：生成书籍某一页在 Cloudflare R2 CDN 中的直链（用于无缝长图阅读）
+ * 辅助方法：生成书籍某一页在 COS 中的直链（用于无缝长图阅读）
  * 自动按照您的 image01.webp, image02.webp ... 规则生成
  */
-export const getR2PageUrl = (
+export const getCosPageUrl = (
   book: DoujinBookItem,
   pageIndex: number, // 从 1 开始
   customCdnUrl?: string
 ): string => {
-  const base = (customCdnUrl || CLOUDFLARE_R2_CONFIG.cdnBaseUrl).replace(/\/$/, '');
+  const base = (customCdnUrl || TENCENT_COS_CONFIG.cdnBaseUrl).replace(/\/$/, '');
   const folder = (book.bookFolder || book.id).replace(/^\/|\/$/g, '');
   const prefix = book.pagePrefix ?? 'image';
   const padDigits = book.pagePadDigits ?? 2;
   const pageNumStr = pageIndex.toString().padStart(padDigits, '0');
-  
+
   return `${base}/${folder}/${prefix}${pageNumStr}.webp`;
 };
 

@@ -1,13 +1,12 @@
 import {
   S3Client,
   ListObjectsV2Command,
-  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { DoujinBookItem } from '../types/doujinArchive';
-import { DOUJIN_ARCHIVE_DATA, CLOUDFLARE_R2_CONFIG } from '../data/doujinArchiveData';
+import { DOUJIN_ARCHIVE_DATA, TENCENT_COS_CONFIG } from '../data/doujinArchiveData';
 
-export interface R2ConfigState {
-  accountId: string;
+export interface COSConfigState {
+  region: string;
   s3ApiEndpoint: string;
   bucketName: string;
   cdnBaseUrl: string;
@@ -15,61 +14,65 @@ export interface R2ConfigState {
   secretAccessKey?: string;
 }
 
-const STORAGE_KEY = 'lh_r2_custom_config_v1';
+const STORAGE_KEY = 'lh_cos_custom_config_v1';
+// 旧 Cloudflare R2 配置的本地存储键，迁移时清理
+const LEGACY_R2_STORAGE_KEY = 'lh_r2_custom_config_v1';
 
-export const getStoredR2Config = (): R2ConfigState => {
+export const getStoredCOSConfig = (): COSConfigState => {
   try {
+    // 清理旧 R2 配置残留
+    localStorage.removeItem(LEGACY_R2_STORAGE_KEY);
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
-        ...CLOUDFLARE_R2_CONFIG,
+        ...TENCENT_COS_CONFIG,
         ...parsed,
       };
     }
   } catch (e) {
-    console.warn('Failed to parse stored R2 config:', e);
+    console.warn('Failed to parse stored COS config:', e);
   }
   return {
-    ...CLOUDFLARE_R2_CONFIG,
+    ...TENCENT_COS_CONFIG,
     accessKeyId: '',
     secretAccessKey: '',
   };
 };
 
-export const saveStoredR2Config = (config: Partial<R2ConfigState>) => {
-  const current = getStoredR2Config();
+export const saveStoredCOSConfig = (config: Partial<COSConfigState>) => {
+  const current = getStoredCOSConfig();
   const next = { ...current, ...config };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   return next;
 };
 
 /**
- * Cloudflare R2 S3 逻辑层管理器
+ * 腾讯云 COS S3 兼容逻辑层管理器
  */
-export class R2Service {
-  private config: R2ConfigState;
+export class COSService {
+  private config: COSConfigState;
   private s3Client: S3Client | null = null;
 
   constructor() {
-    this.config = getStoredR2Config();
+    this.config = getStoredCOSConfig();
     this.initS3Client();
   }
 
-  public updateConfig(partial: Partial<R2ConfigState>) {
-    this.config = saveStoredR2Config(partial);
+  public updateConfig(partial: Partial<COSConfigState>) {
+    this.config = saveStoredCOSConfig(partial);
     this.initS3Client();
   }
 
-  public getConfig(): R2ConfigState {
+  public getConfig(): COSConfigState {
     return { ...this.config };
   }
 
   private initS3Client() {
-    if (this.config.accessKeyId && this.config.secretAccessKey) {
+    if (this.config.accessKeyId && this.config.secretAccessKey && this.config.s3ApiEndpoint) {
       try {
         this.s3Client = new S3Client({
-          region: 'auto',
+          region: this.config.region || 'auto',
           endpoint: this.config.s3ApiEndpoint,
           credentials: {
             accessKeyId: this.config.accessKeyId,
@@ -77,7 +80,7 @@ export class R2Service {
           },
         });
       } catch (err) {
-        console.error('Failed to initialize AWS S3 Client for R2:', err);
+        console.error('Failed to initialize AWS S3 Client for COS:', err);
         this.s3Client = null;
       }
     } else {
@@ -90,7 +93,7 @@ export class R2Service {
   }
 
   /**
-   * 生成规范的 R2 资源访问 URL (默认使用公开 CDN / S3 直链)
+   * 生成规范的 COS 资源访问 URL (使用公开访问域名 / CDN 直链)
    */
   public getObjectUrl(key: string): string {
     const cleanKey = key.replace(/^\//, '');
@@ -183,11 +186,12 @@ export class R2Service {
   }
 
   /**
-   * 若配置了 S3 API Key，调用 AWS SDK 的 ListObjectsV2Command 动态扫描 R2 存储桶文件
+   * 若配置了 S3 API 密钥，调用 AWS SDK 的 ListObjectsV2Command 动态扫描 COS 存储桶文件
+   * （腾讯云 COS 兼容 S3 API，密钥为 COS 的 SecretId / SecretKey）
    */
   public async listS3Objects(prefix = 'lh-'): Promise<string[]> {
     if (!this.s3Client) {
-      throw new Error('未配置 Cloudflare R2 S3 凭据 (AccessKeyId / SecretAccessKey)');
+      throw new Error('未配置腾讯云 COS S3 密钥 (SecretId / SecretKey)');
     }
 
     try {
@@ -207,17 +211,21 @@ export class R2Service {
 
   /**
    * 动态加载远程归档数据：
-   * 1. 尝试从 R2 根目录读取 archive.json 或 books.json
+   * 1. 尝试从 COS 根目录读取 archive.json 或 books.json
    * 2. 若无则从本地默认 Excel 统计数据加载
    */
   public async loadArchiveData(): Promise<DoujinBookItem[]> {
+    if (!this.config.cdnBaseUrl) {
+      // 尚未配置新桶公开域名时，直接走本地兜底数据
+      return DOUJIN_ARCHIVE_DATA;
+    }
     const remoteUrl = this.getObjectUrl('archive.json');
     try {
       const resp = await fetch(remoteUrl, { mode: 'cors', cache: 'no-cache' });
       if (resp.ok) {
         const data = await resp.json();
         if (Array.isArray(data) && data.length > 0) {
-          console.log('[R2Service] Successfully fetched remote archive.json:', data.length, 'books');
+          console.log('[COSService] Successfully fetched remote archive.json:', data.length, 'books');
           return data;
         }
       }
@@ -228,4 +236,4 @@ export class R2Service {
   }
 }
 
-export const r2Service = new R2Service();
+export const cosService = new COSService();
