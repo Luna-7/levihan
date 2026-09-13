@@ -721,8 +721,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         </div>
       </div>
 
-      {/* 典藏本卡片网格：点击直接进入查看长图 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* 典藏本卡片网格：点击直接进入查看长图（手机两列，封面为竖版漫画本比例） */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
         {filteredBooks.map((book) => {
           // 通过 COS 逻辑层动态生成封面 CDN 地址
           const coverUrl = cosService.getCoverUrl(book);
@@ -766,8 +766,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                   </span>
                 </div>
 
-                {/* 封面图片展示区 (来源 腾讯云 COS CDN 链接映射，悬浮显示点击阅读长图) */}
-                <div className="relative w-full aspect-[4/3] bg-[#FAF5E8] border border-[#E0D5BE] rounded-xs overflow-hidden group-hover:border-[#1E4334] flex items-center justify-center transition-colors">
+                {/* 封面图片展示区 (来源 腾讯云 COS CDN 链接映射，竖版漫画本比例 2:3，悬浮显示点击阅读长图) */}
+                <div className="relative w-full aspect-[2/3] bg-[#FAF5E8] border border-[#E0D5BE] rounded-xs overflow-hidden group-hover:border-[#1E4334] flex items-center justify-center transition-colors">
                   <img
                     src={coverUrl}
                     alt={book.titleZh}
