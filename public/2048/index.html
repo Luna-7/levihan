@@ -103,15 +103,14 @@
     </div>
   </div>
 
-  <footer data-page-node-id="NACrlCGDj6DVOlH375Xj2y">2 起步 · 相同方块相碰合成 · 全图片方块 · 合成出 16 即获胜</footer>
+  <footer data-page-node-id="NACrlCGDj6DVOlH375Xj2y">2 起步 · 相同方块相碰合成 · 全图片方块 · 合成出 32 即获胜</footer>
 
 <script>
 (function(){
   'use strict';
-  /* ===== 方块外观：全部为图片方块(2/4/8/16)，16 封顶即获胜 ===== */
-  /* 图片与方块数值一一对应：2→image02 · 4→image03 · 8→image04 · 16→image05 */
-  /* （image01 是旧「0 级」画稿，0 不是方块，故不再参与映射；文件保留未删除） */
-  var IMG={2:'image02.webp',4:'image03.webp',8:'image04.webp',16:'image05.webp'};
+  /* ===== 方块外观：五档图片方块(2/4/8/16/32)，32 封顶即获胜 ===== */
+  /* 图片按序号顺延：2→image01 · 4→image02 · 8→image03 · 16→image04 · 32→image05 */
+  var IMG={2:'image01.webp',4:'image02.webp',8:'image03.webp',16:'image04.webp',32:'image05.webp'};
   
   function faceHTML(v,cls){
     if(IMG.hasOwnProperty(v)){
@@ -159,8 +158,8 @@
     for(var r=0;r<SIZE;r++)for(var c=0;c<SIZE;c++){
       var t=at(r,c);if(!t)return true;
       var rt=(c<SIZE-1)?at(r,c+1):null, dt=(r<SIZE-1)?at(r+1,c):null;
-      if(rt&&rt.v===t.v&&t.v<16)return true;
-      if(dt&&dt.v===t.v&&t.v<16)return true;
+      if(rt&&rt.v===t.v&&t.v<32)return true;
+      if(dt&&dt.v===t.v&&t.v<32)return true;
     }
     return false;
   }
@@ -192,14 +191,14 @@
         if(rr<0||rr>=SIZE||cc<0||cc>=SIZE)break;
         var occ=at(rr,cc);
         if(!occ){nr=rr;nc=cc;continue;}
-        if(occ.v===t.v&&t.v<16&&!occ.locked&&!t.locked){target=occ;nr=rr;nc=cc;}
+        if(occ.v===t.v&&t.v<32&&!occ.locked&&!t.locked){target=occ;nr=rr;nc=cc;}
         break;
       }
       if(target){
         t.r=nr;t.c=nc;t.dead=true;setPos(t);
         target.locked=true;target.v*=2;
         score+=target.v;
-        if(target.v===16&&!won)won=true;
+        if(target.v===32&&!won)won=true;
         moved=true;
         setTimeout(function(tg){tg.el.innerHTML=faceHTML(tg.v,'merge');},100,target);
         setTimeout(function(el){el.remove();},150,t.el);
@@ -216,7 +215,7 @@
       busy=false;
       if(won&&!keep){
         pendingDir=null;
-        ovTitle.textContent='🏆 达成 16！';
+        ovTitle.textContent='🏆 达成 32！';
         ovScore.textContent='SCORE '+score;
         ovBtn.textContent='↻ 继续挑战';
         overlay.classList.add('show');
