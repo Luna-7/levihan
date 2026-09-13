@@ -11,14 +11,14 @@ import { DoujinBookItem } from '../types/doujinArchive';
  * 3. 内页无缝长图为：image01.webp, image02.webp, image03.webp ... image30.webp
  */
 export const TENCENT_COS_CONFIG = {
-  // TODO: 迁移后请填写你的 COS 地域（如 ap-guangzhou / ap-shanghai / ap-beijing）
-  region: 'ap-guangzhou',
+  // COS 地域：南京
+  region: 'ap-nanjing',
   // S3 兼容端点（跟随 region 变化）
-  s3ApiEndpoint: 'https://cos.ap-guangzhou.myqcloud.com',
-  // TODO: 换成你的桶名（必须带 APPID 后缀，如 doujin-archive-125xxxxxxx）
-  bucketName: '',
-  // TODO: 换成你的公开访问域名（默认 https://<桶名>.cos.<region>.myqcloud.com，或绑定的自定义 CDN 域名）
-  cdnBaseUrl: '',
+  s3ApiEndpoint: 'https://cos.ap-nanjing.myqcloud.com',
+  // 桶名（含 APPID 后缀）
+  bucketName: 'levihan-1325571558',
+  // 公开访问域名（COS 静态网站端点）
+  cdnBaseUrl: 'https://levihan-1325571558.cos-website.ap-nanjing.myqcloud.com',
 };
 
 /**
