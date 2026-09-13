@@ -15,4 +15,5 @@ export interface DoujinBookItem {
   bookFolder?: string; // 存储桶子目录，若不填默认自动映射为 id (如 "lh-001")
   pagePrefix?: string; // 图片前缀，默认为 "image"
   pagePadDigits?: number; // 页码位数，默认为 2 (如 image01.webp)
+  warning?: string; // 内容预警说明（后台勾选后填写，站点卡片显示 ⚠ 提示）
 }

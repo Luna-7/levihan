@@ -32,6 +32,7 @@ const COS = require('cos-nodejs-sdk-v5');
 const BUCKET = process.env.COS_BUCKET || 'levihan-1325571558';
 const REGION = process.env.COS_REGION || 'ap-nanjing';
 const ARCHIVE_KEY = 'archive.json';
+const TAGS_KEY = 'tags.json';   // 全站标签库（string[]），供上传台下拉选择
 const MAX_BYTES = 4 * 1024 * 1024; // 单文件上限 4MB
 const MAX_BODY = 6 * 1024 * 1024; // 请求体上限 6MB（HTTP 访问服务 / API 网关的硬上限）
 const TOKEN_TTL = 2 * 60 * 60; // 令牌有效期 2 小时
@@ -114,6 +115,54 @@ async function writeArchive(books) {
   });
 }
 
+/** 读取全站标签库；文件不存在则视为空数组 */
+async function readTagLib() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: TAGS_KEY });
+    const text = Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body);
+    const parsed = JSON.parse(text);
+    return normalizeTagLib(parsed);
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+
+async function writeTagLib(tags) {
+  await putObject({
+    Bucket: BUCKET,
+    Region: REGION,
+    Key: TAGS_KEY,
+    Body: Buffer.from(JSON.stringify(normalizeTagLib(tags), null, 2), 'utf8'),
+    ContentType: 'application/json; charset=utf-8',
+    CacheControl: 'no-cache',
+  });
+}
+
+/** 清洗：去空、trim、去重、限长限量、稳定排序 */
+function normalizeTagLib(input) {
+  const list = Array.isArray(input) ? input : [];
+  const out = [];
+  list.forEach((t) => {
+    const v = String(t == null ? '' : t).trim().slice(0, 24);
+    if (v && out.indexOf(v) < 0) out.push(v);
+  });
+  out.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  return out.slice(0, 300);
+}
+
+/** 从归档里兜底推导标签库（tags.json 缺失时用一次） */
+function deriveTagsFromBooks(books) {
+  const out = [];
+  (Array.isArray(books) ? books : []).forEach((b) => {
+    (b && Array.isArray(b.tags) ? b.tags : []).forEach((t) => {
+      const v = String(t == null ? '' : t).trim();
+      if (v && out.indexOf(v) < 0) out.push(v);
+    });
+  });
+  return normalizeTagLib(out);
+}
+
 /** 字段顺序与 sync-archive.mjs / 前端 DoujinBookItem 保持一致 */
 function normalizeBook(raw) {
   const id = String(raw.id || '').trim();
@@ -150,6 +199,10 @@ function normalizeBook(raw) {
 
   const pagePrefix = String(raw.pagePrefix || '').trim();
   if (pagePrefix && pagePrefix !== 'image') book.pagePrefix = pagePrefix;
+
+  // 内容预警：未勾选时前端传空串，这里不写入字段，站点即不展示
+  const warning = String(raw.warning || '').trim().slice(0, 100);
+  if (warning) book.warning = warning;
 
   // 只在给出合法值时写入；空值/0 必须忽略，否则前端 getCosPageUrl 的 `?? 2` 会拿到 0 而丢掉补零
   const padDigits = parseInt(raw.pagePadDigits, 10);
@@ -196,7 +249,25 @@ async function handle(action, payload) {
 
     case 'catalog': {
       const books = await readArchive();
-      return { ok: true, count: books.length, books };
+      let tagLib = await readTagLib();
+      if (!tagLib.length) {
+        // 标签库为空时，用归档里已有标签兜底建一次，老数据不会「没有可选项」
+        tagLib = deriveTagsFromBooks(books);
+        if (tagLib.length) await writeTagLib(tagLib);
+      }
+      return { ok: true, count: books.length, books, tagLib };
+    }
+
+    /** 标签库：不传 tags = 读取；传 tags = 覆盖保存 */
+    case 'tags': {
+      if (!payload.tags) {
+        const cur = await readTagLib();
+        return { ok: true, tags: cur };
+      }
+      if (!Array.isArray(payload.tags)) throw httpError('tags 必须是数组', 400);
+      const next = normalizeTagLib(payload.tags);
+      await writeTagLib(next);
+      return { ok: true, tags: next };
     }
 
     case 'upload': {
@@ -235,6 +306,13 @@ async function handle(action, payload) {
         books.sort((a, b) => String(a.id).localeCompare(String(b.id), 'en'));
       }
       await writeArchive(books);
+
+      // 顺带把本子用到的标签并入标签库，保证「下拉里一定有新加的标签」
+      const lib = await readTagLib();
+      let added = 0;
+      book.tags.forEach((t) => { if (lib.indexOf(t) < 0) { lib.push(t); added += 1; } });
+      if (added) await writeTagLib(normalizeTagLib(lib));
+
       return { ok: true, replaced, count: books.length, books };
     }
 

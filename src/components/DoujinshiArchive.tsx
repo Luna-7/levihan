@@ -356,6 +356,16 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                   </div>
                 </div>
 
+                {/* 内容预警：后台勾选并填写后展示，未填写时整块不渲染 */}
+                {book.warning && (
+                  <div className="flex items-start gap-1.5 bg-[#FDF0E3] border border-[#E8B04B] rounded-xs px-2 py-1.5">
+                    <span className="shrink-0 text-[11px] leading-none mt-px">⚠</span>
+                    <span className="text-[10px] font-retro-jp text-[#8A5A12] break-words leading-snug">
+                      {book.warning}
+                    </span>
+                  </div>
+                )}
+
                 {/* 字段区：“作者”、来源、汉化、嵌字 */}
                 <div className="bg-[#FAF5E8] border border-[#EBE3D0] rounded-xs p-2 space-y-1 text-[11px] font-retro-jp">
                   <div className="flex items-start gap-1">
