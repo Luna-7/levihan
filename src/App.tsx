@@ -132,7 +132,7 @@ export default function App() {
 
         {/* VIEW 5: 深夜树洞 - iframe 内嵌匿名卷轴树洞（第一阶段：本地存储壳，未接后端） */}
         {activeTab === 'treehole' && (
-          <TreeHoleStage onShowToast={showToast} />
+          <TreeHoleStage />
         )}
       </RetroPixelFrame>
 
