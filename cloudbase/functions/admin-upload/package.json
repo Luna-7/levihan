@@ -1,0 +1,9 @@
+{
+  "name": "admin-upload",
+  "version": "1.0.0",
+  "description": "admin-only doujin upload channel",
+  "main": "index.js",
+  "dependencies": {
+    "cos-nodejs-sdk-v5": "^2.14.6"
+  }
+}

@@ -1,0 +1,412 @@
+/**
+ * 利韩土豆仓 · 同人本管理员上传通道（CloudBase Web 云函数 / HTTP 服务）
+ *
+ * 传输层：HTTP 服务（scf_bootstrap 启动，监听 9000 端口），前端直接 fetch 调用
+ *
+ * 设计要点：
+ * - 不存放任何永久密钥：使用云函数运行时自动注入的临时凭证（TENCENTCLOUD_SECRETID/KEY/SESSIONTOKEN）；
+ *   实测该凭证对本桶 levihan-1325571558 具备读写权限，因此无需 STS、无需配置 COS 密钥
+ * - 浏览器 → 本函数（带管理员口令）→ COS 桶；前端拿不到任何 COS 密钥
+ * - 归档元数据写入桶根目录 archive.json（与 scripts/sync-archive.mjs 同构：DoujinBookItem[]）
+ *
+ * 环境变量（均不含密钥）：
+ *   ADMIN_PASSWORD   管理员口令（必填）
+ *   COS_BUCKET       默认 levihan-1325571558
+ *   COS_REGION       默认 ap-nanjing
+ *   ALLOWED_ORIGINS  可选，逗号分隔；默认 *
+ *
+ * 接口：POST /  body = { action, ... }
+ *   status    公开                        → 健康检查 / 口令是否已配置
+ *   login     {password}                  → { token, exp }
+ *   catalog   (token)                     → { books }
+ *   upload    (token) {bookId,fileName,dataBase64,contentType} → { key, bytes }
+ *   publish   (token) {book}              → { books }
+ *   remove    (token) {id, deleteFiles}   → { id, deletedObjects, books }
+ */
+'use strict';
+
+const http = require('http');
+const crypto = require('crypto');
+const COS = require('cos-nodejs-sdk-v5');
+
+const BUCKET = process.env.COS_BUCKET || 'levihan-1325571558';
+const REGION = process.env.COS_REGION || 'ap-nanjing';
+const ARCHIVE_KEY = 'archive.json';
+const MAX_BYTES = 4 * 1024 * 1024; // 单文件上限 4MB
+const MAX_BODY = 6 * 1024 * 1024; // 请求体上限 6MB（HTTP 访问服务 / API 网关的硬上限）
+const TOKEN_TTL = 2 * 60 * 60; // 令牌有效期 2 小时
+const PORT = process.env.PORT || 9000;
+
+const cos = new COS({
+  SecretId: process.env.TENCENTCLOUD_SECRETID,
+  SecretKey: process.env.TENCENTCLOUD_SECRETKEY,
+  SecurityToken: process.env.TENCENTCLOUD_SESSIONTOKEN,
+  Protocol: 'https:',
+});
+
+/* ------------------------------ 基础设施 ------------------------------ */
+
+const promisify =
+  (fn) =>
+  (params) =>
+    new Promise((resolve, reject) => fn(params, (err, data) => (err ? reject(err) : resolve(data))));
+
+const putObject = promisify(cos.putObject.bind(cos));
+const getObject = promisify(cos.getObject.bind(cos));
+const getBucket = promisify(cos.getBucket.bind(cos));
+const deleteMultipleObject = promisify(cos.deleteMultipleObject.bind(cos));
+
+const adminPassword = () => process.env.ADMIN_PASSWORD || '';
+
+/** 时间安全比较，避免口令被逐字符试探 */
+function safeEqual(a, b) {
+  const ba = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+
+function signExp(exp) {
+  return crypto.createHmac('sha256', adminPassword() + '|levihan-admin-v1').update(String(exp)).digest('base64url');
+}
+
+function makeToken() {
+  const exp = Math.floor(Date.now() / 1000) + TOKEN_TTL;
+  return { token: `${exp}.${signExp(exp)}`, exp };
+}
+
+function verifyToken(token) {
+  if (typeof token !== 'string' || !token.includes('.')) return false;
+  const i = token.indexOf('.');
+  const exp = Number(token.slice(0, i));
+  if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) return false;
+  return safeEqual(token.slice(i + 1), signExp(exp));
+}
+
+const ID_RE = /^lh-\d{1,4}$/;
+const FILE_RE = /^[A-Za-z0-9_-]+\.(webp|jpg|jpeg|png|gif|avif)$/i;
+
+const httpError = (message, status) => Object.assign(new Error(message), { httpStatus: status });
+
+/* ------------------------------ 归档读写 ------------------------------ */
+
+/** 读取桶根归档；文件不存在则视为空数组 */
+async function readArchive() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: ARCHIVE_KEY });
+    const text = Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body);
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+
+async function writeArchive(books) {
+  await putObject({
+    Bucket: BUCKET,
+    Region: REGION,
+    Key: ARCHIVE_KEY,
+    Body: Buffer.from(JSON.stringify(books, null, 2), 'utf8'),
+    ContentType: 'application/json; charset=utf-8',
+    CacheControl: 'no-cache',
+  });
+}
+
+/** 字段顺序与 sync-archive.mjs / 前端 DoujinBookItem 保持一致 */
+function normalizeBook(raw) {
+  const id = String(raw.id || '').trim();
+  if (!ID_RE.test(id)) throw httpError(`ID「${id}」不符合 lh-数字 格式`, 400);
+
+  const titleZh = String(raw.titleZh || '').trim();
+  if (!titleZh) throw httpError('缺少「本子名」', 400);
+
+  const pages = parseInt(raw.pages, 10);
+  if (!Number.isFinite(pages) || pages < 1) throw httpError('「总页数」必须是正整数', 400);
+
+  const tags = Array.isArray(raw.tags)
+    ? raw.tags
+    : String(raw.tags || '')
+        .split(/[,，]/)
+        .map((t) => t.trim())
+        .filter(Boolean);
+
+  const book = {
+    id,
+    titleZh,
+    circle: String(raw.circle || '').trim() || '未知',
+    category: String(raw.category || '').trim() || '漫画本',
+    tags: tags.map((t) => String(t).trim()).filter(Boolean),
+    pages,
+    bookFolder: String(raw.bookFolder || '').trim() || id,
+    coverFile: String(raw.coverFile || '').trim() || 'image01.webp',
+  };
+
+  for (const field of ['titleJp', 'source', 'translator', 'typesetter']) {
+    const v = String(raw[field] || '').trim();
+    if (v) book[field] = v;
+  }
+
+  const pagePrefix = String(raw.pagePrefix || '').trim();
+  if (pagePrefix && pagePrefix !== 'image') book.pagePrefix = pagePrefix;
+
+  // 只在给出合法值时写入；空值/0 必须忽略，否则前端 getCosPageUrl 的 `?? 2` 会拿到 0 而丢掉补零
+  const padDigits = parseInt(raw.pagePadDigits, 10);
+  if (Number.isFinite(padDigits) && padDigits >= 1 && padDigits <= 5 && padDigits !== 2) {
+    book.pagePadDigits = padDigits;
+  }
+
+  return book;
+}
+
+/** 列出某目录下全部对象 Key（自动翻页） */
+async function listAllKeys(prefix) {
+  const keys = [];
+  let marker;
+  for (let page = 0; page < 50; page++) {
+    const res = await getBucket({ Bucket: BUCKET, Region: REGION, Prefix: prefix, MaxKeys: 1000, Marker: marker });
+    (res.Contents || []).forEach((o) => o && o.Key && keys.push(o.Key));
+    if (!res.IsTruncated || !res.NextMarker) break;
+    marker = res.NextMarker;
+  }
+  return keys;
+}
+
+/* ------------------------------ 业务路由 ------------------------------ */
+
+async function handle(action, payload) {
+  switch (action) {
+    case 'status':
+      return {
+        ok: true,
+        configured: adminPassword().length > 0,
+        bucket: BUCKET,
+        region: REGION,
+        cdnBaseUrl: 'https://levihan-1325571558.cos-website.ap-nanjing.myqcloud.com',
+        maxFileBytes: MAX_BYTES,
+        time: new Date().toISOString(),
+      };
+
+    case 'login': {
+      if (!adminPassword()) throw httpError('服务端尚未配置管理员口令', 503);
+      if (!safeEqual(String(payload.password || ''), adminPassword())) throw httpError('口令不正确', 401);
+      return { ok: true, ...makeToken() };
+    }
+
+    case 'catalog': {
+      const books = await readArchive();
+      return { ok: true, count: books.length, books };
+    }
+
+    case 'upload': {
+      const bookId = String(payload.bookId || '').trim();
+      const fileName = String(payload.fileName || '').trim();
+      if (!ID_RE.test(bookId)) throw httpError('非法目录名（应为 lh-数字）', 400);
+      if (!FILE_RE.test(fileName)) throw httpError('非法文件名', 400);
+
+      const b64 = String(payload.dataBase64 || '');
+      if (Math.floor((b64.length * 3) / 4) > MAX_BYTES)
+        throw httpError(`文件超过 ${(MAX_BYTES / 1024 / 1024).toFixed(1)}MB 上限`, 413);
+
+      const body = Buffer.from(b64, 'base64');
+      if (!body.length) throw httpError('文件内容为空', 400);
+
+      const key = `${bookId}/${fileName}`;
+      await putObject({
+        Bucket: BUCKET,
+        Region: REGION,
+        Key: key,
+        Body: body,
+        ContentType: String(payload.contentType || 'image/webp'),
+        CacheControl: 'public, max-age=31536000',
+      });
+      return { ok: true, key, bytes: body.length };
+    }
+
+    case 'publish': {
+      const book = normalizeBook(payload.book || {});
+      const books = await readArchive();
+      const idx = books.findIndex((b) => b && b.id === book.id);
+      const replaced = idx >= 0;
+      if (replaced) books[idx] = book;
+      else {
+        books.push(book);
+        books.sort((a, b) => String(a.id).localeCompare(String(b.id), 'en'));
+      }
+      await writeArchive(books);
+      return { ok: true, replaced, count: books.length, books };
+    }
+
+    case 'remove': {
+      const id = String(payload.id || '').trim();
+      if (!ID_RE.test(id)) throw httpError('非法 ID', 400);
+
+      const books = await readArchive();
+      const target = books.find((b) => b && b.id === id);
+      if (!target) throw httpError('归档中找不到该作品', 404);
+
+      const folder = String(target.bookFolder || id).replace(/^\/|\/$/g, '');
+      let deletedObjects = 0;
+
+      if (payload.deleteFiles !== false) {
+        const keys = await listAllKeys(`${folder}/`);
+        for (let i = 0; i < keys.length; i += 1000) {
+          const chunk = keys.slice(i, i + 1000);
+          await deleteMultipleObject({ Bucket: BUCKET, Region: REGION, Objects: chunk.map((Key) => ({ Key })) });
+          deletedObjects += chunk.length;
+        }
+      }
+
+      const next = books.filter((b) => b && b.id !== id);
+      await writeArchive(next);
+      return { ok: true, id, deletedObjects, count: next.length, books: next };
+    }
+
+    default:
+      throw httpError(`未知操作：${action || '(空)'}`, 400);
+  }
+}
+
+/* ------------------------------ HTTP 层 ------------------------------ */
+
+function corsHeaders(origin) {
+  const allow = (process.env.ALLOWED_ORIGINS || '*').trim();
+  const value =
+    allow === '*'
+      ? '*'
+      : allow
+          .split(',')
+          .map((s) => s.trim())
+          .includes(origin)
+        ? origin
+        : allow.split(',')[0].trim();
+  return {
+    'Access-Control-Allow-Origin': value,
+    'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Token',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+function send(res, status, data, origin) {
+  const body = JSON.stringify(data);
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body),
+    ...corsHeaders(origin),
+  });
+  res.end(body);
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > MAX_BODY) {
+        reject(httpError('请求体过大', 413));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+const server = http.createServer(async (req, res) => {
+  const origin = req.headers.origin || '';
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, corsHeaders(origin));
+    res.end();
+    return;
+  }
+
+  if (req.method === 'GET') {
+    send(res, 200, { ok: true, service: 'admin-upload', action: 'use POST' }, origin);
+    return;
+  }
+
+  let payload = {};
+  try {
+    const raw = await readBody(req);
+    payload = raw ? JSON.parse(raw) : {};
+  } catch (err) {
+    send(res, (err && err.httpStatus) || 400, { ok: false, error: (err && err.message) || '请求体解析失败' }, origin);
+    return;
+  }
+
+  const action = String(payload.action || '').trim();
+  const token = payload.token || req.headers['x-admin-token'] || '';
+
+  try {
+    if (action !== 'status' && action !== 'login' && !verifyToken(token)) {
+      throw httpError('未授权或登录已过期，请重新登录', 401);
+    }
+    send(res, 200, await handle(action, payload), origin);
+  } catch (err) {
+    send(res, (err && err.httpStatus) || 500, { ok: false, error: (err && err.message) || String(err), status: (err && err.httpStatus) || 500 }, origin);
+  }
+});
+
+// 仅当作为 Web 函数主入口（scf_bootstrap 执行 node index.js）时启动 HTTP 服务；
+// 被事件函数加载时 require.main !== module，不会占用端口。
+if (require.main === module) {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`[admin-upload] listening on ${PORT}`);
+  });
+}
+
+/* ------------------------------ Event 函数入口 ------------------------------ */
+/**
+ * 兼容「事件函数 + HTTP 访问服务」调用方式：
+ * 云接入会把 API 网关事件透传进来，此处复用同一套 handle() 逻辑。
+ */
+exports.main = async (event) => {
+  const origin = (event.headers && (event.headers.origin || event.headers.Origin)) || '';
+
+  if (String(event.httpMethod || '').toUpperCase() === 'OPTIONS') {
+    return { statusCode: 204, headers: corsHeaders(origin), body: '' };
+  }
+
+  let payload = event || {};
+  if (typeof event.body === 'string' && event.body) {
+    const raw = event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString('utf8') : event.body;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      payload = {};
+    }
+  } else if (event.body && typeof event.body === 'object') {
+    payload = event.body;
+  }
+
+  const action = String(payload.action || '').trim();
+  const headers = event.headers || {};
+  const token = payload.token || headers['x-admin-token'] || headers['X-Admin-Token'] || '';
+
+  const respond = (status, data) => ({
+    statusCode: status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders(origin) },
+    body: JSON.stringify(data),
+  });
+
+  // 无 action 的 GET 视为健康检查，避免直接落到 401 分支
+  if (!action && String(event.httpMethod || '').toUpperCase() === 'GET') {
+    return respond(200, { ok: true, service: 'admin-upload', hint: '请以 POST + JSON body {action} 调用' });
+  }
+
+  try {
+    if (action !== 'status' && action !== 'login' && !verifyToken(token)) {
+      throw httpError('未授权或登录已过期，请重新登录', 401);
+    }
+    return respond(200, await handle(action, payload));
+  } catch (err) {
+    const status = (err && err.httpStatus) || 500;
+    return respond(status, { ok: false, error: (err && err.message) || String(err), status });
+  }
+};

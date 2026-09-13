@@ -1,0 +1,24 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "version": "2.1",
+  "envId": "levihan-tudou-d0g7jivue1ccc4a35",
+  "functionRoot": "functions",
+  "functions": [
+    {
+      "name": "admin-upload",
+      "type": "Event",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 30,
+      "memorySize": 256,
+      "description": "利韩土豆仓 · 同人本管理员上传通道（口令鉴权 + COS 读写 + 归档写入）",
+      "installDependency": true,
+      "envVariables": {
+        "ADMIN_PASSWORD": "{{env.ADMIN_PASSWORD}}",
+        "COS_BUCKET": "levihan-1325571558",
+        "COS_REGION": "ap-nanjing",
+        "ALLOWED_ORIGINS": "https://levihan-tudou-d0g7jivue1ccc4a35-1325571558.tcloudbaseapp.com,http://localhost:5173,http://localhost:4173"
+      }
+    }
+  ]
+}

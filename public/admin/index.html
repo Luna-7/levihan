@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title>土豆粮仓 · 上传台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&family=VT323&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF7EC; --bg:#F6F1E3; --card:#FFFBF0;
+    --green:#1B4332; --green-2:#1E4334; --ink:#22372B; --ink-2:#4A3A2C; --ink-3:#7A6A55;
+    --gold:#E5A93C; --gold-2:#B7791F; --line:#D5C9AF; --rule:#EAE2CE;
+    --purple:#6A4C93; --danger:#B4442F; --ok:#2F7A4F;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--ink-2);
+    font-family:'Noto Sans SC',-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;
+    font-size:14px;line-height:1.7;-webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:22px 22px;
+  }
+  .jp{font-family:'DotGothic16','Noto Sans SC',monospace}
+  .px{font-family:'Press Start 2P','DotGothic16',monospace}
+  .wrap{max-width:1080px;margin:0 auto;padding:24px 16px 80px}
+  .panel{background:var(--paper);border:2px solid var(--green-2);border-radius:10px;padding:18px;box-shadow:3px 3px 0 rgba(30,67,52,.16)}
+  .panel + .panel{margin-top:18px}
+  h1{font-family:'DotGothic16',monospace;font-size:19px;margin:0;color:var(--green-2);letter-spacing:.5px}
+  h2{font-family:'DotGothic16',monospace;font-size:15px;margin:0 0 14px;color:var(--green-2);
+     display:flex;align-items:center;gap:8px}
+  h2 .n{background:var(--green-2);color:var(--paper);font-family:'Press Start 2P',monospace;
+        font-size:9px;padding:4px 6px;border-radius:3px;line-height:1}
+  .muted{color:var(--ink-3);font-size:12px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .spread{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+  /* ---- form ---- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+  .f{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .f.span2{grid-column:span 2}
+  label{font-size:12px;font-weight:700;color:var(--ink);display:flex;gap:5px;align-items:baseline}
+  label .tag{font-weight:400;color:var(--ink-3);font-size:11px}
+  label .req{color:var(--danger);font-weight:900}
+  input[type=text],input[type=password],input[type=number],select,textarea{
+    width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;background:#fff;
+    color:var(--ink);font-family:inherit;font-size:13.5px;outline:none;transition:border-color .15s}
+  input:focus,select:focus,textarea:focus{border-color:var(--green-2);box-shadow:0 0 0 3px rgba(30,67,52,.08)}
+  input:disabled{background:#F2EDE2;color:var(--ink-3)}
+  textarea{resize:vertical;min-height:38px}
+  /* ---- buttons ---- */
+  button{font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border-radius:6px;
+         padding:8px 14px;border:1.5px solid var(--green-2);background:var(--paper);color:var(--green-2);
+         transition:transform .08s,background .15s,opacity .15s}
+  button:hover:not(:disabled){background:#F1EADA}
+  button:active:not(:disabled){transform:translateY(1px)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .btn-primary{background:var(--green-2);color:var(--paper);border-color:var(--green-2)}
+  .btn-primary:hover:not(:disabled){background:#173628}
+  .btn-gold{background:var(--gold);border-color:var(--gold-2);color:#3A2A08}
+  .btn-gold:hover:not(:disabled){background:#D99C2C}
+  .btn-sm{padding:5px 10px;font-size:12px}
+  .btn-danger{border-color:var(--danger);color:var(--danger)}
+  .btn-danger:hover:not(:disabled){background:#FBEDEA}
+  /* ---- drop zone ---- */
+  .drop{border:2px dashed var(--line);border-radius:10px;background:var(--card);padding:26px 16px;text-align:center;
+        cursor:pointer;transition:.15s}
+  .drop:hover,.drop.over{border-color:var(--green-2);background:#F5F0E2}
+  .drop.over{border-style:solid}
+  /* ---- file list ---- */
+  .files{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:12px}
+  .file{border:1.5px solid var(--line);border-radius:6px;overflow:hidden;background:#fff;position:relative}
+  .file img{display:block;width:100%;aspect-ratio:2/3;object-fit:cover;background:#F2EDE2}
+  .file .meta{padding:3px 5px;font-size:10.5px;font-family:'VT323',monospace;color:var(--ink-3);
+              display:flex;justify-content:space-between;gap:4px}
+  .file .st{position:absolute;top:3px;right:3px;font-size:10px;padding:1px 5px;border-radius:10px;
+            background:rgba(34,55,43,.82);color:#fff;font-family:'VT323',monospace}
+  .file.done .st{background:var(--ok)}
+  .file.err  .st{background:var(--danger)}
+  .file.busy .st{background:var(--gold-2)}
+  .file .del{position:absolute;top:3px;left:3px;width:19px;height:19px;padding:0;border-radius:50%;
+             font-size:11px;line-height:1;background:rgba(255,255,255,.9);border-color:var(--line);
+             color:var(--danger);display:flex;align-items:center;justify-content:center}
+  /* ---- progress ---- */
+  .bar{height:8px;border-radius:5px;background:#E7DFCC;overflow:hidden;margin-top:10px}
+  .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold),var(--green-2));
+         transition:width .25s}
+  /* ---- book list ---- */
+  .bk{display:flex;gap:10px;align-items:center;padding:8px;border:1.5px solid var(--rule);
+      border-radius:8px;background:var(--card);margin-bottom:8px}
+  .bk img{width:38px;height:57px;object-fit:cover;border-radius:4px;border:1px solid var(--line);background:#EDE7D8;flex:none}
+  .bk .info{flex:1;min-width:0}
+  .bk .id{font-family:'VT323',monospace;font-size:15px;color:var(--gold-2);font-weight:700}
+  .bk .t{font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* ---- misc ---- */
+  .note{border-left:3px solid var(--gold);background:#FFF9EC;padding:9px 12px;border-radius:0 6px 6px 0;
+        font-size:12.5px;color:var(--ink-2);margin:12px 0}
+  .msg{padding:9px 12px;border-radius:6px;font-size:13px;margin-top:12px;display:none;white-space:pre-wrap}
+  .msg.show{display:block}
+  .msg.ok{background:#EDF7F0;border:1.5px solid #A9D6BB;color:#1F5B38}
+  .msg.err{background:#FBEDEA;border:1.5px solid #E4B3A8;color:#8E3320}
+  .msg.info{background:#F2EEE1;border:1.5px solid var(--line);color:var(--ink-2)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{border:1.5px solid var(--line);background:#fff;border-radius:20px;padding:3px 10px;font-size:11.5px;color:var(--ink-2)}
+  details>summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--green-2);padding:4px 0;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:'▸ ';font-size:11px}
+  details[open]>summary::before{content:'▾ '}
+  .login-wrap{max-width:400px;margin:12vh auto}
+  .hide{display:none!important}
+  .sw{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--ink-2)}
+  .sw input{width:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ================= 登录 ================= -->
+  <section id="view-login" class="login-wrap">
+    <div class="panel">
+      <div style="text-align:center;margin-bottom:16px">
+        <div class="px" style="font-size:15px;color:var(--green-2)">🥔</div>
+        <h1 style="margin-top:10px">土豆粮仓 · 上传台</h1>
+        <p class="muted" style="margin:6px 0 0">仅限管理员使用</p>
+      </div>
+      <div class="f">
+        <label for="pw">管理员口令 <span class="req">*</span></label>
+        <input type="password" id="pw" autocomplete="current-password" placeholder="请输入口令">
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn-primary" id="btn-login" style="flex:1">进入上传台</button>
+      </div>
+      <div class="msg err" id="login-msg"></div>
+      <p class="muted" style="margin-top:14px;text-align:center">口令只在本次会话内保存，关闭标签页即失效</p>
+    </div>
+  </section>
+
+  <!-- ================= 主界面 ================= -->
+  <section id="view-main" class="hide">
+
+    <div class="panel">
+      <div class="spread">
+        <div class="row" style="gap:10px">
+          <span class="px" style="font-size:13px;color:var(--green-2)">🥔</span>
+          <h1>土豆粮仓 · 上传台</h1>
+        </div>
+        <button class="btn-sm" id="btn-logout">退出登录</button>
+      </div>
+      <div class="muted" style="margin-top:8px" id="env-info">正在连接…</div>
+    </div>
+
+    <!-- 已收录作品 -->
+    <div class="panel">
+      <div class="spread" style="margin-bottom:12px">
+        <h2 style="margin:0"><span class="n">A</span> 已收录作品 <span class="muted" id="bk-count"></span></h2>
+        <button class="btn-sm" id="btn-reload">↻ 刷新列表</button>
+      </div>
+      <div id="bk-list"><p class="muted">加载中…</p></div>
+    </div>
+
+    <!-- 作品信息 -->
+    <div class="panel">
+      <h2><span class="n">B</span> 作品信息 <span class="muted" id="mode-hint">（新建）</span></h2>
+
+      <div class="grid">
+        <div class="f">
+          <label for="f-id">ID 编号 <span class="req">*</span></label>
+          <div class="row" style="gap:6px;flex-wrap:nowrap">
+            <input type="text" id="f-id" placeholder="lh-001">
+            <button class="btn-sm" id="btn-nextid" title="自动填入下一个可用编号" style="flex:none">下一个</button>
+          </div>
+        </div>
+        <div class="f span2">
+          <label for="f-titleZh">本子名 <span class="req">*</span></label>
+          <input type="text" id="f-titleZh" placeholder="例如：我也不是没受欢迎过">
+        </div>
+        <div class="f">
+          <label for="f-titleJp">日文原名 <span class="tag">可选</span></label>
+          <input type="text" id="f-titleJp" placeholder="例：好かれていないわけじゃない">
+        </div>
+        <div class="f">
+          <label for="f-circle">作者 / 社团 <span class="req">*</span></label>
+          <input type="text" id="f-circle" placeholder="例如：おすし">
+        </div>
+        <div class="f">
+          <label for="f-category">分类</label>
+          <input type="text" id="f-category" list="cat-list" placeholder="漫画本">
+          <datalist id="cat-list">
+            <option value="漫画本"></option><option value="小说本"></option>
+            <option value="插画集"></option><option value="商业志"></option>
+          </datalist>
+        </div>
+        <div class="f">
+          <label for="f-tags">标签 <span class="tag">逗号分隔</span></label>
+          <input type="text" id="f-tags" placeholder="现代,含R18">
+        </div>
+        <div class="f">
+          <label for="f-source">来源 <span class="tag">可选</span></label>
+          <input type="text" id="f-source" placeholder="例如：web">
+        </div>
+        <div class="f">
+          <label for="f-translator">汉化 <span class="tag">可选</span></label>
+          <input type="text" id="f-translator" placeholder="例如：LG">
+        </div>
+        <div class="f">
+          <label for="f-typesetter">嵌字 <span class="tag">可选</span></label>
+          <input type="text" id="f-typesetter" placeholder="例如：LG">
+        </div>
+        <div class="f">
+          <label for="f-pages">总页数 <span class="req">*</span></label>
+          <input type="number" id="f-pages" min="1" step="1" placeholder="选择图片后自动填写">
+        </div>
+      </div>
+
+      <details style="margin-top:14px">
+        <summary>高级设置（存储路径 / 命名规则）</summary>
+        <div class="grid" style="margin-top:10px">
+          <div class="f">
+            <label for="f-bookFolder">存储目录 <span class="tag">默认同 ID</span></label>
+            <input type="text" id="f-bookFolder" placeholder="lh-001">
+          </div>
+          <div class="f">
+            <label for="f-pagePrefix">图片前缀 <span class="tag">默认 image</span></label>
+            <input type="text" id="f-pagePrefix" placeholder="image">
+          </div>
+          <div class="f">
+            <label for="f-pagePadDigits">页码位数 <span class="tag">默认 2</span></label>
+            <input type="number" id="f-pagePadDigits" min="1" max="5" step="1" placeholder="2">
+          </div>
+          <div class="f">
+            <label for="f-coverFile">封面文件 <span class="tag">默认第 1 张</span></label>
+            <input type="text" id="f-coverFile" placeholder="image01.webp">
+          </div>
+        </div>
+        <p class="muted" style="margin:10px 0 0">留空即使用默认值；站点按 <code>{目录}/{前缀}{页码}.webp</code> 读取内页。</p>
+      </details>
+    </div>
+
+    <!-- 上传图片 -->
+    <div class="panel">
+      <div class="spread" style="margin-bottom:12px">
+        <h2 style="margin:0"><span class="n">C</span> 内页图片 <span class="muted" id="files-count">未选择</span></h2>
+        <div class="row" style="gap:8px">
+          <button class="btn-sm" id="btn-sort">↕ 按文件名重排</button>
+          <button class="btn-sm" id="btn-clear">清空</button>
+        </div>
+      </div>
+
+      <div id="drop" class="drop">
+        <div style="font-size:26px">📥</div>
+        <div style="font-weight:700;color:var(--ink);margin-top:6px">把图片拖到这里，或点击选择</div>
+        <div class="muted" style="margin-top:4px">支持 jpg / png / webp，将按顺序自动命名为 image01、image02…</div>
+        <input type="file" id="picker" accept="image/*" multiple class="hide">
+      </div>
+
+      <div class="files" id="files"></div>
+
+      <div class="row" style="margin-top:16px;gap:14px">
+        <label class="sw"><input type="checkbox" id="opt-webp" checked> 自动转 WebP（大幅减小体积）</label>
+        <label class="sw">画质
+          <input type="range" id="opt-q" min="60" max="95" value="85" style="width:90px">
+          <span class="muted" id="q-val" style="font-family:'VT323',monospace;font-size:15px">85</span>
+        </label>
+      </div>
+
+      <div class="bar"><i id="bar"></i></div>
+      <div class="muted" id="prog-text" style="margin-top:6px">待上传</div>
+
+      <div class="row" style="margin-top:16px">
+        <button class="btn-gold" id="btn-upload" disabled style="flex:1">🚀 上传并发布</button>
+        <button class="btn-primary" id="btn-publish-only" disabled>仅更新信息</button>
+      </div>
+      <div class="msg" id="main-msg"></div>
+      <p class="muted" style="margin-top:10px">「仅更新信息」不传图片，适合只改标题 / 标签 / 页数。单张图片上限 4MB。</p>
+    </div>
+
+  </section>
+</div>
+
+<script>
+'use strict';
+/* ============ 配置 ============ */
+var FN_URL  = 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/admin-upload';
+var CDN     = 'https://levihan-1325571558.cos-website.ap-nanjing.myqcloud.com';
+var SITE    = 'https://levihan-tudou-d0g7jivue1ccc4a35-1325571558.tcloudbaseapp.com';
+var TOKEN_KEY = 'levihan-admin-token';
+var MAX_FILE  = 4 * 1024 * 1024;
+
+/* ============ 状态 ============ */
+var token = sessionStorage.getItem(TOKEN_KEY) || '';
+var books = [];
+var files = [];          // { file, url, status, err, name }
+var envMax = MAX_FILE;
+
+/* ============ 小工具 ============ */
+function $(id){ return document.getElementById(id); }
+function show(el, cls, text){ el.className = 'msg show ' + cls; el.textContent = text; }
+function hide(el){ el.className = 'msg'; el.textContent = ''; }
+function fmtSize(n){
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(0) + ' KB';
+  return (n/1024/1024).toFixed(2) + ' MB';
+}
+function naturalSort(a, b){
+  return String(a).localeCompare(String(b), 'zh-Hans-CN', { numeric:true, sensitivity:'base' });
+}
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+  });
+}
+
+/* ============ 接口调用（text/plain 规避预检） ============ */
+function api(payload){
+  var body = Object.assign({}, payload);
+  if (token && body.action !== 'login' && body.action !== 'status') body.token = token;
+  return fetch(FN_URL, {
+    method:'POST',
+    headers:{ 'Content-Type':'text/plain;charset=UTF-8' },
+    body: JSON.stringify(body)
+  }).then(function(res){
+    return res.json().catch(function(){ return {}; }).then(function(data){
+      if (data && data.ok === false) {
+        var e = new Error(data.error || ('请求失败（HTTP ' + res.status + '）'));
+        e.status = data.status || res.status;
+        throw e;
+      }
+      if (!res.ok) { var e2 = new Error('请求失败（HTTP ' + res.status + '）'); e2.status = res.status; throw e2; }
+      return data;
+    });
+  });
+}
+
+function onAuthFail(err){
+  if (err && err.status === 401) {
+    token = ''; sessionStorage.removeItem(TOKEN_KEY);
+    $('view-main').classList.add('hide');
+    $('view-login').classList.remove('hide');
+    show($('login-msg'), 'err', '登录已过期，请重新输入口令。');
+    return true;
+  }
+  return false;
+}
+
+/* ============ 登录 ============ */
+function doLogin(){
+  var pw = $('pw').value;
+  if (!pw) { show($('login-msg'), 'err', '请输入口令。'); return; }
+  $('btn-login').disabled = true;
+  hide($('login-msg'));
+  api({ action:'login', password: pw }).then(function(d){
+    token = d.token;
+    sessionStorage.setItem(TOKEN_KEY, token);
+    $('pw').value = '';
+    enterMain();
+  }).catch(function(err){
+    show($('login-msg'), 'err', err.message || String(err));
+  }).then(function(){ $('btn-login').disabled = false; });
+}
+
+function logout(){
+  token = ''; sessionStorage.removeItem(TOKEN_KEY);
+  $('view-main').classList.add('hide');
+  $('view-login').classList.remove('hide');
+  clearFiles();
+}
+
+/* ============ 主界面 ============ */
+function enterMain(){
+  $('view-login').classList.add('hide');
+  $('view-main').classList.remove('hide');
+  refreshEnv();
+  loadBooks();
+}
+
+function refreshEnv(){
+  api({ action:'status' }).then(function(d){
+    envMax = d.maxFileBytes || MAX_FILE;
+    $('env-info').textContent = '✓ 已连接 · 存储桶 ' + d.bucket + '（' + d.region + '）· 单张上限 ' + fmtSize(envMax);
+  }).catch(function(err){
+    $('env-info').textContent = '⚠ 无法连接上传服务：' + (err.message || err);
+  });
+}
+
+function loadBooks(){
+  var box = $('bk-list');
+  box.innerHTML = '<p class="muted">加载中…</p>';
+  api({ action:'catalog' }).then(function(d){
+    books = d.books || [];
+    $('bk-count').textContent = '共 ' + books.length + ' 本';
+    if (!books.length) { box.innerHTML = '<p class="muted">归档还是空的，先在上面新建一本吧。</p>'; return; }
+    box.innerHTML = books.map(function(b){
+      var cover = CDN + '/' + (b.bookFolder || b.id) + '/' + (b.coverFile || 'image01.webp');
+      return '<div class="bk">' +
+        '<img src="' + esc(cover) + '" alt="" loading="lazy" onerror="this.style.opacity=.25">' +
+        '<div class="info">' +
+          '<div class="row" style="gap:8px"><span class="id">' + esc(b.id) + '</span>' +
+          '<span class="t">' + esc(b.titleZh) + '</span></div>' +
+          '<div class="muted">' + esc(b.circle || '—') + ' · ' + (b.pages || 0) + ' 页' +
+            (b.tags && b.tags.length ? ' · ' + b.tags.map(esc).join(' / ') : '') + '</div>' +
+        '</div>' +
+        '<button class="btn-sm" data-edit="' + esc(b.id) + '">编辑</button>' +
+        '<button class="btn-sm btn-danger" data-del="' + esc(b.id) + '">删除</button>' +
+      '</div>';
+    }).join('');
+  }).catch(function(err){
+    if (onAuthFail(err)) return;
+    box.innerHTML = '';
+    show($('main-msg'), 'err', '读取归档失败：' + (err.message || err));
+  });
+}
+
+/* ============ 表单 ============ */
+function nextId(){
+  var max = 0;
+  books.forEach(function(b){
+    var m = /^lh-(\d+)$/.exec(b.id || '');
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return 'lh-' + String(max + 1).padStart(3, '0');
+}
+
+function readForm(){
+  // 可选数值：非法/留空时返回 undefined，JSON 序列化时会整个字段消失，
+  // 避免把 pagePadDigits:0 写进归档（会让站点把 image01 读成 image1）。
+  var pad = parseInt($('f-pagePadDigits').value, 10);
+  return {
+    id: $('f-id').value.trim(),
+    titleZh: $('f-titleZh').value.trim(),
+    titleJp: $('f-titleJp').value.trim(),
+    circle: $('f-circle').value.trim(),
+    category: $('f-category').value.trim(),
+    tags: $('f-tags').value.trim(),
+    source: $('f-source').value.trim(),
+    translator: $('f-translator').value.trim(),
+    typesetter: $('f-typesetter').value.trim(),
+    pages: parseInt($('f-pages').value, 10) || 0,
+    bookFolder: $('f-bookFolder').value.trim(),
+    pagePrefix: $('f-pagePrefix').value.trim(),
+    pagePadDigits: (pad >= 1 && pad <= 5) ? pad : undefined,
+    coverFile: $('f-coverFile').value.trim()
+  };
+}
+
+function fillForm(b){
+  $('f-id').value = b.id || '';
+  $('f-titleZh').value = b.titleZh || '';
+  $('f-titleJp').value = b.titleJp || '';
+  $('f-circle').value = b.circle || '';
+  $('f-category').value = b.category || '';
+  $('f-tags').value = (b.tags || []).join(',');
+  $('f-source').value = b.source || '';
+  $('f-translator').value = b.translator || '';
+  $('f-typesetter').value = b.typesetter || '';
+  $('f-pages').value = b.pages || '';
+  $('f-bookFolder').value = b.bookFolder && b.bookFolder !== b.id ? b.bookFolder : '';
+  $('f-pagePrefix').value = b.pagePrefix || '';
+  $('f-pagePadDigits').value = b.pagePadDigits && b.pagePadDigits !== 2 ? b.pagePadDigits : '';
+  $('f-coverFile').value = b.coverFile && b.coverFile !== 'image01.webp' ? b.coverFile : '';
+  $('mode-hint').textContent = '（正在编辑 ' + b.id + '）';
+}
+
+function resetForm(){
+  ['f-id','f-titleZh','f-titleJp','f-circle','f-category','f-tags','f-source',
+   'f-translator','f-typesetter','f-pages','f-bookFolder','f-pagePrefix',
+   'f-pagePadDigits','f-coverFile'].forEach(function(k){ $(k).value = ''; });
+  $('mode-hint').textContent = '（新建）';
+  clearFiles();
+}
+
+/* ============ 文件选择 ============ */
+function addFiles(list){
+  var incoming = Array.prototype.slice.call(list || []);
+  incoming.sort(function(a, b){ return naturalSort(a.name, b.name); });
+  incoming.forEach(function(f){
+    if (!/^image\//.test(f.type) && !/\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(f.name)) return;
+    files.push({ file:f, url: URL.createObjectURL(f), status:'idle', err:'', name:f.name });
+  });
+  renderFiles();
+  syncPages();
+}
+
+function clearFiles(){
+  files.forEach(function(f){ try { URL.revokeObjectURL(f.url); } catch(e){} });
+  files = [];
+  renderFiles();
+  $('bar').style.width = '0%';
+  $('prog-text').textContent = '待上传';
+  syncButtons();
+}
+
+function renderFiles(){
+  var box = $('files');
+  if (!files.length) { box.innerHTML = ''; $('files-count').textContent = '未选择'; syncButtons(); return; }
+  $('files-count').textContent = files.length + ' 张 · 合计 ' + fmtSize(files.reduce(function(s,f){ return s + f.file.size; }, 0));
+  box.innerHTML = files.map(function(f, i){
+    var badge = f.status === 'done' ? '✓' : f.status === 'busy' ? f.pct + '%' : f.status === 'err' ? '✗' :
+                f.status === 'skip' ? '—' : (i + 1);
+    return '<div class="file ' + (f.status === 'done' ? 'done' : f.status === 'err' ? 'err' : f.status === 'busy' ? 'busy' : '') + '" data-i="' + i + '">' +
+      '<img src="' + f.url + '" alt="" loading="lazy">' +
+      '<button class="del" data-rm="' + i + '" title="移除">×</button>' +
+      '<span class="st">' + badge + '</span>' +
+      '<div class="meta"><span>' + (i + 1) + '</span><span>' + fmtSize(f.file.size) + '</span></div>' +
+    '</div>';
+  }).join('');
+  syncButtons();
+}
+
+function updateFileNode(i){
+  var f = files[i];
+  var node = $('files').querySelector('[data-i="' + i + '"]');
+  if (!node) return;
+  node.className = 'file ' + (f.status === 'done' ? 'done' : f.status === 'err' ? 'err' : f.status === 'busy' ? 'busy' : '');
+  node.querySelector('.st').textContent =
+    f.status === 'done' ? '✓' : f.status === 'err' ? '✗' : f.status === 'busy' ? (f.pct || 0) + '%' : (i + 1);
+}
+
+function syncPages(){
+  if (files.length) $('f-pages').value = files.length;
+  var id = $('f-id').value.trim();
+  if (id && !$('f-bookFolder').value.trim()) $('f-bookFolder').placeholder = id;
+}
+
+function syncButtons(){
+  var busy = files.some(function(f){ return f.status === 'busy'; });
+  $('btn-upload').disabled = busy || !files.length;
+  $('btn-publish-only').disabled = busy;
+}
+
+/* ============ 图片处理 ============ */
+function toWebp(file, quality){
+  if (!file.type || file.type === 'image/webp') return Promise.resolve({ blob:file, name:file.name });
+  return createImageBitmap(file).then(function(bmp){
+    var c = document.createElement('canvas');
+    c.width = bmp.width; c.height = bmp.height;
+    c.getContext('2d').drawImage(bmp, 0, 0);
+    if (bmp.close) bmp.close();
+    return new Promise(function(res, rej){
+      c.toBlob(function(blob){
+        if (!blob || blob.type !== 'image/webp') { rej(new Error('当前浏览器无法编码 WebP，请改用 Chrome / Edge')); return; }
+        res({ blob:blob, name: file.name.replace(/\.[^.]+$/, '') + '.webp' });
+      }, 'image/webp', quality);
+    });
+  });
+}
+
+function toBase64(blob){
+  return new Promise(function(res, rej){
+    var r = new FileReader();
+    r.onload = function(){
+      var s = String(r.result);
+      var i = s.indexOf(',');
+      res(i >= 0 ? s.slice(i + 1) : '');
+    };
+    r.onerror = function(){ rej(new Error('读取文件失败')); };
+    r.readAsDataURL(blob);
+  });
+}
+
+function pageName(i, pad, prefix){
+  return (prefix || 'image') + String(i + 1).padStart(pad, '0') + '.webp';
+}
+
+/* 并发池 */
+function pool(items, limit, worker){
+  var idx = 0, active = 0, failed = 0, done = 0;
+  return new Promise(function(resolve){
+    function next(){
+      if (idx >= items.length && active === 0) { resolve({ failed:failed, done:done }); return; }
+      while (active < limit && idx < items.length) {
+        var i = idx++;
+        active++;
+        worker(i).then(function(ok){
+          if (!ok) failed++;
+        }).catch(function(){ failed++; }).then(function(){
+          active--; done++;
+          updateProgress(done, items.length);
+          next();
+        });
+      }
+    }
+    next();
+  });
+}
+
+function updateProgress(done, total){
+  var pct = total ? Math.round(done / total * 100) : 0;
+  $('bar').style.width = pct + '%';
+  $('prog-text').textContent = '已处理 ' + done + ' / ' + total + ' 张（' + pct + '%）';
+}
+
+/* ============ 上传主流程 ============ */
+function setBusy(on){
+  ['btn-upload','btn-publish-only','btn-logout','btn-reload','btn-nextid','btn-clear','btn-sort'].forEach(function(id){
+    $(id).disabled = on;
+  });
+  if (!on) syncButtons();
+}
+
+function uploadAll(){
+  var form = readForm();
+  if (!validate(form, false)) return;
+
+  var prefix = form.pagePrefix || 'image';
+  var pad = form.pagePadDigits || (files.length > 99 ? 3 : 2);
+  var quality = (parseInt($('opt-q').value, 10) || 85) / 100;
+  var convert = $('opt-webp').checked;
+
+  hide($('main-msg'));
+  files.forEach(function(f){ f.status = 'idle'; f.err = ''; f.pct = 0; });
+  renderFiles();
+  setBusy(true);
+  updateProgress(0, files.length);
+
+  // 先把所有图片转码成待上传的 blob，避免并发转码占满内存
+  var prepared = [];
+  var chain = Promise.resolve();
+  files.forEach(function(f, i){
+    chain = chain.then(function(){
+      f.status = 'busy'; f.pct = 0; updateFileNode(i);
+      var p = convert ? toWebp(f.file, quality) : Promise.resolve({ blob:f.file, name:f.name });
+      return p.then(function(r){
+        if (r.blob.size > envMax) throw new Error('转换后仍超过 ' + fmtSize(envMax));
+        return toBase64(r.blob).then(function(b64){
+          prepared[i] = { b64: b64, size: r.blob.size, type: r.blob.type || 'image/webp' };
+          f.preparedSize = r.blob.size;
+        });
+      }).catch(function(err){
+        f.status = 'err'; f.err = err.message || String(err); updateFileNode(i);
+      });
+    });
+  });
+
+  chain.then(function(){
+    var okIdx = [];
+    files.forEach(function(f, i){ if (f.status !== 'err') okIdx.push(i); });
+    if (!okIdx.length) throw new Error('所有图片都处理失败，请检查文件格式。');
+
+    return pool(okIdx, 3, function(k){
+      var i = okIdx[k], f = files[i], p = prepared[i];
+      f.status = 'busy'; updateFileNode(i);
+      return api({
+        action:'upload', bookId: form.id, fileName: pageName(i, pad, prefix),
+        dataBase64: p.b64, contentType: p.type
+      }).then(function(){
+        f.status = 'done'; updateFileNode(i); return true;
+      }).catch(function(err){
+        f.status = 'err'; f.err = err.message || String(err); updateFileNode(i); return false;
+      });
+    });
+  }).then(function(res){
+    var failed = files.filter(function(f){ return f.status === 'err'; });
+    if (failed.length) {
+      var msg = '⚠ 有 ' + failed.length + ' 张上传失败，已停止写入归档。\n' +
+        failed.slice(0, 5).map(function(f, i){ return '  · 第 ' + (files.indexOf(f) + 1) + ' 张（' + f.name + '）：' + f.err; }).join('\n') +
+        (failed.length > 5 ? '\n  …' : '') + '\n修好后点「上传并发布」会重传全部图片（同名覆盖）。';
+      show($('main-msg'), 'err', msg);
+      setBusy(false);
+      return;
+    }
+    // 全部成功 → 写入归档
+    var book = Object.assign({}, form);
+    book.pages = files.length || form.pages;
+    book.bookFolder = form.bookFolder || form.id;
+    book.coverFile = form.coverFile || 'image01.webp';
+    return api({ action:'publish', book: book }).then(function(d){
+      show($('main-msg'), 'ok',
+        '✅ 发布成功：' + book.id + ' · ' + book.titleZh + '（共 ' + d.count + ' 本）\n' +
+        '图片已全部上传（' + files.length + ' 张），站点刷新即可看到。\n' +
+        '预览：' + CDN + '/' + (book.bookFolder || book.id) + '/' + (book.coverFile || 'image01.webp'));
+      resetForm();
+      loadBooks();
+    });
+  }).catch(function(err){
+    if (onAuthFail(err)) return;
+    show($('main-msg'), 'err', '✗ ' + (err.message || String(err)));
+  }).then(function(){ setBusy(false); });
+}
+
+function publishOnly(){
+  var form = readForm();
+  if (!validate(form, true)) return;
+  hide($('main-msg'));
+  setBusy(true);
+  api({ action:'publish', book: form }).then(function(d){
+    show($('main-msg'), 'ok', '✅ 已更新归档信息：' + form.id + '（共 ' + d.count + ' 本）');
+    loadBooks();
+  }).catch(function(err){
+    if (onAuthFail(err)) return;
+    show($('main-msg'), 'err', '✗ ' + (err.message || String(err)));
+  }).then(function(){ setBusy(false); });
+}
+
+function validate(form, needPages){
+  if (!/^lh-\d{1,4}$/.test(form.id)) return fail('ID 编号格式不对，应为 lh-数字，例如 lh-001。');
+  if (!form.titleZh) return fail('请填写「本子名」。');
+  if (!form.circle) return fail('请填写「作者 / 社团」。');
+  if (needPages && !(form.pages > 0)) return fail('请填写「总页数」（或先选择图片）。');
+  if (!needPages && files.length && form.pages && form.pages !== files.length) {
+    if (!confirm('「总页数」写的是 ' + form.pages + '，但选了 ' + files.length + ' 张图片。\n上传后将按图片张数记为 ' + files.length + ' 页，继续？')) return false;
+  }
+  var dup = books.filter(function(b){ return b.id === form.id; })[0];
+  if (dup && !needPages) {
+    if (!confirm('归档中已存在 ' + form.id + '（' + dup.titleZh + '）。\n继续将覆盖它的信息和同名图片，确定吗？')) return false;
+  }
+  return true;
+}
+function fail(m){ show($('main-msg'), 'err', m); return false; }
+
+/* ============ 事件绑定 ============ */
+$('btn-login').onclick = doLogin;
+$('pw').addEventListener('keydown', function(e){ if (e.key === 'Enter') doLogin(); });
+$('btn-logout').onclick = logout;
+$('btn-reload').onclick = loadBooks;
+$('btn-nextid').onclick = function(){ $('f-id').value = nextId(); syncPages(); };
+$('f-id').addEventListener('input', syncPages);
+
+$('drop').onclick = function(){ $('picker').click(); };
+$('picker').onchange = function(e){ addFiles(e.target.files); e.target.value = ''; };
+['dragenter','dragover'].forEach(function(ev){
+  $('drop').addEventListener(ev, function(e){ e.preventDefault(); $('drop').classList.add('over'); });
+});
+['dragleave','drop'].forEach(function(ev){
+  $('drop').addEventListener(ev, function(e){ e.preventDefault(); $('drop').classList.remove('over'); });
+});
+$('drop').addEventListener('drop', function(e){
+  if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
+});
+$('files').addEventListener('click', function(e){
+  var b = e.target.closest('[data-rm]');
+  if (!b) return;
+  var i = parseInt(b.getAttribute('data-rm'), 10);
+  try { URL.revokeObjectURL(files[i].url); } catch(err){}
+  files.splice(i, 1);
+  renderFiles(); syncPages();
+});
+$('btn-clear').onclick = function(){ if (files.length && confirm('清空已选图片？')) clearFiles(); };
+$('btn-sort').onclick = function(){
+  files.sort(function(a, b){ return naturalSort(a.name, b.name); });
+  renderFiles();
+};
+$('opt-q').oninput = function(){ $('q-val').textContent = $('opt-q').value; };
+$('btn-upload').onclick = uploadAll;
+$('btn-publish-only').onclick = publishOnly;
+
+$('bk-list').addEventListener('click', function(e){
+  var ed = e.target.closest('[data-edit]');
+  if (ed) {
+    var b = books.filter(function(x){ return x.id === ed.getAttribute('data-edit'); })[0];
+    if (b) { fillForm(b); window.scrollTo({ top:0, behavior:'smooth' }); }
+    return;
+  }
+  var dl = e.target.closest('[data-del]');
+  if (dl) {
+    var id = dl.getAttribute('data-del');
+    var target = books.filter(function(x){ return x.id === id; })[0] || {};
+    if (!confirm('⚠ 删除 ' + id + '（' + (target.titleZh || '') + '）\n\n将同时删除归档记录与 COS 上的全部图片文件，且不可恢复。\n确定删除吗？')) return;
+    setBusy(true);
+    hide($('main-msg'));
+    api({ action:'remove', id:id, deleteFiles:true }).then(function(d){
+      show($('main-msg'), 'ok', '🗑 已删除 ' + id + '，连带清理 ' + (d.deletedObjects || 0) + ' 个图片文件。');
+      loadBooks();
+    }).catch(function(err){
+      if (onAuthFail(err)) return;
+      show($('main-msg'), 'err', '✗ 删除失败：' + (err.message || err));
+    }).then(function(){ setBusy(false); });
+  }
+});
+
+/* ============ 启动 ============ */
+if (token) enterMain();
+else { $('view-login').classList.remove('hide'); }
+</script>
+</body>
+</html>
