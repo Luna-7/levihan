@@ -360,6 +360,7 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
                 ['/2048/image02.webp', '2'],
                 ['/2048/image03.webp', '4'],
                 ['/2048/image04.webp', '8'],
+                ['/2048/image05.webp', '16'],
               ] as const).map(([src, num]) => (
                 <div key={num} className="flex flex-col items-center gap-0.5">
                   <img
@@ -372,9 +373,9 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
               ))}
               <div className="flex flex-col items-center gap-0.5">
                 <span className="w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center bg-[#2D4C3A] text-[#F9E79F] border-2 border-[#1E4334] shadow-2xs font-pixel text-[11px]">
-                  16
+                  32
                 </span>
-                <span className="font-pixel text-[10px] text-[#1E4334] font-bold">= 16</span>
+                <span className="font-pixel text-[10px] text-[#1E4334] font-bold">= 32</span>
               </div>
             </div>
             <ul className="list-disc list-inside space-y-1 text-[11px] sm:text-xs text-[#6E5844] leading-relaxed">
@@ -382,10 +383,10 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
                 <b>操作方式：</b>方向键 / WASD，或手指在棋盘上滑动，全部方块会一起移动。
               </li>
               <li>
-                <b>合成规则：</b>相同方块相碰即合体升级：<b>0+0→2 · 2+2→4 · 4+4→8 · 8+8→16</b>，一路合成出 <b>2048</b> 即获胜！
+                <b>合成规则：</b>相同方块相碰即合体升级：<b>0+0→2 · 2+2→4 · 4+4→8 · 8+8→16 · 16+16→32</b>，一路合成出 <b>2048</b> 即获胜！
               </li>
               <li>
-                <b>防混淆提示：</b>图片方块只到 <b>8</b> 为止，<b>16 及以上为数字方块</b>，请对照上方图表认清楚。
+                <b>防混淆提示：</b>图片方块只到 <b>16</b> 为止，<b>32 及以上为数字方块</b>，请对照上方图表认清楚。
               </li>
             </ul>
           </div>

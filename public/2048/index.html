@@ -103,13 +103,13 @@
     </div>
   </div>
 
-  <footer>0 起步 · 相同方块相碰合成 · 图片方块只到 8，16 起为数字方块</footer>
+  <footer>0 起步 · 相同方块相碰合成 · 图片方块只到 16，32 起为数字方块</footer>
 
 <script>
 (function(){
   'use strict';
-  /* ===== 方块外观：0/2/4/8 → 四张图；≥16 → 复古数字方块 ===== */
-  var IMG={0:'image01.webp',2:'image02.webp',4:'image03.webp',8:'image04.webp'};
+  /* ===== 方块外观：0/2/4/8/16 → 五张图；≥32 → 复古数字方块 ===== */
+  var IMG={0:'image01.webp',2:'image02.webp',4:'image03.webp',8:'image04.webp',16:'image05.webp'};
   var NUM_COLOR={16:'#2D4C3A',32:'#C29641',64:'#B3402F',128:'#6A4C93',256:'#E5A93C',
                  512:'#1B4332',1024:'#8A5A2B',2048:'#12281F'};
   function faceHTML(v,cls){

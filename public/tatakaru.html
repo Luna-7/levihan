@@ -229,7 +229,7 @@
           <button class="g2-btn-new" id="g2OvBtn">↻ 再来一局</button>
         </div>
       </div>
-      <div class="g2-foot">0 起步 · 相同方块相碰合成 · 图片方块只到 8，16 起为数字方块</div>
+      <div class="g2-foot">0 起步 · 相同方块相碰合成 · 图片方块只到 16，32 起为数字方块</div>
     </div>
 
     <div class="stage panel-locked" id="stage-locked" data-page-node-id="NGZMZUh73DQ9cdMdrkcAir">
@@ -245,12 +245,12 @@
         <div class="lg"><img src="./2048/image02.webp" alt="2"><span class="eq">=</span><span>2</span></div>
         <div class="lg"><img src="./2048/image03.webp" alt="4"><span class="eq">=</span><span>4</span></div>
         <div class="lg"><img src="./2048/image04.webp" alt="8"><span class="eq">=</span><span>8</span></div>
-        <div class="lg"><span class="numpx">16</span><span class="eq">=</span><span>16</span></div>
+        <div class="lg"><img src="./2048/image05.webp" alt="16"><span class="eq">=</span><span>16</span></div>
       </div>
       <p>方向键 / WASD / 手指滑动来移动全部方块，<b>相同方块相碰即合成升级</b>：<br>
         <b>0+0→2</b> · <b>2+2→4</b> · <b>4+4→8</b> · <b>8+8→</b><span class="num-chip">16</span> ·
         <span class="num-chip">16</span>+<span class="num-chip">16</span>=<span class="num-chip">32</span> …<br>
-        ⚠️ 注意：图片方块只到 <b>8</b> 为止，<b>16 及以上为数字方块</b>，别认混啦！合成出 <b>2048</b> 即获胜。</p>
+        ⚠️ 注意：图片方块只到 <b>16</b> 为止，<b>32 及以上为数字方块</b>，别认混啦！合成出 <b>2048</b> 即获胜。</p>
     </div>
 
     <div class="tip">
@@ -295,12 +295,12 @@
 
   /* ==========================================================
      2048 游戏逻辑（内嵌，玩法致敬 gabrielecirulli/2048）
-     方块映射：0→image01 · 2→image02 · 4→image03 · 8→image04，
-     16 及以上为数字方块
+     方块映射：0→image01 · 2→image02 · 4→image03 · 8→image04 · 16→image05，
+     32 及以上为数字方块
      ========================================================== */
   (function(){
     'use strict';
-    var IMG={0:'./2048/image01.webp',2:'./2048/image02.webp',4:'./2048/image03.webp',8:'./2048/image04.webp'};
+    var IMG={0:'./2048/image01.webp',2:'./2048/image02.webp',4:'./2048/image03.webp',8:'./2048/image04.webp',16:'./2048/image05.webp'};
     var NUM_COLOR={16:'#2D4C3A',32:'#C29641',64:'#B3402F',128:'#6A4C93',256:'#E5A93C',
                    512:'#1B4332',1024:'#8A5A2B',2048:'#12281F'};
     function faceHTML(v,cls){
