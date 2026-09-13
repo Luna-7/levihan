@@ -112,7 +112,7 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 3: 保留同人本专区 (A-Z卷汉化精修/画册/防倒卖规范，当前对游客展示研发中) */}
+        {/* VIEW 3: 同人本专区 (A-Z卷汉化精修/画册/防倒卖规范，已正式开放) */}
         {activeTab === 'doujinshi' && (
           <DoujinshiArchive
             onCopyCode={handleCopyExtractionCode}
