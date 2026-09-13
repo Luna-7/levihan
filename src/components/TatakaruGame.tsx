@@ -1,9 +1,16 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { soundManager } from '../utils/audio';
 
 interface Props {
   onShowToast: (msg: string) => void;
 }
+
+// 背景音乐：每个游戏一首循环曲（浏览器自动播放限制：首次用户手势后才开始）
+const BGM_SRC: Record<'daxigua' | 'g2048', string> = {
+  daxigua: '/sounds/bgm-daxigua.mp3',
+  g2048: '/sounds/bgm-2048.mp3',
+};
+const BGM_PREF_KEY = 'tatakaru-bgm-enabled';
 
 export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
   type GameKey = 'daxigua' | 'g2048';
@@ -18,6 +25,79 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // ---- 背景音乐 ----
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [bgmOn, setBgmOn] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(BGM_PREF_KEY) !== '0';
+    } catch {
+      return true;
+    }
+  });
+
+  // 创建 audio 元素（单例、循环播放）
+  useEffect(() => {
+    const el = new Audio();
+    el.loop = true;
+    el.volume = 0.35;
+    el.preload = 'auto';
+    audioRef.current = el;
+    return () => {
+      el.pause();
+      el.src = '';
+      audioRef.current = null;
+    };
+  }, []);
+
+  // 跟随当前游戏切换曲目；已开播则无缝续播
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    const src = BGM_SRC[activeGame];
+    if (el.src !== window.location.origin + src) {
+      el.src = src;
+    }
+    if (bgmOn && !el.paused) {
+      el.play().catch(() => {});
+    }
+  }, [activeGame]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 开关状态变化：播放 / 暂停（需用户手势后浏览器才放行）
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (bgmOn) {
+      el.play().catch(() => {});
+    } else {
+      el.pause();
+    }
+    try {
+      window.localStorage.setItem(BGM_PREF_KEY, bgmOn ? '1' : '0');
+    } catch { /* 私密模式忽略 */ }
+  }, [bgmOn]);
+
+  // 首次用户手势解锁自动播放限制
+  useEffect(() => {
+    const unlock = () => {
+      const el = audioRef.current;
+      if (el && bgmOn) el.play().catch(() => {});
+    };
+    document.addEventListener('pointerdown', unlock, { once: true });
+    document.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      document.removeEventListener('pointerdown', unlock);
+      document.removeEventListener('keydown', unlock);
+    };
+  }, [bgmOn]);
+
+  const handleToggleBgm = () => {
+    setBgmOn((v) => {
+      const next = !v;
+      onShowToast(next ? '🎵 背景音乐已开启' : '🔇 背景音乐已关闭');
+      return next;
+    });
+  };
 
   // 切换游戏：只挂载当前游戏的 iframe（cocos 画布在被 display:none 隐藏后恢复会损坏，
   // 因此切换即卸载重建，保证每次都是干净的加载流程）
@@ -114,6 +194,19 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
 
         <div className="flex items-center gap-1.5">
           <button
+            onClick={handleToggleBgm}
+            className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-2xs cursor-pointer transition-all flex items-center gap-1 text-[10px] sm:text-[11px] font-bold shadow-2xs border ${
+              bgmOn
+                ? 'bg-[#FAF5E8] hover:bg-[#F3EAD5] text-[#1E4334] border-[#D5C9AF]'
+                : 'bg-[#EFE7D2] text-[#8A7968] border-[#D5C9AF]'
+            }`}
+            title={bgmOn ? '关闭背景音乐' : '开启背景音乐'}
+          >
+            <span>{bgmOn ? '🔊' : '🔇'}</span>
+            <span>{bgmOn ? 'BGM 开' : 'BGM 关'}</span>
+          </button>
+
+          <button
             onClick={handleRefresh}
             className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-[#FAF5E8] hover:bg-[#F3EAD5] text-[#1E4334] border border-[#D5C9AF] rounded-2xs cursor-pointer transition-all flex items-center gap-1 text-[10px] sm:text-[11px] font-bold shadow-2xs"
             title="重置并重新开始游戏"
@@ -148,6 +241,13 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
               <span>塔塔开 · 沉浸对局中</span>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleToggleBgm}
+                className="px-2 py-0.5 bg-[#1E4334] text-[#F9E79F] border border-[#3B7E64] rounded-2xs text-xs font-pixel cursor-pointer"
+                title={bgmOn ? '关闭背景音乐' : '开启背景音乐'}
+              >
+                {bgmOn ? '🔊' : '🔇'}
+              </button>
               <button
                 onClick={handleRefresh}
                 className="px-2 py-0.5 bg-[#1E4334] text-[#F9E79F] border border-[#3B7E64] rounded-2xs text-xs font-pixel cursor-pointer"
