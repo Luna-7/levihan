@@ -36,7 +36,48 @@ export const GroupHome: React.FC<Props> = ({
 
   return (
     <div className="space-y-4 sm:space-y-6 text-[#2C241D]">
-      {/* 1. QQ GROUPS & RECRUITMENT & VERIFICATION */}
+      {/* 1. 开屏文案（首页最顶部模块） */}
+      <section
+        id="opening-section"
+        className="bg-[#FAF5E8] border-2 sm:border-[3px] border-[#1E4334] rounded-md p-3 xs:p-4 sm:p-6 md:p-7 shadow-xs"
+      >
+        <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-xs px-4 py-6 xs:px-5 xs:py-7 sm:px-8 sm:py-9 font-retro-jp text-center">
+          <h2 className="font-pixel text-xs xs:text-sm sm:text-base md:text-lg text-[#1E4334] font-bold tracking-wide">
+            💚💜 # Levi × Hans 💚💜
+          </h2>
+
+          <div className="mt-4 sm:mt-5 space-y-1 text-xs sm:text-sm md:text-base text-[#3D3025] leading-relaxed">
+            <p>这里没什么特别的。</p>
+            <p>就是喜欢利威尔和韩吉，</p>
+            <p>所以放一些喜欢的东西，</p>
+            <p>聊一点喜欢的话题，</p>
+            <p>一起吃点粮。</p>
+          </div>
+
+          <p className="mt-4 sm:mt-5 font-bold text-sm sm:text-base md:text-lg text-[#B7791F]">
+            仅此而已。
+          </p>
+
+          <p className="mt-1.5 font-bold text-[11px] sm:text-xs md:text-sm text-[#1E4334] tracking-wide leading-relaxed">
+            Only Levi × Hans.
+            <br />
+            Only for those who love them.
+          </p>
+
+          <div className="mt-5 pt-3 border-t border-dashed border-[#EAE2CE] flex justify-end">
+            <a
+              href="/cp-community-survey-report.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs sm:text-sm text-[#1E4334] font-bold hover:underline flex items-center gap-1"
+            >
+              <span>📊</span> CP社群调查分析报告 ➔
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* 2. QQ GROUPS & RECRUITMENT & VERIFICATION */}
       <section id="group-info-section" className="bg-[#FFFEEF] border-2 sm:border-[3px] border-[#1E4334] rounded-md p-3 xs:p-4 sm:p-5 md:p-6 shadow-xs space-y-3.5">
         {/* 土豆分群 Collapsible Card Dropdown */}
         <div className="space-y-2">
@@ -126,46 +167,6 @@ export const GroupHome: React.FC<Props> = ({
             )}
           </div>
         </div>
-      </section>
-
-      {/* 2. CORE MANIFESTO & REDLINES */}
-      <section id="manifesto-section" className="bg-[#FAF5E8] border-2 sm:border-[3px] border-[#1E4334] rounded-md p-3 xs:p-4 sm:p-5 md:p-6 shadow-xs space-y-4">
-        {/* Manifesto Body */}
-        <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-xs p-3.5 sm:p-5 md:p-6 font-retro-jp text-xs sm:text-sm md:text-base text-[#3D3025] leading-relaxed space-y-3.5">
-          <p className="font-bold text-[#1E4334] text-sm sm:text-base md:text-lg">
-            本群以 <span className="text-[#27AE60]">💚</span><span className="text-[#8E44AD]">💜</span> 利威尔 × 韩吉 为唯一不可动摇的创作与讨论核心。
-          </p>
-
-          <div className="space-y-1.5 text-[#4A3B2C]">
-            <p className="font-bold text-[#5B4636] text-sm sm:text-base">在这里，你可以——</p>
-            <p>● <b>干饭：</b>分享利韩粮仓，互相投喂同人图文；</p>
-            <p>● <b>唠嗑：</b>聊原作剧情、角色解读、日常碎碎念；</p>
-            <p>● <b>躺平：</b>享受一个和平、温暖、互不冒犯的磕CP乌托邦。</p>
-          </div>
-
-          <p className="text-[#1E4334]">
-            群不关注外部社区的纷争与风向，不参与任何跨圈对立，不将外部恩怨带入本群。<b>这里只属于利韩，只属于同好之间的善意。</b>
-          </p>
-
-          <p className="text-[#5D4E41]">
-            本群不接受任何以私人价值观进行的道德绑架，没有人应该被“磕CP就该怎样”或“利韩群应该怎样”的个人喜好审判与定义，遇到不喜欢的话题、人，可暂时潜水或群内屏蔽特定人。
-          </p>
-
-          <p className="font-bold text-[#B7791F]">
-            你喜欢你的，我热爱我的，彼此尊重即是最好的同好关系。
-          </p>
-
-          <p className="text-[11px] sm:text-xs text-[#8C7A68] italic pt-2 border-t border-dashed border-[#EAE2CE]">
-            加入本社群即视为认可上述定位。如与个人预期存在较大差异，可自行选择退出。
-          </p>
-          <div className="pt-2 flex justify-end">
-            <a href="/cp-community-survey-report.html" target="_blank" rel="noopener noreferrer" className="text-xs sm:text-sm text-[#1E4334] font-bold hover:underline flex items-center gap-1">
-              <span>📊</span> CP社群调查分析报告 ➔
-            </a>
-          </div>
-        </div>
-
-
       </section>
 
       {/* 3. QUICK NAVIGATION TILES */}
