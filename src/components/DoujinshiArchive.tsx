@@ -169,8 +169,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const handleVerifySecret = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const val = inputSecret.trim().toLowerCase();
-    // 允许研发调试通行口令
-    if (['potato', 'lh', 'levi-hange', '利韩', '利韩土豆', '139', '0721'].includes(val)) {
+    // 管理员开放密码（仅代码内校验，页面任何位置不显示）
+    if (val === 'luna721') {
       soundManager.playCoin();
       setIsDevUnlocked(true);
       setShowUnlockModal(false);
@@ -306,8 +306,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
               <form onSubmit={handleVerifySecret} className="space-y-2.5">
                 <input
-                  type="text"
-                  placeholder="输入测试口令..."
+                  type="password"
+                  placeholder="输入管理密码..."
                   value={inputSecret}
                   onChange={(e) => {
                     setInputSecret(e.target.value);

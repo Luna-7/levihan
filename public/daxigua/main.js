@@ -189,6 +189,19 @@ window.boot = function() {
         var MainManger = __require("MainManage");
         MainManger.init(launchScene, cc.sys.isBrowser, canvas.style.visibility);
 
+        // 画布自愈：启动后分多个时间点强制同步画布尺寸与容器，
+        // 并监听 resize（旋转屏幕/地址栏伸缩），保证 canvas 永远铺满 iframe、无黑边灰边
+        var __syncCanvas = function () {
+          try {
+            var w = document.documentElement.clientWidth;
+            var h = document.documentElement.clientHeight;
+            if (w > 0 && h > 0) cc.view.setCanvasSize(w, h);
+          } catch (e) { /* ignore */ }
+        };
+        [300, 800, 1500, 3000].forEach(function (d) { setTimeout(__syncCanvas, d); });
+        window.addEventListener('resize', __syncCanvas);
+        window.addEventListener('orientationchange', function () { setTimeout(__syncCanvas, 300); });
+
 
 
 
