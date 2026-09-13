@@ -1,1 +1,17 @@
-[]
+[
+  {
+    "id": "lh-004",
+    "titleZh": "我也不是没受欢迎过",
+    "circle": "おすし",
+    "category": "漫画本",
+    "tags": [
+      "现代"
+    ],
+    "source": "web",
+    "translator": "LG",
+    "typesetter": "LG",
+    "pages": 52,
+    "bookFolder": "lh-004",
+    "coverFile": "image01.webp"
+  }
+]
