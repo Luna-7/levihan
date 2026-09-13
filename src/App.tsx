@@ -5,17 +5,16 @@ import { GroupHome } from './components/GroupHome';
 import { ResourceHub } from './components/ResourceHub';
 import { DoujinshiArchive } from './components/DoujinshiArchive';
 import { TatakaruGame } from './components/TatakaruGame';
-import { TreeHoleStage } from './components/TreeHoleStage';
 import { GROUP_INFO, POTATO_EGG_QUOTES } from './data/initialData';
 import { soundManager } from './utils/audio';
 
 export default function App() {
-  // Navigation State: 'home' (群主页与群规) | 'resources' (资源外链) | 'doujinshi' (土豆粮仓驻地) | 'tatakaru' (游戏小屋) | 'treehole' (深夜树洞)
+  // Navigation State: 'home' (群主页与群规) | 'resources' (资源外链) | 'doujinshi' (土豆粮仓驻地) | 'tatakaru' (游戏小屋)
   // 支持 ?tab=<name> 深度直达任意分区（配合 TatakaruGame 的 ?game=2048 可直达 2048 对局）
-  const [activeTab, setActiveTab] = useState<'home' | 'resources' | 'doujinshi' | 'tatakaru' | 'treehole'>(() => {
+  const [activeTab, setActiveTab] = useState<'home' | 'resources' | 'doujinshi' | 'tatakaru'>(() => {
     if (typeof window !== 'undefined') {
       const tab = new URLSearchParams(window.location.search).get('tab');
-      if (tab === 'tatakaru' || tab === 'resources' || tab === 'doujinshi' || tab === 'treehole') {
+      if (tab === 'tatakaru' || tab === 'resources' || tab === 'doujinshi') {
         return tab;
       }
     }
@@ -128,11 +127,6 @@ export default function App() {
         {/* VIEW 4: 兵团娱乐室 - 原生内嵌塔塔开小游戏 */}
         {activeTab === 'tatakaru' && (
           <TatakaruGame onShowToast={showToast} />
-        )}
-
-        {/* VIEW 5: 深夜树洞 - iframe 内嵌匿名卷轴树洞（第一阶段：本地存储壳，未接后端） */}
-        {activeTab === 'treehole' && (
-          <TreeHoleStage />
         )}
       </RetroPixelFrame>
 
