@@ -37,9 +37,7 @@ export const ResourceHub: React.FC<Props> = ({
   onGoToDoujin,
 }) => {
   const [activeTab, setActiveTab] = useState<'anime' | 'creative' | 'manga' | 'au-novel' | 'ao3' | 'pixiv' | 'doujin'>('anime');
-  const [selectedArtists, setSelectedArtists] = useState<Set<string>>(new Set());
   const [visitedArtists, setVisitedArtists] = useState<Set<string>>(new Set());
-  const [blockedNotice, setBlockedNotice] = useState<{ count: number; artists: PixivArtist[] } | null>(null);
 
   // Load visited Pixiv artists from localStorage
   useEffect(() => {
@@ -79,82 +77,14 @@ export const ResourceHub: React.FC<Props> = ({
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const handleToggleArtist = (idOrUrl: string) => {
-    soundManager.playBlip();
-    const next = new Set<string>(selectedArtists);
-    if (next.has(idOrUrl)) {
-      next.delete(idOrUrl);
-    } else {
-      if (next.size >= 20) {
-        onShowToast('⚠️ 一次最多选中 20 位画师，以避免同时打开过多标签页导致浏览器卡顿哦！🌸');
-        return;
-      }
-      next.add(idOrUrl);
-    }
-    setSelectedArtists(next);
-  };
-
-  const handleOpenSingleArtist = (artist: PixivArtist, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  // 点击卡片：直接在新标签页打开该画师的 Pixiv 主页
+  const handleOpenArtist = (artist: PixivArtist) => {
     soundManager.playBlip();
     const key = artist.id || artist.url;
     const nextVisited = new Set<string>(visitedArtists);
     nextVisited.add(key);
     saveVisited(nextVisited);
     window.open(artist.url, '_blank', 'noopener,noreferrer');
-  };
-
-  const handleOpenSelected = () => {
-    if (selectedArtists.size === 0) {
-      onShowToast('请先点击卡片选中画师 🎨');
-      return;
-    }
-    
-    soundManager.playCoin();
-    const targetArtists: PixivArtist[] = [];
-    const nextVisited = new Set<string>(visitedArtists);
-
-    PIXIV_ARTISTS_DATA.forEach((a) => {
-      const key = a.id || a.url;
-      if (selectedArtists.has(key) && a.url) {
-        targetArtists.push(a);
-      }
-    });
-
-    let opened = 0;
-    const blocked: PixivArtist[] = [];
-
-    // Attempt to open each selected artist
-    targetArtists.forEach((a) => {
-      const key = a.id || a.url;
-      try {
-        const win = window.open(a.url, '_blank', 'noopener,noreferrer');
-        if (!win || win.closed || typeof win.closed === 'undefined') {
-          blocked.push(a);
-        } else {
-          opened++;
-          nextVisited.add(key);
-        }
-      } catch (err) {
-        blocked.push(a);
-      }
-    });
-
-    saveVisited(nextVisited);
-
-    if (blocked.length > 0) {
-      setBlockedNotice({ count: blocked.length, artists: targetArtists });
-      onShowToast(`⚠️ 浏览器安全策略拦截了部分弹窗（已打开 ${opened} 个，拦截 ${blocked.length} 个）。请在地址栏允许弹出窗口或点击下方清单 🔓`);
-    } else {
-      setBlockedNotice({ count: 0, artists: targetArtists });
-      onShowToast(`🚀 已触发打开选中的 ${targetArtists.length} 位画师！若未全部打开，请检查浏览器地址栏弹窗拦截设置 🔓`);
-    }
-  };
-
-  const handleClearSelection = () => {
-    soundManager.playBlip();
-    setSelectedArtists(new Set<string>());
-    onShowToast('已清空已选画师 🧹');
   };
 
   const handleResetDonePixiv = () => {
@@ -401,72 +331,24 @@ export const ResourceHub: React.FC<Props> = ({
                 🎨 PIXIV画师跳转墙
               </span>
               <span className="text-[11px] font-retro-jp text-[#7A6958]">
-                💡 点击卡片可多选，点击 ↗ 图标直接跳转
+                💡 直接点击卡片即可跳转 Pixiv 画师主页
               </span>
             </div>
 
-            {/* Symmetric & Evenly Distributed Action Control Grid (Exactly 3 Buttons) */}
-            <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 w-full">
-              <button
-                onClick={handleClearSelection}
-                className="py-1.5 px-3 bg-[#FAF5E8] hover:bg-[#EAE2CE] text-[#5B4636] border border-[#D5C9AF] text-xs font-retro-jp rounded-xs font-bold transition-all text-center flex items-center justify-center gap-1 cursor-pointer select-none"
-              >
-                <span>🧹</span> 清空选择
-              </button>
+            {/* 已读记录操作 */}
+            <div className="flex justify-end">
               <button
                 onClick={handleResetDonePixiv}
                 className="py-1.5 px-3 bg-[#FAF5E8] hover:bg-[#EAE2CE] text-[#8C7A68] border border-[#D5C9AF] text-xs font-retro-jp rounded-xs transition-all text-center flex items-center justify-center gap-1 cursor-pointer select-none"
               >
                 <span>👁️</span> 重置已读
               </button>
-              <button
-                onClick={handleOpenSelected}
-                className="py-1.5 px-3 bg-[#1E4334] hover:bg-[#2A5C47] text-[#F9E79F] border border-[#153025] text-xs font-pixel rounded-xs font-bold transition-all text-center flex items-center justify-center gap-1 cursor-pointer shadow-2xs select-none"
-                title="一键在新标签页中批量打开所有选中画师"
-              >
-                <span>🚀</span> 确认批量打开 ({selectedArtists.size})
-              </button>
             </div>
-
-            {/* Batch Open / Pop-up Assistance Banner */}
-            {blockedNotice && blockedNotice.artists.length > 0 && (
-              <div className="p-2.5 bg-[#FAF5E8] border-2 border-[#1E4334] rounded-sm text-xs font-retro-jp space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-[#1E4334] font-bold">
-                    <span>🔓</span>
-                    <span>批量打开与防拦截助手</span>
-                  </div>
-                  <button
-                    onClick={() => setBlockedNotice(null)}
-                    className="text-[11px] text-[#8C7A68] hover:text-[#1E4334] font-bold px-1.5 py-0.5 bg-[#FFFEEF] border border-[#D5C9AF] rounded-xs cursor-pointer"
-                  >
-                    ✕ 关闭
-                  </button>
-                </div>
-                <p className="text-[11px] text-[#5B4636] leading-relaxed">
-                  💡 <b>浏览器安全提示</b>：现代浏览器默认限制单次点击最多弹出1个标签页。若只打开了1个页面，请在<b>浏览器地址栏右侧点击拦截图标 🚫 并选择【始终允许弹出式窗口】</b>，即可一键批量全部打开！
-                </p>
-                <div className="flex flex-wrap gap-1 pt-1 border-t border-dashed border-[#D5C9AF]">
-                  <span className="text-[11px] text-[#7A6958] self-center mr-1 font-bold">本次画师直达清单:</span>
-                  {blockedNotice.artists.map((a) => (
-                    <button
-                      key={a.id || a.url}
-                      onClick={(e) => handleOpenSingleArtist(a, e)}
-                      className="px-2 py-0.5 bg-[#FFFEEF] hover:bg-[#1E4334] hover:text-[#F9E79F] text-[#2D2319] border border-[#D5C9AF] text-[11px] rounded-xs font-retro-jp flex items-center gap-1 transition-all cursor-pointer"
-                    >
-                      <span>{a.name}</span>
-                      <span className="font-pixel text-[9px]">↗</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="flex flex-wrap gap-1.5 max-h-80 overflow-y-auto pr-1">
             {PIXIV_ARTISTS_DATA.map((artist) => {
               const key = artist.id || artist.url;
-              const isSelected = selectedArtists.has(key);
               const isVisited = visitedArtists.has(key);
               const idx = hashCode(artist.name) % PALETTE.length;
               const [bg, border] = PALETTE[idx];
@@ -474,29 +356,15 @@ export const ResourceHub: React.FC<Props> = ({
               return (
                 <div
                   key={key}
-                  onClick={() => handleToggleArtist(key)}
-                  style={{
-                    backgroundColor: isSelected ? '#1E4334' : bg,
-                    borderColor: isSelected ? '#1E4334' : border,
-                    color: isSelected ? '#F9E79F' : '#2C241D',
-                  }}
-                  className={`px-2 py-1 text-xs font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 select-none group ${
+                  onClick={() => handleOpenArtist(artist)}
+                  style={{ backgroundColor: bg, borderColor: border, color: '#2C241D' }}
+                  className={`px-2 py-1 text-xs font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 select-none hover:opacity-90 hover:shadow-2xs ${
                     isVisited ? 'opacity-60 grayscale-[30%]' : ''
                   }`}
-                  title={`点击卡片多选；点击右侧 ↗ 直接在新标签打开 ${artist.name}`}
+                  title={`点击直接在新标签打开 ${artist.name} 的 Pixiv 主页 ↗`}
                 >
-                  <span className="text-[10px]">{isSelected ? '✓' : isVisited ? '👁️' : '✦'}</span>
+                  <span className="text-[10px]">{isVisited ? '👁️' : '✦'}</span>
                   <span>{artist.name}</span>
-                  <button
-                    type="button"
-                    onClick={(e) => handleOpenSingleArtist(artist, e)}
-                    className={`ml-0.5 px-1 py-0.2 text-[10px] rounded-xs opacity-70 hover:opacity-100 transition-all font-pixel ${
-                      isSelected ? 'hover:bg-[#2A5C47] text-[#F9E79F]' : 'hover:bg-[#EAE2CE] text-[#5B4636]'
-                    }`}
-                    title="立即跳转新页面 ↗"
-                  >
-                    ↗
-                  </button>
                 </div>
               );
             })}
