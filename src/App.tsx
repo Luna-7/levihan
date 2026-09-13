@@ -4,6 +4,7 @@ import { HeaderCard } from './components/HeaderCard';
 import { GroupHome } from './components/GroupHome';
 import { ResourceHub } from './components/ResourceHub';
 import { DoujinshiArchive } from './components/DoujinshiArchive';
+import { TatakaruGame } from './components/TatakaruGame';
 import { GROUP_INFO, POTATO_EGG_QUOTES } from './data/initialData';
 import { soundManager } from './utils/audio';
 
@@ -112,6 +113,11 @@ export default function App() {
               setActiveTab('resources');
             }}
           />
+        )}
+
+        {/* VIEW 4: 兵团娱乐室 - 原生内嵌塔塔开小游戏 */}
+        {activeTab === 'tatakaru' && (
+          <TatakaruGame onShowToast={showToast} />
         )}
       </RetroPixelFrame>
 

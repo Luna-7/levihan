@@ -113,7 +113,7 @@ export const HeaderCard: React.FC<Props> = ({
         <button
           onClick={() => {
             soundManager.playBlip();
-            window.open('/tatakaru.html', '_blank', 'noopener,noreferrer');
+            onSelectTab('tatakaru');
           }}
           className={`w-full justify-center px-2 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1 sm:gap-1.5 min-w-0 select-none ${
             activeTab === 'tatakaru'

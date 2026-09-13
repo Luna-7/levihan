@@ -1012,30 +1012,24 @@ window.__require = function e(t, n, o) {
           null != n.Instance && n.Instance.destroy(), n.Instance = this, this.clickMask.setContentSize(cc.winSize.width, cc.winSize.height), this.bgMask.setContentSize(cc.winSize.width, cc.winSize.height), this.failedUiBox.y = cc.winSize.height / 2 + this.failedUiBox.height / 2
         }, t.prototype.start = function () {
           var e = i.default.returnCurrentLanType();
-          1 != e && (this.bencichengji.getComponent(cc.Sprite).spriteFrame = this.bencichengjiarr[e - 1], this.gengduoyouxi.getComponent(cc.Sprite).spriteFrame = this.gengduoyouxiarr[e - 1]), this.continueTip.getComponent(cc.Label).string = 1 == e ? "\u70b9\u51fb\u7ee7\u7eed" : 2 == e ? "\u9ede\u64ca\u7e7c\u7e8c" : 4 == e ? "\ud074\ub9ad \ud558\uc5ec \uacc4\uc18d" : "Click Continue", this.reStartBtn.runAction(cc.repeatForever(cc.sequence(cc.scaleTo(.5, 1.1), cc.scaleTo(.55, 1), cc.delayTime(.5)))), cc.tween(this.moreGameBtn).to(.5, {
-            scale: 1.1
-          }).to(.5, {
-            scale: 1
-          }).union().repeatForever().start(), cc.tween(this.adsButton2).to(1, {
-            scale: .8
-          }).to(1, {
-            scale: .9
-          }).union().repeatForever().start()
+          if (this.moreGameBtn) this.moreGameBtn.active = false;
+          if (this.gengduoyouxi) this.gengduoyouxi.active = false;
+          if (this.adsButton2) this.adsButton2.active = false;
+          if (this.bannerButton) this.bannerButton.active = false;
+          1 != e && (this.bencichengji.getComponent(cc.Sprite).spriteFrame = this.bencichengjiarr[e - 1], this.gengduoyouxi.getComponent(cc.Sprite).spriteFrame = this.gengduoyouxiarr[e - 1]), this.continueTip.getComponent(cc.Label).string = 1 == e ? "\u70b9\u51fb\u7ee7\u7eed" : 2 == e ? "\u9ede\u64ca\u7e7c\u7e8c" : 4 == e ? "\ud074\ub9ad \ud558\uc5ec \uacc4\uc18d" : "Click Continue", this.reStartBtn.runAction(cc.repeatForever(cc.sequence(cc.scaleTo(.5, 1.1), cc.scaleTo(.55, 1), cc.delayTime(.5))))
         }, t.prototype.update = function (e) {
         }, t.prototype.adsButtonFunc2 = function () {
-          if (adLink) {
-            window.location.href = adLink
-          }
         }, t.prototype.bannerButtonFunc = function () {
-          if (adLink) {
-            window.location.href = adLink
-          }
         }, t.prototype.ShowFailedUi = function (e, t) {
           var n = this;
+          if (this.moreGameBtn) this.moreGameBtn.active = false;
+          if (this.gengduoyouxi) this.gengduoyouxi.active = false;
+          if (this.adsButton2) this.adsButton2.active = false;
+          if (this.bannerButton) this.bannerButton.active = false;
           this.scheduleOnce(function () {
-            r.default.Instance.HideScorePanel(), n.levelTxt.string = r.default.Instance.level.toString(), n.scoreLabel.string = s.default.score.toString(), n.highScoreLabel.string = t, n.resultTxt.string = n.GetContentByScore(e), n.overTxt.string = "\u5f53\u524d\u5173\u5361\u5df2\u5b8c\u6210" + Math.floor(r.default.Instance.nowYQ / r.default.Instance.passlevelYQ * 100) + "%", n.canClick = !1, n.levelTxt.string = e, n.bgMask.runAction(cc.fadeTo(.36, 150)), n.scheduleOnce(function () {
+            r.default.Instance.HideScorePanel(), n.levelTxt.string = r.default.Instance.level.toString(), n.scoreLabel.string = s.default.score.toString(), n.highScoreLabel.string = t, n.resultTxt.string = n.GetContentByScore(e), n.overTxt.string = "免责声明：图源网络，侵删", n.canClick = !1, n.levelTxt.string = e, n.bgMask.runAction(cc.fadeTo(.36, 150)), n.scheduleOnce(function () {
               i.default.CenteredUi(10, this.di, this.levelTxt.node, this.guan), this.failedUiBox.y = cc.winSize.height / 2 + this.failedUiBox.height / 2, this.failedUiBox.runAction(cc.sequence(cc.moveTo(.36, this.failedBoxPos).easing(cc.easeBackOut()), cc.callFunc(function () {
-                this.clickMask.on(cc.Node.EventType.TOUCH_START, this.OnClickCloseMask, this), this.moreGameBtn.on(cc.Node.EventType.TOUCH_START, this.OnClickMoreGame, this), this.continueTip.opacity = 0, this.continueTip.runAction(cc.repeatForever(cc.sequence(cc.fadeIn(.5), cc.delayTime(.5), cc.fadeOut(.5)))), this.canClick = !0
+                this.clickMask.on(cc.Node.EventType.TOUCH_START, this.OnClickCloseMask, this), this.continueTip.opacity = 0, this.continueTip.runAction(cc.repeatForever(cc.sequence(cc.fadeIn(.5), cc.delayTime(.5), cc.fadeOut(.5)))), this.canClick = !0
               }, this)))
             }, 0)
           }, .5)
@@ -1836,7 +1830,7 @@ window.__require = function e(t, n, o) {
         gameOverToEnd: cc.Node
       },
       onLoad: function () {
-        cc.director.getCollisionManager().enabled = !0, cc.director.getPhysicsManager().enabled = !0, this.gameOveEndBool = !1, this.gameOverNum = 0, this.gameWidth = cc.winSize.width, this.gameHeight = cc.winSize.height, o.playNum, o.playNum++, c.loadingLayer("panel/LinkIconSpr"), o.mainGameJs = this, function(){ var b1=cc.find("Canvas/scorePanel/adsButton"); if(b1) b1.active=!1; var b2=cc.find("Canvas/failedUi/failedUiBox/adsButton2"); if(b2) b2.active=!1; }(), o.publicGameBool || this.play()
+        cc.director.getCollisionManager().enabled = !0, cc.director.getPhysicsManager().enabled = !0, this.gameOveEndBool = !1, this.gameOverNum = 0, this.gameWidth = cc.winSize.width, this.gameHeight = cc.winSize.height, o.playNum, o.playNum++, o.mainGameJs = this, function(){ var b1=cc.find("Canvas/scorePanel/adsButton"); if(b1) b1.active=!1; var b2=cc.find("Canvas/failedUi/failedUiBox/adsButton2"); if(b2) b2.active=!1; }(), o.publicGameBool || this.play()
       },
       play: function () {
         console.log(1);
@@ -3617,16 +3611,16 @@ window.__require = function e(t, n, o) {
         return cc.sys.localStorage.getItem("HigScore_JiaoTong")
       },
       UIPosChange: function () {
-        this.overScoreT.string = c.gameScore, console.log("lang", a.langugeType);
-        var e = null;
-        e = 1 == a.langugeType ? this.getContentByScore(c.gameScore, a.gameNameText) : this.getContentByScore2(c.gameScore, a.gameNameText), console.log("nihao", a.endHttpShowInfo), null != a.endHttpShowInfo && "" != a.endHttpShowInfo && (cc.log("gototo"), e = a.endHttpShowInfo), this.overInfoT.string = e;
-        var t = this.overInfoT.node.height;
-        if (this.overInfoT.node.height = Math.ceil(e.length * this.overInfoT.fontSize / this.overInfoT.node.width) * t, document.title = e, console.log("gameOver txtMoreText", a.txtMoreText), this.midGameText.string = a.txtMoreText, this.leftBtnText.string = a.txtAgainText, this.tempArr = this.gameFocus(), null != a.ranLinkUrl()) {
-          var n = a.ranLinkUrl(),
-            o = a.ranLinkData.gameList[n].gameName;
-          this.rigthBtnGameName = o, this.rightBtnGameUrl = a.ranLinkData.gameList[n].gameUrl
+        this.overScoreT.string = c.gameScore;
+        this.overInfoT.string = "本次得分：" + c.gameScore + " 分";
+        if (this.moreBtn && this.moreBtn.node) this.moreBtn.node.active = false;
+        if (this.rightBtn && this.rightBtn.node) this.rightBtn.node.active = false;
+        if (this.leftBtn && this.leftBtn.node) {
+          this.leftBtn.node.x = 0;
         }
-        null != this.rigthBtnGameName && "" != this.rigthBtnGameName ? this.rightBtnText.string = this.rigthBtnGameName : this.rightBtnText.string = this.tempArr[0]
+        if (this.leftBtnText) {
+          this.leftBtnText.string = "重新作战";
+        }
       },
       gameFocus: function () {
         var e = [],
