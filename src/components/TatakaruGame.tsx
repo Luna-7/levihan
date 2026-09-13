@@ -6,17 +6,26 @@ interface Props {
 }
 
 export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
-  const [activeGame, setActiveGame] = useState<'daxigua' | 'comingSoon'>('daxigua');
-  const [iframeKey, setIframeKey] = useState<number>(1);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  type GameKey = 'daxigua' | 'g2048';
+  const [activeGame, setActiveGame] = useState<GameKey>(() => {
+    // 支持 ?game=2048 直达 2048 对局
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('game') === '2048') {
+      return 'g2048';
+    }
+    return 'daxigua';
+  });
+  const [iframeKeys, setIframeKeys] = useState<Record<GameKey, number>>({ daxigua: 1, g2048: 1 });
+  const [isLoadingMap, setIsLoadingMap] = useState<Record<GameKey, boolean>>({ daxigua: true, g2048: true });
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  const isLoading = isLoadingMap[activeGame];
+
   const handleRefresh = () => {
     soundManager.playBlip();
-    setIsLoading(true);
-    setIframeKey((prev) => prev + 1);
-    onShowToast('正在重新加载战局 🍉');
+    setIsLoadingMap((prev) => ({ ...prev, [activeGame]: true }));
+    setIframeKeys((prev) => ({ ...prev, [activeGame]: prev[activeGame] + 1 }));
+    onShowToast(activeGame === 'daxigua' ? '正在重新加载战局 🍉' : '正在重新开局 🧩');
   };
 
   const handleToggleFullscreen = () => {
@@ -55,7 +64,20 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
                   : 'text-[#D5C9AF] hover:text-[#FAF5E8]'
               }`}
             >
-              🍉 合成大西瓜
+              🍉 合成大西皮
+            </button>
+            <button
+              onClick={() => {
+                soundManager.playBlip();
+                setActiveGame('g2048');
+              }}
+              className={`px-3 py-1 text-xs font-pixel rounded-2xs cursor-pointer transition-all ${
+                activeGame === 'g2048'
+                  ? 'bg-[#B3402F] text-[#F9E79F] shadow-xs'
+                  : 'text-[#D5C9AF] hover:text-[#FAF5E8]'
+              }`}
+            >
+              🧩 2048
             </button>
             <button
               onClick={() => {
@@ -76,17 +98,17 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
         <div className="flex items-center gap-2 text-[#5B4636]">
           <span className="font-pixel text-[#1E4334] font-bold">🎮 当前对局：</span>
           <span className="bg-[#FAF5E8] border border-[#D5C9AF] px-2 py-0.5 rounded-2xs text-[11px] text-[#B3402F] font-bold">
-            利韩·合成大西瓜
+            {activeGame === 'daxigua' ? '利韩·合成大西皮' : '利韩·2048 合成'}
           </span>
           <span className="hidden md:inline text-[11px] text-[#7A6958]">
-            （点击或滑动屏幕放下水果）
+            {activeGame === 'daxigua' ? '（点击或滑动屏幕放下水果）' : '（方向键 / WASD / 滑动屏幕移动方块）'}
           </span>
         </div>
 
         <div className="flex items-center gap-1.5">
           <button
             onClick={handleRefresh}
-            className="px-2.5 py-1 bg-[#FAF5E8] hover:bg-[#F3EAD5] text-[#1E4334] border border-[#D5C9AF] rounded-2xs cursor-pointer transition-all flex items-center gap-1 text-[11px] font-bold shadow-2xs"
+            className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-[#FAF5E8] hover:bg-[#F3EAD5] text-[#1E4334] border border-[#D5C9AF] rounded-2xs cursor-pointer transition-all flex items-center gap-1 text-[10px] sm:text-[11px] font-bold shadow-2xs"
             title="重置并重新开始游戏"
           >
             <span>🔄</span>
@@ -95,7 +117,7 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
 
           <button
             onClick={handleToggleFullscreen}
-            className="px-2.5 py-1 bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] rounded-2xs cursor-pointer transition-all flex items-center gap-1 text-[11px] font-pixel shadow-2xs"
+            className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] rounded-2xs cursor-pointer transition-all flex items-center gap-1 text-[10px] sm:text-[11px] font-pixel shadow-2xs"
             title="沉浸全屏对局"
           >
             <span>⛶</span>
@@ -135,46 +157,70 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
           </div>
         )}
 
-        {/* 游戏机框体 */}
-        <div
-          className={`relative w-full max-w-[460px] bg-[#142B21] border-3 sm:border-4 border-[#1E4334] rounded-md shadow-2xl overflow-hidden flex flex-col items-center ${
-            isFullscreen
-              ? 'h-[calc(100vh-60px)] max-h-[860px]'
-              : 'h-[620px] xs:h-[660px] sm:h-[720px] max-h-[76vh]'
-          }`}
-        >
+        {/* 游戏机框体：宽度由 CSS 动态推导，严格保持 720:1280（9:16），
+            随设备视口自适应，任何屏幕都不会产生上下黑边。
+            ⚠ 禁止用 JS 改写 iframe 宽高（会破坏 cocos 引擎初始化），只用纯 CSS */}
+        <div className="relative w-fit max-w-full bg-[#142B21] border-3 sm:border-4 border-[#1E4334] rounded-md shadow-2xl overflow-hidden flex flex-col items-center">
           {/* 顶部怀旧指示灯 */}
-          <div className="w-full bg-[#1A382B] px-3 py-1 border-b border-[#2B5E4A] flex items-center justify-between select-none">
+          <div className="w-full h-7 bg-[#1A382B] px-3 border-b border-[#2B5E4A] flex items-center justify-between select-none shrink-0">
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#E74C3C] animate-pulse" />
               <span className="w-2 h-2 rounded-full bg-[#F39C12]" />
               <span className="w-2 h-2 rounded-full bg-[#2ECC71]" />
               <span className="text-[10px] font-pixel text-[#F9E79F] ml-1">TATAKARU STAGE</span>
             </div>
-            <span className="text-[10px] font-mono text-[#A3E4D7]">9:16 RES</span>
           </div>
 
           {/* 加载骨架屏动画 */}
           {isLoading && (
-            <div className="absolute inset-0 top-6 bg-[#142B21] flex flex-col items-center justify-center gap-3 z-10 text-[#F9E79F] font-pixel">
-              <div className="text-3xl animate-bounce">🥔 🍉 ⚔️</div>
-              <p className="text-xs tracking-wider animate-pulse">正在进入利韩战斗舞台...</p>
+            <div className="absolute inset-0 top-7 bg-[#142B21] flex flex-col items-center justify-center gap-3 z-10 text-[#F9E79F] font-pixel">
+              <div className="text-3xl animate-bounce">{activeGame === 'daxigua' ? '🥔 🍉 ⚔️' : '2️⃣ 0️⃣ 4️⃣ 8️⃣'}</div>
+              <p className="text-xs tracking-wider animate-pulse">
+                {activeGame === 'daxigua' ? '正在进入利韩战斗舞台...' : '正在布置 2048 合成棋盘...'}
+              </p>
               <div className="w-32 bg-[#0D1C16] h-1.5 rounded-full overflow-hidden border border-[#2B5E4A]">
                 <div className="bg-[#EAA83B] h-full w-2/3 animate-pulse" />
               </div>
             </div>
           )}
 
-          {/* 原生内嵌游戏 Iframe */}
+          {/* 原生内嵌游戏 Iframe 一：合成大西皮。aspect-ratio 锁定 9:16，宽度按视口高/宽动态取最小。
+              ⚠ 禁止用 JS 改写 iframe 宽高（会破坏 cocos 引擎初始化），只用纯 CSS */}
           <iframe
             ref={iframeRef}
-            key={iframeKey}
+            key={iframeKeys.daxigua}
             src="/daxigua/index.html"
-            title="利韩合成大西瓜"
-            onLoad={() => setIsLoading(false)}
+            title="利韩合成大西皮"
+            onLoad={() => setIsLoadingMap((prev) => ({ ...prev, daxigua: false }))}
             allow="autoplay; fullscreen"
-            className="w-full h-full border-0 bg-white"
-            style={{ display: 'block' }}
+            className="border-0 bg-[#142B21]"
+            style={{
+              display: activeGame === 'daxigua' ? 'block' : 'none',
+              aspectRatio: '720 / 1280',
+              height: 'auto',
+              width: isFullscreen
+                ? 'min(100vw, calc((100dvh - 96px) * 9 / 16))'
+                : 'min(calc(100vw - 56px), calc((min(76vh, 860px) - 46px) * 9 / 16), 460px)',
+            }}
+          />
+
+          {/* 原生内嵌游戏 Iframe 二：2048 合成。竖向 3:4 版式（标题+棋盘+提示），
+              切换游戏时仅隐藏不卸载，双方进度都保留 */}
+          <iframe
+            key={iframeKeys.g2048}
+            src="/2048/index.html"
+            title="利韩2048合成"
+            onLoad={() => setIsLoadingMap((prev) => ({ ...prev, g2048: false }))}
+            allow="autoplay"
+            className="border-0 bg-[#FBF7EC]"
+            style={{
+              display: activeGame === 'g2048' ? 'block' : 'none',
+              aspectRatio: '3 / 4',
+              height: 'auto',
+              width: isFullscreen
+                ? 'min(100vw, calc((100dvh - 96px) * 3 / 4))'
+                : 'min(calc(100vw - 56px), calc((min(76vh, 860px) - 46px) * 3 / 4), 560px)',
+            }}
           />
         </div>
       </div>
@@ -187,20 +233,61 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
             <span>作战指南与玩法规则</span>
           </div>
           <span className="text-[11px] text-[#B3402F] font-bold">
-            ⚠️ 免责声明：图源网络，侵删
+            ⚠️ 图源网络，侵删
           </span>
         </div>
-        <ul className="list-disc list-inside space-y-1 text-[11px] sm:text-xs text-[#6E5844] leading-relaxed">
-          <li>
-            <b>操作方式：</b>鼠标左键点击或手指在屏幕左右轻扫，松开即可投下掉落物。
-          </li>
-          <li>
-            <b>合成规则：</b>两个相同形态的水果/头像发生碰撞即可融合升级为更高阶形态，目标是向着终极巨大形态进发！
-          </li>
-          <li>
-            <b>防触顶警戒：</b>掉落物堆积超过顶部虚线警戒线时游戏将结算，请合理规划堆叠布局。
-          </li>
-        </ul>
+
+        {activeGame === 'daxigua' ? (
+          <ul className="list-disc list-inside space-y-1 text-[11px] sm:text-xs text-[#6E5844] leading-relaxed">
+            <li>
+              <b>操作方式：</b>鼠标左键点击或手指在屏幕左右轻扫，松开即可投下掉落物。
+            </li>
+            <li>
+              <b>合成规则：</b>两个相同形态的水果/头像发生碰撞即可融合升级为更高阶形态，目标是向着终极巨大形态进发！
+            </li>
+            <li>
+              <b>防触顶警戒：</b>掉落物堆积超过顶部虚线警戒线时游戏将结算，请合理规划堆叠布局。
+            </li>
+          </ul>
+        ) : (
+          <div className="space-y-2">
+            {/* 2048 数字 ↔ 图片对照表，防止玩家认混 */}
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 py-1">
+              {([
+                ['/2048/image01.webp', '0'],
+                ['/2048/image02.webp', '2'],
+                ['/2048/image03.webp', '4'],
+                ['/2048/image04.webp', '8'],
+              ] as const).map(([src, num]) => (
+                <div key={num} className="flex flex-col items-center gap-0.5">
+                  <img
+                    src={src}
+                    alt={`方块 ${num}`}
+                    className="w-11 h-11 sm:w-12 sm:h-12 object-cover border-2 border-[#1E4334] shadow-2xs bg-[#FAF5E8]"
+                  />
+                  <span className="font-pixel text-[10px] text-[#1E4334] font-bold">= {num}</span>
+                </div>
+              ))}
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center bg-[#2D4C3A] text-[#F9E79F] border-2 border-[#1E4334] shadow-2xs font-pixel text-[11px]">
+                  16
+                </span>
+                <span className="font-pixel text-[10px] text-[#1E4334] font-bold">= 16</span>
+              </div>
+            </div>
+            <ul className="list-disc list-inside space-y-1 text-[11px] sm:text-xs text-[#6E5844] leading-relaxed">
+              <li>
+                <b>操作方式：</b>方向键 / WASD，或手指在棋盘上滑动，全部方块会一起移动。
+              </li>
+              <li>
+                <b>合成规则：</b>相同方块相碰即合体升级：<b>0+0→2 · 2+2→4 · 4+4→8 · 8+8→16</b>，一路合成出 <b>2048</b> 即获胜！
+              </li>
+              <li>
+                <b>防混淆提示：</b>图片方块只到 <b>8</b> 为止，<b>16 及以上为数字方块</b>，请对照上方图表认清楚。
+              </li>
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

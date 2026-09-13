@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>2048 · 塔塔开</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=DotGothic16&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FBF7EC; --card:#FFFBF0;
+    --ink:#22372B; --ink-brown:#4A3A2C; --ink-soft:#7A6A55;
+    --border-green:#1B4332; --green-mid:#2D4C3A;
+    --gold:#C29641; --gold-accent:#E5A93C; --gold-stitch:#C8A359;
+    --line:#E4D9C3; --cell:#F3EDDD;
+    /* 棋盘边长：受 iframe 宽度与高度双重约束 */
+    --bs:min(94vw, calc(100dvh - 158px));
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;overflow:hidden;}
+  body{font-family:'Noto Sans SC','DotGothic16',sans-serif;background:var(--bg);color:var(--ink-brown);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:8px;}
+  .px{font-family:'Press Start 2P',monospace;}
+  .vt{font-family:'VT323',monospace;}
+
+  /* ===== 顶部：标题 + 计分 ===== */
+  header{width:var(--bs);display:flex;align-items:flex-end;justify-content:space-between;gap:8px;}
+  .brand h1{font-family:'Press Start 2P',monospace;font-size:calc(var(--bs)*0.085);color:var(--border-green);
+    letter-spacing:1px;text-shadow:2px 2px 0 var(--gold-accent);}
+  .brand .sub{font-family:'DotGothic16','Noto Sans SC',sans-serif;font-size:calc(var(--bs)*0.032);
+    letter-spacing:2px;color:var(--ink-soft);margin-top:5px;}
+  .scores{display:flex;gap:6px;}
+  .sbox{background:var(--card);border:2px solid var(--line);box-shadow:2px 2px 0 rgba(34,42,32,.14);
+    padding:4px 10px;text-align:center;min-width:calc(var(--bs)*0.16);}
+  .sbox .lb{font-family:'VT323',monospace;font-size:calc(var(--bs)*0.035);color:var(--ink-soft);letter-spacing:1px;}
+  .sbox .vl{font-family:'Press Start 2P',monospace;font-size:calc(var(--bs)*0.045);color:var(--border-green);margin-top:3px;}
+
+  /* ===== 操作行 ===== */
+  .bar{width:var(--bs);display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .btn-new{font-family:'DotGothic16','Noto Sans SC',sans-serif;font-size:calc(var(--bs)*0.038);letter-spacing:2px;
+    padding:6px 14px;background:var(--green-mid);color:#F9E79F;border:2px solid var(--border-green);
+    box-shadow:2px 2px 0 #12281F;cursor:pointer;user-select:none;}
+  .btn-new:hover{background:var(--border-green);}
+  .btn-new:active{transform:translate(2px,2px);box-shadow:none;}
+  .hint{font-family:'VT323',monospace;font-size:calc(var(--bs)*0.038);color:var(--ink-soft);letter-spacing:1px;text-align:right;}
+
+  /* ===== 棋盘 ===== */
+  .board{position:relative;width:var(--bs);height:var(--bs);
+    background:#EDE4CD;border:3px solid var(--border-green);
+    outline:2px dashed var(--gold-stitch);outline-offset:-8px;
+    box-shadow:3px 3px 0 rgba(34,42,32,.2);touch-action:none;}
+  .cell{position:absolute;width:25%;height:25%;padding:2.2%;}
+  .cell::before{content:"";display:block;width:100%;height:100%;background:var(--cell);
+    border:2px solid #E0D5BC;}
+  .tile{position:absolute;width:25%;height:25%;padding:2.2%;
+    transition:transform .13s ease-in-out;will-change:transform;z-index:2;}
+  .face{width:100%;height:100%;border:2px solid var(--border-green);
+    box-shadow:2px 2px 0 rgba(34,42,32,.25);
+    background-size:cover;background-position:center;background-color:var(--card);
+    display:flex;align-items:center;justify-content:center;}
+  .face.num{color:#F9E79F;font-family:'Press Start 2P',monospace;}
+  .face.spawn{animation:pop .18s ease .05s backwards;}
+  .face.merge{animation:merge .2s ease;}
+  @keyframes pop{0%{transform:scale(0);}70%{transform:scale(1.12);}100%{transform:scale(1);}}
+  @keyframes merge{0%{transform:scale(1);}45%{transform:scale(1.22);}100%{transform:scale(1);}}
+
+  /* ===== 结算浮层 ===== */
+  .overlay{position:absolute;inset:-3px;z-index:10;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;background:rgba(251,247,236,.88);backdrop-filter:blur(2px);}
+  .overlay.show{display:flex;}
+  .overlay .big{font-family:'DotGothic16','Noto Sans SC',sans-serif;font-size:calc(var(--bs)*0.075);
+    letter-spacing:4px;color:var(--border-green);}
+  .overlay .sc{font-family:'Press Start 2P',monospace;font-size:calc(var(--bs)*0.04);color:var(--ink-brown);}
+  .overlay .btn-new{font-size:calc(var(--bs)*0.04);}
+
+  footer{width:var(--bs);text-align:center;font-family:'VT323',monospace;
+    font-size:calc(var(--bs)*0.033);color:var(--ink-soft);letter-spacing:1px;}
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>2048</h1>
+      <div class="sub">利韩土豆群 · 塔塔开</div>
+    </div>
+    <div class="scores">
+      <div class="sbox"><div class="lb">SCORE</div><div class="vl" id="score">0</div></div>
+      <div class="sbox"><div class="lb">BEST</div><div class="vl" id="best">0</div></div>
+    </div>
+  </header>
+
+  <div class="bar">
+    <button class="btn-new" id="btnNew">↻ 新开一局</button>
+    <div class="hint">方向键 / WASD / 滑动屏幕</div>
+  </div>
+
+  <div class="board" id="board">
+    <div class="overlay" id="overlay">
+      <div class="big" id="ovTitle">游戏结束</div>
+      <div class="sc" id="ovScore"></div>
+      <button class="btn-new" id="ovBtn">↻ 再来一局</button>
+    </div>
+  </div>
+
+  <footer>0 起步 · 相同方块相碰合成 · 图片方块只到 8，16 起为数字方块</footer>
+
+<script>
+(function(){
+  'use strict';
+  /* ===== 方块外观：0/2/4/8 → 四张图；≥16 → 复古数字方块 ===== */
+  var IMG={0:'image01.webp',2:'image02.webp',4:'image03.webp',8:'image04.webp'};
+  var NUM_COLOR={16:'#2D4C3A',32:'#C29641',64:'#B3402F',128:'#6A4C93',256:'#E5A93C',
+                 512:'#1B4332',1024:'#8A5A2B',2048:'#12281F'};
+  function faceHTML(v,cls){
+    if(IMG.hasOwnProperty(v)){
+      return '<div class="face '+cls+'" style="background-image:url(\''+IMG[v]+'\')"></div>';
+    }
+    var s=String(v);
+    var fs=s.length<=2?'0.42':(s.length===3?'0.3':'0.24');
+    var col=NUM_COLOR[v]||'#12281F';
+    return '<div class="face num '+cls+'" style="background:'+col+';font-size:calc(var(--bs)*'+fs+')">'+s+'</div>';
+  }
+
+  var SIZE=4, board=document.getElementById('board'), overlay=document.getElementById('overlay');
+  var elScore=document.getElementById('score'), elBest=document.getElementById('best');
+  var ovTitle=document.getElementById('ovTitle'), ovScore=document.getElementById('ovScore'), ovBtn=document.getElementById('ovBtn');
+  var tiles=[], nextId=1, score=0, over=false, won=false, keep=false, busy=false;
+  function loadBest(){try{return parseInt(localStorage.getItem('tatakaru-2048-best')||'0',10)||0;}catch(e){return 0;}}
+  function saveBest(v){try{localStorage.setItem('tatakaru-2048-best',v);}catch(e){}}
+  var best=loadBest();
+  elBest.textContent=best;
+
+  function at(r,c){for(var i=0;i<tiles.length;i++){var t=tiles[i];if(!t.dead&&t.r===r&&t.c===c)return t;}return null;}
+  function setPos(t){t.el.style.transform='translate('+(t.c*100)+'%,'+(t.r*100)+'%)';}
+  function updateScore(){elScore.textContent=score;if(score>best){best=score;elBest.textContent=best;saveBest(best);}}
+
+  function makeTile(r,c,v,cls){
+    var el=document.createElement('div');
+    el.className='tile';
+    el.innerHTML=faceHTML(v,cls||'spawn');
+    board.insertBefore(el,overlay);
+    var t={id:nextId++,r:r,c:c,v:v,el:el,dead:false,locked:false};
+    setPos(t);tiles.push(t);return t;
+  }
+
+  function spawn(){
+    var empty=[];
+    for(var r=0;r<SIZE;r++)for(var c=0;c<SIZE;c++)if(!at(r,c))empty.push([r,c]);
+    if(!empty.length)return;
+    var rc=empty[Math.floor(Math.random()*empty.length)];
+    makeTile(rc[0],rc[1],Math.random()<0.9?0:2);
+  }
+
+  function anyMove(){
+    for(var r=0;r<SIZE;r++)for(var c=0;c<SIZE;c++){
+      var t=at(r,c);if(!t)return true;
+      var rt=(c<SIZE-1)?at(r,c+1):null, dt=(r<SIZE-1)?at(r+1,c):null;
+      if(rt&&rt.v===t.v)return true;
+      if(dt&&dt.v===t.v)return true;
+    }
+    return false;
+  }
+
+  function endCheck(){
+    if(!anyMove()){over=true;
+      ovTitle.textContent='游戏结束';
+      ovScore.textContent='SCORE '+score;
+      ovBtn.textContent='↻ 再来一局';
+      overlay.classList.add('show');
+    }
+  }
+
+  function move(dr,dc){
+    if(over||busy)return;
+    var alive=tiles.filter(function(t){return !t.dead;});
+    var sorted=alive.slice().sort(function(a,b){
+      return dr===1?b.r-a.r:dr===-1?a.r-b.r:dc===1?b.c-a.c:a.c-b.c;
+    });
+    var moved=false;
+    alive.forEach(function(t){t.locked=false;});
+    sorted.forEach(function(t){
+      var nr=t.r,nc=t.c,target=null;
+      while(true){
+        var rr=nr+dr,cc=nc+dc;
+        if(rr<0||rr>=SIZE||cc<0||cc>=SIZE)break;
+        var occ=at(rr,cc);
+        if(!occ){nr=rr;nc=cc;continue;}
+        if(occ.v===t.v&&!occ.locked&&!t.locked){target=occ;nr=rr;nc=cc;}
+        break;
+      }
+      if(target){
+        t.r=nr;t.c=nc;t.dead=true;setPos(t);
+        target.locked=true;target.v*=2;
+        score+=target.v;
+        if(target.v===2048&&!won)won=true;
+        moved=true;
+        setTimeout(function(tg){tg.el.innerHTML=faceHTML(tg.v,'merge');},100,target);
+        setTimeout(function(el){el.remove();},150,t.el);
+      }else if(nr!==t.r||nc!==t.c){
+        t.r=nr;t.c=nc;setPos(t);moved=true;
+      }
+    });
+    if(!moved)return;
+    busy=true;updateScore();
+    setTimeout(function(){
+      tiles=tiles.filter(function(t){return !t.dead;});
+      spawn();
+      busy=false;
+      if(won&&!keep){
+        ovTitle.textContent='🏆 达成 2048！';
+        ovScore.textContent='SCORE '+score;
+        ovBtn.textContent='↻ 继续挑战';
+        overlay.classList.add('show');
+        return;
+      }
+      endCheck();
+    },130);
+  }
+
+  function newGame(){
+    tiles.forEach(function(t){t.el.remove();});
+    tiles=[];score=0;over=false;busy=false;keep=false;won=false;
+    overlay.classList.remove('show');
+    updateScore();spawn();spawn();
+  }
+
+  /* ===== 输入：键盘 ===== */
+  var KEY={ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1],
+           w:[-1,0],s:[1,0],a:[0,-1],d:[0,1],W:[-1,0],S:[1,0],A:[0,-1],D:[0,1]};
+  document.addEventListener('keydown',function(e){
+    if(KEY[e.key]){e.preventDefault();move(KEY[e.key][0],KEY[e.key][1]);}
+  });
+  /* ===== 输入：触摸滑动 ===== */
+  var tx=0,ty=0,tracking=false;
+  document.addEventListener('touchstart',function(e){
+    tracking=true;tx=e.touches[0].clientX;ty=e.touches[0].clientY;
+  },{passive:true});
+  document.addEventListener('touchmove',function(e){if(tracking)e.preventDefault();},{passive:false});
+  document.addEventListener('touchend',function(e){
+    if(!tracking)return;tracking=false;
+    var dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
+    if(Math.max(Math.abs(dx),Math.abs(dy))<24)return;
+    if(Math.abs(dx)>Math.abs(dy))move(0,dx>0?1:-1);
+    else move(dy>0?1:-1,0);
+  },{passive:true});
+
+  document.getElementById('btnNew').addEventListener('click',newGame);
+  ovBtn.addEventListener('click',function(){
+    if(over){newGame();}          /* 游戏结束 → 重开 */
+    else{keep=true;overlay.classList.remove('show');}  /* 达成2048 → 继续 */
+  });
+
+  newGame();
+
+  /* 调试/自动化测试钩子（不影响游戏逻辑） */
+  window.__g2048={
+    tiles:function(){return tiles.filter(function(t){return !t.dead;})
+      .map(function(t){return {r:t.r,c:t.c,v:t.v};});},
+    isOver:function(){return over;},
+    isWon:function(){return won&&!keep;}
+  };
+})();
+</script>
+</body>
+</html>

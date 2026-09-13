@@ -16,6 +16,8 @@
     --gold:#C29641; --gold-accent:#E5A93C; --gold-stitch:#C8A359;
     --purple:#6A4C93; --red:#B3402F;
     --line:#E4D9C3;
+    /* 2048 棋盘边长：受视口宽度与页面高度双重约束 */
+    --bs2048:min(calc(100vw - 70px), 500px, 78vh);
   }
   *{margin:0;padding:0;box-sizing:border-box;}
   html{background:var(--bg);}
@@ -60,7 +62,7 @@
   .tab:not(.active):not(.locked):hover{border-color:var(--gold-accent);color:var(--border-green);}
   .tab:active{transform:translate(2px,2px);box-shadow:none;}
 
-  /* ===== 游戏区 ===== */
+  /* ===== 游戏区（合成大西瓜 iframe） ===== */
   .stage{position:relative;background:#12281F;border:3px solid var(--border-green);
     outline:2px dashed var(--gold-stitch);outline-offset:-9px;
     box-shadow:4px 4px 0 rgba(34,42,32,.2);overflow:hidden;
@@ -82,6 +84,78 @@
   .tip{margin-top:12px;text-align:center;font-size:12.5px;color:var(--ink-soft);line-height:1.9;}
   .tip b{color:var(--border-green);}
 
+  /* ==========================================================
+     2048 游戏（直接内嵌主 HTML，与大西瓜并列为同级标签页）
+     全部类名加 g2- 前缀，避免与大西瓜/站点样式冲突
+     ========================================================== */
+  .g2048-panel{display:none;flex-direction:column;align-items:center;gap:8px;
+    background:var(--parchment);border:3px solid var(--border-green);
+    outline:2px dashed var(--gold-stitch);outline-offset:-9px;
+    box-shadow:4px 4px 0 rgba(34,42,32,.2);padding:12px 6px;width:100%;}
+  .g2048-panel.show{display:flex;}
+  .g2048-panel .g2-header{width:var(--bs2048);display:flex;align-items:flex-end;justify-content:space-between;gap:8px;}
+  .g2-brand h2{font-family:'Press Start 2P',monospace;font-size:calc(var(--bs2048)*0.085);font-weight:400;
+    color:var(--border-green);letter-spacing:1px;text-shadow:2px 2px 0 var(--gold-accent);}
+  .g2-brand .g2-sub{font-family:'DotGothic16','Noto Sans SC',sans-serif;font-size:calc(var(--bs2048)*0.032);
+    letter-spacing:2px;color:var(--ink-soft);margin-top:5px;}
+  .g2-scores{display:flex;gap:6px;}
+  .g2-sbox{background:var(--card);border:2px solid var(--line);box-shadow:2px 2px 0 rgba(34,42,32,.14);
+    padding:4px 10px;text-align:center;min-width:calc(var(--bs2048)*0.16);}
+  .g2-sbox .g2-lb{font-family:'VT323',monospace;font-size:calc(var(--bs2048)*0.035);color:var(--ink-soft);letter-spacing:1px;}
+  .g2-sbox .g2-vl{font-family:'Press Start 2P',monospace;font-size:calc(var(--bs2048)*0.045);color:var(--border-green);margin-top:3px;}
+  .g2-bar{width:var(--bs2048);display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .g2-btn-new{font-family:'DotGothic16','Noto Sans SC',sans-serif;font-size:calc(var(--bs2048)*0.038);letter-spacing:2px;
+    padding:6px 14px;background:var(--green-mid);color:#F9E79F;border:2px solid var(--border-green);
+    box-shadow:2px 2px 0 #12281F;cursor:pointer;user-select:none;}
+  .g2-btn-new:hover{background:var(--border-green);}
+  .g2-btn-new:active{transform:translate(2px,2px);box-shadow:none;}
+  .g2-hint{font-family:'VT323',monospace;font-size:calc(var(--bs2048)*0.038);color:var(--ink-soft);letter-spacing:1px;text-align:right;}
+  .g2-board{position:relative;width:var(--bs2048);height:var(--bs2048);
+    background:#EDE4CD;border:3px solid var(--border-green);
+    box-shadow:3px 3px 0 rgba(34,42,32,.2);touch-action:none;}
+  .g2-cell{position:absolute;width:25%;height:25%;padding:2.2%;}
+  .g2-cell::before{content:"";display:block;width:100%;height:100%;background:#F3EDDD;
+    border:2px solid #E0D5BC;}
+  .g2-tile{position:absolute;width:25%;height:25%;padding:2.2%;
+    transition:transform .13s ease-in-out;will-change:transform;z-index:2;}
+  .g2-face{width:100%;height:100%;border:2px solid var(--border-green);
+    box-shadow:2px 2px 0 rgba(34,42,32,.25);
+    background-size:cover;background-position:center;background-color:var(--card);
+    display:flex;align-items:center;justify-content:center;}
+  .g2-face.g2-num{color:#F9E79F;font-family:'Press Start 2P',monospace;}
+  .g2-face.g2-spawn{animation:g2pop .18s ease .05s backwards;}
+  .g2-face.g2-merge{animation:g2merge .2s ease;}
+  @keyframes g2pop{0%{transform:scale(0);}70%{transform:scale(1.12);}100%{transform:scale(1);}}
+  @keyframes g2merge{0%{transform:scale(1);}45%{transform:scale(1.22);}100%{transform:scale(1);}}
+  .g2-overlay{position:absolute;inset:-3px;z-index:10;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;background:rgba(251,247,236,.88);backdrop-filter:blur(2px);}
+  .g2-overlay.show{display:flex;}
+  .g2-overlay .g2-big{font-family:'DotGothic16','Noto Sans SC',sans-serif;font-size:calc(var(--bs2048)*0.075);
+    letter-spacing:4px;color:var(--border-green);}
+  .g2-overlay .g2-sc{font-family:'Press Start 2P',monospace;font-size:calc(var(--bs2048)*0.04);color:var(--ink-brown);}
+  .g2048-panel .g2-foot{width:var(--bs2048);text-align:center;font-family:'VT323',monospace;
+    font-size:calc(var(--bs2048)*0.033);color:var(--ink-soft);letter-spacing:1px;}
+
+  /* ===== 2048 规则区 ===== */
+  .rules2048{display:none;margin-top:12px;background:var(--card);border:2px solid var(--line);
+    box-shadow:3px 3px 0 rgba(34,42,32,.12);padding:12px 12px 10px;}
+  .rules2048.show{display:block;}
+  .rules2048 h3{font-family:'DotGothic16','Noto Sans SC',sans-serif;font-size:15px;letter-spacing:3px;
+    color:var(--border-green);text-align:center;margin-bottom:4px;}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin:10px 0 8px;}
+  .legend .lg{display:flex;flex-direction:column;align-items:center;gap:5px;
+    font-family:'Press Start 2P',monospace;font-size:10px;color:var(--ink-brown);}
+  .legend .lg img{width:52px;height:52px;object-fit:cover;border:2px solid var(--border-green);
+    box-shadow:2px 2px 0 rgba(34,42,32,.2);background:var(--card);}
+  .legend .lg .eq{color:var(--gold-accent);font-size:8px;}
+  .legend .lg .numpx{width:52px;height:52px;display:flex;align-items:center;justify-content:center;
+    background:var(--green-mid);color:#F9E79F;border:2px solid var(--border-green);
+    box-shadow:2px 2px 0 rgba(34,42,32,.2);font-size:11px;}
+  .rules2048 p{font-size:12.5px;color:var(--ink-soft);line-height:1.9;text-align:center;}
+  .rules2048 p b{color:var(--border-green);}
+  .num-chip{display:inline-block;font-family:'Press Start 2P',monospace;font-size:9px;color:#F9E79F;
+    background:var(--green-mid);border:1px solid var(--border-green);padding:3px 5px;margin:0 1px;}
+
   /* ===== 返回主页按钮 ===== */
   .btn-home{display:flex;align-items:center;justify-content:center;gap:6px;
     margin:14px auto 0;padding:8px 22px;
@@ -102,6 +176,12 @@
     .tab{font-size:12px;letter-spacing:1px;padding:5px 12px;}
     /* 手机上高度同时受 62vh 约束，保证整页一屏放下、无滚动 */
     .stage iframe{height:min(calc((100vw - 40px) * 16 / 9), min(62vh, 760px));}
+    :root{--bs2048:min(calc(100vw - 60px), 500px, 62vh);}
+    .rules2048{padding:10px 8px 8px;}
+    .rules2048 h3{font-size:13px;letter-spacing:2px;}
+    .legend{gap:8px;}
+    .legend .lg img,.legend .lg .numpx{width:44px;height:44px;}
+    .rules2048 p{font-size:11px;line-height:1.65;}
     .tip{margin-top:8px;font-size:11px;line-height:1.65;}
     .btn-home{margin-top:10px;padding:7px 18px;font-size:12px;}
   }
@@ -117,6 +197,7 @@
 
     <div class="tabs" id="tabs" data-page-node-id="1KtxydZ0mUmYWJCBkt4Hha">
       <div class="tab active" data-panel="game" data-page-node-id="ccpxTPpGkzbIlHpA9hQNX7">🍉 合成大西瓜</div>
+      <div class="tab" data-panel="g2048">🧩 2048</div>
       <div class="tab locked" title="敬请期待" data-page-node-id="mqsZ76C5bRD6cZoX5oZ6Sn">🔒 待续</div>
       <div class="tab locked" title="敬请期待" data-page-node-id="krrSWBAPtZrDKYi05vSIFm">🔒 待续</div>
     </div>
@@ -124,10 +205,52 @@
     <div class="stage" id="stage-game" data-page-node-id="ADaszvUlujn4YAA3Vikzwh">
       <iframe id="gameFrame" src="./daxigua/index.html" allow="autoplay" data-page-node-id="OXdMwEqsksq8w5r02RdrGN"></iframe>
     </div>
+
+    <!-- 2048：直接内嵌本页，与大西瓜并列为同级标签页 -->
+    <div class="g2048-panel" id="stage-g2048">
+      <div class="g2-header">
+        <div class="g2-brand">
+          <h2>2048</h2>
+          <div class="g2-sub">利韩土豆群 · 塔塔开</div>
+        </div>
+        <div class="g2-scores">
+          <div class="g2-sbox"><div class="g2-lb">SCORE</div><div class="g2-vl" id="g2Score">0</div></div>
+          <div class="g2-sbox"><div class="g2-lb">BEST</div><div class="g2-vl" id="g2Best">0</div></div>
+        </div>
+      </div>
+      <div class="g2-bar">
+        <button class="g2-btn-new" id="g2New">↻ 新开一局</button>
+        <div class="g2-hint">方向键 / WASD / 滑动屏幕</div>
+      </div>
+      <div class="g2-board" id="g2Board">
+        <div class="g2-overlay" id="g2Overlay">
+          <div class="g2-big" id="g2OvTitle">游戏结束</div>
+          <div class="g2-sc" id="g2OvScore"></div>
+          <button class="g2-btn-new" id="g2OvBtn">↻ 再来一局</button>
+        </div>
+      </div>
+      <div class="g2-foot">0 起步 · 相同方块相碰合成 · 图片方块只到 8，16 起为数字方块</div>
+    </div>
+
     <div class="stage panel-locked" id="stage-locked" data-page-node-id="NGZMZUh73DQ9cdMdrkcAir">
       <div class="lock" data-page-node-id="iaYZ35EWvv3XepdFhxEeFl">📦</div>
       <div class="t" data-page-node-id="LSHRgyoJD8hXmn9lerV7q9">新玩法 合成中…</div>
       <div class="s" data-page-node-id="IhvSB7ppLGBbqw3oAYOjDH">NEXT GAME COMING SOON · 敬请期待</div>
+    </div>
+
+    <div class="rules2048" id="rules-g2048">
+      <h3>📜 2048 合成规则</h3>
+      <div class="legend">
+        <div class="lg"><img src="./2048/image01.webp" alt="0"><span class="eq">=</span><span>0</span></div>
+        <div class="lg"><img src="./2048/image02.webp" alt="2"><span class="eq">=</span><span>2</span></div>
+        <div class="lg"><img src="./2048/image03.webp" alt="4"><span class="eq">=</span><span>4</span></div>
+        <div class="lg"><img src="./2048/image04.webp" alt="8"><span class="eq">=</span><span>8</span></div>
+        <div class="lg"><span class="numpx">16</span><span class="eq">=</span><span>16</span></div>
+      </div>
+      <p>方向键 / WASD / 手指滑动来移动全部方块，<b>相同方块相碰即合成升级</b>：<br>
+        <b>0+0→2</b> · <b>2+2→4</b> · <b>4+4→8</b> · <b>8+8→</b><span class="num-chip">16</span> ·
+        <span class="num-chip">16</span>+<span class="num-chip">16</span>=<span class="num-chip">32</span> …<br>
+        ⚠️ 注意：图片方块只到 <b>8</b> 为止，<b>16 及以上为数字方块</b>，别认混啦！合成出 <b>2048</b> 即获胜。</p>
     </div>
 
     <div class="tip">
@@ -138,24 +261,200 @@
   </div>
 
 <script>
+  /* ===== 标签页切换（大西瓜 / 2048 / 待续） ===== */
   const tabs=document.querySelectorAll('.tab');
   const stageGame=document.getElementById('stage-game');
+  const stage2048=document.getElementById('stage-g2048');
   const stageLocked=document.getElementById('stage-locked');
+  const rules2048=document.getElementById('rules-g2048');
+  function hideAllStages(){
+    stageGame.style.display='none';
+    stage2048.classList.remove('show');
+    stageLocked.style.display='none';
+    rules2048.classList.remove('show');
+  }
   tabs.forEach(tab=>{
     tab.addEventListener('click',()=>{
       if(tab.classList.contains('locked')){
-        stageGame.style.display='none';
+        hideAllStages();
         stageLocked.style.display='flex';
-        document.querySelector('.tab.active').classList.remove('active');
         return;
       }
-      stageGame.style.display='block';
-      stageLocked.style.display='none';
+      hideAllStages();
+      if(tab.dataset.panel==='g2048'){
+        stage2048.classList.add('show');
+        rules2048.classList.add('show');
+      }else{
+        stageGame.style.display='block';
+      }
       document.querySelector('.tab.active')?.classList.remove('active');
       tab.classList.add('active');
     });
   });
-  /* 游戏画布尺寸完全由 CSS 控制（见 .stage iframe 注释），禁止 JS 改写 */
+  /* 大西瓜画布尺寸完全由 CSS 控制（见 .stage iframe 注释），禁止 JS 改写 */
+
+  /* ==========================================================
+     2048 游戏逻辑（内嵌，玩法致敬 gabrielecirulli/2048）
+     方块映射：0→image01 · 2→image02 · 4→image03 · 8→image04，
+     16 及以上为数字方块
+     ========================================================== */
+  (function(){
+    'use strict';
+    var IMG={0:'./2048/image01.webp',2:'./2048/image02.webp',4:'./2048/image03.webp',8:'./2048/image04.webp'};
+    var NUM_COLOR={16:'#2D4C3A',32:'#C29641',64:'#B3402F',128:'#6A4C93',256:'#E5A93C',
+                   512:'#1B4332',1024:'#8A5A2B',2048:'#12281F'};
+    function faceHTML(v,cls){
+      if(IMG.hasOwnProperty(v)){
+        return '<div class="g2-face '+cls+'" style="background-image:url(\''+IMG[v]+'\')"></div>';
+      }
+      var s=String(v);
+      var fs=s.length<=2?'0.42':(s.length===3?'0.3':'0.24');
+      var col=NUM_COLOR[v]||'#12281F';
+      return '<div class="g2-face g2-num '+cls+'" style="background:'+col+';font-size:calc(var(--bs2048)*'+fs+')">'+s+'</div>';
+    }
+
+    var SIZE=4;
+    var board=document.getElementById('g2Board'), overlay=document.getElementById('g2Overlay');
+    var elScore=document.getElementById('g2Score'), elBest=document.getElementById('g2Best');
+    var ovTitle=document.getElementById('g2OvTitle'), ovScore=document.getElementById('g2OvScore'), ovBtn=document.getElementById('g2OvBtn');
+    var panel=document.getElementById('stage-g2048');
+    var tiles=[], nextId=1, score=0, over=false, won=false, keep=false, busy=false;
+    function loadBest(){try{return parseInt(localStorage.getItem('tatakaru-2048-best')||'0',10)||0;}catch(e){return 0;}}
+    function saveBest(v){try{localStorage.setItem('tatakaru-2048-best',v);}catch(e){}}
+    var best=loadBest();
+    elBest.textContent=best;
+
+    function at(r,c){for(var i=0;i<tiles.length;i++){var t=tiles[i];if(!t.dead&&t.r===r&&t.c===c)return t;}return null;}
+    function setPos(t){t.el.style.transform='translate('+(t.c*100)+'%,'+(t.r*100)+'%)';}
+    function updateScore(){elScore.textContent=score;if(score>best){best=score;elBest.textContent=best;saveBest(best);}}
+
+    function makeTile(r,c,v,cls){
+      var el=document.createElement('div');
+      el.className='g2-tile';
+      el.innerHTML=faceHTML(v,cls||'g2-spawn');
+      board.insertBefore(el,overlay);
+      var t={id:nextId++,r:r,c:c,v:v,el:el,dead:false,locked:false};
+      setPos(t);tiles.push(t);return t;
+    }
+
+    function spawn(){
+      var empty=[];
+      for(var r=0;r<SIZE;r++)for(var c=0;c<SIZE;c++)if(!at(r,c))empty.push([r,c]);
+      if(!empty.length)return;
+      var rc=empty[Math.floor(Math.random()*empty.length)];
+      makeTile(rc[0],rc[1],Math.random()<0.9?0:2);
+    }
+
+    function anyMove(){
+      for(var r=0;r<SIZE;r++)for(var c=0;c<SIZE;c++){
+        var t=at(r,c);if(!t)return true;
+        var rt=(c<SIZE-1)?at(r,c+1):null, dt=(r<SIZE-1)?at(r+1,c):null;
+        if(rt&&rt.v===t.v)return true;
+        if(dt&&dt.v===t.v)return true;
+      }
+      return false;
+    }
+
+    function endCheck(){
+      if(!anyMove()){over=true;
+        ovTitle.textContent='游戏结束';
+        ovScore.textContent='SCORE '+score;
+        ovBtn.textContent='↻ 再来一局';
+        overlay.classList.add('show');
+      }
+    }
+
+    function move(dr,dc){
+      if(over||busy)return;
+      var alive=tiles.filter(function(t){return !t.dead;});
+      var sorted=alive.slice().sort(function(a,b){
+        return dr===1?b.r-a.r:dr===-1?a.r-b.r:dc===1?b.c-a.c:a.c-b.c;
+      });
+      var moved=false;
+      alive.forEach(function(t){t.locked=false;});
+      sorted.forEach(function(t){
+        var nr=t.r,nc=t.c,target=null;
+        while(true){
+          var rr=nr+dr,cc=nc+dc;
+          if(rr<0||rr>=SIZE||cc<0||cc>=SIZE)break;
+          var occ=at(rr,cc);
+          if(!occ){nr=rr;nc=cc;continue;}
+          if(occ.v===t.v&&!occ.locked&&!t.locked){target=occ;nr=rr;nc=cc;}
+          break;
+        }
+        if(target){
+          t.r=nr;t.c=nc;t.dead=true;setPos(t);
+          target.locked=true;target.v*=2;
+          score+=target.v;
+          if(target.v===2048&&!won)won=true;
+          moved=true;
+          setTimeout(function(tg){tg.el.innerHTML=faceHTML(tg.v,'g2-merge');},100,target);
+          setTimeout(function(el){el.remove();},150,t.el);
+        }else if(nr!==t.r||nc!==t.c){
+          t.r=nr;t.c=nc;setPos(t);moved=true;
+        }
+      });
+      if(!moved)return;
+      busy=true;updateScore();
+      setTimeout(function(){
+        tiles=tiles.filter(function(t){return !t.dead;});
+        spawn();
+        busy=false;
+        if(won&&!keep){
+          ovTitle.textContent='🏆 达成 2048！';
+          ovScore.textContent='SCORE '+score;
+          ovBtn.textContent='↻ 继续挑战';
+          overlay.classList.add('show');
+          return;
+        }
+        endCheck();
+      },130);
+    }
+
+    function newGame(){
+      tiles.forEach(function(t){t.el.remove();});
+      tiles=[];score=0;over=false;busy=false;keep=false;won=false;
+      overlay.classList.remove('show');
+      updateScore();spawn();spawn();
+    }
+
+    /* ===== 输入：键盘（仅 2048 面板可见时接管，且阻止方向键滚动页面） ===== */
+    var KEY={ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1],
+             w:[-1,0],s:[1,0],a:[0,-1],d:[0,1],W:[-1,0],S:[1,0],A:[0,-1],D:[0,1]};
+    document.addEventListener('keydown',function(e){
+      if(!panel.classList.contains('show'))return;
+      if(KEY[e.key]){e.preventDefault();move(KEY[e.key][0],KEY[e.key][1]);}
+    });
+    /* ===== 输入：触摸滑动（绑定在棋盘上，不影响页面其他区域滚动） ===== */
+    var tx=0,ty=0,tracking=false;
+    board.addEventListener('touchstart',function(e){
+      tracking=true;tx=e.touches[0].clientX;ty=e.touches[0].clientY;
+    },{passive:true});
+    board.addEventListener('touchmove',function(e){if(tracking)e.preventDefault();},{passive:false});
+    board.addEventListener('touchend',function(e){
+      if(!tracking)return;tracking=false;
+      var dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
+      if(Math.max(Math.abs(dx),Math.abs(dy))<24)return;
+      if(Math.abs(dx)>Math.abs(dy))move(0,dx>0?1:-1);
+      else move(dy>0?1:-1,0);
+    },{passive:true});
+
+    document.getElementById('g2New').addEventListener('click',newGame);
+    ovBtn.addEventListener('click',function(){
+      if(over){newGame();}          /* 游戏结束 → 重开 */
+      else{keep=true;overlay.classList.remove('show');}  /* 达成2048 → 继续 */
+    });
+
+    newGame();
+
+    /* 调试/自动化测试钩子（不影响游戏逻辑） */
+    window.__g2048={
+      tiles:function(){return tiles.filter(function(t){return !t.dead;})
+        .map(function(t){return {r:t.r,c:t.c,v:t.v};});},
+      isOver:function(){return over;},
+      isWon:function(){return won&&!keep;}
+    };
+  })();
 </script>
 </body>
 </html>
