@@ -14,8 +14,8 @@
     --border-green:#1B4332; --green-mid:#2D4C3A;
     --gold:#C29641; --gold-accent:#E5A93C; --gold-stitch:#C8A359;
     --line:#E4D9C3; --cell:#F3EDDD;
-    /* 棋盘边长：受 iframe 宽度与高度双重约束 */
-    --bs:min(94vw, calc(100dvh - 158px));
+    /* 棋盘边长：受 iframe 宽度与高度双重约束（留足头部/操作行/页脚空间） */
+    --bs:min(94vw, calc(100dvh - 175px));
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;overflow:hidden;}

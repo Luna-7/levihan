@@ -15,15 +15,22 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
     return 'daxigua';
   });
   const [iframeKeys, setIframeKeys] = useState<Record<GameKey, number>>({ daxigua: 1, g2048: 1 });
-  const [isLoadingMap, setIsLoadingMap] = useState<Record<GameKey, boolean>>({ daxigua: true, g2048: true });
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const isLoading = isLoadingMap[activeGame];
+  // 切换游戏：只挂载当前游戏的 iframe（cocos 画布在被 display:none 隐藏后恢复会损坏，
+  // 因此切换即卸载重建，保证每次都是干净的加载流程）
+  const switchGame = (g: GameKey) => {
+    if (g === activeGame) return;
+    soundManager.playBlip();
+    setActiveGame(g);
+    setIsLoading(true);
+  };
 
   const handleRefresh = () => {
     soundManager.playBlip();
-    setIsLoadingMap((prev) => ({ ...prev, [activeGame]: true }));
+    setIsLoading(true);
     setIframeKeys((prev) => ({ ...prev, [activeGame]: prev[activeGame] + 1 }));
     onShowToast(activeGame === 'daxigua' ? '正在重新加载战局 🍉' : '正在重新开局 🧩');
   };
@@ -56,9 +63,9 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
             <button
               onClick={() => {
                 soundManager.playBlip();
-                setActiveGame('daxigua');
+                switchGame('daxigua');
               }}
-              className={`px-3 py-1 text-xs font-pixel rounded-2xs cursor-pointer transition-all ${
+              className={`px-3 py-1 text-xs font-pixel rounded-2xs cursor-pointer transition-all whitespace-nowrap ${
                 activeGame === 'daxigua'
                   ? 'bg-[#B3402F] text-[#F9E79F] shadow-xs'
                   : 'text-[#D5C9AF] hover:text-[#FAF5E8]'
@@ -69,9 +76,9 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
             <button
               onClick={() => {
                 soundManager.playBlip();
-                setActiveGame('g2048');
+                switchGame('g2048');
               }}
-              className={`px-3 py-1 text-xs font-pixel rounded-2xs cursor-pointer transition-all ${
+              className={`px-3 py-1 text-xs font-pixel rounded-2xs cursor-pointer transition-all whitespace-nowrap ${
                 activeGame === 'g2048'
                   ? 'bg-[#B3402F] text-[#F9E79F] shadow-xs'
                   : 'text-[#D5C9AF] hover:text-[#FAF5E8]'
@@ -186,42 +193,37 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
 
           {/* 原生内嵌游戏 Iframe 一：合成大西皮。aspect-ratio 锁定 9:16，宽度按视口高/宽动态取最小。
               ⚠ 禁止用 JS 改写 iframe 宽高（会破坏 cocos 引擎初始化），只用纯 CSS */}
-          <iframe
+          {activeGame === 'daxigua' && <iframe
             ref={iframeRef}
             key={iframeKeys.daxigua}
             src="/daxigua/index.html"
             title="利韩合成大西皮"
-            onLoad={() => setIsLoadingMap((prev) => ({ ...prev, daxigua: false }))}
+            onLoad={() => setIsLoading(false)}
             allow="autoplay; fullscreen"
             className="border-0 bg-[#142B21]"
             style={{
-              display: activeGame === 'daxigua' ? 'block' : 'none',
               aspectRatio: '720 / 1280',
               height: 'auto',
               width: isFullscreen
                 ? 'min(100vw, calc((100dvh - 96px) * 9 / 16))'
                 : 'min(calc(100vw - 56px), calc((min(76vh, 860px) - 46px) * 9 / 16), 460px)',
             }}
-          />
-
-          {/* 原生内嵌游戏 Iframe 二：2048 合成。竖向 3:4 版式（标题+棋盘+提示），
-              切换游戏时仅隐藏不卸载，双方进度都保留 */}
-          <iframe
+          />}
+          {activeGame === 'g2048' && <iframe
             key={iframeKeys.g2048}
             src="/2048/index.html"
             title="利韩2048合成"
-            onLoad={() => setIsLoadingMap((prev) => ({ ...prev, g2048: false }))}
+            onLoad={() => setIsLoading(false)}
             allow="autoplay"
             className="border-0 bg-[#FBF7EC]"
             style={{
-              display: activeGame === 'g2048' ? 'block' : 'none',
               aspectRatio: '3 / 4',
               height: 'auto',
               width: isFullscreen
                 ? 'min(100vw, calc((100dvh - 96px) * 3 / 4))'
                 : 'min(calc(100vw - 56px), calc((min(76vh, 860px) - 46px) * 3 / 4), 560px)',
             }}
-          />
+          />}
         </div>
       </div>
 
