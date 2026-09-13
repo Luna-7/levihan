@@ -302,10 +302,9 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
           </ul>
         ) : (
           <div className="space-y-2">
-            {/* 2048 图片方块对照表（全图片方块，16 封顶） */}
+            {/* 2048 图片方块对照表（全图片方块，16 封顶；方块值只可能是 2/4/8/16） */}
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 py-1">
               {([
-                ['/2048/image01.webp', '0'],
                 ['/2048/image02.webp', '2'],
                 ['/2048/image03.webp', '4'],
                 ['/2048/image04.webp', '8'],
@@ -326,7 +325,7 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
                 <b>操作方式：</b>方向键 / WASD，或手指在棋盘上滑动，全部方块会一起移动。
               </li>
               <li>
-                <b>合成规则：</b>相同方块相碰即合体升级：<b>0+0→2 · 2+2→4 · 4+4→8 · 8+8→16</b>；<b>16 封顶不再合并</b>，合成出 <b>16</b> 即获胜！
+                <b>合成规则：</b>相同方块相碰即合体升级：<b>2+2→4 · 4+4→8 · 8+8→16</b>；<b>16 封顶不再合并</b>，合成出 <b>16</b> 即获胜！
               </li>
               <li>
                 <b>小提示：</b>全部方块均为图片方块，对照上方图表认脸不认数，轻松开局。

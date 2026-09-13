@@ -103,13 +103,15 @@
     </div>
   </div>
 
-  <footer data-page-node-id="NACrlCGDj6DVOlH375Xj2y">0 起步 · 相同方块相碰合成 · 全图片方块 · 合成出 16 即获胜</footer>
+  <footer data-page-node-id="NACrlCGDj6DVOlH375Xj2y">2 起步 · 相同方块相碰合成 · 全图片方块 · 合成出 16 即获胜</footer>
 
 <script>
 (function(){
   'use strict';
-  /* ===== 方块外观：全部为图片方块(0/2/4/8/16)，16 封顶即获胜 ===== */
-  var IMG={0:'image01.webp',2:'image02.webp',4:'image03.webp',8:'image04.webp',16:'image05.webp'};
+  /* ===== 方块外观：全部为图片方块(2/4/8/16)，16 封顶即获胜 ===== */
+  /* 图片与方块数值一一对应：2→image02 · 4→image03 · 8→image04 · 16→image05 */
+  /* （image01 是旧「0 级」画稿，0 不是方块，故不再参与映射；文件保留未删除） */
+  var IMG={2:'image02.webp',4:'image03.webp',8:'image04.webp',16:'image05.webp'};
   
   function faceHTML(v,cls){
     if(IMG.hasOwnProperty(v)){
@@ -125,6 +127,7 @@
   var elScore=document.getElementById('score'), elBest=document.getElementById('best');
   var ovTitle=document.getElementById('ovTitle'), ovScore=document.getElementById('ovScore'), ovBtn=document.getElementById('ovBtn');
   var tiles=[], nextId=1, score=0, over=false, won=false, keep=false, busy=false;
+  var pendingDir=null, gen=0;   /* pendingDir：动画锁定期间缓存的方向；gen：世代号，防止旧回调污染新一局 */
   function loadBest(){try{return parseInt(localStorage.getItem('tatakaru-2048-best')||'0',10)||0;}catch(e){return 0;}}
   function saveBest(v){try{localStorage.setItem('tatakaru-2048-best',v);}catch(e){}}
   var best=loadBest();
@@ -148,7 +151,8 @@
     for(var r=0;r<SIZE;r++)for(var c=0;c<SIZE;c++)if(!at(r,c))empty.push([r,c]);
     if(!empty.length)return;
     var rc=empty[Math.floor(Math.random()*empty.length)];
-    makeTile(rc[0],rc[1],Math.random()<0.9?0:2);
+    /* 标准 2048 生成规则：90% → 2，10% → 4（0 只代表空格，永不作为方块值） */
+    makeTile(rc[0],rc[1],Math.random()<0.9?2:4);
   }
 
   function anyMove(){
@@ -171,7 +175,10 @@
   }
 
   function move(dr,dc){
-    if(over||busy)return;
+    if(over)return;
+    /* 输入连续性：动画锁定期间只缓存「最后一次」方向，解锁后立即补执行，避免快速连按被吞 */
+    if(busy){pendingDir=[dr,dc];return;}
+    var myGen=gen;
     var alive=tiles.filter(function(t){return !t.dead;});
     var sorted=alive.slice().sort(function(a,b){
       return dr===1?b.r-a.r:dr===-1?a.r-b.r:dc===1?b.c-a.c:a.c-b.c;
@@ -200,13 +207,15 @@
         t.r=nr;t.c=nc;setPos(t);moved=true;
       }
     });
-    if(!moved)return;
+    if(!moved){endCheck();return;}   /* 无有效移动：不生成新方块，但仍需判定是否已 Game Over */
     busy=true;updateScore();
     setTimeout(function(){
+      if(myGen!==gen)return;   /* 期间「新开一局」→ 丢弃本次回调，避免污染新棋盘 */
       tiles=tiles.filter(function(t){return !t.dead;});
       spawn();
       busy=false;
       if(won&&!keep){
+        pendingDir=null;
         ovTitle.textContent='🏆 达成 16！';
         ovScore.textContent='SCORE '+score;
         ovBtn.textContent='↻ 继续挑战';
@@ -214,12 +223,15 @@
         return;
       }
       endCheck();
+      /* 解锁后补执行被缓存的方向（Game Over 时不再执行） */
+      if(pendingDir&&!over){var p=pendingDir;pendingDir=null;move(p[0],p[1]);}
     },130);
   }
 
   function newGame(){
     tiles.forEach(function(t){t.el.remove();});
     tiles=[];score=0;over=false;busy=false;keep=false;won=false;
+    pendingDir=null;gen++;
     overlay.classList.remove('show');
     updateScore();spawn();spawn();
   }
@@ -257,7 +269,22 @@
     tiles:function(){return tiles.filter(function(t){return !t.dead;})
       .map(function(t){return {r:t.r,c:t.c,v:t.v};});},
     isOver:function(){return over;},
-    isWon:function(){return won&&!keep;}
+    isWon:function(){return won&&!keep;},
+    /* 以下仅用于自动化测试：铺一个确定的棋盘（0=空格） */
+    setBoard:function(grid){
+      tiles.forEach(function(t){t.el.remove();});
+      tiles=[];score=0;over=false;won=false;keep=false;busy=false;pendingDir=null;gen++;
+      overlay.classList.remove('show');
+      for(var r=0;r<SIZE;r++)for(var c=0;c<SIZE;c++){
+        var v=(grid[r]&&grid[r][c])||0;
+        if(v>0)makeTile(r,c,v,'');
+      }
+      updateScore();
+    },
+    move:function(dr,dc){move(dr,dc);},
+    hasPending:function(){return !!pendingDir;},
+    isBusy:function(){return busy;},
+    cells:function(){return document.querySelectorAll('#board .tile').length;}
   };
 })();
 </script>
