@@ -22,7 +22,5 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  },
-  "include": ["src"],
-  "exclude": ["treehole", "dist", "node_modules"]
+  }
 }

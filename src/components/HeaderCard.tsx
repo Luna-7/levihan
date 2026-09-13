@@ -3,8 +3,8 @@ import { PixelPotion, PixelStar } from './PixelIcons';
 import { soundManager } from '../utils/audio';
 
 interface Props {
-  activeTab: 'home' | 'resources' | 'doujinshi' | 'tatakaru';
-  onSelectTab: (tab: 'home' | 'resources' | 'doujinshi' | 'tatakaru') => void;
+  activeTab: 'home' | 'resources' | 'doujinshi' | 'tatakaru' | 'treehole';
+  onSelectTab: (tab: 'home' | 'resources' | 'doujinshi' | 'tatakaru' | 'treehole') => void;
   isSoundMuted: boolean;
   onToggleSound: () => void;
   onCopyGroupNumber: () => void;
@@ -64,7 +64,7 @@ export const HeaderCard: React.FC<Props> = ({
       </div>
 
       {/* Navigation Tabs - responsive tab paddings, dynamic alignment and balanced grid on mobile & desktop */}
-      <nav aria-label="主要导航" className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 w-full">
+      <nav aria-label="主要导航" className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2 w-full">
         <button
           onClick={() => {
             soundManager.playBlip();
@@ -123,6 +123,21 @@ export const HeaderCard: React.FC<Props> = ({
         >
           <span className="shrink-0">⚔️</span>
           <span className="truncate">塔塔开</span>
+        </button>
+
+        <button
+          onClick={() => {
+            soundManager.playBlip();
+            onSelectTab('treehole');
+          }}
+          className={`w-full justify-center px-2 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1 sm:gap-1.5 min-w-0 select-none col-span-2 sm:col-span-1 ${
+            activeTab === 'treehole'
+              ? 'bg-[#2B3A55] text-[#F9E79F] border-[#2B3A55] font-bold shadow-2xs'
+              : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
+          }`}
+        >
+          <span className="shrink-0">🪵</span>
+          <span className="truncate">深夜树洞</span>
         </button>
       </nav>
     </header>
