@@ -229,7 +229,7 @@
           <button class="g2-btn-new" id="g2OvBtn">↻ 再来一局</button>
         </div>
       </div>
-      <div class="g2-foot">0 起步 · 相同方块相碰合成 · 图片方块只到 16，32 起为数字方块</div>
+      <div class="g2-foot">0 起步 · 相同方块相碰合成 · 全图片方块 · 合成出 16 即获胜</div>
     </div>
 
     <div class="stage panel-locked" id="stage-locked" data-page-node-id="NGZMZUh73DQ9cdMdrkcAir">
@@ -248,9 +248,8 @@
         <div class="lg"><img src="./2048/image05.webp" alt="16"><span class="eq">=</span><span>16</span></div>
       </div>
       <p>方向键 / WASD / 手指滑动来移动全部方块，<b>相同方块相碰即合成升级</b>：<br>
-        <b>0+0→2</b> · <b>2+2→4</b> · <b>4+4→8</b> · <b>8+8→</b><span class="num-chip">16</span> ·
-        <span class="num-chip">16</span>+<span class="num-chip">16</span>=<span class="num-chip">32</span> …<br>
-        ⚠️ 注意：图片方块只到 <b>16</b> 为止，<b>32 及以上为数字方块</b>，别认混啦！合成出 <b>2048</b> 即获胜。</p>
+        <b>0+0→2</b> · <b>2+2→4</b> · <b>4+4→8</b> · <b>8+8→16</b>，16 不再合并<br>
+        ⚠️ 注意：全部方块均为图片方块，<b>16 封顶</b>——合成出 <b>16</b> 即获胜！</p>
     </div>
 
     <div class="tip">
@@ -296,20 +295,18 @@
   /* ==========================================================
      2048 游戏逻辑（内嵌，玩法致敬 gabrielecirulli/2048）
      方块映射：0→image01 · 2→image02 · 4→image03 · 8→image04 · 16→image05，
-     32 及以上为数字方块
+     16 封顶即获胜，无数字方块
      ========================================================== */
   (function(){
     'use strict';
     var IMG={0:'./2048/image01.webp',2:'./2048/image02.webp',4:'./2048/image03.webp',8:'./2048/image04.webp',16:'./2048/image05.webp'};
-    var NUM_COLOR={16:'#2D4C3A',32:'#C29641',64:'#B3402F',128:'#6A4C93',256:'#E5A93C',
-                   512:'#1B4332',1024:'#8A5A2B',2048:'#12281F'};
     function faceHTML(v,cls){
       if(IMG.hasOwnProperty(v)){
         return '<div class="g2-face '+cls+'" style="background-image:url(\''+IMG[v]+'\')"></div>';
       }
       var s=String(v);
       var fs=s.length<=2?'0.42':(s.length===3?'0.3':'0.24');
-      var col=NUM_COLOR[v]||'#12281F';
+      var col='#12281F';
       return '<div class="g2-face g2-num '+cls+'" style="background:'+col+';font-size:calc(var(--bs2048)*'+fs+')">'+s+'</div>';
     }
 
@@ -349,8 +346,8 @@
       for(var r=0;r<SIZE;r++)for(var c=0;c<SIZE;c++){
         var t=at(r,c);if(!t)return true;
         var rt=(c<SIZE-1)?at(r,c+1):null, dt=(r<SIZE-1)?at(r+1,c):null;
-        if(rt&&rt.v===t.v)return true;
-        if(dt&&dt.v===t.v)return true;
+        if(rt&&rt.v===t.v&&t.v<16)return true;
+        if(dt&&dt.v===t.v&&t.v<16)return true;
       }
       return false;
     }
@@ -379,14 +376,14 @@
           if(rr<0||rr>=SIZE||cc<0||cc>=SIZE)break;
           var occ=at(rr,cc);
           if(!occ){nr=rr;nc=cc;continue;}
-          if(occ.v===t.v&&!occ.locked&&!t.locked){target=occ;nr=rr;nc=cc;}
+          if(occ.v===t.v&&t.v<16&&!occ.locked&&!t.locked){target=occ;nr=rr;nc=cc;}
           break;
         }
         if(target){
           t.r=nr;t.c=nc;t.dead=true;setPos(t);
           target.locked=true;target.v*=2;
           score+=target.v;
-          if(target.v===2048&&!won)won=true;
+          if(target.v===16&&!won)won=true;
           moved=true;
           setTimeout(function(tg){tg.el.innerHTML=faceHTML(tg.v,'g2-merge');},100,target);
           setTimeout(function(el){el.remove();},150,t.el);
@@ -401,7 +398,7 @@
         spawn();
         busy=false;
         if(won&&!keep){
-          ovTitle.textContent='🏆 达成 2048！';
+          ovTitle.textContent='🏆 达成 16！';
           ovScore.textContent='SCORE '+score;
           ovBtn.textContent='↻ 继续挑战';
           overlay.classList.add('show');
@@ -442,7 +439,7 @@
     document.getElementById('g2New').addEventListener('click',newGame);
     ovBtn.addEventListener('click',function(){
       if(over){newGame();}          /* 游戏结束 → 重开 */
-      else{keep=true;overlay.classList.remove('show');}  /* 达成2048 → 继续 */
+      else{keep=true;overlay.classList.remove('show');}  /* 达成16 → 继续 */
     });
 
     newGame();

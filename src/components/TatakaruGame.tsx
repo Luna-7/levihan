@@ -5,11 +5,8 @@ interface Props {
   onShowToast: (msg: string) => void;
 }
 
-// 背景音乐：每个游戏一首循环曲（浏览器自动播放限制：首次用户手势后才开始）
-const BGM_SRC: Record<'daxigua' | 'g2048', string> = {
-  daxigua: '/sounds/bgm-daxigua.mp3',
-  g2048: '/sounds/bgm-2048.mp3',
-};
+// 背景音乐：两个游戏共用一首循环曲（切换游戏不断播；浏览器限制：首次用户手势后才开始）
+const BGM_SRC = '/sounds/bgm.mp3';
 const BGM_PREF_KEY = 'tatakaru-bgm-enabled';
 
 export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
@@ -21,12 +18,11 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
     }
     return 'daxigua';
   });
-  const [iframeKeys, setIframeKeys] = useState<Record<GameKey, number>>({ daxigua: 1, g2048: 1 });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // ---- 背景音乐 ----
+  // ---- 背景音乐（单例，两个游戏共用，切换游戏不断播）----
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [bgmOn, setBgmOn] = useState<boolean>(() => {
     try {
@@ -36,32 +32,19 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
     }
   });
 
-  // 创建 audio 元素（单例、循环播放）
+  // 创建 audio 元素：单曲循环，src 只设一次，与游戏切换完全解耦
   useEffect(() => {
-    const el = new Audio();
+    const el = new Audio(BGM_SRC);
     el.loop = true;
     el.volume = 0.35;
     el.preload = 'auto';
     audioRef.current = el;
     return () => {
       el.pause();
-      el.src = '';
+      el.removeAttribute('src');
       audioRef.current = null;
     };
   }, []);
-
-  // 跟随当前游戏切换曲目；已开播则无缝续播
-  useEffect(() => {
-    const el = audioRef.current;
-    if (!el) return;
-    const src = BGM_SRC[activeGame];
-    if (el.src !== window.location.origin + src) {
-      el.src = src;
-    }
-    if (bgmOn && !el.paused) {
-      el.play().catch(() => {});
-    }
-  }, [activeGame]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 开关状态变化：播放 / 暂停（需用户手势后浏览器才放行）
   useEffect(() => {
@@ -100,19 +83,12 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
   };
 
   // 切换游戏：只挂载当前游戏的 iframe（cocos 画布在被 display:none 隐藏后恢复会损坏，
-  // 因此切换即卸载重建，保证每次都是干净的加载流程）
+  // 因此切换即卸载重建，保证每次都是干净的加载流程）。BGM 不受切换影响。
   const switchGame = (g: GameKey) => {
     if (g === activeGame) return;
     soundManager.playBlip();
     setActiveGame(g);
     setIsLoading(true);
-  };
-
-  const handleRefresh = () => {
-    soundManager.playBlip();
-    setIsLoading(true);
-    setIframeKeys((prev) => ({ ...prev, [activeGame]: prev[activeGame] + 1 }));
-    onShowToast(activeGame === 'daxigua' ? '正在重新加载战局 🍉' : '正在重新开局 🧩');
   };
 
   const handleToggleFullscreen = () => {
@@ -166,16 +142,6 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
             >
               🧩 2048
             </button>
-            <button
-              onClick={() => {
-                soundManager.playBlip();
-                onShowToast('更多利韩主题像素小游戏开发中 🥔');
-              }}
-              className="px-3 py-1 text-xs font-pixel rounded-2xs text-[#8A7968] hover:text-[#D5C9AF] cursor-pointer"
-              title="待解锁"
-            >
-              🔒 敬请期待
-            </button>
           </div>
         </div>
       </div>
@@ -204,15 +170,6 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
           >
             <span>{bgmOn ? '🔊' : '🔇'}</span>
             <span>{bgmOn ? 'BGM 开' : 'BGM 关'}</span>
-          </button>
-
-          <button
-            onClick={handleRefresh}
-            className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-[#FAF5E8] hover:bg-[#F3EAD5] text-[#1E4334] border border-[#D5C9AF] rounded-2xs cursor-pointer transition-all flex items-center gap-1 text-[10px] sm:text-[11px] font-bold shadow-2xs"
-            title="重置并重新开始游戏"
-          >
-            <span>🔄</span>
-            <span>重新开始</span>
           </button>
 
           <button
@@ -247,12 +204,6 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
                 title={bgmOn ? '关闭背景音乐' : '开启背景音乐'}
               >
                 {bgmOn ? '🔊' : '🔇'}
-              </button>
-              <button
-                onClick={handleRefresh}
-                className="px-2 py-0.5 bg-[#1E4334] text-[#F9E79F] border border-[#3B7E64] rounded-2xs text-xs font-pixel cursor-pointer"
-              >
-                🔄 重开
               </button>
               <button
                 onClick={handleToggleFullscreen}
@@ -295,7 +246,6 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
               ⚠ 禁止用 JS 改写 iframe 宽高（会破坏 cocos 引擎初始化），只用纯 CSS */}
           {activeGame === 'daxigua' && <iframe
             ref={iframeRef}
-            key={iframeKeys.daxigua}
             src="/daxigua/index.html"
             title="利韩合成大西皮"
             onLoad={() => setIsLoading(false)}
@@ -310,7 +260,6 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
             }}
           />}
           {activeGame === 'g2048' && <iframe
-            key={iframeKeys.g2048}
             src="/2048/index.html"
             title="利韩2048合成"
             onLoad={() => setIsLoading(false)}
@@ -353,7 +302,7 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
           </ul>
         ) : (
           <div className="space-y-2">
-            {/* 2048 数字 ↔ 图片对照表，防止玩家认混 */}
+            {/* 2048 图片方块对照表（全图片方块，16 封顶） */}
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 py-1">
               {([
                 ['/2048/image01.webp', '0'],
@@ -371,22 +320,16 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
                   <span className="font-pixel text-[10px] text-[#1E4334] font-bold">= {num}</span>
                 </div>
               ))}
-              <div className="flex flex-col items-center gap-0.5">
-                <span className="w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center bg-[#2D4C3A] text-[#F9E79F] border-2 border-[#1E4334] shadow-2xs font-pixel text-[11px]">
-                  32
-                </span>
-                <span className="font-pixel text-[10px] text-[#1E4334] font-bold">= 32</span>
-              </div>
             </div>
             <ul className="list-disc list-inside space-y-1 text-[11px] sm:text-xs text-[#6E5844] leading-relaxed">
               <li>
                 <b>操作方式：</b>方向键 / WASD，或手指在棋盘上滑动，全部方块会一起移动。
               </li>
               <li>
-                <b>合成规则：</b>相同方块相碰即合体升级：<b>0+0→2 · 2+2→4 · 4+4→8 · 8+8→16 · 16+16→32</b>，一路合成出 <b>2048</b> 即获胜！
+                <b>合成规则：</b>相同方块相碰即合体升级：<b>0+0→2 · 2+2→4 · 4+4→8 · 8+8→16</b>；<b>16 封顶不再合并</b>，合成出 <b>16</b> 即获胜！
               </li>
               <li>
-                <b>防混淆提示：</b>图片方块只到 <b>16</b> 为止，<b>32 及以上为数字方块</b>，请对照上方图表认清楚。
+                <b>小提示：</b>全部方块均为图片方块，对照上方图表认脸不认数，轻松开局。
               </li>
             </ul>
           </div>
