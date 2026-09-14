@@ -2,6 +2,5 @@
   "name": "利韩土豆仓",
   "description": "利韩土豆仓官方网站，发布群规守则与进群指引，归档进击的巨人利韩Cut/动画素材、资源外链与土豆粮仓驻地。",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }
-
