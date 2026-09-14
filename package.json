@@ -5,17 +5,21 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
+    "dev:save-hange": "vite --config vite.save-hange.config.ts --port=3001",
+    "build": "npm run build:save-hange && vite build",
+    "build:save-hange": "vite build --config vite.save-hange.config.ts",
     "preview": "vite preview",
     "sync:archive": "node scripts/sync-archive.mjs",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "verify:levels": "node scripts/verify-save-hange-levels.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1131.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
+    "lucide-react": "^0.546.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-pinch-zoom-pan": "^1.4.5"
