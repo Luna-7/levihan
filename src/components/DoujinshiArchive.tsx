@@ -6,6 +6,7 @@ import { DoujinBookItem, RecommendItem, GroupNovel } from '../types/doujinArchiv
 import { soundManager } from '../utils/audio';
 import { cosService } from '../services/cosClient';
 import { NovelModule } from './NovelModule';
+import LazyComicPage from './LazyComicPage';
 
 interface Props {
   onCopyCode?: (code: string) => void;
@@ -29,6 +30,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   // 动态探测与检测到的内页总数
   const [detectedPages, setDetectedPages] = useState<number | null>(null);
   const [isDetectingPages, setIsDetectingPages] = useState<boolean>(false);
+
+  // 封面加载失败状态
+  const [failedCovers, setFailedCovers] = useState<Set<string>>(new Set());
 
   // 站外推荐表（recs.json）与在线小说索引（novels.json）；读不到则为空 → 对应段不渲染
   const [recs, setRecs] = useState<RecommendItem[]>([]);
@@ -72,17 +76,19 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     onShowToast(`正在开启《${book.titleZh}》无缝长图画廊 📖`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // 后台非阻塞动态探测实际存在页数
-    setIsDetectingPages(true);
-    try {
-      const realPages = await cosService.detectBookPages(book, Math.max(book.pages || 30, 40));
-      if (realPages && realPages > 0) {
-        setDetectedPages(realPages);
+    // 只在页数未知时才进行探测
+    if (!book.pages || book.pages <= 0) {
+      setIsDetectingPages(true);
+      try {
+        const realPages = await cosService.detectBookPages(book, 40);
+        if (realPages && realPages > 0) {
+          setDetectedPages(realPages);
+        }
+      } catch (e) {
+        // 维持默认页数
+      } finally {
+        setIsDetectingPages(false);
       }
-    } catch (e) {
-      // 维持默认页数
-    } finally {
-      setIsDetectingPages(false);
     }
   };
 
@@ -111,6 +117,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     return matchCat && matchTag && matchSearch;
   });
 
+  // 处理封面加载失败
+  const handleCoverError = (bookId: string) => {
+    setFailedCovers((prev) => new Set(prev).add(bookId));
+  };
+
   // ==========================================
   // 📖 无缝长图阅读模式 (基于 腾讯云 COS CDN 映射 + react-pinch-zoom-pan)
   // ==========================================
@@ -125,27 +136,13 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           const pageUrl = cosService.getPageUrl(readingBook, pageNum);
 
           return (
-            <div key={pageNum} className="relative w-full block m-0 p-0 leading-none">
-              <img
+            <div key={pageNum}>
+              <LazyComicPage
+                pageNumber={pageNum}
                 src={pageUrl}
                 alt={`${readingBook.titleZh} 第 ${pageNum} 页`}
-                loading={pageNum <= 4 ? 'eager' : 'lazy'}
+                className="relative w-full block m-0 p-0 leading-none"
                 referrerPolicy="no-referrer"
-                className="w-full h-auto block m-0 p-0 border-0 align-top select-none"
-                onError={(e) => {
-                  const target = e.currentTarget;
-                  target.style.display = 'none';
-                  const parent = target.parentElement;
-                  if (parent) {
-                    parent.className =
-                      'w-full py-10 px-4 bg-[#1E2621] border-b border-dashed border-[#34483B] text-center text-[#A69C8E] font-retro-jp space-y-1 block';
-                    parent.innerHTML = `
-                      <div class="text-sm font-pixel text-[#F9E79F]">第 ${pageNum} / ${totalPages} 页</div>
-                      <div class="text-[11px] text-[#C4B7A6] mt-0.5">COS 路径: ${readingBook.bookFolder || readingBook.id}/image${pageNum.toString().padStart(2, '0')}.webp</div>
-                      <div class="text-[9px] text-[#7A6958]">若图片未显示，请确保存储桶已开启 Public Access 或文件已同步</div>
-                    `;
-                  }
-                }}
               />
             </div>
           );
@@ -346,27 +343,24 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
                 {/* 封面图片展示区 (来源 腾讯云 COS CDN 链接映射，竖版漫画本比例 2:3，悬浮显示点击阅读长图) */}
                 <div className="relative w-full aspect-[2/3] bg-[#FAF5E8] border border-[#E0D5BE] rounded-xs overflow-hidden group-hover:border-[#1E4334] flex items-center justify-center transition-colors">
-                  <img
-                    src={coverUrl}
-                    alt={book.titleZh}
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    onError={(e) => {
-                      const target = e.currentTarget;
-                      target.style.display = 'none';
-                      const parent = target.parentElement;
-                      if (parent) {
-                        parent.classList.add('flex-col', 'p-2', 'text-center');
-                        parent.innerHTML = `
-                          <div class="text-xl">📖</div>
-                          <div class="font-pixel text-[10px] text-[#1E4334] mt-1 font-bold">${book.titleZh}</div>
-                          <div class="text-[9px] text-[#8C7A68] mt-0.5 font-mono">${book.bookFolder || book.id}/${book.coverFile || 'image01.webp'}</div>
-                          <div class="text-[8px] text-[#B7791F] mt-0.5">点击进入长图画廊</div>
-                        `;
-                      }
-                    }}
-                  />
+                  {!failedCovers.has(book.id) ? (
+                    <img
+                      src={coverUrl}
+                      alt={book.titleZh}
+                      loading="lazy"
+                      decoding="async"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      onError={() => handleCoverError(book.id)}
+                    />
+                  ) : (
+                    <div className="flex flex-col p-2 text-center w-full h-full items-center justify-center">
+                      <div className="text-xl">📖</div>
+                      <div className="font-pixel text-[10px] text-[#1E4334] mt-1 font-bold">{book.titleZh}</div>
+                      <div className="text-[9px] text-[#8C7A68] mt-0.5 font-mono">{book.bookFolder || book.id}/{book.coverFile || 'image01.webp'}</div>
+                      <div className="text-[8px] text-[#B7791F] mt-0.5">点击进入长图画廊</div>
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <span className="px-3 py-1.5 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs rounded-xs shadow-lg flex items-center gap-1">
                       <span>📖 点击阅读长图</span>

@@ -29,7 +29,7 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
     setFailed(false);
     setProgress(0);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
-    fetch(cosService.getNovelBodyUrl(novel.id), { cache: 'no-cache' })
+    fetch(cosService.getNovelBodyUrl(novel.id), { cache: 'default' })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.text();

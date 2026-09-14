@@ -4,6 +4,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { DoujinBookItem, RecommendItem, GroupNovel } from '../types/doujinArchive';
 import { DOUJIN_ARCHIVE_DATA, TENCENT_COS_CONFIG } from '../data/doujinArchiveData';
+import { requestDebug } from '../utils/requestDebug';
 
 export interface COSConfigState {
   region: string;
@@ -156,13 +157,15 @@ export class COSService {
 
   /**
    * 自动探测 lh-XXX 目录下的真实页数与图片存在性
+   * 限制并发数为 2，遇到连续 3 页缺失才认为到达结尾
    */
   public async detectBookPages(book: DoujinBookItem, maxProbe = 100): Promise<number> {
     const detected: number[] = [];
-    const concurrency = 6;
-    let stop = false;
+    const concurrency = 2;
+    let consecutiveMissing = 0;
+    const MAX_CONSECUTIVE_MISSING = 3;
 
-    for (let i = 1; i <= maxProbe && !stop; i += concurrency) {
+    for (let i = 1; i <= maxProbe; i += concurrency) {
       const chunk = Array.from({ length: Math.min(concurrency, maxProbe - i + 1) }, (_, idx) => i + idx);
       const results = await Promise.all(
         chunk.map(async (pageIdx) => {
@@ -175,9 +178,13 @@ export class COSService {
       for (const res of results) {
         if (res.ok) {
           detected.push(res.pageIdx);
+          consecutiveMissing = 0;
         } else {
-          stop = true;
-          break;
+          consecutiveMissing++;
+          if (consecutiveMissing >= MAX_CONSECUTIVE_MISSING) {
+            // 连续 3 页缺失，认为到达结尾
+            return detected.length > 0 ? Math.max(...detected) : book.pages || 10;
+          }
         }
       }
     }
@@ -215,7 +222,8 @@ export class COSService {
   public async loadRecsData(): Promise<RecommendItem[]> {
     if (!this.config.cdnBaseUrl) return [];
     try {
-      const resp = await fetch(this.getObjectUrl('recs.json'), { mode: 'cors', cache: 'no-cache' });
+      requestDebug.recordJsonRequest();
+      const resp = await fetch(this.getObjectUrl('recs.json'), { mode: 'cors', cache: 'default' });
       if (resp.ok) {
         const data = await resp.json();
         if (Array.isArray(data)) {
@@ -235,7 +243,8 @@ export class COSService {
   public async loadNovelList(): Promise<GroupNovel[]> {
     if (!this.config.cdnBaseUrl) return [];
     try {
-      const resp = await fetch(this.getObjectUrl('novels.json'), { mode: 'cors', cache: 'no-cache' });
+      requestDebug.recordJsonRequest();
+      const resp = await fetch(this.getObjectUrl('novels.json'), { mode: 'cors', cache: 'default' });
       if (resp.ok) {
         const data = await resp.json();
         if (Array.isArray(data)) return data;
@@ -263,7 +272,8 @@ export class COSService {
     }
     const remoteUrl = this.getObjectUrl('archive.json');
     try {
-      const resp = await fetch(remoteUrl, { mode: 'cors', cache: 'no-cache' });
+      requestDebug.recordJsonRequest();
+      const resp = await fetch(remoteUrl, { mode: 'cors', cache: 'default' });
       if (resp.ok) {
         const data = await resp.json();
         if (Array.isArray(data) && data.length > 0) {
