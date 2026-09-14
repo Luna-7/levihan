@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { RetroPixelFrame } from './components/RetroPixelFrame';
 import { HeaderCard } from './components/HeaderCard';
 import { GroupHome } from './components/GroupHome';
@@ -137,6 +138,9 @@ export default function App() {
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* Vercel Analytics */}
+      <Analytics />
     </main>
   );
 }
