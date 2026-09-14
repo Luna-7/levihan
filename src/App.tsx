@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { RetroPixelFrame } from './components/RetroPixelFrame';
 import { HeaderCard } from './components/HeaderCard';
 import { GroupHome } from './components/GroupHome';
@@ -141,6 +142,9 @@ export default function App() {
 
       {/* Vercel Analytics */}
       <Analytics />
+      
+      {/* Vercel Speed Insights */}
+      <SpeedInsights />
     </main>
   );
 }
