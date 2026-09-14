@@ -32,9 +32,6 @@ export const BGM_ASSET_PATH = 'assets/bauklotze.mp3';
  */
 export const FALLBACK_TRACK_SECONDS = 236;
 
-/** 本机最佳纪录存储键（与主站排行榜弹窗同源共享 localStorage） */
-export const BEST_RECORD_KEY = 'savehange-best';
-
 /** 与宿主 TatakaruGame 约定的对局 BGM 通知协议（不可改名） */
 export const HOST_BGM_MESSAGE_TYPE = 'save-hange-bgm';
 

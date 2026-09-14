@@ -22,7 +22,6 @@ import { GameBoard } from './components/GameBoard';
 import { VictoryModal } from './components/VictoryModal';
 import { DefeatModal } from './components/DefeatModal';
 import { soundManager } from './audio';
-import { saveBestRecord } from './bestRecords';
 import { applyMove, createInitialPieces, isVictory } from './gameLogic';
 import type { MoveDelta } from './gameLogic';
 import { DIFFICULTIES, DIFFICULTY_ORDER } from './levels';
@@ -148,7 +147,7 @@ export const SaveHangeGame: React.FC = () => {
   }, []);
 
   /** Victory：韩吉抵达出口 */
-  const handleWin = useCallback((finalMoves: number) => {
+  const handleWin = useCallback(() => {
     if (terminalRef.current) return;
     terminalRef.current = true;
 
@@ -163,7 +162,6 @@ export const SaveHangeGame: React.FC = () => {
     setIsGameOver(false);
 
     haptic([30, 50, 30, 50, 90]);
-    saveBestRecord(difficultyRef.current, elapsed, finalMoves);
     notifyHostBgm('end'); // 对局音乐停止 → 宿主恢复共用 BGM
     soundManager.playVictorySound();
   }, []);
@@ -208,7 +206,7 @@ export const SaveHangeGame: React.FC = () => {
       movesRef.current = nextMoves;
       setMoves(nextMoves);
 
-      if (isVictory(next)) handleWin(nextMoves);
+      if (isVictory(next)) handleWin();
 
       return true;
     },
@@ -292,30 +290,30 @@ export const SaveHangeGame: React.FC = () => {
 
         {/* Top Header Section */}
         <div className="relative z-10 flex flex-col">
-          {/* Top Status & Difficulty Switcher */}
-          <div className="flex items-center justify-between mb-1">
+          {/* Top Status & Difficulty Switcher（左右两组控件等高 h-8、单行不换行、间距统一） */}
+          <div className="flex items-center justify-between gap-2 mb-1">
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-[#1e1010]/90 border border-[#4a1c1c] text-red-400 font-mono text-[9px] sm:text-[10px] font-bold tracking-wider uppercase rounded shadow-sm backdrop-blur-sm whitespace-nowrap shrink-0">
               <Skull className="w-3 h-3 text-red-500 animate-pulse shrink-0" />
               {hasStarted ? '地鸣逼近 • THE RUMBLING' : '待机中 • STANDBY'}
             </span>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* Music Toggle Button */}
               <button
                 id="music-toggle-btn"
                 onClick={handleToggleMute}
-                className="flex items-center justify-center w-8 h-8 bg-[#102419]/90 hover:bg-[#1a3827] border border-[#2b5941] hover:border-[#34d399] rounded text-[#86efac] transition-all cursor-pointer shadow-sm"
+                className="flex items-center justify-center w-8 h-8 shrink-0 bg-[#102419]/90 hover:bg-[#1a3827] border border-[#2b5941] hover:border-[#34d399] rounded text-[#86efac] transition-all cursor-pointer shadow-sm"
                 title={isMuted ? '开启音乐' : '关闭音乐'}
               >
                 {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               </button>
 
               {/* Difficulty Dropdown Selector placed at the top right */}
-              <div ref={difficultyMenuRef} className="relative">
+              <div ref={difficultyMenuRef} className="relative shrink-0">
                 <button
                   id="difficulty-selector-btn"
                   onClick={() => setShowDifficultyMenu((prev) => !prev)}
-                  className="flex items-center gap-1 px-2 py-0.5 bg-[#102419]/90 hover:bg-[#1a3827] border border-[#2b5941] hover:border-[#34d399] rounded text-[10px] font-mono font-black text-[#86efac] tracking-wider transition-all cursor-pointer shadow-sm"
+                  className="flex items-center gap-1 h-8 px-2.5 sm:px-3 bg-[#102419]/90 hover:bg-[#1a3827] border border-[#2b5941] hover:border-[#34d399] rounded text-[9px] sm:text-[10px] font-mono font-black text-[#86efac] tracking-wider transition-all cursor-pointer shadow-sm whitespace-nowrap"
                   title="切换关卡难度"
                 >
                   <Flame className="w-3 h-3 text-yellow-400" />
@@ -365,7 +363,7 @@ export const SaveHangeGame: React.FC = () => {
               SAVE HANGE
             </h1>
             <p className="text-[11px] font-bold text-[#bbf7d0] tracking-wide mt-0.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)]">
-              {hasStarted ? '在终曲播放完毕前护送 韩吉 突围登上飞机' : '拖动 / 点击方块开始突围'}
+              {hasStarted ? '在终曲播放完毕前护送 韩吉 突围登上飞机' : '拖动方块开始突围'}
             </p>
           </div>
 

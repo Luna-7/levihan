@@ -99,3 +99,10 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #E5A93C;
 }
+
+/* 沉浸对局模式：隐藏卡片边框上的全部像素装饰。
+   部分带 scale / z-20 的装饰在 Chrome 下会穿透 position:fixed 的全屏遮罩（合成层级异常），
+   沉浸语义上这些装饰本就不该出现，直接整体隐藏最稳。 */
+body.immersive-on .retro-frame-card > .absolute {
+  visibility: hidden;
+}

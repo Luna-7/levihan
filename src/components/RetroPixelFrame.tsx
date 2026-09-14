@@ -24,7 +24,7 @@ export const RetroPixelFrame: React.FC<Props> = ({
   return (
     <div className="w-full max-w-4xl mx-auto my-2 xs:my-4 sm:my-6 md:my-8 px-1.5 xs:px-2 sm:px-4 transition-all duration-300">
       {/* Outer Card with Dynamic responsive Stitched Border & Corner Pixel Hearts */}
-      <div className="relative bg-[#FBF7EC] border-2 xs:border-4 md:border-[6px] border-[#1E4334] rounded-md xs:rounded-lg p-2.5 xs:p-4 sm:p-6 md:p-8 lg:p-10 shadow-xl transition-all duration-300">
+      <div className="retro-frame-card relative bg-[#FBF7EC] border-2 xs:border-4 md:border-[6px] border-[#1E4334] rounded-md xs:rounded-lg p-2.5 xs:p-4 sm:p-6 md:p-8 lg:p-10 shadow-xl transition-all duration-300">
         {/* Inner Gold/Brown Stitched Dotted Line */}
         <div className="absolute inset-1 xs:inset-2 md:inset-3 border sm:border-2 border-dashed border-[#D4B26F] pointer-events-none rounded-sm xs:rounded-md" />
 
