@@ -121,10 +121,6 @@ export function getMoveLimits(pieces: readonly Piece[], piece: Piece): MoveLimit
   return { maxLeft, maxRight, maxUp, maxDown };
 }
 
-export function canMoveInAnyDirection(limits: MoveLimits): boolean {
-  return limits.maxLeft > 0 || limits.maxRight > 0 || limits.maxUp > 0 || limits.maxDown > 0;
-}
-
 /**
  * 把一次移动请求裁剪成「一次操作、一个轴」的合法位移。
  *

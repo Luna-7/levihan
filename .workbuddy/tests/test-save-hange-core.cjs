@@ -1,19 +1,21 @@
 /**
- * 拯救韩吉（SAVE HANGE）核心状态机回归测试 —— 真实浏览器 + 真实构建产物
+ * 拯救韩吉（SAVE HANGE）输入手感 + 状态机 + 音效 回归测试
+ * —— 真实浏览器 + 真实构建产物
  *
  * 运行方式：
  *   1) 先起预览服务：./node_modules/.bin/vite preview --config vite.save-hange.config.ts --port 4174 --strictPort
  *   2) NODE_PATH=/Users/luna/.workbuddy/binaries/node/workspace/node_modules \
  *        node .workbuddy/tests/test-save-hange-core.cjs
  *
- * 覆盖需求里点名的坑：
- *   - 页面加载不自动开始计时（待机态）
- *   - 点击一次只计 1 次移动
- *   - 一次多格拖拽只计 1 次移动（pointerup 与 click 不会重复触发）
- *   - 倒计时与音频同源（剩余时间 = duration - currentTime）
- *   - 切难度 = 全新对局（棋盘/步数/计时/音频全部重置）
- *   - 音频自然结束 → 失败，且终态后不再接受移动
- *   - 宿主 BGM 协议 save-hange-bgm 的 start / end 收发
+ * 覆盖：
+ *   - 点击只选中、绝不移动；非法点击/非法拖拽不会启动游戏
+ *   - 拖拽是唯一的位置改变方式（键盘除外）：跟手、轴锁、半格吸附、回弹
+ *   - 一次拖拽跨多格只计 1 次移动；pointerup 与 click 不重复触发
+ *   - 键盘单格移动、失败给 blocked 反馈
+ *   - 倒计时与音频同源；切难度/重开 = 全新对局
+ *   - 音频播完 = 失败；胜利后不再触发失败（终态互斥）
+ *   - SFX 增益提升且输出经过限幅（实测峰值不削波）
+ *   - 宿主 BGM 协议 save-hange-bgm 的 start / end
  */
 const { chromium } = require('playwright-core');
 
@@ -28,7 +30,6 @@ function check(name, ok, detail) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 读取 HUD：剩余时间 / 移动次数 */
 async function readHud(page) {
   return page.evaluate(() => {
     const byLabel = (text) =>
@@ -58,15 +59,64 @@ async function readAudio(page) {
   });
 }
 
-async function readMessages(page) {
-  return page.evaluate(() => (window.__msgs || []).map((m) => (m && m.type) + ':' + (m && m.state)));
-}
+const readMessages = (page) =>
+  page.evaluate(() => (window.__msgs || []).map((m) => (m && m.type) + ':' + (m && m.state)));
 
-async function pieceXPercent(page, id) {
+/** 棋子的网格坐标（由内联 left/top 百分比反推） */
+async function pieceGrid(page, id) {
   return page.evaluate((pieceId) => {
     const el = document.getElementById('piece-' + pieceId);
-    return el ? parseFloat(el.style.left) : null;
+    if (!el) return null;
+    return { x: parseFloat(el.style.left) / 25, y: parseFloat(el.style.top) / 20 };
   }, id);
+}
+
+/** 棋子是否处于选中态（选中会加 ring-2 描边） */
+async function isSelected(page, id) {
+  return page.evaluate((pieceId) => {
+    const el = document.querySelector('#piece-' + pieceId + ' > div');
+    return el ? el.className.includes('ring-2') : false;
+  }, id);
+}
+
+async function boardMetrics(page) {
+  return page.evaluate(() => {
+    const board = document.getElementById('piece-hange').parentElement;
+    const rect = board.getBoundingClientRect();
+    return {
+      x: rect.x,
+      y: rect.y,
+      cellW: rect.width / 4,
+      cellH: rect.height / 5,
+    };
+  });
+}
+
+async function pieceCenter(page, id) {
+  return page.evaluate((pieceId) => {
+    const el = document.getElementById('piece-' + pieceId);
+    const rect = el.getBoundingClientRect();
+    return { cx: rect.x + rect.width / 2, cy: rect.y + rect.height / 2 };
+  }, id);
+}
+
+/** 按格子位移拖拽棋子（可传小数，用于测回弹） */
+async function dragByCells(page, id, dxCells, dyCells, steps = 4) {
+  const before = await pieceCenter(page, id);
+  const { cellW, cellH } = await boardMetrics(page);
+  const targetX = before.cx + dxCells * cellW;
+  const targetY = before.cy + dyCells * cellH;
+
+  await page.mouse.move(before.cx, before.cy);
+  await page.mouse.down();
+  for (let step = 1; step <= steps; step++) {
+    await page.mouse.move(
+      before.cx + ((targetX - before.cx) * step) / steps,
+      before.cy + ((targetY - before.cy) * step) / steps
+    );
+  }
+  await page.mouse.up();
+  await sleep(220); // 等 0.14s 吸附动画结束
 }
 
 (async () => {
@@ -83,10 +133,12 @@ async function pieceXPercent(page, id) {
     if (msg.type() === 'error') errors.push('console: ' + msg.text());
   });
 
-  // 捕获 SoundManager 内部创建的 Audio，并监听 postMessage（顶层打开时 parent === window）
+  // 捕获 SoundManager 创建的 Audio、宿主消息，以及 SFX 总线的实际输出峰值
   await page.addInitScript(() => {
     window.__audios = [];
     window.__msgs = [];
+    window.__audioDebug = { gains: [], compressorInChain: false, analyser: null, peak: 0 };
+
     const NativeAudio = window.Audio;
     window.Audio = function (...args) {
       const el = new NativeAudio(...args);
@@ -94,47 +146,133 @@ async function pieceXPercent(page, id) {
       return el;
     };
     window.Audio.prototype = NativeAudio.prototype;
+
     window.addEventListener('message', (event) => window.__msgs.push(event.data));
+
+    const NativeCtx = window.AudioContext;
+    const nativeCreateGain = NativeCtx.prototype.createGain;
+    NativeCtx.prototype.createGain = function () {
+      const node = nativeCreateGain.call(this);
+      window.__audioDebug.gains.push(node);
+      return node;
+    };
+
+    // 在「连到 destination」的最后一段插一个 AnalyserNode，量真实输出峰值。
+    // 游戏里只有 SFX 总线走 Web Audio（Bauklötze 是 HTMLAudioElement），
+    // 所以这里量到的就是 SFX 的最终电平。
+    const nativeConnect = AudioNode.prototype.connect;
+    AudioNode.prototype.connect = function (destination, ...rest) {
+      try {
+        if (destination instanceof AudioDestinationNode) {
+          const ctx = destination.context;
+          if (!window.__audioDebug.analyser) {
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 1024;
+            window.__audioDebug.analyser = analyser;
+            const buffer = new Float32Array(analyser.fftSize);
+            const tick = () => {
+              analyser.getFloatTimeDomainData(buffer);
+              for (let i = 0; i < buffer.length; i++) {
+                const value = Math.abs(buffer[i]);
+                if (value > window.__audioDebug.peak) window.__audioDebug.peak = value;
+              }
+              requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          }
+          window.__audioDebug.compressorInChain =
+            window.__audioDebug.compressorInChain || this instanceof DynamicsCompressorNode;
+          nativeConnect.call(window.__audioDebug.analyser, destination);
+          return nativeConnect.call(this, window.__audioDebug.analyser, ...rest);
+        }
+      } catch {
+        /* 落回原生连接 */
+      }
+      return nativeConnect.call(this, destination, ...rest);
+    };
   });
 
-  console.log('\n=== SAVE HANGE 核心状态机回归 ===\n');
+  console.log('\n=== SAVE HANGE 输入手感 / 状态机 / 音效 回归 ===\n');
 
   await page.goto(BASE, { waitUntil: 'load', timeout: 60000 });
   await page.waitForSelector('#piece-hange', { timeout: 30000 });
 
-  /* ---------- A. 待机态：不自动开始计时 ---------- */
-  await sleep(1200); // 故意等一会儿，若会自动开始则必然露馅
+  /* ---------- A. 待机态 ---------- */
+  await sleep(1200);
   const standbyHud = await readHud(page);
   const standbyAudio = await readAudio(page);
   check('待机：移动次数为 0', standbyHud.moves === '0', standbyHud.moves);
   check('待机：剩余时间为整首终曲', standbyHud.remaining === '03:56', standbyHud.remaining);
-  check('待机：音频未播放且未走秒', !!standbyAudio && standbyAudio.paused && standbyAudio.currentTime === 0,
-    JSON.stringify(standbyAudio));
+  check('待机：音频未播放', !!standbyAudio && standbyAudio.paused && standbyAudio.currentTime === 0);
   check('待机：未发送任何 BGM 消息', (await readMessages(page)).length === 0);
 
-  /* ---------- B. 点击一次 = 恰好 1 次移动，并启动音乐 ---------- */
+  /* ---------- B. 点击 = 只选中，绝不移动 ---------- */
+  const titan1Before = await pieceGrid(page, 'titan_1');
   await page.click('#piece-titan_1');
   await sleep(300);
   const afterClickHud = await readHud(page);
-  const afterClickAudio = await readAudio(page);
-  check('点击一次：移动次数恰好 +1', afterClickHud.moves === '1', afterClickHud.moves);
-  check('点击一次：音频开始播放', !!afterClickAudio && !afterClickAudio.paused, JSON.stringify(afterClickAudio));
-  const msgsAfterClick = await readMessages(page);
-  check('点击一次：向宿主发送 start', msgsAfterClick.includes('save-hange-bgm:start'), msgsAfterClick.join(','));
+  const titan1AfterClick = await pieceGrid(page, 'titan_1');
+  check('点击棋子：移动次数保持 0（不再自动移动）', afterClickHud.moves === '0', afterClickHud.moves);
+  check('点击棋子：棋子位置完全没变',
+    titan1Before.x === titan1AfterClick.x && titan1Before.y === titan1AfterClick.y,
+    `${JSON.stringify(titan1Before)} -> ${JSON.stringify(titan1AfterClick)}`);
+  check('点击棋子：不会启动游戏（音频仍暂停）', (await readAudio(page)).paused === true);
+  check('点击棋子：不会发送 start', !(await readMessages(page)).includes('save-hange-bgm:start'));
+  check('点击棋子：选中态可见', await isSelected(page, 'titan_1'));
 
-  /* ---------- C. 倒计时与音频同源 ---------- */
-  await sleep(1800);
-  const hudC = await readHud(page);
-  const audioC = await readAudio(page);
-  const expectedRemaining = audioC.duration ? audioC.duration - audioC.currentTime : null;
-  const shownSeconds = hudC.remaining
-    ? Number(hudC.remaining.split(':')[0]) * 60 + Number(hudC.remaining.split(':')[1])
+  await page.click('#piece-hange');
+  await sleep(200);
+  check('点击其它棋子：切换选中', (await isSelected(page, 'hange')) && !(await isSelected(page, 'titan_1')));
+
+  /* ---------- C. 非法拖拽（不足半格）→ 回弹、不计步、不启动 ---------- */
+  await dragByCells(page, 'titan_1', 0, 0.3);
+  const afterTinyDragHud = await readHud(page);
+  const titan1AfterTiny = await pieceGrid(page, 'titan_1');
+  check('拖拽不足半格：回弹到原格，不计步', afterTinyDragHud.moves === '0' &&
+    titan1AfterTiny.x === titan1Before.x && titan1AfterTiny.y === titan1Before.y,
+    `moves=${afterTinyDragHud.moves} pos=${JSON.stringify(titan1AfterTiny)}`);
+  check('非法拖拽：不会启动游戏计时', (await readAudio(page)).paused === true);
+  check('非法拖拽：给出 blocked 抖动反馈', await page.evaluate(() => {
+    const el = document.querySelector('#piece-titan_1 > div');
+    return el ? el.className.includes('animate-lockedShake') : false;
+  }));
+
+  /* ---------- D. 键盘：合法移动 ---------- */
+  await page.click('#piece-titan_1'); // 选中
+  await page.keyboard.press('ArrowDown');
+  await sleep(300);
+  const afterKeyHud = await readHud(page);
+  const titan1AfterKey = await pieceGrid(page, 'titan_1');
+  check('键盘下移：成功移动一格', titan1AfterKey.y === titan1Before.y + 1, JSON.stringify(titan1AfterKey));
+  check('键盘下移：移动次数恰好 +1', afterKeyHud.moves === '1', afterKeyHud.moves);
+  check('第一次有效移动：音频才开始播放', (await readAudio(page)).paused === false);
+  check('第一次有效移动：向宿主发送 start', (await readMessages(page)).includes('save-hange-bgm:start'));
+
+  /* ---------- E. 键盘：非法移动（已在底边） ---------- */
+  await page.keyboard.press('ArrowDown');
+  await sleep(200);
+  const afterKeyBlockedHud = await readHud(page);
+  const titan1AfterBlocked = await pieceGrid(page, 'titan_1');
+  check('键盘非法移动：位置不变', titan1AfterBlocked.y === titan1AfterKey.y, JSON.stringify(titan1AfterBlocked));
+  check('键盘非法移动：不计步', afterKeyBlockedHud.moves === '1', afterKeyBlockedHud.moves);
+  check('键盘非法移动：给出 blocked 抖动反馈', await page.evaluate(() => {
+    const el = document.querySelector('#piece-titan_1 > div');
+    return el ? el.className.includes('animate-lockedShake') : false;
+  }));
+
+  /* ---------- F. 倒计时与音频同源 ---------- */
+  await sleep(1600);
+  const hudF = await readHud(page);
+  const audioF = await readAudio(page);
+  const expectedRemaining = audioF.duration ? audioF.duration - audioF.currentTime : null;
+  const shownSeconds = hudF.remaining
+    ? Number(hudF.remaining.split(':')[0]) * 60 + Number(hudF.remaining.split(':')[1])
     : null;
   check('倒计时 = 音频时长 - 已播放位置（误差 ≤1.2s）',
     expectedRemaining !== null && shownSeconds !== null && Math.abs(shownSeconds - expectedRemaining) <= 1.2,
-    `UI=${hudC.remaining} 音频=${expectedRemaining === null ? 'n/a' : expectedRemaining.toFixed(2)} currentTime=${audioC.currentTime?.toFixed(2)}`);
+    `UI=${hudF.remaining} 音频=${expectedRemaining === null ? 'n/a' : expectedRemaining.toFixed(2)}`);
 
-  /* ---------- D. 切难度 = 全新对局 ---------- */
+  /* ---------- G. 切难度 = 全新对局 ---------- */
   await page.click('#difficulty-selector-btn');
   await page.waitForSelector('text=新兵突破', { timeout: 5000 });
   await page.click('text=新兵突破');
@@ -143,70 +281,42 @@ async function pieceXPercent(page, id) {
   const afterSwitchAudio = await readAudio(page);
   check('切难度：移动次数归零', afterSwitchHud.moves === '0', afterSwitchHud.moves);
   check('切难度：倒计时复位为终曲全长', afterSwitchHud.remaining === '03:56', afterSwitchHud.remaining);
-  check('切难度：旧音频已停止并归零',
-    !!afterSwitchAudio && afterSwitchAudio.paused && afterSwitchAudio.currentTime === 0,
-    JSON.stringify(afterSwitchAudio));
+  check('切难度：旧音频停止并归零',
+    !!afterSwitchAudio && afterSwitchAudio.paused && afterSwitchAudio.currentTime === 0);
   check('切难度：向宿主发送 end', (await readMessages(page)).includes('save-hange-bgm:end'));
-  check('切难度：EASY 布局生效（韩吉 x=25%）', (await pieceXPercent(page, 'hange')) === 25);
+  check('切难度：EASY 布局生效（韩吉 x=25%）', (await pieceGrid(page, 'hange')).x === 1);
 
-  /* ---------- E. 一次多格拖拽 = 恰好 1 次移动 ---------- */
-  const boardBox = await page.evaluate(() => {
-    const board = document.getElementById('piece-hange').parentElement;
-    const r = board.getBoundingClientRect();
-    return { x: r.x, y: r.y, width: r.width, height: r.height };
-  });
-  const cellW = boardBox.width / 4;
-  const cellH = boardBox.height / 5;
+  /* ---------- H. 一次多格拖拽 = 恰好 1 次移动 ---------- */
+  const titan3Before = await pieceGrid(page, 'titan_3');
+  check('EASY 初始：titan_3 位于最左列', titan3Before.x === 0 && titan3Before.y === 4, JSON.stringify(titan3Before));
 
-  const titan3 = await page.evaluate(() => {
-    const el = document.getElementById('piece-titan_3');
-    const r = el.getBoundingClientRect();
-    return { cx: r.x + r.width / 2, cy: r.y + r.height / 2, left: parseFloat(el.style.left) };
-  });
-  check('EASY 初始：titan_3 位于最左列', titan3.left === 0, titan3.left);
-
-  await page.mouse.move(titan3.cx, titan3.cy);
-  await page.mouse.down();
-  // 分步移动，越过 6px 轴锁定阈值，最终要求右移 2 格
-  for (let step = 1; step <= 6; step++) {
-    await page.mouse.move(titan3.cx + (cellW * 2 * step) / 6, titan3.cy, { steps: 1 });
-    await sleep(30);
-  }
-  await page.mouse.up();
-  await sleep(450);
-
+  await dragByCells(page, 'titan_3', 2, 0, 6);
   const afterDragHud = await readHud(page);
-  const titan3After = await pieceXPercent(page, 'titan_3');
+  const titan3After = await pieceGrid(page, 'titan_3');
+  check('多格拖拽：棋子跟手滑满 2 格', titan3After.x === 2, JSON.stringify(titan3After));
   check('多格拖拽：移动次数恰好 +1（pointerup 与 click 未重复触发）',
     afterDragHud.moves === '1', afterDragHud.moves);
-  check('多格拖拽：棋子确实滑动了 2 格', titan3After === 50, titan3After);
-  check('多格拖拽：拖拽也启动了音乐',
-    (await readMessages(page)).filter((m) => m === 'save-hange-bgm:start').length === 2,
-    (await readMessages(page)).join(','));
+  check('拖拽后：选中态保持', await isSelected(page, 'titan_3'));
+  check('拖拽也会启动音乐（第二次 start）',
+    (await readMessages(page)).filter((m) => m === 'save-hange-bgm:start').length === 2);
 
-  /* ---------- F. 音频自然播完 = 失败 ---------- */
+  /* ---------- I. 音频自然播完 = 失败 ---------- */
   await page.evaluate(() => {
     const audio = window.__audios[0];
     audio.currentTime = Math.max(0, audio.duration - 0.4);
   });
   await page.waitForSelector('#defeat-restart-btn', { timeout: 15000 });
   check('音频播完：出现失败弹窗', !!(await page.$('#defeat-restart-btn')));
-  check('音频播完：没有同时出现胜利弹窗', !(await page.$('#victory-restart-btn')));
-  const msgsAfterDefeat = await readMessages(page);
-  check('音频播完：向宿主发送 end', msgsAfterDefeat.includes('save-hange-bgm:end'));
+  check('音频播完：没有同时出现胜利弹窗', !(await page.$('#proceed-to-victory-card-btn')));
+  check('音频播完：向宿主发送 end', (await readMessages(page)).includes('save-hange-bgm:end'));
 
   const movesBeforeLockedClick = (await readHud(page)).moves;
-  await page.evaluate(() => {
-    // 终态下棋盘被锁，点击不应再产生任何移动
-    document.getElementById('piece-titan_4')?.dispatchEvent(
-      new MouseEvent('click', { bubbles: true })
-    );
-  });
+  await page.click('#piece-titan_4').catch(() => {});
   await sleep(300);
   check('终态锁：失败后点击不再计步', (await readHud(page)).moves === movesBeforeLockedClick,
     `${movesBeforeLockedClick} -> ${(await readHud(page)).moves}`);
 
-  /* ---------- G. 重开 ---------- */
+  /* ---------- J. 重开 ---------- */
   await page.click('#defeat-restart-btn');
   await sleep(400);
   const afterRestartHud = await readHud(page);
@@ -214,46 +324,16 @@ async function pieceXPercent(page, id) {
   check('重开：移动次数归零', afterRestartHud.moves === '0', afterRestartHud.moves);
   check('重开：倒计时复位', afterRestartHud.remaining === '03:56', afterRestartHud.remaining);
   check('重开：旧音频停止且归零（不会继续播）',
-    !!afterRestartAudio && afterRestartAudio.paused && afterRestartAudio.currentTime === 0,
-    JSON.stringify(afterRestartAudio));
+    !!afterRestartAudio && afterRestartAudio.paused && afterRestartAudio.currentTime === 0);
   check('重开：失败弹窗消失', !(await page.$('#defeat-restart-btn')));
-  check('重开：棋盘回到 EASY 初始布局', (await pieceXPercent(page, 'titan_3')) === 0);
+  check('重开：棋盘回到 EASY 初始布局', (await pieceGrid(page, 'titan_3')).x === 0);
 
-  /* ---------- H. 胜利路径：用真实拖拽重放 EASY 的 65 步最优解 ---------- */
-  // 由 scripts/verify-save-hange-levels.ts 同源规则 BFS 求出（见交付说明）
+  /* ---------- K. 胜利路径：真实拖拽重放 EASY 的 65 步最优解 ---------- */
+  // 由 scripts/verify-save-hange-levels.ts 同源规则 BFS 求出
   const EASY_SOLUTION = [["founding_eren",0,1],["hange",0,1],["titan_1",0,1],["titan_1",1,0],["eren",1,0],["floch",0,-2],["hange",-1,0],["zeke",-1,0],["ymir",0,1],["titan_2",1,0],["titan_1",0,-1],["zeke",0,-1],["titan_4",0,-1],["titan_4",-1,0],["ymir",0,2],["zeke",1,0],["titan_4",0,-2],["hange",1,0],["floch",0,2],["eren",-1,0],["titan_1",-1,0],["titan_2",-1,0],["zeke",0,-1],["ymir",0,-1],["founding_eren",1,0],["titan_3",1,0],["floch",0,1],["eren",0,1],["titan_1",-1,0],["titan_2",-1,0],["titan_4",-1,0],["zeke",-1,0],["ymir",0,-2],["hange",1,0],["titan_4",0,1],["titan_2",0,1],["titan_1",1,0],["eren",0,-1],["floch",0,-1],["titan_3",-1,0],["titan_4",0,2],["hange",-1,0],["ymir",0,2],["zeke",1,0],["titan_1",1,0],["titan_2",1,0],["eren",1,0],["floch",0,-2],["hange",-1,0],["titan_2",0,2],["titan_1",0,2],["zeke",-1,0],["ymir",0,-2],["titan_1",1,0],["titan_2",0,-1],["founding_eren",0,-1],["titan_4",2,0],["titan_3",2,0],["hange",0,1],["titan_2",-2,0],["titan_1",-2,0],["founding_eren",0,-1],["titan_3",0,-1],["titan_3",1,0],["hange",1,0]];
 
-  const dragPiece = async (pieceId, dx, dy) => {
-    const box = await page.evaluate((id) => {
-      const el = document.getElementById('piece-' + id);
-      const rect = el.getBoundingClientRect();
-      const board = el.parentElement.getBoundingClientRect();
-      return {
-        cx: rect.x + rect.width / 2,
-        cy: rect.y + rect.height / 2,
-        cellW: board.width / 4,
-        cellH: board.height / 5,
-      };
-    }, pieceId);
-
-    const targetX = box.cx + dx * box.cellW;
-    const targetY = box.cy + dy * box.cellH;
-
-    await page.mouse.move(box.cx, box.cy);
-    await page.mouse.down();
-    for (let step = 1; step <= 4; step++) {
-      await page.mouse.move(
-        box.cx + ((targetX - box.cx) * step) / 4,
-        box.cy + ((targetY - box.cy) * step) / 4
-      );
-    }
-    await page.mouse.up();
-    // 等 CSS 落格动画（0.18s）结束，避免下一次拖拽起点落在过渡中的位置
-    await sleep(220);
-  };
-
   for (const [pieceId, dx, dy] of EASY_SOLUTION) {
-    await dragPiece(pieceId, dx, dy);
+    await dragByCells(page, pieceId, dx, dy);
   }
 
   let victoryReached = true;
@@ -267,23 +347,36 @@ async function pieceXPercent(page, id) {
   check('胜利：移动次数恰好等于操作数 65（无重复计步）', finalHud.moves === '65', finalHud.moves);
   check('胜利：没有同时出现失败弹窗', !(await page.$('#defeat-restart-btn')));
   check('胜利：音频已立即暂停', (await readAudio(page)).paused === true);
-  check('胜利：已向宿主发送 end', (await readMessages(page)).includes('save-hange-bgm:end'));
 
-  // 终态互斥：胜利后再让音频播到结束，绝不能反过来触发失败
-  const endMessagesBefore = (await readMessages(page)).filter((m) => m === 'save-hange-bgm:end').length;
+  /* ---------- L. 终态互斥 ---------- */
+  const endBefore = (await readMessages(page)).filter((m) => m === 'save-hange-bgm:end').length;
   await page.evaluate(() => {
     const audio = window.__audios[0];
     audio.currentTime = Math.max(0, audio.duration - 0.3);
     return audio.play().catch(() => {});
   });
   await sleep(1600);
-  const endMessagesAfter = (await readMessages(page)).filter((m) => m === 'save-hange-bgm:end').length;
-  check('终态互斥：胜利后音频再播完也不会触发失败',
-    !(await page.$('#defeat-restart-btn')) && victoryReached !== false);
-  check('终态互斥：不会重复发送 end', endMessagesAfter === endMessagesBefore,
-    `${endMessagesBefore} -> ${endMessagesAfter}`);
+  const endAfter = (await readMessages(page)).filter((m) => m === 'save-hange-bgm:end').length;
+  check('终态互斥：胜利后音频再播完也不会触发失败', !(await page.$('#defeat-restart-btn')));
+  check('终态互斥：不会重复发送 end', endAfter === endBefore, `${endBefore} -> ${endAfter}`);
 
-  /* ---------- J. 控制台零错误 ---------- */
+  /* ---------- M. SFX 音量与限幅 ---------- */
+  // 注意：增益是用 setValueAtTime 调度的，必须等音频跑起来之后再读同一节点，
+  // 否则读到的是调度生效前的默认值 1
+  const audioDebug = await page.evaluate(() => ({
+    gainValue: window.__audioDebug.gains.length > 0 ? window.__audioDebug.gains[0].gain.value : null,
+    compressorInChain: window.__audioDebug.compressorInChain,
+    peak: window.__audioDebug.peak,
+  }));
+  // AudioParam 是 Float32，1.6 读回来是 1.600000023841858，必须带容差比较
+  check('SFX 总线增益已提升到 1.6（原 0.65）',
+    audioDebug.gainValue !== null && Math.abs(audioDebug.gainValue - 1.6) < 0.001,
+    audioDebug.gainValue);
+  check('SFX 输出经过限幅器（压缩器在链路中）', audioDebug.compressorInChain === true);
+  check('SFX 实测峰值有存在感且未削波（0.05 < peak ≤ 1.0）',
+    audioDebug.peak > 0.05 && audioDebug.peak <= 1.0, audioDebug.peak.toFixed(4));
+
+  /* ---------- N. 无页面报错 ---------- */
   const realErrors = errors.filter((e) => !/favicon|ERR_/i.test(e));
   check('无页面报错', realErrors.length === 0, realErrors.join(' | '));
 

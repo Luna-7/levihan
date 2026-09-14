@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import planeBg from '../assets/images/plane_sunset_1789352611027.jpg';
 import mangaPage1 from '../assets/images/manga_rescue_1.jpg';
 import mangaPage2 from '../assets/images/manga_rescue_2.jpg';
-import { soundManager } from '../audio/soundManager';
+import { soundManager } from '../audio';
 import { X, ChevronLeft, ChevronRight, Sparkles, BookOpen, ArrowRight } from 'lucide-react';
 
 interface VictoryModalProps {

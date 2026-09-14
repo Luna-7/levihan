@@ -21,7 +21,7 @@ import rumblingBg from './assets/images/rumbling_bg_1789328679857.jpg';
 import { GameBoard } from './components/GameBoard';
 import { VictoryModal } from './components/VictoryModal';
 import { DefeatModal } from './components/DefeatModal';
-import { soundManager } from './audio/soundManager';
+import { soundManager } from './audio';
 import { saveBestRecord } from './bestRecords';
 import { applyMove, createInitialPieces, isVictory } from './gameLogic';
 import type { MoveDelta } from './gameLogic';

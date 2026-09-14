@@ -3,10 +3,23 @@
  * Supports uploaded MP3 track source, physical slide SFX, ODM gear hook sfx, heartbeats, cinematic manga swell, etc.
  */
 
+/**
+ * 操作音效（SFX）总线增益。
+ *
+ * 原值 0.65 → 1.6（约 2.5 倍），让「移动 / 选中 / 推不动」这些操作反馈明显有存在感。
+ * 提升后峰值会超过 1.0，所以总线末端串了一级 DynamicsCompressor 当作限幅器，
+ * 既不削波、不爆音，也不至于在移动端刺耳。
+ *
+ * 注意：Bauklötze 走的是 HTMLAudioElement，完全不经过这条 Web Audio 总线，
+ * 所以对局音乐音量不受本次调整影响。
+ */
+const SFX_MASTER_GAIN = 1.6;
+
 class SoundManager {
   private bgmAudio: HTMLAudioElement | null = null;
   private audioCtx: AudioContext | null = null;
   private sfxGain: GainNode | null = null;
+  private sfxLimiter: DynamicsCompressorNode | null = null;
   private isMuted: boolean = false;
   private isBgmPlaying: boolean = false;
   private currentDuration: number = 236; // Default Bauklötze duration in seconds (3:56)
@@ -67,9 +80,20 @@ class SoundManager {
     if (!this.audioCtx) {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.audioCtx = new AudioCtx();
+
+      // SFX 总线：GainNode 抬音量 → 限幅器兜峰值 → 输出
       this.sfxGain = this.audioCtx.createGain();
-      this.sfxGain.gain.setValueAtTime(this.isMuted ? 0 : 0.65, this.audioCtx.currentTime);
-      this.sfxGain.connect(this.audioCtx.destination);
+      this.sfxGain.gain.setValueAtTime(this.isMuted ? 0 : SFX_MASTER_GAIN, this.audioCtx.currentTime);
+
+      this.sfxLimiter = this.audioCtx.createDynamicsCompressor();
+      this.sfxLimiter.threshold.setValueAtTime(-8, this.audioCtx.currentTime);
+      this.sfxLimiter.knee.setValueAtTime(4, this.audioCtx.currentTime);
+      this.sfxLimiter.ratio.setValueAtTime(12, this.audioCtx.currentTime);
+      this.sfxLimiter.attack.setValueAtTime(0.003, this.audioCtx.currentTime);
+      this.sfxLimiter.release.setValueAtTime(0.12, this.audioCtx.currentTime);
+
+      this.sfxGain.connect(this.sfxLimiter);
+      this.sfxLimiter.connect(this.audioCtx.destination);
     }
     if (this.audioCtx.state === 'suspended') {
       this.audioCtx.resume();
@@ -140,9 +164,92 @@ class SoundManager {
   }
 
   /**
-   * Realistic Physical "刷刷" Swoosh Slide Sound
+   * 棋子落格：清晰、短促的"刷刷"摩擦声（一次成功移动 = 一次）
    */
-  public playSlideSound(): void {
+  public playMoveSound(): void {
+    this.playSlideSound();
+  }
+
+  /**
+   * 选中棋子：极轻的一声"嗒"，只做存在感提示，绝不抢 Bauklötze。
+   */
+  public playSelectSound(): void {
+    try {
+      const ctx = this.getAudioContext();
+      if (this.isMuted || !this.sfxGain) return;
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1180, now);
+      osc.frequency.exponentialRampToValueAtTime(820, now + 0.06);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
+   * 非法移动 / 回弹：短促低沉的"咚"，明显但不刺耳。
+   */
+  public playBlockedSound(): void {
+    try {
+      const ctx = this.getAudioContext();
+      if (this.isMuted || !this.sfxGain) return;
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(190, now);
+      osc.frequency.exponentialRampToValueAtTime(85, now + 0.12);
+      gain.gain.setValueAtTime(0.34, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.15);
+
+      // 一点点摩擦噪声，"推不动"才有质感
+      const bufferSize = Math.floor(ctx.sampleRate * 0.06);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(900, now);
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.18, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(this.sfxGain);
+      noise.start(now);
+      noise.stop(now + 0.07);
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
+   * 物理"刷刷"滑动音本体（playMoveSound 的实际实现）
+   */
+  private playSlideSound(): void {
     try {
       const ctx = this.getAudioContext();
       if (this.isMuted || !this.sfxGain) return;
@@ -348,7 +455,7 @@ class SoundManager {
       this.bgmAudio.muted = this.isMuted;
     }
     if (this.sfxGain && this.audioCtx) {
-      this.sfxGain.gain.setValueAtTime(this.isMuted ? 0 : 0.65, this.audioCtx.currentTime);
+      this.sfxGain.gain.setValueAtTime(this.isMuted ? 0 : SFX_MASTER_GAIN, this.audioCtx.currentTime);
     }
     return this.isMuted;
   }

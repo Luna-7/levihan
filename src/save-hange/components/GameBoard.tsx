@@ -1,9 +1,17 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CharacterArt } from '../data/characters';
 import type { Piece } from '../levels';
-import type { MoveDelta } from '../gameLogic';
-import { canMoveInAnyDirection, getMoveLimits } from '../gameLogic';
-import { soundManager } from '../audio/soundManager';
+import type { MoveDelta, MoveLimits } from '../gameLogic';
+import { getMoveLimits } from '../gameLogic';
+import type { Axis } from '../input';
+import {
+  KEY_DIRECTION_BY_CODE,
+  clampDragOffset,
+  resolveDragAxis,
+  resolveSnap,
+  shouldActivateDrag,
+} from '../input';
+import { soundManager } from '../audio';
 import { Plane } from 'lucide-react';
 
 interface GameBoardProps {
@@ -21,19 +29,21 @@ interface DragState {
   pieceId: string;
   startX: number;
   startY: number;
-  currentDeltaX: number;
-  currentDeltaY: number;
-  maxLeft: number;
-  maxRight: number;
-  maxUp: number;
-  maxDown: number;
-  lockAxis: 'x' | 'y' | null;
-  /** 拖拽起始网格坐标与尺寸（用于落点幽灵预览） */
+  /** 已裁剪到合法范围内的跟随位移（px） */
+  offsetX: number;
+  offsetY: number;
+  axis: Axis | null;
+  /** 按下瞬间的合法可动范围快照 */
+  limits: MoveLimits;
+  /** 落点幽灵预览用的起始格坐标与尺寸 */
   gx: number;
   gy: number;
   gw: number;
   gh: number;
 }
+
+/** 落格动画：只用很轻的 ease-out，不做弹簧 / 惯性 */
+const SNAP_TRANSITION = 'left 0.14s ease-out, top 0.14s ease-out, transform 0.14s ease-out';
 
 /** 触感反馈（无振动硬件时静默降级） */
 const haptic = (pattern: number | number[]) => {
@@ -44,271 +54,242 @@ const haptic = (pattern: number | number[]) => {
   }
 };
 
-export const GameBoard: React.FC<GameBoardProps> = ({
-  pieces,
-  onMovePiece,
-  isGameOver,
-}) => {
+export const GameBoard: React.FC<GameBoardProps> = ({ pieces, onMovePiece, isGameOver }) => {
   const [selectedPieceId, setSelectedPieceId] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [shakeId, setShakeId] = useState<string | null>(null);
+
   const boardRef = useRef<HTMLDivElement | null>(null);
   const isDraggingRef = useRef<boolean>(false);
-  /** 真实拖拽结束后要吞掉紧随其后的 click（一次手势只允许产生一次移动） */
+  /**
+   * 真实拖拽结束后要吞掉紧随其后的 click。
+   * pointerup 与 click 是两次独立事件，不隔离的话一次拖拽会被执行两次。
+   */
   const suppressClickRef = useRef<boolean>(false);
 
-  /**
-   * 某棋子四个方向各能滑几格。
-   * 规则唯一来源是 gameLogic.getMoveLimits —— 这里不允许再写一份判定。
-   */
+  /** 某棋子四个方向各能滑几格（规则唯一来源是 gameLogic） */
   const limitsOf = useCallback((piece: Piece) => getMoveLimits(pieces, piece), [pieces]);
 
-  // Execute movement
-  const commitMove = useCallback(
-    (pieceId: string, dx: number, dy: number) => {
-      if (isGameOver || (dx === 0 && dy === 0)) return;
+  /** 「推不动」反馈：轻微抖动 + 短促失败音 + 轻触感 */
+  const flashBlocked = useCallback((pieceId: string) => {
+    setShakeId(pieceId);
+    soundManager.playBlockedSound();
+    haptic(20);
+    window.setTimeout(() => setShakeId((cur) => (cur === pieceId ? null : cur)), 320);
+  }, []);
 
-      // 位移裁剪、计步、胜负判定全部由宿主用 gameLogic 统一处理：
-      // 返回 true 才算「真的动了一格」，也只有这时才响落地音。
-      const moved = onMovePiece(pieceId, { dx, dy });
-
-      if (moved) {
-        soundManager.playSlideSound(); // "刷刷" friction swoosh sound
-        haptic(8); // 轻微触感确认每一步落子
+  /** 选中：只改选中态，绝不移动棋子 */
+  const selectPiece = useCallback(
+    (pieceId: string) => {
+      if (selectedPieceId !== pieceId) {
+        soundManager.playSelectSound();
+        setSelectedPieceId(pieceId);
       }
     },
-    [isGameOver, onMovePiece]
+    [selectedPieceId]
   );
 
-  // Smart Click / Tap fallback
-  const handlePieceClick = (piece: Piece) => {
-    if (isGameOver) return;
-
-    // 刚发生过真实拖拽 → 这次 click 只是手势的尾巴，必须吞掉。
-    // 否则一次拖拽会先由 pointerup 落子、再被 click 按方向优先级落一次（重复移动 + 重复计步）。
-    if (suppressClickRef.current) {
-      suppressClickRef.current = false;
-      return;
-    }
-
-    setSelectedPieceId(piece.id);
-
-    const limits = limitsOf(piece);
-    // 四个方向都被锁死：抖动 + 触感提示「这块推不动」
-    if (!canMoveInAnyDirection(limits)) {
-      setShakeId(piece.id);
-      haptic(20);
-      window.setTimeout(() => setShakeId((cur) => (cur === piece.id ? null : cur)), 340);
-      return;
-    }
-
-    // Prioritize directions: Down > Right > Left > Up
-    if (limits.maxDown > 0) commitMove(piece.id, 0, 1);
-    else if (limits.maxRight > 0) commitMove(piece.id, 1, 0);
-    else if (limits.maxLeft > 0) commitMove(piece.id, -1, 0);
-    else if (limits.maxUp > 0) commitMove(piece.id, 0, -1);
-  };
-
-  // Pointer Down: Start Drag
-  const handlePointerDown = (e: React.PointerEvent, piece: Piece) => {
-    if (isGameOver) return;
-    setSelectedPieceId(piece.id);
-
-    const limits = limitsOf(piece);
-    isDraggingRef.current = false;
-    suppressClickRef.current = false;
-
-    setDragState({
-      pieceId: piece.id,
-      startX: e.clientX,
-      startY: e.clientY,
-      currentDeltaX: 0,
-      currentDeltaY: 0,
-      maxLeft: limits.maxLeft,
-      maxRight: limits.maxRight,
-      maxUp: limits.maxUp,
-      maxDown: limits.maxDown,
-      lockAxis: null,
-      gx: piece.x,
-      gy: piece.y,
-      gw: piece.w,
-      gh: piece.h,
-    });
-
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  };
-
-  // Pointer Move: Smooth Real-time Dragging
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!dragState || !boardRef.current || isGameOver) return;
-
-    const rect = boardRef.current.getBoundingClientRect();
-    const cellWidth = rect.width / 4;
-    const cellHeight = rect.height / 5;
-
-    const rawDeltaX = e.clientX - dragState.startX;
-    const rawDeltaY = e.clientY - dragState.startY;
-
-    // Detect if gesture exceeds minimal threshold to become a real drag
-    if (!isDraggingRef.current && (Math.abs(rawDeltaX) > 4 || Math.abs(rawDeltaY) > 4)) {
-      isDraggingRef.current = true;
-    }
-
-    let lockAxis = dragState.lockAxis;
-    if (!lockAxis && (Math.abs(rawDeltaX) > 6 || Math.abs(rawDeltaY) > 6)) {
-      const canGoX = (rawDeltaX < 0 && dragState.maxLeft > 0) || (rawDeltaX > 0 && dragState.maxRight > 0);
-      const canGoY = (rawDeltaY < 0 && dragState.maxUp > 0) || (rawDeltaY > 0 && dragState.maxDown > 0);
-
-      if (canGoX && !canGoY) {
-        lockAxis = 'x';
-      } else if (!canGoX && canGoY) {
-        lockAxis = 'y';
-      } else if (Math.abs(rawDeltaX) >= Math.abs(rawDeltaY)) {
-        lockAxis = 'x';
-      } else {
-        lockAxis = 'y';
-      }
-    }
-
-    let clampedDeltaX = 0;
-    let clampedDeltaY = 0;
-
-    if (lockAxis === 'x') {
-      const minPixelX = -dragState.maxLeft * cellWidth;
-      const maxPixelX = dragState.maxRight * cellWidth;
-      clampedDeltaX = Math.max(minPixelX, Math.min(maxPixelX, rawDeltaX));
-    } else if (lockAxis === 'y') {
-      const minPixelY = -dragState.maxUp * cellHeight;
-      const maxPixelY = dragState.maxDown * cellHeight;
-      clampedDeltaY = Math.max(minPixelY, Math.min(maxPixelY, rawDeltaY));
-    }
-
-    setDragState((prev) =>
-      prev
-        ? {
-            ...prev,
-            currentDeltaX: clampedDeltaX,
-            currentDeltaY: clampedDeltaY,
-            lockAxis,
-          }
-        : null
-    );
-  };
-
-  // Pointer Up: Commit Move or Spring Back
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (!dragState || !boardRef.current) {
-      setDragState(null);
-      isDraggingRef.current = false;
-      return;
-    }
-
-    // 快照本次手势是否真的拖动过（决定要不要吞掉随后的 click）
-    const dragged = isDraggingRef.current;
-
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
-
-    const rect = boardRef.current.getBoundingClientRect();
-    const cellWidth = rect.width / 4;
-    const cellHeight = rect.height / 5;
-
-    const { currentDeltaX, currentDeltaY, pieceId } = dragState;
-
-    let moveX = 0;
-    let moveY = 0;
-
-    // 0.25 格即吸附：低于此回弹，略一用力就跟进下一格，手感更跟手
-    if (Math.abs(currentDeltaX) > cellWidth * 0.25) {
-      moveX = Math.round(currentDeltaX / cellWidth);
-    }
-    if (Math.abs(currentDeltaY) > cellHeight * 0.25) {
-      moveY = Math.round(currentDeltaY / cellHeight);
-    }
-
-    if (moveX !== 0 || moveY !== 0) {
-      commitMove(pieceId, moveX, moveY);
-    }
-
-    setDragState(null);
-    // 拖动过就吞掉随后的 click；用状态位而不是定时器，避免 50ms 这种时序脆弱写法
-    suppressClickRef.current = dragged;
-    isDraggingRef.current = false;
-  };
-
-  // Keyboard controls（无选中时默认操控目标块「韩吉」）
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+  /**
+   * 点击 = 只选中，不移动。
+   *
+   * 早期版本会按「下 > 右 > 左 > 上」的固定优先级自动走一格，那正是
+   * 「点一下就自己动了」的根源，已彻底移除。现在改变棋子位置只有两条路径：
+   * 拖拽，或键盘方向键。
+   */
+  const handlePieceClick = useCallback(
+    (piece: Piece) => {
       if (isGameOver) return;
-      const activeId = selectedPieceId ?? 'hange';
-      if (['ArrowUp', 'KeyW'].includes(e.code)) {
-        e.preventDefault();
-        setSelectedPieceId(activeId);
-        commitMove(activeId, 0, -1);
-      } else if (['ArrowDown', 'KeyS'].includes(e.code)) {
-        e.preventDefault();
-        setSelectedPieceId(activeId);
-        commitMove(activeId, 0, 1);
-      } else if (['ArrowLeft', 'KeyA'].includes(e.code)) {
-        e.preventDefault();
-        setSelectedPieceId(activeId);
-        commitMove(activeId, -1, 0);
-      } else if (['ArrowRight', 'KeyD'].includes(e.code)) {
-        e.preventDefault();
-        setSelectedPieceId(activeId);
-        commitMove(activeId, 1, 0);
+
+      // 刚刚发生过真实拖拽 → 这次 click 只是手势的尾巴，直接吞掉
+      if (suppressClickRef.current) {
+        suppressClickRef.current = false;
+        return;
       }
+
+      selectPiece(piece.id);
+    },
+    [isGameOver, selectPiece]
+  );
+
+  /* ---------- 拖拽 ---------- */
+
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent, piece: Piece) => {
+      if (isGameOver) return;
+
+      selectPiece(piece.id);
+
+      isDraggingRef.current = false;
+      suppressClickRef.current = false;
+
+      setDragState({
+        pieceId: piece.id,
+        startX: event.clientX,
+        startY: event.clientY,
+        offsetX: 0,
+        offsetY: 0,
+        axis: null,
+        limits: limitsOf(piece),
+        gx: piece.x,
+        gy: piece.y,
+        gw: piece.w,
+        gh: piece.h,
+      });
+
+      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    },
+    [isGameOver, limitsOf, selectPiece]
+  );
+
+  const handlePointerMove = useCallback(
+    (event: React.PointerEvent) => {
+      if (!dragState || !boardRef.current || isGameOver) return;
+
+      const rect = boardRef.current.getBoundingClientRect();
+      const cellWidth = rect.width / 4;
+      const cellHeight = rect.height / 5;
+
+      const rawDx = event.clientX - dragState.startX;
+      const rawDy = event.clientY - dragState.startY;
+
+      if (!isDraggingRef.current && shouldActivateDrag(rawDx, rawDy)) {
+        isDraggingRef.current = true;
+      }
+
+      setDragState((prev) => {
+        if (!prev) return null;
+
+        const axis = resolveDragAxis(rawDx, rawDy, prev.limits, prev.axis);
+        const maxX = rawDx < 0 ? prev.limits.maxLeft : prev.limits.maxRight;
+        const maxY = rawDy < 0 ? prev.limits.maxUp : prev.limits.maxDown;
+
+        // 跟手：拖到哪儿棋子就贴到哪儿，但仍被合法范围裁住（不穿模、不出界）
+        return {
+          ...prev,
+          axis,
+          offsetX: axis === 'x' ? clampDragOffset(rawDx, maxX, cellWidth) : 0,
+          offsetY: axis === 'y' ? clampDragOffset(rawDy, maxY, cellHeight) : 0,
+        };
+      });
+    },
+    [dragState, isGameOver]
+  );
+
+  const handlePointerUp = useCallback(
+    (event: React.PointerEvent) => {
+      if (!dragState || !boardRef.current) {
+        setDragState(null);
+        isDraggingRef.current = false;
+        return;
+      }
+
+      // 快照本次手势是否真的拖动过（决定要不要吞掉随后的 click）
+      const dragged = isDraggingRef.current;
+
+      try {
+        (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+      } catch {
+        /* ignore */
+      }
+
+      const rect = boardRef.current.getBoundingClientRect();
+      const cellWidth = rect.width / 4;
+      const cellHeight = rect.height / 5;
+
+      const moveX = dragState.axis === 'x' ? resolveSnap(dragState.offsetX, cellWidth) : 0;
+      const moveY = dragState.axis === 'y' ? resolveSnap(dragState.offsetY, cellHeight) : 0;
+
+      setDragState(null);
+      suppressClickRef.current = dragged;
+      isDraggingRef.current = false;
+
+      if (moveX !== 0 || moveY !== 0) {
+        const moved = onMovePiece(dragState.pieceId, { dx: moveX, dy: moveY });
+        if (moved) {
+          soundManager.playMoveSound();
+          haptic(8);
+        } else {
+          // 兜底：越界部分已在拖动时裁掉，真没动就不计步、给失败反馈
+          flashBlocked(dragState.pieceId);
+        }
+        return;
+      }
+
+      // 拖动过但不足半格 → 回弹，并给出「没落格」的反馈；纯点击不触发
+      if (dragged) flashBlocked(dragState.pieceId);
+    },
+    [dragState, flashBlocked, onMovePiece]
+  );
+
+  /* ---------- 键盘：每次输入 = 单格移动 ---------- */
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isGameOver) return;
+
+      const delta = KEY_DIRECTION_BY_CODE[event.code];
+      if (!delta) return;
+      event.preventDefault();
+
+      // 没有选中时默认操控目标块「韩吉」，并把它显式选中，让玩家看得见
+      const targetId = selectedPieceId ?? 'hange';
+      if (selectedPieceId !== targetId) setSelectedPieceId(targetId);
+
+      const moved = onMovePiece(targetId, delta);
+      if (!moved) flashBlocked(targetId);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedPieceId, isGameOver, commitMove]);
+  }, [selectedPieceId, isGameOver, onMovePiece, flashBlocked]);
 
-  // 自适应棋盘尺寸：按容器可用空间计算（保持 4:5），不再依赖固定像素断点，
-  // 保证在任意宽度的 9:16 iframe 内都完整显示不溢出
+  /* ---------- 自适应棋盘尺寸（保持 4:5，不依赖固定断点） ---------- */
+
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [boardSize, setBoardSize] = useState<{ w: number; h: number }>({ w: 320, h: 400 });
+
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
+
     const measure = () => {
-      const r = el.getBoundingClientRect();
-      const availW = r.width;
-      const availH = r.height > 0 ? r.height : r.width * 1.25;
-      const w = Math.max(220, Math.min(availW, availH * 0.8, 460));
-      setBoardSize({ w: Math.round(w), h: Math.round(w * 1.25) });
+      const rect = el.getBoundingClientRect();
+      const availableWidth = rect.width;
+      const availableHeight = rect.height > 0 ? rect.height : rect.width * 1.25;
+      const width = Math.max(220, Math.min(availableWidth, availableHeight * 0.8, 460));
+      setBoardSize({ w: Math.round(width), h: Math.round(width * 1.25) });
     };
+
     measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
-  // 拖拽落点幽灵预览：跟随手指吸附到最近可行格，松手即落在该格
+  /** 拖拽落点幽灵预览：跟随手指吸附到最近可行格 */
   const dragGhost = (() => {
-    if (!dragState) return null;
+    if (!dragState || !dragState.axis) return null;
+
     const cellW = boardSize.w / 4;
     const cellH = boardSize.h / 5;
-    let tx = 0;
-    let ty = 0;
-    if (dragState.lockAxis === 'x') {
-      tx = Math.max(-dragState.maxLeft, Math.min(dragState.maxRight, Math.round(dragState.currentDeltaX / cellW)));
-    } else if (dragState.lockAxis === 'y') {
-      ty = Math.max(-dragState.maxUp, Math.min(dragState.maxDown, Math.round(dragState.currentDeltaY / cellH)));
-    }
+    const steps =
+      dragState.axis === 'x'
+        ? resolveSnap(dragState.offsetX, cellW)
+        : resolveSnap(dragState.offsetY, cellH);
+
     return {
-      left: (dragState.gx + tx) * 25,
-      top: (dragState.gy + ty) * 20,
+      left: (dragState.gx + (dragState.axis === 'x' ? steps : 0)) * 25,
+      top: (dragState.gy + (dragState.axis === 'y' ? steps : 0)) * 20,
       w: dragState.gw * 25,
       h: dragState.gh * 20,
     };
   })();
 
   return (
-    <div ref={rootRef} className="flex items-center justify-center select-none w-full h-full min-h-0 max-w-2xl mx-auto">
+    <div
+      ref={rootRef}
+      className="flex items-center justify-center select-none w-full h-full min-h-0 max-w-2xl mx-auto"
+    >
       {/* 4x5 Board Surface */}
       <div
         ref={boardRef}
@@ -327,13 +308,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         <div className="absolute bottom-0 left-[25%] w-[50%] h-[20%] border-t-2 border-dashed border-[#55b382]/80 bg-[#163023]/60 flex flex-col items-center justify-center text-[#5eead4] pointer-events-none z-0">
           <div className="flex items-center gap-1 px-2.5 py-1 bg-[#09150f]/90 border border-[#3e7e5d] text-[#6ee7b7] shadow-md animate-pulse">
             <Plane className="w-4 h-4 md:w-5 md:h-5 text-[#34d399] -rotate-45" />
-            <span className="text-[10px] md:text-xs font-bold tracking-widest">
-              飞机 (EXIT)
-            </span>
+            <span className="text-[10px] md:text-xs font-bold tracking-widest">飞机 (EXIT)</span>
           </div>
         </div>
 
-        {/* Drag Ghost Preview: 松手落点的虚线幽灵格 */}
+        {/* 拖拽落点预览 */}
         {dragGhost && (
           <div
             className="absolute border-2 border-dashed border-[#34d399]/80 bg-[#34d399]/15 rounded-sm pointer-events-none z-20 transition-[left,top] duration-100 ease-out"
@@ -352,33 +331,26 @@ export const GameBoard: React.FC<GameBoardProps> = ({
           const isHans = piece.type === 'target';
           const isCurrentlyDragging = dragState?.pieceId === piece.id;
 
-          const leftPct = piece.x * 25;
-          const topPct = piece.y * 20;
-          const widthPct = piece.w * 25;
-          const heightPct = piece.h * 20;
-
-          const dragX = isCurrentlyDragging ? dragState.currentDeltaX : 0;
-          const dragY = isCurrentlyDragging ? dragState.currentDeltaY : 0;
+          const dragX = isCurrentlyDragging ? dragState.offsetX : 0;
+          const dragY = isCurrentlyDragging ? dragState.offsetY : 0;
 
           return (
             <div
               key={piece.id}
               id={`piece-${piece.id}`}
               onClick={() => handlePieceClick(piece)}
-              onPointerDown={(e) => handlePointerDown(e, piece)}
+              onPointerDown={(event) => handlePointerDown(event, piece)}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
               style={{
-                left: `${leftPct}%`,
-                top: `${topPct}%`,
-                width: `${widthPct}%`,
-                height: `${heightPct}%`,
+                left: `${piece.x * 25}%`,
+                top: `${piece.y * 20}%`,
+                width: `${piece.w * 25}%`,
+                height: `${piece.h * 20}%`,
                 transform: `translate3d(${dragX}px, ${dragY}px, 0)`,
-                // 弹簧曲线：略过冲再回弹，落格更「脆」
-                transition: isCurrentlyDragging
-                  ? 'none'
-                  : 'left 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.08), top 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.08), transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.08)',
+                // 拖拽中不做补间（严格跟手）；松手后由这段轻量 ease-out 完成吸附
+                transition: isCurrentlyDragging ? 'none' : SNAP_TRANSITION,
                 willChange: isCurrentlyDragging ? 'transform' : 'left, top',
                 touchAction: 'none',
                 zIndex: isCurrentlyDragging ? 30 : 10,
@@ -390,13 +362,13 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                   shakeId === piece.id ? 'animate-lockedShake' : ''
                 } ${
                   isSelected || isCurrentlyDragging
-                    ? 'border-[#34d399] ring-2 ring-[#34d399]/80 shadow-[0_0_20px_rgba(52,211,153,0.6)]'
+                    ? 'border-[#34d399] ring-2 ring-[#34d399]/80 shadow-[0_0_18px_rgba(52,211,153,0.55)]'
                     : isHans
-                    ? 'border-[#4ade80] shadow-[0_4px_12px_rgba(0,0,0,0.8)] hover:brightness-110'
-                    : 'border-[#1b382b] shadow-[0_3px_8px_rgba(0,0,0,0.7)] hover:border-[#2d5a45] hover:brightness-110'
+                      ? 'border-[#4ade80] shadow-[0_4px_12px_rgba(0,0,0,0.8)] hover:brightness-110'
+                      : 'border-[#1b382b] shadow-[0_3px_8px_rgba(0,0,0,0.7)] hover:border-[#2d5a45] hover:brightness-110'
                 }`}
               >
-                {/* Character Illustration / Graphic (Clean, without top-left name) */}
+                {/* Character Illustration / Graphic */}
                 <div className="absolute inset-0 z-0 pointer-events-none">
                   <CharacterArt id={piece.id} />
                 </div>
@@ -408,7 +380,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                   </div>
                 )}
 
-                {/* Subtle border accent */}
                 <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-[#34d399]/30 to-transparent z-10 pointer-events-none" />
               </div>
             </div>
