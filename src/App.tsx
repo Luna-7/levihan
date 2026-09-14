@@ -14,9 +14,14 @@ export default function App() {
   // 支持 ?tab=<name> 深度直达任意分区（配合 TatakaruGame 的 ?game=hange 可直达拯救韩吉对局）
   const [activeTab, setActiveTab] = useState<'home' | 'resources' | 'doujinshi' | 'tatakaru'>(() => {
     if (typeof window !== 'undefined') {
-      const tab = new URLSearchParams(window.location.search).get('tab');
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
       if (tab === 'tatakaru' || tab === 'resources' || tab === 'doujinshi') {
         return tab;
+      }
+      const game = params.get('game');
+      if (game === 'hange' || game === '2048') {
+        return 'tatakaru';
       }
     }
     return 'home';
