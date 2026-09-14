@@ -106,7 +106,7 @@ export const HeaderCard: React.FC<Props> = ({
               : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
           }`}
         >
-          <span className="shrink-0">🔒</span>
+          <span className="shrink-0">🍠</span>
           <span className="truncate">土豆粮仓驻地</span>
         </button>
 

@@ -1,12 +1,73 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import path from 'path';
-import { defineConfig } from 'vite';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig(() => ({
+const localDoujinAuth = (expectedPassword?: string): Plugin => {
+  const middleware = (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+    if (request.url !== '/api/doujin-auth') {
+      next();
+      return;
+    }
+
+    response.setHeader('Content-Type', 'application/json; charset=utf-8');
+    response.setHeader('Cache-Control', 'no-store');
+
+    if (request.method !== 'POST') {
+      response.statusCode = 405;
+      response.setHeader('Allow', 'POST');
+      response.end(JSON.stringify({ ok: false }));
+      return;
+    }
+
+    let body = '';
+    request.on('data', (chunk) => {
+      body += chunk;
+    });
+    request.on('end', () => {
+      if (!expectedPassword) {
+        response.statusCode = 503;
+        response.end(JSON.stringify({ ok: false }));
+        return;
+      }
+
+      let suppliedPassword = '';
+      try {
+        const parsed = JSON.parse(body) as { password?: unknown };
+        suppliedPassword = typeof parsed.password === 'string' ? parsed.password : '';
+      } catch {
+        // Invalid input is treated as a failed password attempt.
+      }
+
+      const suppliedHash = createHash('sha256').update(suppliedPassword).digest();
+      const expectedHash = createHash('sha256').update(expectedPassword).digest();
+      const isValid = timingSafeEqual(suppliedHash, expectedHash);
+      response.statusCode = isValid ? 200 : 401;
+      response.end(JSON.stringify({ ok: isValid }));
+    });
+  };
+
+  return {
+    name: 'local-doujin-auth',
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+  };
+};
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+
+  return ({
   define: { global: 'globalThis' },
   plugins: [
+    localDoujinAuth(env.DOUJIN_PASSWORD),
     react(),
     tailwindcss(),
     VitePWA({
@@ -18,6 +79,7 @@ export default defineConfig(() => ({
         'icons/icon-192x192.png',
         'icons/icon-512x512.png',
         'icons/icon-maskable-512x512.png',
+        'images/archive-maintenance.png',
         'sounds/bgm.mp3',
       ],
       workbox: {
@@ -67,4 +129,5 @@ export default defineConfig(() => ({
     // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
     watch: process.env.DISABLE_HMR === 'true' ? null : {},
   },
-}));
+  });
+});

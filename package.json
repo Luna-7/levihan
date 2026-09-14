@@ -14,6 +14,9 @@
     "lint": "tsc --noEmit",
     "verify:levels": "node scripts/verify-save-hange-levels.ts"
   },
+  "allowScripts": {
+    "esbuild": true
+  },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1131.0",
     "@tailwindcss/vite": "^4.1.14",

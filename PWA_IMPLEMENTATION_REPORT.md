@@ -15,6 +15,7 @@
 - `public/icons/icon-192x192.png`
 - `public/icons/icon-512x512.png`
 - `public/icons/icon-maskable-512x512.png`
+- `public/images/archive-maintenance.png`
 - `PWA_IMPLEMENTATION_REPORT.md`
 
 `sw.js`、`workbox-*.js` 和 `registerSW.js` 由构建生成在 `dist/`，不作为源文件维护。
@@ -42,8 +43,8 @@
 使用 `vite-plugin-pwa` 的 `generateSW` / Workbox 成熟方案：
 
 - `registerType: autoUpdate`
-- App Shell precache：构建后的 `index.html`、主站 JS/CSS、favicon、PWA icons、主站 BGM。
-- 实际构建 precache：10 项，共 916.56 KiB。
+- App Shell precache：构建后的 `index.html`、主站 JS/CSS、favicon、PWA icons、维护页图片、主站 BGM。
+- 实际构建 precache：11 项，共 923.96 KiB。
 - `cleanupOutdatedCaches: true` 清理旧的 Workbox precache。
 - Vercel 对 `sw.js` 使用 `no-cache, no-store, must-revalidate`，避免 worker 文件永久陈旧。
 - navigation fallback 为 `index.html`；游戏子应用和管理页路径加入 denylist，避免其 HTML 被错误替换成主站 HTML。
@@ -88,7 +89,7 @@
 
 - Build verification: **PASS** — `npm run build`
 - TypeScript/lint: **PASS** — `npm run lint`
-- Manifest JSON、图标尺寸、`sw.js`、Workbox 文件、注册脚本和 10 项 precache 清单静态检查：**PASS**
+- Manifest JSON、图标尺寸、`sw.js`、Workbox 文件、注册脚本和 11 项 precache 清单静态检查：**PASS**
 - Static inspection: **PASS**
 - Browser verification: **PASS（本地 Vite preview / Chromium）**
   - `?tab=resources`: query 保留且页面正确渲染。
@@ -123,6 +124,6 @@
 
 **这个版本已经具备标准 PWA 的基础安装条件**：有有效 manifest、标准图标、HTTPS 部署目标、已注册并可更新的 Service Worker，以及可离线启动的 App Shell。正式域名上的安装提示仍应按上面的真机 checklist 最终确认。
 
-- **安装后首次打开**：下载约 916.56 KiB 的 App Shell precache；游戏和漫画不会被批量下载。首次进入某游戏/漫画时，实际请求到的资源进入对应 runtime cache。
+- **安装后首次打开**：下载约 923.96 KiB 的 App Shell precache；游戏和漫画不会被批量下载。首次进入某游戏/漫画时，实际请求到的资源进入对应 runtime cache。
 - **第二次打开**：App Shell 优先从本地快速启动；已访问游戏和漫画资源优先命中各自缓存，同时 Service Worker 自动检查应用更新。
 - **离线打开**：App Shell 可启动，主站本地 UI 可显示；已访问并完整缓存的游戏/漫画尽量可用，未访问的远程资源和未打开过的游戏不会凭空离线可用。

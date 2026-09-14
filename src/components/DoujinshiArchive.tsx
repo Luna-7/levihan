@@ -7,6 +7,7 @@ import { soundManager } from '../utils/audio';
 import { cosService } from '../services/cosClient';
 import { NovelModule } from './NovelModule';
 import LazyComicPage from './LazyComicPage';
+import { DOUJIN_SESSION_KEY, DoujinMaintenanceGate } from './DoujinMaintenanceGate';
 
 interface Props {
   onCopyCode?: (code: string) => void;
@@ -23,6 +24,13 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('漫画本');
   const [selectedTag, setSelectedTag] = useState<string>('全部');
+  const [isMangaUnlocked, setIsMangaUnlocked] = useState<boolean>(() => {
+    try {
+      return window.sessionStorage.getItem(DOUJIN_SESSION_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   // 当前正在无缝长图阅读的书籍
   const [readingBook, setReadingBook] = useState<DoujinBookItem | null>(null);
@@ -223,8 +231,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
       {/* 典藏公约红线轻量提示 */}
       <div className="p-2 px-3 bg-[#FBF0EE] border-l-3 border-[#C0392B] rounded-r-xs font-retro-jp text-[11px] text-[#900C3F] flex items-center">
         <div>
-          <span className="font-bold">⚠️ 典藏公约：</span>
-          本专区由利韩同好自发汉化嵌字。<b>严禁倒卖商用、严禁转传闲鱼微店</b>，请共同守护创作者的心血。
+          <span className="font-bold">⚠️ 公约：</span>
+          本专区由利韩同好自发分享。<b>严禁倒卖商用、严禁转传闲鱼微店</b>，请共同守护创作者的心血。
         </div>
       </div>
 
@@ -251,7 +259,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           ))}
 
           {/* 标签行：漫画本的标签与小说本不通用，小说本模块有自己的题材筛选，此处隐藏 */}
-          {selectedCategory !== '小说本' && (
+          {(selectedCategory === '插画集' || isMangaUnlocked) && (
             <>
               <span className="text-[10px] font-pixel text-[#8C7A68] ml-2 mr-1">标签:</span>
               <div className="flex flex-wrap gap-1">
@@ -277,6 +285,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         </div>
 
         {/* 搜索框 */}
+        {(selectedCategory !== '漫画本' || isMangaUnlocked) && (
         <div className="flex items-center gap-1.5 pt-1 border-t border-dashed border-[#E0D5BE]">
           <input
             type="text"
@@ -294,6 +303,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
             </button>
           )}
         </div>
+        )}
       </div>
 
       {/* 小说本 = 专属视图：段切换（在线小说 / 站外推荐）+ 题材筛选 + 瀑布流 */}
@@ -303,7 +313,10 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
       {/* 典藏本卡片网格：点击直接进入查看长图（手机两列，封面为竖版漫画本比例）；小说本视图下由上方模块接管 */}
       {selectedCategory !== '小说本' && (
-        <>
+        <DoujinMaintenanceGate
+          enabled={selectedCategory === '漫画本' && !isMangaUnlocked}
+          onUnlock={() => setIsMangaUnlocked(true)}
+        >
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
         {filteredBooks.map((book) => {
           // 通过 COS 逻辑层动态生成封面 CDN 地址
@@ -437,15 +450,14 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
               </div>
             </div>
           );
-        })}
+          })}
           </div>
-        </>
-      )}
-
-      {selectedCategory !== '小说本' && filteredBooks.length === 0 && (
-        <div className="p-8 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
-          没有检索到符合条件的同人本，您可以清空搜索条件或调整分类～
-        </div>
+          {filteredBooks.length === 0 && (
+            <div className="p-8 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
+              没有检索到符合条件的同人本，您可以清空搜索条件或调整分类～
+            </div>
+          )}
+        </DoujinMaintenanceGate>
       )}
     </div>
   );
