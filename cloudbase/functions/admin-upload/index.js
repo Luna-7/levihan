@@ -22,6 +22,10 @@
  *   upload    (token) {bookId,fileName,dataBase64,contentType} → { key, bytes }
  *   publish   (token) {book}              → { books }
  *   remove    (token) {id, deleteFiles}   → { id, deletedObjects, books }
+ *   novelList     (token)                          → { novels }
+ *   novelSave     (token) {id?,title,author,body,authorNote?,warning?,tags?} → { novel, novels }
+ *   novelDelete   (token) {id}                     → { id, novels }
+ *   recs          (token) {items: RecommendItem[]} → { count }   // 落桶 recs.json
  */
 'use strict';
 
@@ -33,6 +37,9 @@ const BUCKET = process.env.COS_BUCKET || 'levihan-1325571558';
 const REGION = process.env.COS_REGION || 'ap-nanjing';
 const ARCHIVE_KEY = 'archive.json';
 const TAGS_KEY = 'tags.json';   // 全站标签库（string[]），供上传台下拉选择
+const NOVELS_KEY = 'novels.json';   // 在线小说索引（GroupNovel[]）
+const NOVEL_DIR = 'novels/';        // 在线小说正文：novels/{id}.txt（纯文本）
+const MAX_NOVEL_CHARS = 500000;     // 单篇正文字数上限
 const MAX_BYTES = 4 * 1024 * 1024; // 单文件上限 4MB
 const MAX_BODY = 6 * 1024 * 1024; // 请求体上限 6MB（HTTP 访问服务 / API 网关的硬上限）
 const TOKEN_TTL = 2 * 60 * 60; // 令牌有效期 2 小时
@@ -213,6 +220,97 @@ function normalizeBook(raw) {
   return book;
 }
 
+/* ------------------------------ 在线小说 ------------------------------ */
+
+const NOVEL_ID_RE = /^[a-z0-9][a-z0-9-]{2,39}$/;
+
+/** 读取在线小说索引；文件不存在则视为空数组 */
+async function readNovels() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: NOVELS_KEY });
+    const text = Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body);
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+
+async function writeNovels(novels) {
+  await putObject({
+    Bucket: BUCKET,
+    Region: REGION,
+    Key: NOVELS_KEY,
+    Body: Buffer.from(JSON.stringify(novels, null, 2), 'utf8'),
+    ContentType: 'application/json; charset=utf-8',
+    CacheControl: 'no-cache',
+  });
+}
+
+/** 校验并规范化小说元数据；正文字数由调用方传入 */
+function normalizeNovelMeta(raw, chars) {
+  const title = String(raw.title || '').trim();
+  if (!title) throw httpError('缺少「标题」', 400);
+  if (title.length > 120) throw httpError('标题过长（上限 120 字）', 400);
+
+  let id = String(raw.id || '').trim();
+  if (!id) id = 'nv-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  if (!NOVEL_ID_RE.test(id)) throw httpError('非法小说 ID', 400);
+
+  const meta = {
+    id,
+    title,
+    author: String(raw.author || '').trim() || '佚名',
+    chars,
+    createdAt: String(raw.createdAt || '').trim() || new Date().toISOString(),
+  };
+  if (String(raw.updatedAt || '').trim()) meta.updatedAt = String(raw.updatedAt).trim();
+
+  // 可选字段只在有真实值时写入（与归档约定一致）
+  const authorNote = String(raw.authorNote || '').trim().slice(0, 2000);
+  if (authorNote) meta.authorNote = authorNote;
+
+  const warning = String(raw.warning || '').trim().slice(0, 100);
+  if (warning) meta.warning = warning;
+
+  const rawTags = Array.isArray(raw.tags)
+    ? raw.tags
+    : String(raw.tags || '').split(/[,，]/);
+  const tags = rawTags.map((t) => String(t == null ? '' : t).trim()).filter(Boolean).slice(0, 20);
+  if (tags.length) meta.tags = tags;
+
+  return meta;
+}
+
+/** 站外推荐表（recs.json）：白名单字段 + 轻校验后整表覆盖 */
+function normalizeRecs(items) {
+  const out = [];
+  const seen = new Set();
+  items.forEach((raw) => {
+    const title = String((raw && raw.title) || '').trim();
+    if (!title) return;
+    const url = /^https?:\/\//.test(String((raw && raw.url) || '').trim()) ? String(raw.url).trim() : '';
+    if (url && seen.has(url)) return;
+    if (url) seen.add(url);
+    const item = {
+      id: String((raw && raw.id) || '').trim() || `rec-${out.length}`,
+      title,
+      url,
+      type: String((raw && raw.type) || '').trim() || '未分类',
+      rating: String((raw && raw.rating) || '').trim() || '未标注',
+    };
+    const site = String((raw && raw.site) || '').trim();
+    if (site) item.site = site;
+    const recommender = String((raw && raw.recommender) || '').trim();
+    if (recommender) item.recommender = recommender;
+    const reason = String((raw && raw.reason) || '').trim();
+    if (reason) item.reason = reason;
+    out.push(item);
+  });
+  return out;
+}
+
 /** 列出某目录下全部对象 Key（自动翻页） */
 async function listAllKeys(prefix) {
   const keys = [];
@@ -339,6 +437,74 @@ async function handle(action, payload) {
       const next = books.filter((b) => b && b.id !== id);
       await writeArchive(next);
       return { ok: true, id, deletedObjects, count: next.length, books: next };
+    }
+
+    /* -------- 在线小说（小说本模块第一段） -------- */
+
+    case 'novelList': {
+      const novels = await readNovels();
+      return { ok: true, count: novels.length, novels };
+    }
+
+    case 'novelSave': {
+      const text = String(payload.body || '').replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '');
+      if (!text.trim()) throw httpError('正文不能为空', 400);
+      if (text.length > MAX_NOVEL_CHARS) throw httpError(`正文超过 ${MAX_NOVEL_CHARS} 字上限`, 413);
+
+      const meta = normalizeNovelMeta(payload, text.length);
+      await putObject({
+        Bucket: BUCKET,
+        Region: REGION,
+        Key: `${NOVEL_DIR}${meta.id}.txt`,
+        Body: Buffer.from(text, 'utf8'),
+        ContentType: 'text/plain; charset=utf-8',
+        CacheControl: 'no-cache',
+      });
+
+      const novels = await readNovels();
+      const idx = novels.findIndex((n) => n && n.id === meta.id);
+      const replaced = idx >= 0;
+      if (replaced) {
+        meta.createdAt = novels[idx].createdAt || meta.createdAt;
+        meta.updatedAt = new Date().toISOString();
+        novels[idx] = meta;
+      } else {
+        novels.unshift(meta);
+      }
+      novels.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      await writeNovels(novels);
+      return { ok: true, replaced, novel: meta, count: novels.length, novels };
+    }
+
+    case 'novelDelete': {
+      const id = String(payload.id || '').trim();
+      if (!NOVEL_ID_RE.test(id)) throw httpError('非法小说 ID', 400);
+
+      const novels = await readNovels();
+      const next = novels.filter((n) => n && n.id !== id);
+      await deleteMultipleObject({
+        Bucket: BUCKET,
+        Region: REGION,
+        Objects: [{ Key: `${NOVEL_DIR}${id}.txt` }],
+      });
+      await writeNovels(next);
+      return { ok: true, id, count: next.length, novels: next };
+    }
+
+    /* -------- 站外推荐表（recs.json，整表覆盖；SSOT 是腾讯表格，此处只做落桶） -------- */
+
+    case 'recs': {
+      if (!Array.isArray(payload.items)) throw httpError('items 必须是数组', 400);
+      const recs = normalizeRecs(payload.items);
+      await putObject({
+        Bucket: BUCKET,
+        Region: REGION,
+        Key: 'recs.json',
+        Body: Buffer.from(JSON.stringify(recs, null, 2), 'utf8'),
+        ContentType: 'application/json; charset=utf-8',
+        CacheControl: 'no-cache',
+      });
+      return { ok: true, count: recs.length };
     }
 
     default:

@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import {
   DOUJIN_ARCHIVE_DATA,
 } from '../data/doujinArchiveData';
-import { DoujinBookItem } from '../types/doujinArchive';
+import { DoujinBookItem, RecommendItem, GroupNovel } from '../types/doujinArchive';
 import { soundManager } from '../utils/audio';
 import { cosService } from '../services/cosClient';
+import { NovelModule } from './NovelModule';
 
 interface Props {
   onCopyCode?: (code: string) => void;
@@ -19,7 +20,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
   // 搜索与多维筛选
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('全部');
+  const [selectedCategory, setSelectedCategory] = useState<string>('漫画本');
   const [selectedTag, setSelectedTag] = useState<string>('全部');
 
   // 当前正在无缝长图阅读的书籍
@@ -29,14 +30,20 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const [detectedPages, setDetectedPages] = useState<number | null>(null);
   const [isDetectingPages, setIsDetectingPages] = useState<boolean>(false);
 
+  // 站外推荐表（recs.json）与在线小说索引（novels.json）；读不到则为空 → 对应段不渲染
+  const [recs, setRecs] = useState<RecommendItem[]>([]);
+  const [novels, setNovels] = useState<GroupNovel[]>([]);
+
   // 统计所有标签（动态汇总当前数据中的所有标签）
-  const allCategories = ['全部', '漫画本', '小说本', '插画集'];
+  const allCategories = ['漫画本', '小说本', '插画集'];
   const dynamicTags = Array.from(new Set(books.flatMap((b) => b.tags || [])));
   const allTags = ['全部', ...dynamicTags];
 
-  // 组件挂载时自动尝试同步 COS 远端归档
+  // 组件挂载时自动尝试同步 COS 远端归档（推荐表与在线小说索引并行加载，失败静默降级）
   useEffect(() => {
     handleRefreshArchive(false);
+    cosService.loadRecsData().then(setRecs).catch(() => {});
+    cosService.loadNovelList().then(setNovels).catch(() => {});
   }, []);
 
   // 刷新归档数据 (尝试从 COS 获取 archive.json)
@@ -88,7 +95,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
   // 过滤同人本列表
   const filteredBooks = books.filter((book) => {
-    const matchCat = selectedCategory === '全部' || (book.category || '漫画本') === selectedCategory;
+    const matchCat = (book.category || '漫画本') === selectedCategory;
     const matchTag = selectedTag === '全部' || book.tags.includes(selectedTag);
     const q = searchQuery.trim().toLowerCase();
     const matchSearch =
@@ -246,25 +253,30 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
             </button>
           ))}
 
-          <span className="text-[10px] font-pixel text-[#8C7A68] ml-2 mr-1">标签:</span>
-          <div className="flex flex-wrap gap-1">
-            {allTags.map((tag) => (
-              <button
-                key={tag}
-                onClick={() => {
-                  soundManager.playBlip();
-                  setSelectedTag(tag);
-                }}
-                className={`px-1.5 py-0.5 rounded-xs border text-[10px] font-retro-jp transition-all cursor-pointer ${
-                  selectedTag === tag
-                    ? 'bg-[#B7791F] text-[#FFFEEF] border-[#B7791F] font-bold'
-                    : 'bg-[#FAF5E8] text-[#7A6958] border-[#E0D5BE] hover:bg-white'
-                }`}
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
+          {/* 标签行：漫画本的标签与小说本不通用，小说本模块有自己的题材筛选，此处隐藏 */}
+          {selectedCategory !== '小说本' && (
+            <>
+              <span className="text-[10px] font-pixel text-[#8C7A68] ml-2 mr-1">标签:</span>
+              <div className="flex flex-wrap gap-1">
+                {allTags.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => {
+                      soundManager.playBlip();
+                      setSelectedTag(tag);
+                    }}
+                    className={`px-1.5 py-0.5 rounded-xs border text-[10px] font-retro-jp transition-all cursor-pointer ${
+                      selectedTag === tag
+                        ? 'bg-[#B7791F] text-[#FFFEEF] border-[#B7791F] font-bold'
+                        : 'bg-[#FAF5E8] text-[#7A6958] border-[#E0D5BE] hover:bg-white'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* 搜索框 */}
@@ -287,8 +299,15 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         </div>
       </div>
 
-      {/* 典藏本卡片网格：点击直接进入查看长图（手机两列，封面为竖版漫画本比例） */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+      {/* 小说本 = 专属视图：段切换（在线小说 / 站外推荐）+ 题材筛选 + 瀑布流 */}
+      {selectedCategory === '小说本' && (
+        <NovelModule searchQuery={searchQuery} recs={recs} novels={novels} onShowToast={onShowToast} />
+      )}
+
+      {/* 典藏本卡片网格：点击直接进入查看长图（手机两列，封面为竖版漫画本比例）；小说本视图下由上方模块接管 */}
+      {selectedCategory !== '小说本' && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
         {filteredBooks.map((book) => {
           // 通过 COS 逻辑层动态生成封面 CDN 地址
           const coverUrl = cosService.getCoverUrl(book);
@@ -425,9 +444,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
             </div>
           );
         })}
-      </div>
+          </div>
+        </>
+      )}
 
-      {filteredBooks.length === 0 && (
+      {selectedCategory !== '小说本' && filteredBooks.length === 0 && (
         <div className="p-8 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
           没有检索到符合条件的同人本，您可以清空搜索条件或调整分类～
         </div>

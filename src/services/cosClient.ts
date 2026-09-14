@@ -2,7 +2,7 @@ import {
   S3Client,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
-import { DoujinBookItem } from '../types/doujinArchive';
+import { DoujinBookItem, RecommendItem, GroupNovel } from '../types/doujinArchive';
 import { DOUJIN_ARCHIVE_DATA, TENCENT_COS_CONFIG } from '../data/doujinArchiveData';
 
 export interface COSConfigState {
@@ -207,6 +207,48 @@ export class COSService {
       console.error('S3 ListObjectsV2 error:', err);
       throw err;
     }
+  }
+
+  /**
+   * 加载站外推荐表（recs.json）。读不到 / 解析失败 → 空数组（推荐区整块不渲染，不报错）
+   */
+  public async loadRecsData(): Promise<RecommendItem[]> {
+    if (!this.config.cdnBaseUrl) return [];
+    try {
+      const resp = await fetch(this.getObjectUrl('recs.json'), { mode: 'cors', cache: 'no-cache' });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (Array.isArray(data)) {
+          console.log('[COSService] Successfully fetched remote recs.json:', data.length, 'recs');
+          return data;
+        }
+      }
+    } catch (e) {
+      // 推荐数据缺失时优雅降级
+    }
+    return [];
+  }
+
+  /**
+   * 加载在线小说索引（novels.json，只含元数据不含正文）。读不到 → 空数组
+   */
+  public async loadNovelList(): Promise<GroupNovel[]> {
+    if (!this.config.cdnBaseUrl) return [];
+    try {
+      const resp = await fetch(this.getObjectUrl('novels.json'), { mode: 'cors', cache: 'no-cache' });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (Array.isArray(data)) return data;
+      }
+    } catch (e) {
+      // 在线小说缺失时优雅降级
+    }
+    return [];
+  }
+
+  /** 在线小说正文直链（novels/{id}.txt，点开卡片时才加载） */
+  public getNovelBodyUrl(id: string): string {
+    return this.getObjectUrl(`novels/${id}.txt`);
   }
 
   /**

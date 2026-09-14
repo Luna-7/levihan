@@ -10,17 +10,31 @@ const BGM_SRC = '/sounds/bgm.mp3';
 const BGM_PREF_KEY = 'tatakaru-bgm-enabled';
 
 export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
-  type GameKey = 'daxigua' | 'g2048';
+  type GameKey = 'daxigua' | 'hange';
   const [activeGame, setActiveGame] = useState<GameKey>(() => {
-    // 支持 ?game=2048 直达 2048 对局
-    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('game') === '2048') {
-      return 'g2048';
+    // 支持 ?game=hange 直达拯救韩吉对局（?game=2048 为旧链接，兼容映射到拯救韩吉）
+    if (typeof window !== 'undefined') {
+      const g = new URLSearchParams(window.location.search).get('game');
+      if (g === 'hange' || g === '2048') return 'hange';
     }
     return 'daxigua';
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // 拯救韩吉对局音乐播放中：期间外部共用 BGM 强制关闭且开关禁用，结束后自动恢复
+  const [gameBgmActive, setGameBgmActive] = useState<boolean>(false);
+  // 排行榜弹窗（v1：本机最佳纪录；云端总榜见 .workbuddy/design/leaderboard-design-v1.md）
+  const [showLeaderboard, setShowLeaderboard] = useState<boolean>(false);
+  const [bestRecords, setBestRecords] = useState<Record<string, { timeUsed: number; moves: number; ts: number }>>({});
+  const openLeaderboard = () => {
+    try {
+      setBestRecords(JSON.parse(window.localStorage.getItem('savehange-best') || '{}'));
+    } catch {
+      setBestRecords({});
+    }
+    setShowLeaderboard(true);
+  };
 
   // ---- 背景音乐（单例，两个游戏共用，切换游戏不断播）----
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -82,11 +96,36 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
     });
   };
 
+  // 拯救韩吉 iframe 汇报对局音乐状态：
+  // start = 对局专属音乐（Bauklötze）开始 → 关闭外部共用 BGM 并禁用开关；
+  // end   = 对局音乐停止（胜利/超时/曲目播完/重开/切难度）→ 自动恢复共用 BGM 与开关
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data as { type?: string; state?: string } | null;
+      if (!d || d.type !== 'save-hange-bgm') return;
+      if (d.state === 'start') {
+        setGameBgmActive(true);
+        setBgmOn(false);
+      } else if (d.state === 'end') {
+        setGameBgmActive(false);
+        setBgmOn(true);
+        onShowToast('🎵 对局结束，已恢复背景音乐');
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [onShowToast]);
+
   // 切换游戏：只挂载当前游戏的 iframe（cocos 画布在被 display:none 隐藏后恢复会损坏，
-  // 因此切换即卸载重建，保证每次都是干净的加载流程）。BGM 不受切换影响。
+  // 因此切换即卸载重建，保证每次都是干净的加载流程）。BGM 不受切换影响；
+  // 若拯救韩吉对局音乐播放中切走，iframe 卸载即音乐终止 → 恢复共用 BGM。
   const switchGame = (g: GameKey) => {
     if (g === activeGame) return;
     soundManager.playBlip();
+    if (gameBgmActive) {
+      setGameBgmActive(false);
+      setBgmOn(true);
+    }
     setActiveGame(g);
     setIsLoading(true);
   };
@@ -132,15 +171,15 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
             <button
               onClick={() => {
                 soundManager.playBlip();
-                switchGame('g2048');
+                switchGame('hange');
               }}
               className={`px-3 py-1 text-xs font-pixel rounded-2xs cursor-pointer transition-all whitespace-nowrap ${
-                activeGame === 'g2048'
+                activeGame === 'hange'
                   ? 'bg-[#B3402F] text-[#F9E79F] shadow-xs'
                   : 'text-[#D5C9AF] hover:text-[#FAF5E8]'
               }`}
             >
-              🧩 2048
+              🛡️ 拯救韩吉
             </button>
           </div>
         </div>
@@ -148,28 +187,32 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
 
       {/* 游戏操作小工具栏 */}
       <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-md px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-2xs text-xs font-retro-jp">
-        <div className="flex items-center gap-2 text-[#5B4636]">
-          <span className="font-pixel text-[#1E4334] font-bold">🎮 当前对局：</span>
-          <span className="bg-[#FAF5E8] border border-[#D5C9AF] px-2 py-0.5 rounded-2xs text-[11px] text-[#B3402F] font-bold">
-            {activeGame === 'daxigua' ? '利韩·合成大西皮' : '利韩·2048 合成'}
-          </span>
-          <span className="hidden md:inline text-[11px] text-[#7A6958]">
-            {activeGame === 'daxigua' ? '（点击或滑动屏幕放下水果）' : '（方向键 / WASD / 滑动屏幕移动方块）'}
-          </span>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={openLeaderboard}
+            className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] rounded-2xs cursor-pointer transition-all flex items-center gap-1 text-[10px] sm:text-[11px] font-pixel shadow-2xs"
+            title="查看拯救韩吉突围排行榜"
+          >
+            <span>🏆</span>
+            <span>排行榜</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-1.5">
           <button
             onClick={handleToggleBgm}
-            className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-2xs cursor-pointer transition-all flex items-center gap-1 text-[10px] sm:text-[11px] font-bold shadow-2xs border ${
-              bgmOn
-                ? 'bg-[#FAF5E8] hover:bg-[#F3EAD5] text-[#1E4334] border-[#D5C9AF]'
-                : 'bg-[#EFE7D2] text-[#8A7968] border-[#D5C9AF]'
+            disabled={gameBgmActive}
+            className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-2xs transition-all flex items-center gap-1 text-[10px] sm:text-[11px] font-bold shadow-2xs border ${
+              gameBgmActive
+                ? 'bg-[#EFE7D2] text-[#B9AA93] border-[#D5C9AF] cursor-not-allowed'
+                : bgmOn
+                ? 'bg-[#FAF5E8] hover:bg-[#F3EAD5] text-[#1E4334] border-[#D5C9AF] cursor-pointer'
+                : 'bg-[#EFE7D2] text-[#8A7968] border-[#D5C9AF] cursor-pointer'
             }`}
-            title={bgmOn ? '关闭背景音乐' : '开启背景音乐'}
+            title={gameBgmActive ? '对局音乐播放中，结束后自动恢复' : bgmOn ? '关闭背景音乐' : '开启背景音乐'}
           >
-            <span>{bgmOn ? '🔊' : '🔇'}</span>
-            <span>{bgmOn ? 'BGM 开' : 'BGM 关'}</span>
+            <span>{gameBgmActive || bgmOn ? '🔊' : '🔇'}</span>
+            <span>{gameBgmActive ? '对局 BGM' : bgmOn ? 'BGM 开' : 'BGM 关'}</span>
           </button>
 
           <button
@@ -200,10 +243,15 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleToggleBgm}
-                className="px-2 py-0.5 bg-[#1E4334] text-[#F9E79F] border border-[#3B7E64] rounded-2xs text-xs font-pixel cursor-pointer"
-                title={bgmOn ? '关闭背景音乐' : '开启背景音乐'}
+                disabled={gameBgmActive}
+                className={`px-2 py-0.5 border rounded-2xs text-xs font-pixel ${
+                  gameBgmActive
+                    ? 'bg-[#1A382B] text-[#8A7968] border-[#2B5E4A] cursor-not-allowed'
+                    : 'bg-[#1E4334] text-[#F9E79F] border-[#3B7E64] cursor-pointer'
+                }`}
+                title={gameBgmActive ? '对局音乐播放中，结束后自动恢复' : bgmOn ? '关闭背景音乐' : '开启背景音乐'}
               >
-                {bgmOn ? '🔊' : '🔇'}
+                {gameBgmActive ? '🎮' : bgmOn ? '🔊' : '🔇'}
               </button>
               <button
                 onClick={handleToggleFullscreen}
@@ -232,9 +280,9 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
           {/* 加载骨架屏动画 */}
           {isLoading && (
             <div className="absolute inset-0 top-7 bg-[#142B21] flex flex-col items-center justify-center gap-3 z-10 text-[#F9E79F] font-pixel">
-              <div className="text-3xl animate-bounce">{activeGame === 'daxigua' ? '🥔 🍉 ⚔️' : '2️⃣ 0️⃣ 4️⃣ 8️⃣'}</div>
+              <div className="text-3xl animate-bounce">{activeGame === 'daxigua' ? '🥔 🍉 ⚔️' : '🛡️ ✈️ ⚔️'}</div>
               <p className="text-xs tracking-wider animate-pulse">
-                {activeGame === 'daxigua' ? '正在进入利韩战斗舞台...' : '正在布置 2048 合成棋盘...'}
+                {activeGame === 'daxigua' ? '正在进入利韩战斗舞台...' : '正在集结地鸣战场，护送韩吉突围...'}
               </p>
               <div className="w-32 bg-[#0D1C16] h-1.5 rounded-full overflow-hidden border border-[#2B5E4A]">
                 <div className="bg-[#EAA83B] h-full w-2/3 animate-pulse" />
@@ -259,18 +307,20 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
                 : 'min(calc(100vw - 56px), calc((min(76vh, 860px) - 46px) * 9 / 16), 460px)',
             }}
           />}
-          {activeGame === 'g2048' && <iframe
-            src="/2048/index.html"
-            title="利韩2048合成"
+          {/* 原生内嵌游戏 Iframe 二：拯救韩吉（华容道）。9:16 竖屏，与合成大西皮同宽度规则 */}
+          {activeGame === 'hange' && <iframe
+            ref={iframeRef}
+            src="/save-hange/index.html"
+            title="利韩·拯救韩吉"
             onLoad={() => setIsLoading(false)}
             allow="autoplay"
-            className="border-0 bg-[#FBF7EC]"
+            className="border-0 bg-[#080d0a]"
             style={{
-              aspectRatio: '3 / 4',
+              aspectRatio: '9 / 16',
               height: 'auto',
               width: isFullscreen
-                ? 'min(100vw, calc((100dvh - 96px) * 3 / 4))'
-                : 'min(calc(100vw - 56px), calc((min(76vh, 860px) - 46px) * 3 / 4), 560px)',
+                ? 'min(100vw, calc((100dvh - 96px) * 9 / 16))'
+                : 'min(calc(100vw - 56px), calc((min(76vh, 860px) - 46px) * 9 / 16), 460px)',
             }}
           />}
         </div>
@@ -301,40 +351,90 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast }) => {
             </li>
           </ul>
         ) : (
-          <div className="space-y-2">
-            {/* 2048 图片方块对照表（五档图片方块 2/4/8/16/32，32 封顶） */}
-            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 py-1">
-              {([
-                ['/2048/image01.webp', '2'],
-                ['/2048/image02.webp', '4'],
-                ['/2048/image03.webp', '8'],
-                ['/2048/image04.webp', '16'],
-                ['/2048/image05.webp', '32'],
-              ] as const).map(([src, num]) => (
-                <div key={num} className="flex flex-col items-center gap-0.5">
-                  <img
-                    src={src}
-                    alt={`方块 ${num}`}
-                    className="w-11 h-11 sm:w-12 sm:h-12 object-cover border-2 border-[#1E4334] shadow-2xs bg-[#FAF5E8]"
-                  />
-                  <span className="font-pixel text-[10px] text-[#1E4334] font-bold">= {num}</span>
-                </div>
-              ))}
-            </div>
-            <ul className="list-disc list-inside space-y-1 text-[11px] sm:text-xs text-[#6E5844] leading-relaxed">
-              <li>
-                <b>操作方式：</b>方向键 / WASD，或手指在棋盘上滑动，全部方块会一起移动。
-              </li>
-              <li>
-                <b>合成规则：</b>相同方块相碰即合体升级：<b>2+2→4 · 4+4→8 · 8+8→16 · 16+16→32</b>；<b>32 封顶不再合并</b>，合出 <b>32</b> 达成胜利，点「继续挑战」可接着玩！
-              </li>
-              <li>
-                <b>小提示：</b>全部方块均为图片方块，对照上方图表认脸不认数，轻松开局。
-              </li>
-            </ul>
-          </div>
+          <ul className="list-disc list-inside space-y-1 text-[11px] sm:text-xs text-[#6E5844] leading-relaxed">
+            <li>
+              <b>目标：</b>在终曲播放完毕前，把带「拯救韩吉」标签的 2×2 方块护送到<b>底部飞机出口</b>！
+            </li>
+            <li>
+              <b>操作方式：</b>拖拽方块（可一次滑动多格），或点击方块让其自动避让，也支持方向键 / WASD。
+            </li>
+            <li>
+              <b>难度与倒计时：</b>三档难度仅布局不同（简单 / 经典 / 绝境），倒计时均为 Bauklötze 终曲全长（3:56），走第一步后开始计时并播放专属音乐。
+            </li>
+            <li>
+              <b>音乐规则：</b>对局中播放游戏专属音乐，外部共用 BGM 暂停；对局结束（突围 / 超时 / 乐曲终了 / 重开）后自动恢复。
+            </li>
+          </ul>
         )}
       </div>
+      {/* 排行榜弹窗 v1：本机最佳纪录（总排名云端方案见设计稿 v1，待拍板后接入） */}
+      {showLeaderboard && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => setShowLeaderboard(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-[#FFFEEF] border-2 border-[#1E4334] rounded-md shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 标题条 */}
+            <div className="bg-[#1E4334] px-3.5 py-2.5 flex items-center justify-between">
+              <span className="font-pixel text-xs sm:text-sm text-[#F9E79F] font-bold">🏆 拯救韩吉 · 突围排行榜</span>
+              <button
+                onClick={() => setShowLeaderboard(false)}
+                className="w-6 h-6 flex items-center justify-center bg-[#B3402F] hover:bg-[#C9523F] text-[#FAF5E8] rounded-2xs text-xs font-bold cursor-pointer transition-colors"
+                title="关闭"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3.5 space-y-2.5">
+              <p className="text-[10px] text-[#7A6958] leading-relaxed font-retro-jp">
+                排名规则：突围成功才上榜；<b className="text-[#B3402F]">用时更短优先</b>，用时相同比步数。三档难度分开排名。
+              </p>
+
+              {/* 本机最佳纪录 */}
+              {([
+                ['easy', '简单 · 新兵突破'],
+                ['normal', '普通 · 经典阻击'],
+                ['hard', '困难 · 绝境地鸣'],
+              ] as const).map(([key, label]) => {
+                const rec = bestRecords[key];
+                const mm = rec ? String(Math.floor(rec.timeUsed / 60)).padStart(2, '0') : '––';
+                const ss = rec ? String(rec.timeUsed % 60).padStart(2, '0') : '––';
+                return (
+                  <div key={key} className="flex items-center justify-between bg-[#FAF5E8] border border-[#D5C9AF] rounded-xs px-3 py-2">
+                    <div>
+                      <div className="font-pixel text-[11px] text-[#1E4334] font-bold">{label}</div>
+                      <div className="text-[9px] text-[#8C7A68] mt-0.5 font-retro-jp">
+                        {rec ? new Date(rec.ts).toLocaleDateString('zh-CN') : '等待首次突围成功'}
+                      </div>
+                    </div>
+                    <div className="text-right font-mono">
+                      {rec ? (
+                        <>
+                          <div className="text-sm font-bold text-[#B3402F]">
+                            {mm}:{ss}
+                          </div>
+                          <div className="text-[9px] text-[#8C7A68]">{rec.moves} 步</div>
+                        </>
+                      ) : (
+                        <span className="text-xs text-[#B9AA93]">暂无纪录</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* 云端总榜占位（设计 v1 待拍板） */}
+              <div className="border border-dashed border-[#D5C9AF] rounded-xs px-3 py-2 text-[10px] text-[#8C7A68] leading-relaxed font-retro-jp">
+                🌐 <b>全服总排名</b>：需要云端榜单支撑（方案已设计，待接入）。当前先记录你设备上的最佳成绩。
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

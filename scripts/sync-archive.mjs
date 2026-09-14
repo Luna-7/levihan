@@ -27,6 +27,11 @@ const csvArg = process.argv[2];
 const csvPath = path.resolve(csvArg || 'archive/ID编号.csv');
 const outPath = path.resolve('archive/archive.json');
 
+/* 推荐表（第二个数据源）：archive/推荐.csv → archive/recs.json → COS 桶根
+ * 表列约定：文章名称 | 链接 | 类型 | 限制 | 推荐ID | 推荐理由（E/F 可选） */
+const recsCsvPath = path.resolve('archive/推荐.csv');
+const recsOutPath = path.resolve('archive/recs.json');
+
 /* ---------- 极简 CSV 解析（支持引号包裹的逗号/换行） ---------- */
 function parseCSV(text) {
   text = text.replace(/^\uFEFF/, ''); // 去 BOM
@@ -83,7 +88,61 @@ function buildArchive(rows) {
   return { items, problems };
 }
 
-/* ---------- 主流程 ---------- */
+/* ---------- 推荐表 CSV → RecommendItem[] ---------- */
+function stableRecId(url) {
+  const m = /\/works\/(\d+)/.exec(url || '');
+  if (m) return `ao3-${m[1]}`;
+  // 无 AO3 works 号：用 URL 的简易 hash，保证同一链接 id 稳定
+  let h = 0;
+  const s = String(url || '');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return `rec-${h.toString(36)}`;
+}
+
+function siteName(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host.endsWith('archiveofourown.org')) return 'AO3';
+    if (host.endsWith('lofter.com')) return 'LOFTER';
+    if (host.endsWith('weibo.com')) return '微博';
+    return host.replace(/^www\./, '').toUpperCase();
+  } catch {
+    return '';
+  }
+}
+
+function buildRecs(rows) {
+  const items = [];
+  const problems = [];
+  const seen = new Set();
+  for (let i = 1; i < rows.length; i++) { // 首行为表头
+    const [title, url, type, rating, recommender, reason] = rows[i].map((c) => (c || '').trim());
+    if (!title && !url) continue; // 全空行（表格中间可能有大段空行）
+    if (!title) { problems.push(`推荐表第 ${i + 1} 行：缺「文章名称」，已跳过`); continue; }
+    if (!url) { problems.push(`推荐表第 ${i + 1} 行：${title} 缺「链接」，保留但跳转置灰`); }
+    if (url && !/^https?:\/\//.test(url)) {
+      problems.push(`推荐表第 ${i + 1} 行：${title} 链接不是 http(s)，按缺链接处理`);
+    }
+    const cleanUrl = /^https?:\/\//.test(url || '') ? url : '';
+    if (cleanUrl && seen.has(cleanUrl)) { problems.push(`推荐表第 ${i + 1} 行：${title} 链接重复，保留首条`); continue; }
+    if (cleanUrl) seen.add(cleanUrl);
+
+    const item = {
+      id: stableRecId(cleanUrl),
+      title,
+      url: cleanUrl,
+      type: type || '未分类',
+      rating: rating || '未标注',
+      site: siteName(cleanUrl),
+    };
+    if (recommender) item.recommender = recommender;
+    if (reason) item.reason = reason;
+    items.push(item);
+  }
+  return { items, problems };
+}
+
+/* ---------- 主流程（数据源一：ID编号 → archive.json） ---------- */
 if (!fs.existsSync(csvPath)) {
   console.error(`✗ 找不到表格 CSV：${csvPath}`);
   console.error('  请先在腾讯文档把「ID编号」表导出为 CSV，保存为 archive/ID编号.csv');
@@ -102,6 +161,22 @@ console.log(`✓ 从表格解析出 ${items.length} 部作品`);
 fs.mkdirSync(path.dirname(outPath), { recursive: true });
 fs.writeFileSync(outPath, JSON.stringify(items, null, 2), 'utf8');
 console.log(`✓ 已生成 ${outPath}`);
+
+/* ---------- 主流程（数据源二：推荐表 → recs.json） ---------- */
+let recs = null;
+if (fs.existsSync(recsCsvPath)) {
+  const recsRows = parseCSV(fs.readFileSync(recsCsvPath, 'utf8'));
+  const recsBuilt = buildRecs(recsRows);
+  if (recsBuilt.problems.length) {
+    console.warn('⚠ 推荐表数据问题：');
+    recsBuilt.problems.forEach((p) => console.warn('  - ' + p));
+  }
+  recs = recsBuilt.items;
+  fs.writeFileSync(recsOutPath, JSON.stringify(recs, null, 2), 'utf8');
+  console.log(`✓ 已生成 ${recsOutPath}（${recs.length} 条推荐）`);
+} else {
+  console.warn(`⚠ 找不到 ${recsCsvPath}，本次跳过推荐表（archive.json 不受影响）`);
+}
 
 /* ---------- 上传到 COS ---------- */
 const secretId = process.env.COS_SECRET_ID;
@@ -127,7 +202,18 @@ try {
     CacheControl: 'no-cache',
   }));
   console.log(`✓ archive.json 已上传到 COS：${BUCKET}/${'archive.json'}`);
-  console.log('  网站刷新即可读到最新归档数据。');
+
+  if (recs) {
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: 'recs.json',
+      Body: JSON.stringify(recs, null, 2),
+      ContentType: 'application/json; charset=utf-8',
+      CacheControl: 'no-cache',
+    }));
+    console.log(`✓ recs.json 已上传到 COS：${BUCKET}/recs.json（${recs.length} 条）`);
+  }
+  console.log('  网站刷新即可读到最新数据。');
 } catch (err) {
   console.error('✗ 上传失败：', err?.message || err);
   process.exit(1);

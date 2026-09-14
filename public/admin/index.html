@@ -374,6 +374,58 @@
       <p class="muted" style="margin-top:10px" data-page-node-id="01H5C0IL4bWY24eaSpxX4g">「仅更新信息」不传图片，适合只改标题 / 标签 / 页数。单张图片上限 4MB。</p>
     </div>
 
+    <!-- 在线小说 -->
+    <div class="panel" id="nv-panel-top" data-page-node-id="nvpanel0000000000000000000a">
+      <div class="spread" style="margin-bottom:12px" data-page-node-id="nvpanel0000000000000000000b">
+        <h2 style="margin:0" data-page-node-id="nvpanel0000000000000000000c"><span class="n" data-page-node-id="nvpanel0000000000000000000d">D</span> 在线小说 <span class="muted" id="nv-count" data-page-node-id="nvpanel0000000000000000000e"></span></h2>
+        <div class="row" style="gap:8px" data-page-node-id="nvpanel0000000000000000000f">
+          <button class="btn-sm" id="btn-nv-reload" data-page-node-id="nvpanel00000000000000000010">↻ 刷新列表</button>
+          <button class="btn-sm" id="btn-nv-clear" data-page-node-id="nvpanel00000000000000000011">清空表单</button>
+        </div>
+      </div>
+
+      <div id="nv-list" data-page-node-id="nvpanel00000000000000000012"><p class="muted" data-page-node-id="nvpanel00000000000000000013">加载中…</p></div>
+
+      <div class="grid" style="margin-top:12px" data-page-node-id="nvpanel00000000000000000014">
+        <div class="f" data-page-node-id="nvpanel00000000000000000015">
+          <label for="nv-title" data-page-node-id="nvpanel00000000000000000016">标题 <span class="req">*</span></label>
+          <input type="text" id="nv-title" placeholder="例如：雨夜与糖（上）" data-page-node-id="nvpanel00000000000000000017">
+        </div>
+        <div class="f" data-page-node-id="nvpanel00000000000000000018">
+          <label for="nv-author" data-page-node-id="nvpanel00000000000000000019">作者 <span class="req">*</span></label>
+          <input type="text" id="nv-author" placeholder="例如：阿蓝" data-page-node-id="nvpanel00000000000000000020">
+        </div>
+        <div class="f span2" data-page-node-id="nvpanel00000000000000000021">
+          <label for="nv-tags" data-page-node-id="nvpanel00000000000000000022">标签 <span class="tag" data-page-node-id="nvpanel00000000000000000023">可选，英文逗号分隔，如：原作向,R</span></label>
+          <input type="text" id="nv-tags" placeholder="例如：原作向,R" data-page-node-id="nvpanel00000000000000000024">
+        </div>
+        <div class="f span2" data-page-node-id="nvpanel00000000000000000025">
+          <label style="align-items:center" data-page-node-id="nvpanel00000000000000000026">
+            <input type="checkbox" id="nv-warn-on" style="width:auto" data-page-node-id="nvpanel00000000000000000027">
+            ⚠ 内容预警 <span class="tag" data-page-node-id="nvpanel00000000000000000028">勾选后填写，站点卡片会显示</span>
+          </label>
+          <div id="nv-warn-box" class="hide" style="margin-top:2px" data-page-node-id="nvpanel00000000000000000029">
+            <textarea id="nv-warning" rows="2" maxlength="100" data-page-node-id="nvpanel00000000000000000030"></textarea>
+          </div>
+        </div>
+        <div class="f span2" data-page-node-id="nvpanel00000000000000000031">
+          <label for="nv-note" data-page-node-id="nvpanel00000000000000000032">作者说的话 <span class="tag" data-page-node-id="nvpanel00000000000000000033">可选，卡片引用块展示；留空则不显示</span></label>
+          <textarea id="nv-note" rows="2" maxlength="2000" data-page-node-id="nvpanel00000000000000000034"></textarea>
+        </div>
+        <div class="f span2" data-page-node-id="nvpanel00000000000000000035">
+          <label for="nv-body" data-page-node-id="nvpanel00000000000000000036">正文 <span class="req">*</span> <span class="tag" data-page-node-id="nvpanel00000000000000000037">段落之间空一行，站点按空行分段 · 上限 50 万字</span></label>
+          <textarea id="nv-body" rows="10" placeholder="粘贴正文…" style="font-family:ui-monospace,Menlo,monospace" data-page-node-id="nvpanel00000000000000000038"></textarea>
+          <div class="muted" style="margin-top:2px" data-page-node-id="nvpanel00000000000000000039"><span id="nv-body-len">0</span> 字</div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px" data-page-node-id="nvpanel00000000000000000040">
+        <button class="btn-gold" id="btn-nv-save" style="flex:1" data-page-node-id="nvpanel00000000000000000041">💾 保存并发布</button>
+      </div>
+      <div class="msg" id="nv-msg" data-page-node-id="nvpanel00000000000000000042"></div>
+      <p class="muted" style="margin-top:10px" data-page-node-id="nvpanel00000000000000000043">正文以纯文本存入 COS novels/{id}.txt，索引写入 novels.json；与上面的图片上传互相独立。</p>
+    </div>
+
   </section>
 </div>
 
@@ -519,6 +571,7 @@ function enterMain(){
   $('view-main').classList.remove('hide');
   refreshEnv();
   loadBooks();
+  loadNovels();
   syncButtons();   // 初始态：没填 ID → 两个按钮都灰；填了 ID → 「仅更新信息」可用
 }
 
@@ -632,8 +685,147 @@ function resetForm(){
   clearFiles();
 }
 
-/* ============ 文件选择 ============ */
-function releaseFile(f){
+/* ============ 在线小说（D 面板） ============ */
+var novels = [];
+
+function loadNovels(){
+  var box = $('nv-list');
+  box.innerHTML = '<p class="muted">加载中…</p>';
+  api({ action:'novelList' }).then(function(d){
+    novels = d.novels || [];
+    $('nv-count').textContent = '共 ' + novels.length + ' 篇';
+    if (!novels.length) { box.innerHTML = '<p class="muted">还没有在线小说，在下面粘贴正文发布第一篇吧。</p>'; return; }
+    box.innerHTML = novels.map(function(n){
+      return '<div class="bk">' +
+        '<div class="info">' +
+          '<div class="row" style="gap:8px"><span class="id">' + esc(n.id) + '</span>' +
+          '<span class="t">' + esc(n.title) + '</span></div>' +
+          '<div class="muted">' + esc(n.author) + ' · ' + (n.chars || 0) + ' 字' +
+            (n.tags && n.tags.length ? ' · ' + n.tags.map(esc).join(' / ') : '') +
+            (n.updatedAt ? ' · 更新于 ' + esc(n.updatedAt.slice(0, 10)) : '') + '</div>' +
+        '</div>' +
+        '<button class="btn-sm" data-nv-edit="' + esc(n.id) + '">编辑</button>' +
+        '<button class="btn-sm btn-danger" data-nv-del="' + esc(n.id) + '">删除</button>' +
+      '</div>';
+    }).join('');
+  }).catch(function(err){
+    if (onAuthFail(err)) return;
+    box.innerHTML = '';
+    show($('nv-msg'), 'err', '读取在线小说失败：' + (err.message || err));
+  });
+}
+
+function findNovel(id){
+  for (var i = 0; i < novels.length; i++) if (novels[i].id === id) return novels[i];
+  return null;
+}
+
+function readNovelForm(){
+  return {
+    id: nvEditingId,
+    title: $('nv-title').value.trim(),
+    author: $('nv-author').value.trim(),
+    tags: $('nv-tags').value.trim(),
+    warning: $('nv-warn-on').checked ? $('nv-warning').value.trim() : '',
+    authorNote: $('nv-note').value.trim(),
+    body: $('nv-body').value
+  };
+}
+
+function resetNovelForm(){
+  ['nv-title','nv-author','nv-tags','nv-note','nv-body','nv-warning'].forEach(function(k){ $(k).value = ''; });
+  $('nv-warn-on').checked = false;
+  $('nv-warn-box').classList.add('hide');
+  $('nv-body-len').textContent = '0';
+}
+
+function saveNovel(){
+  var form = readNovelForm();
+  if (!form.title) { show($('nv-msg'), 'err', '请填写标题。'); return; }
+  if (!form.body.trim()) { show($('nv-msg'), 'err', '正文不能为空。'); return; }
+  var btn = $('btn-nv-save');
+  btn.disabled = true;
+  hide($('nv-msg'));
+  api({ action:'novelSave', id: form.id || undefined, title: form.title, author: form.author,
+        tags: form.tags, warning: form.warning, authorNote: form.authorNote, body: form.body })
+    .then(function(d){
+      novels = d.novels || [];
+      renderNovelList();
+      resetNovelForm();
+      show($('nv-msg'), 'ok', d.replaced ? '✓ 已更新《' + form.title + '》' : '✓ 已发布《' + form.title + '》');
+    })
+    .catch(function(err){
+      if (onAuthFail(err)) return;
+      show($('nv-msg'), 'err', (err.message || err));
+    })
+    .then(function(){ btn.disabled = false; });
+}
+
+function renderNovelList(){
+  var box = $('nv-list');
+  $('nv-count').textContent = '共 ' + novels.length + ' 篇';
+  if (!novels.length) { box.innerHTML = '<p class="muted">还没有在线小说，在下面粘贴正文发布第一篇吧。</p>'; return; }
+  box.innerHTML = novels.map(function(n){
+    return '<div class="bk">' +
+      '<div class="info">' +
+        '<div class="row" style="gap:8px"><span class="id">' + esc(n.id) + '</span>' +
+        '<span class="t">' + esc(n.title) + '</span></div>' +
+        '<div class="muted">' + esc(n.author) + ' · ' + (n.chars || 0) + ' 字' +
+          (n.tags && n.tags.length ? ' · ' + n.tags.map(esc).join(' / ') : '') + '</div>' +
+      '</div>' +
+      '<button class="btn-sm" data-nv-edit="' + esc(n.id) + '">编辑</button>' +
+      '<button class="btn-sm btn-danger" data-nv-del="' + esc(n.id) + '">删除</button>' +
+    '</div>';
+  }).join('');
+}
+
+$('btn-nv-save').addEventListener('click', saveNovel);
+$('btn-nv-reload').addEventListener('click', loadNovels);
+$('btn-nv-clear').addEventListener('click', function(){
+  nvEditingId = ''; resetNovelForm(); hide($('nv-msg'));
+});
+$('nv-body').addEventListener('input', function(){
+  $('nv-body-len').textContent = String(this.value.length);
+});
+$('nv-warn-on').addEventListener('change', function(){
+  $('nv-warn-box').classList.toggle('hide', !this.checked);
+});
+$('nv-list').addEventListener('click', function(e){
+  var t = e.target;
+  if (!t || !t.closest) return;
+  var ed = t.closest('[data-nv-edit]');
+  var del = t.closest('[data-nv-del]');
+  if (ed) {
+    var n = findNovel(ed.getAttribute('data-nv-edit'));
+    if (!n) return;
+    nvEditingId = n.id;
+    $('nv-title').value = n.title || '';
+    $('nv-author').value = n.author || '';
+    $('nv-tags').value = (n.tags || []).join(',');
+    $('nv-note').value = n.authorNote || '';
+    $('nv-warn-on').checked = !!n.warning;
+    $('nv-warning').value = n.warning || '';
+    $('nv-warn-box').classList.toggle('hide', !n.warning);
+    $('nv-body').value = '';
+    $('nv-body-len').textContent = '0';
+    show($('nv-msg'), 'ok', '正在编辑《' + n.title + '》：正文不回填（避免覆盖），需要改正文请整篇重新粘贴。');
+    window.scrollTo({ top: $('nv-panel-top').getBoundingClientRect().top + window.scrollY - 12, behavior: 'smooth' });
+  } else if (del) {
+    var id = del.getAttribute('data-nv-del');
+    var target = findNovel(id);
+    if (!confirm('确定删除《' + (target ? target.title : id) + '》？正文与索引会一起删除，不可恢复。')) return;
+    api({ action:'novelDelete', id: id }).then(function(d){
+      novels = d.novels || [];
+      renderNovelList();
+      show($('nv-msg'), 'ok', '✓ 已删除');
+    }).catch(function(err){
+      if (onAuthFail(err)) return;
+      show($('nv-msg'), 'err', '删除失败：' + (err.message || err));
+    });
+  }
+});
+
+/* ============ 文件选择 ============ */function releaseFile(f){
   if (!f) return;
   try { URL.revokeObjectURL(f.url); } catch(e){}
   if (f.originalUrl && f.originalUrl !== f.url) { try { URL.revokeObjectURL(f.originalUrl); } catch(e){} }
