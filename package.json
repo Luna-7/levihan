@@ -9,8 +9,7 @@
     "preview": "vite preview",
     "sync:archive": "node scripts/sync-archive.mjs",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit",
-    "pages:build": "vite build"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1131.0",
