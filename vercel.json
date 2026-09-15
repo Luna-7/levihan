@@ -3,36 +3,27 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "framework": "vite",
-  "headers": [
+  "routes": [
     {
-      "source": "/manifest.webmanifest",
-      "headers": [{ "key": "Content-Type", "value": "application/manifest+json" }]
+      "src": "^/$",
+      "has": [{ "type": "host", "value": "admin.levihan.asia" }],
+      "dest": "/admin/index.html"
     },
     {
-      "source": "/sw.js",
-      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "admin.levihan.asia"
-        }
-      ],
-      "destination": "/admin/"
+      "src": "^/pixiv-artists\\.js$",
+      "has": [{ "type": "host", "value": "admin.levihan.asia" }],
+      "dest": "/admin/pixiv-artists.js"
     },
     {
-      "source": "/pixiv-artists.js",
-      "has": [
-        {
-          "type": "host",
-          "value": "admin.levihan.asia"
-        }
-      ],
-      "destination": "/admin/pixiv-artists.js"
-    }
+      "src": "^/manifest\\.webmanifest$",
+      "headers": { "Content-Type": "application/manifest+json" },
+      "continue": true
+    },
+    {
+      "src": "^/sw\\.js$",
+      "headers": { "Cache-Control": "no-cache, no-store, must-revalidate" },
+      "continue": true
+    },
+    { "handle": "filesystem" }
   ]
 }
