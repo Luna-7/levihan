@@ -204,6 +204,14 @@ function normalizeBook(raw) {
     if (v) book[field] = v;
   }
 
+  const authorUrl = String(raw.authorUrl || '').trim();
+  if (authorUrl) {
+    let parsed;
+    try { parsed = new URL(authorUrl); } catch { throw httpError('作者主页链接不是有效网址', 400); }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw httpError('作者主页链接只支持 HTTP(S)', 400);
+    book.authorUrl = authorUrl;
+  }
+
   const pagePrefix = String(raw.pagePrefix || '').trim();
   if (pagePrefix && pagePrefix !== 'image') book.pagePrefix = pagePrefix;
 
@@ -266,6 +274,14 @@ function normalizeNovelMeta(raw, chars) {
     createdAt: String(raw.createdAt || '').trim() || new Date().toISOString(),
   };
   if (String(raw.updatedAt || '').trim()) meta.updatedAt = String(raw.updatedAt).trim();
+
+  const authorUrl = String(raw.authorUrl || '').trim();
+  if (authorUrl) {
+    let parsed;
+    try { parsed = new URL(authorUrl); } catch { throw httpError('作者主页链接不是有效网址', 400); }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw httpError('作者主页链接只支持 HTTP(S)', 400);
+    meta.authorUrl = authorUrl;
+  }
 
   // 可选字段只在有真实值时写入（与归档约定一致）
   const authorNote = String(raw.authorNote || '').trim().slice(0, 2000);
@@ -398,11 +414,15 @@ async function handle(action, payload) {
       const books = await readArchive();
       const idx = books.findIndex((b) => b && b.id === book.id);
       const replaced = idx >= 0;
-      if (replaced) books[idx] = book;
-      else {
+      const now = new Date().toISOString();
+      if (replaced) {
+        if (books[idx].createdAt) book.createdAt = books[idx].createdAt;
+        books[idx] = book;
+      } else {
+        book.createdAt = now;
         books.push(book);
-        books.sort((a, b) => String(a.id).localeCompare(String(b.id), 'en'));
       }
+      book.updatedAt = now;
       await writeArchive(books);
 
       // 顺带把本子用到的标签并入标签库，保证「下拉里一定有新加的标签」
@@ -471,7 +491,7 @@ async function handle(action, payload) {
       } else {
         novels.unshift(meta);
       }
-      novels.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
       await writeNovels(novels);
       return { ok: true, replaced, novel: meta, count: novels.length, novels };
     }

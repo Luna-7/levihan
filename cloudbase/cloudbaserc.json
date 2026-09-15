@@ -17,7 +17,7 @@
         "ADMIN_PASSWORD": "{{env.ADMIN_PASSWORD}}",
         "COS_BUCKET": "levihan-1325571558",
         "COS_REGION": "ap-nanjing",
-        "ALLOWED_ORIGINS": "https://levihan-tudou-d0g7jivue1ccc4a35-1325571558.tcloudbaseapp.com,http://localhost:5173,http://localhost:4173"
+        "ALLOWED_ORIGINS": "https://levihan-tudou-d0g7jivue1ccc4a35-1325571558.tcloudbaseapp.com,http://localhost:5173,http://localhost:4173,https://admin.levihan.asia"
       }
     }
   ]

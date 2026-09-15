@@ -12,7 +12,8 @@
     "sync:archive": "node scripts/sync-archive.mjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "verify:levels": "node scripts/verify-save-hange-levels.ts"
+    "verify:levels": "node scripts/verify-save-hange-levels.ts",
+    "prebuild": "node scripts/generate-admin-pixiv.mjs"
   },
   "allowScripts": {
     "esbuild": true
