@@ -12,5 +12,27 @@
       "source": "/sw.js",
       "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "admin.levihan.asia"
+        }
+      ],
+      "destination": "/admin/"
+    },
+    {
+      "source": "/pixiv-artists.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "admin.levihan.asia"
+        }
+      ],
+      "destination": "/admin/pixiv-artists.js"
+    }
   ]
 }
