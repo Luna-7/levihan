@@ -37,6 +37,8 @@ const BUCKET = process.env.COS_BUCKET || 'levihan-1325571558';
 const REGION = process.env.COS_REGION || 'ap-nanjing';
 const ARCHIVE_KEY = 'archive.json';
 const TAGS_KEY = 'tags.json';   // 全站标签库（string[]），供上传台下拉选择
+const INBOX_COLLECTION = 'submission_inbox';
+const TREEHOLE_KEY = 'treehole.json';
 const NOVELS_KEY = 'novels.json';   // 在线小说索引（GroupNovel[]）
 const NOVEL_DIR = 'novels/';        // 在线小说正文：novels/{id}.txt（纯文本）
 const MAX_NOVEL_CHARS = 500000;     // 单篇正文字数上限
@@ -342,8 +344,104 @@ async function listAllKeys(prefix) {
 
 /* ------------------------------ 业务路由 ------------------------------ */
 
+function inboxDb() {
+  const tcb = require('@cloudbase/node-sdk');
+  const accessKey = process.env.CLOUDBASE_APIKEY;
+  if (!accessKey) throw httpError('云端收件箱尚未配置服务端数据库凭证', 503);
+  return tcb.init({ env: 'levihan-tudou-d0g7jivue1ccc4a35', accessKey }).rdb({ database: 'public' });
+}
+
+function assertDbResult(result) {
+  if (result.error) throw httpError('云端收件箱数据库请求失败：' + result.error.message, 503);
+  return result.data;
+}
+
+async function readPublishedNotes() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: TREEHOLE_KEY });
+    const parsed = JSON.parse(Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+
+async function writePublishedNotes(notes) {
+  await putObject({ Bucket: BUCKET, Region: REGION, Key: TREEHOLE_KEY,
+    Body: Buffer.from(JSON.stringify(notes, null, 2), 'utf8'),
+    ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache' });
+}
+
+async function submitToInbox(type, payload) {
+  if (payload.website) return { ok: true }; // 蜜罐字段，拦截普通机器人
+  const now = new Date().toISOString();
+  let item;
+  if (type === 'novel') {
+    const title = String(payload.title || '').trim();
+    const author = String(payload.author || '').trim();
+    const email = String(payload.email || '').trim();
+    const body = String(payload.body || '').replace(/\r\n?/g, '\n').trim();
+    if (!title || title.length > 120 || !author || author.length > 80) throw httpError('请填写有效的标题和作者', 400);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120) throw httpError('请填写有效邮箱', 400);
+    if (!body || body.length > MAX_NOVEL_CHARS) throw httpError('正文不能为空或超过字数上限', 400);
+    const authorUrl = String(payload.authorUrl || '').trim();
+    if (authorUrl) {
+      let parsed;
+      try { parsed = new URL(authorUrl); } catch { throw httpError('作者主页链接不是有效网址', 400); }
+      if (!['https:', 'http:'].includes(parsed.protocol)) throw httpError('作者主页链接只支持 HTTP(S)', 400);
+    }
+    item = { title, author, email, body,
+      authorUrl: authorUrl.slice(0, 300),
+      notes: String(payload.notes || '').trim().slice(0, 2000) };
+  } else {
+    const content = String(payload.content || '').trim();
+    if (!content || content.length > 300) throw httpError('纸条不能为空或超过 300 字', 400);
+    item = { sender: String(payload.sender || '匿名调查兵').trim().slice(0, 20) || '匿名调查兵',
+      mood: String(payload.mood || '💚 守护利韩').trim().slice(0, 30), content };
+  }
+  const id = crypto.randomUUID();
+  assertDbResult(await inboxDb().from(INBOX_COLLECTION).insert({ id, type, status: 'pending', payload: item, created_at: now, updated_at: now }));
+  return { ok: true, id, status: 'pending' };
+}
+
+async function reviewInbox(payload) {
+  const id = String(payload.id || '').trim();
+  const decision = String(payload.decision || '').trim();
+  if (!/^[a-zA-Z0-9_-]{8,80}$/.test(id) || !['approve', 'reject'].includes(decision)) throw httpError('审核参数无效', 400);
+  const db = inboxDb();
+  const rows = assertDbResult(await db.from(INBOX_COLLECTION).select('id,type,status,payload').eq('id', id).limit(1));
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  const item = row && { type: row.type, status: row.status, ...(row.payload || {}) };
+  if (!item || item.status !== 'pending') throw httpError('投稿不存在或已处理', 409);
+  const now = new Date().toISOString();
+  if (decision === 'approve') {
+    if (item.type === 'novel') {
+      const novelId = 'nv-' + id.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 32);
+      await handle('novelSave', { id: novelId, title: item.title, author: item.author,
+        authorUrl: item.authorUrl, body: item.body, authorNote: item.notes });
+    } else if (item.type === 'treehole') {
+      const notes = await readPublishedNotes();
+      if (!notes.some((n) => n.id === id)) {
+        notes.unshift({ id, sender: item.sender, mood: item.mood, content: item.content,
+          timestamp: now, potatoes: 1 });
+        await writePublishedNotes(notes);
+      }
+    } else throw httpError('不支持的投稿类型', 400);
+  }
+  assertDbResult(await db.from(INBOX_COLLECTION).update({ status: decision === 'approve' ? 'published' : 'rejected', updated_at: now }).eq('id', id).eq('status', 'pending'));
+  return { ok: true, id, status: decision === 'approve' ? 'published' : 'rejected' };
+}
+
 async function handle(action, payload) {
   switch (action) {
+    case 'submitNovel': return submitToInbox('novel', payload);
+    case 'submitTreehole': return submitToInbox('treehole', payload);
+    case 'inboxList': {
+      const rows = assertDbResult(await inboxDb().from(INBOX_COLLECTION).select('id,type,payload,created_at').eq('status', 'pending').order('created_at', { ascending: false }).limit(100));
+      return { ok: true, items: (rows || []).map((row) => ({ _id: row.id, type: row.type, createdAt: row.created_at, ...(row.payload || {}) })) };
+    }
+    case 'inboxReview': return reviewInbox(payload);
     case 'status':
       return {
         ok: true,
@@ -608,7 +706,7 @@ const server = http.createServer(async (req, res) => {
   const token = payload.token || req.headers['x-admin-token'] || '';
 
   try {
-    if (action !== 'status' && action !== 'login' && !verifyToken(token)) {
+    if (!['status', 'login', 'submitNovel', 'submitTreehole'].includes(action) && !verifyToken(token)) {
       throw httpError('未授权或登录已过期，请重新登录', 401);
     }
     send(res, 200, await handle(action, payload), origin);
@@ -665,7 +763,7 @@ exports.main = async (event) => {
   }
 
   try {
-    if (action !== 'status' && action !== 'login' && !verifyToken(token)) {
+    if (!['status', 'login', 'submitNovel', 'submitTreehole'].includes(action) && !verifyToken(token)) {
       throw httpError('未授权或登录已过期，请重新登录', 401);
     }
     return respond(200, await handle(action, payload));

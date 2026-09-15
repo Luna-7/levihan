@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Analytics } from '@vercel/analytics/react';
 import { RetroPixelFrame } from './components/RetroPixelFrame';
 import { HeaderCard } from './components/HeaderCard';
@@ -6,17 +6,22 @@ import { GroupHome } from './components/GroupHome';
 import { ResourceHub } from './components/ResourceHub';
 import { DoujinshiArchive } from './components/DoujinshiArchive';
 import { TatakaruGame } from './components/TatakaruGame';
+import { DispatchHub } from './components/DispatchHub';
+import { MobileBottomNav } from './components/MobileBottomNav';
+import { BackToTopButton } from './components/BackToTopButton';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { GROUP_INFO, POTATO_EGG_QUOTES } from './data/initialData';
 import { soundManager } from './utils/audio';
+import { NavigationTab } from './types';
 
 export default function App() {
-  // Navigation State: 'home' (群主页与群规) | 'resources' (资源外链) | 'doujinshi' (土豆粮仓驻地) | 'tatakaru' (游戏小屋)
+  // Navigation State: 'home' | 'resources' | 'doujinshi' | 'tatakaru' | 'dispatch'
   // 支持 ?tab=<name> 深度直达任意分区（配合 TatakaruGame 的 ?game=hange 可直达拯救韩吉对局）
-  const [activeTab, setActiveTab] = useState<'home' | 'resources' | 'doujinshi' | 'tatakaru'>(() => {
+  const [activeTab, setActiveTab] = useState<NavigationTab>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get('tab');
-      if (tab === 'tatakaru' || tab === 'resources' || tab === 'doujinshi') {
+      if (tab === 'tatakaru' || tab === 'resources' || tab === 'doujinshi' || tab === 'dispatch') {
         return tab;
       }
       const game = params.get('game');
@@ -26,17 +31,22 @@ export default function App() {
     }
     return 'home';
   });
+  const [isGamePlaying, setIsGamePlaying] = useState<boolean>(false);
   const [isSoundMuted, setIsSoundMuted] = useState<boolean>(soundManager.isMuted());
   const [chestOpened, setChestOpened] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
     setToastMessage(msg);
-    const timer = setTimeout(() => {
+    toastTimerRef.current = window.setTimeout(() => {
       setToastMessage(null);
+      toastTimerRef.current = null;
     }, 2800);
-    return () => clearTimeout(timer);
-  };
+  }, []);
 
   const handleCopyGroupNumber = () => {
     soundManager.playCoin();
@@ -68,6 +78,9 @@ export default function App() {
   const handleToggleSound = () => {
     const muted = soundManager.toggleMute();
     setIsSoundMuted(muted);
+    if (!muted) {
+      soundManager.playCoin();
+    }
     showToast(muted ? '已静音 🔇' : '已开启复古8位音效 🔊');
   };
 
@@ -78,18 +91,33 @@ export default function App() {
     showToast(quote);
   };
 
+  const isImmersivePlaying = activeTab === 'tatakaru' && isGamePlaying;
+
   return (
-    <main className="min-h-screen py-2 xs:py-4 sm:py-6 md:py-8 px-1.5 xs:px-2 sm:px-4 flex flex-col items-center justify-start bg-[#F4EEDC] transition-all duration-300">
+    <main className="min-h-screen pt-0 sm:pt-4 md:pt-6 pb-0 sm:pb-8 px-0 sm:px-4 flex flex-col items-center justify-start bg-[#F4EEDC] transition-all duration-300 antialiased selection:bg-[#EAA83B] selection:text-[#18392B]">
+      {/* Offline Connectivity Status Badge */}
+      <OfflineIndicator />
+
       {/* Main Retro Stitched Pixel Frame with Fluid Adaptive Padding & Border */}
-      <RetroPixelFrame onOpenChest={handleOpenChest} chestOpened={chestOpened}>
-        {/* Header is now the beautiful and unified green HeaderCard of 利韩土豆群 */}
-        <HeaderCard
-          activeTab={activeTab}
-          onSelectTab={setActiveTab}
-          isSoundMuted={isSoundMuted}
-          onToggleSound={handleToggleSound}
-          onCopyGroupNumber={handleCopyGroupNumber}
-        />
+      <RetroPixelFrame
+        onOpenChest={handleOpenChest}
+        chestOpened={chestOpened}
+        isGamePlaying={isImmersivePlaying}
+      >
+        {/* HeaderCard is hidden during immersive game to maximize game arena and eliminate top banners */}
+        {!isImmersivePlaying && (
+          <HeaderCard
+            activeTab={activeTab}
+            onSelectTab={(tab) => {
+              setIsGamePlaying(false);
+              setActiveTab(tab);
+            }}
+            isSoundMuted={isSoundMuted}
+            onToggleSound={handleToggleSound}
+            onCopyGroupNumber={handleCopyGroupNumber}
+            onShowToast={showToast}
+          />
+        )}
 
         {/* VIEW 1: 群主页与群规宣传 */}
         {activeTab === 'home' && (
@@ -97,10 +125,12 @@ export default function App() {
             onNavigateToResources={() => {
               soundManager.playBlip();
               setActiveTab('resources');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             onNavigateToDoujin={() => {
               soundManager.playBlip();
               setActiveTab('doujinshi');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             onShowToast={showToast}
           />
@@ -114,6 +144,7 @@ export default function App() {
             onGoToDoujin={() => {
               soundManager.playBlip();
               setActiveTab('doujinshi');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
         )}
@@ -126,23 +157,46 @@ export default function App() {
             onGoToResources={() => {
               soundManager.playBlip();
               setActiveTab('resources');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
         )}
 
         {/* VIEW 4: 兵团娱乐室 - 原生内嵌塔塔开小游戏 */}
         {activeTab === 'tatakaru' && (
-          <TatakaruGame onShowToast={showToast} />
+          <TatakaruGame
+            onShowToast={showToast}
+            onPlayingChange={setIsGamePlaying}
+          />
+        )}
+
+        {/* VIEW 5: 联络呈递 - 战术研讨与作品分享信箱 */}
+        {activeTab === 'dispatch' && (
+          <DispatchHub onShowToast={showToast} />
         )}
       </RetroPixelFrame>
 
-      {/* Floating Retro Toast Notification */}
+      {/* Floating Retro Toast Notification (positioned above mobile bottom navigation) */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-[#1E4334] text-[#FAF5E8] border-2 border-[#EAA83B] px-4 py-2.5 rounded-md shadow-2xl font-retro-jp text-xs sm:text-sm flex items-center gap-2 animate-bounce">
-          <span className="text-base">🥔</span>
-          <span>{toastMessage}</span>
+        <div className="fixed bottom-20 sm:bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-[#1E4334] text-[#FAF5E8] border-2 border-[#EAA83B] px-4 py-2 rounded-md shadow-2xl font-retro-jp text-xs sm:text-sm flex items-center gap-2 animate-bounce max-w-[90vw]">
+          <span className="text-base shrink-0">🥔</span>
+          <span className="truncate">{toastMessage}</span>
         </div>
       )}
+
+      {/* Mobile Bottom Navigation Bar for easy thumb navigation on mobile / PWA - hidden during game */}
+      {!isImmersivePlaying && (
+        <MobileBottomNav
+          activeTab={activeTab}
+          onSelectTab={(tab) => {
+            setIsGamePlaying(false);
+            setActiveTab(tab);
+          }}
+        />
+      )}
+
+      {/* Back to Top Floating Button */}
+      {!isImmersivePlaying && <BackToTopButton />}
 
       {/* Vercel Analytics */}
       <Analytics />

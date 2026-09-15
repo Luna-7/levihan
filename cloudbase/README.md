@@ -86,3 +86,17 @@ NODE_PATH=/Users/luna/.workbuddy/binaries/node/workspace/node_modules \
 ```
 
 两个脚本都会在结束时把归档恢复到运行前的状态，不会留下测试数据。
+
+## 第一阶段：云端待审收件箱
+
+小说稿件与树洞纸条经主站表单发送到 `admin-upload` 的 `submitNovel` / `submitTreehole`，
+存入 CloudBase PostgreSQL `public.submission_inbox`。管理员后台使用原令牌调用
+`inboxList` / `inboxReview`。通过小说后调用原 `novelSave`，写入 `novels.json` 和
+`novels/{id}.txt`；通过树洞纸条后写入 `treehole.json`。驳回只更新私有收件箱状态。
+
+SQL 建表和私有权限配置见 `migrations/20260915_submission_inbox.sql`。前端不持有
+CloudBase 数据库服务密钥；云函数只从环境变量 `CLOUDBASE_APIKEY` 读取它。
+正式启用前需为云函数配置一把服务端 API Key，并确保 `cloudbase/.env` 中的
+`CLOUDBASE_APIKEY` 仅用于部署且被 Git 忽略。缺少它时，收件箱明确返回 503。
+小说投稿第一期支持直接粘贴正文或单份 1MB 以内的 UTF-8 `.txt` / `.md`；
+PDF、DOCX、EPUB 与图片附件的二进制待审上传需要后续单独审核区。

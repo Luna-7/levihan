@@ -1,0 +1,6 @@
+.env*
+**/.env
+cloudbase/.env
+node_modules/
+**/node_modules/
+.git/

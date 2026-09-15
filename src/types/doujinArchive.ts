@@ -5,6 +5,9 @@ export interface DoujinBookItem {
   titleZh: string; // 本子名
   titleJp?: string; // 日文原名（可选）
   circle: string; // 作者
+  authorUrl?: string; // 作者主页外链（可选，如Pixiv等）
+  createdAt?: string; // 归档加入时间（旧作品可能没有）
+  updatedAt?: string; // 最近发布或更新的时间
   category?: DoujinCategory; // 分类（如未填默认为漫画本）
   tags: string[]; // 标签，如 ["自设世界观", "现代", "含R18"]
   source?: string; // 来源，如 "塔比欧卡"
@@ -27,6 +30,8 @@ export interface RecommendItem {
   rating: string; // D 列 评级（R / 清水），与题材同级参与筛选与标签展示
   recommender?: string; // E 列 推荐ID（推荐人），卡片显示为「@推荐人 说：」
   reason?: string; // F 列 推荐理由，跟在推荐人后面；空则理由块不渲染
+  createdAt?: string; // 推荐加入时间（旧记录可能没有）
+  updatedAt?: string; // 最近更新时间
 }
 
 /** 在线小说元数据（管理台「D 在线小说」→ 云函数 → COS novels.json；正文在 novels/{id}.txt） */
@@ -34,6 +39,7 @@ export interface GroupNovel {
   id: string; // 'nv-' + 时间戳36进制 + 随机
   title: string;
   author: string;
+  authorUrl?: string; // 作者主页链接（可选）
   chars: number; // 正文字数（云函数计算）
   createdAt: string; // ISO
   updatedAt?: string;

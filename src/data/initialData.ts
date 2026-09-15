@@ -13,7 +13,7 @@ export const GROUP_INFO: GroupInfo = {
   verificationRequirement: '入群申请时请务必写三条利韩的磕点，无答案、恶意玩烂梗或空白小号将无法通过审核。',
   contactAdmin: '兵团书记官 / 粮仓管理员',
   motto: '心臓を捧げよ！在八十一重平行宇宙，与你共享每一个热腾腾的土豆。',
-  intro: '本群为《进击的巨人》利威尔 × 韩吉·佐耶（Levi × Hange）专一向同好交流社群。取名“土豆群”，既致敬兵团中苦中作乐、患难与共的经典羁绊，也是所有深爱利韩的同好温暖的粮仓。站点用于展示群规公约、进群指引，并长期归档官方动画/4K剪辑、分镜原稿、140+位Pixiv画师导航及汉化精修同人本。',
+  intro: '本群为《进击的巨人》利威尔 × 韩吉·佐耶（Levi × Hans）专一向同好交流社群。取名“土豆群”，既致敬兵团中苦中作乐、患难与共的经典羁绊，也是所有深爱利韩的同好温暖的粮仓。站点用于展示群规公约、进群指引，并长期归档官方动画/4K剪辑、分镜原稿、140+位Pixiv画师导航及汉化精修同人本。',
   establishedDate: '调查兵团驻地专属',
   activeAnnouncement: '📢 粮仓近期完成多项补档！现已开放一群至四群联合交流。入群申请请务必写【三条利韩的磕点】。已收录 S1-S4 完结4K高清Cut、分镜手稿、漫画全集以及汉化精修同人本A-Z卷。群内资源仅限内部同好交流，严禁二次倒卖与外传！'
 };
@@ -90,7 +90,7 @@ export const DOUJINSHI_BOOKS: DoujinshiBook[] = [
   {
     id: 'dj-1',
     title: '【汉化精修】利韩经典同人本合集 A-Z 全卷',
-    originalTitle: 'Levi x Hange Doujinshi Anthologies & Collections',
+    originalTitle: 'Levi x Hans Doujinshi Anthologies & Collections',
     authorOrCircle: '日本各大利韩知名社团联合作品集',
     source: 'Comic City / C88-C99 展会精选 / 知名社团合集',
     translator: '利韩土豆汉化组 · 特邀翻译小队',
@@ -109,7 +109,7 @@ export const DOUJINSHI_BOOKS: DoujinshiBook[] = [
   {
     id: 'dj-2',
     title: '【原画高清】同人画集、明信片与公式特典合辑',
-    originalTitle: 'Levi & Hange Memorial Artbooks & Postcards',
+    originalTitle: 'Levi & Hans Memorial Artbooks & Postcards',
     authorOrCircle: '多位 Pixiv 知名画师及日本同人展会特典',
     source: '「調査兵団の休日」「翼を広げて」线下同人展现场',
     translator: '原画图集（附场刊独白译文）',

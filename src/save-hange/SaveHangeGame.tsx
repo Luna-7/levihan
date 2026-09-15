@@ -360,7 +360,7 @@ export const SaveHangeGame: React.FC = () => {
           {/* Main Title Banner (AOT Rumbling / Hange Stand Off) */}
           <div className="text-center my-0.5">
             <h1 className="text-xl sm:text-2xl font-black tracking-wider text-[#34d399] drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] font-mono">
-              SAVE HANGE
+              SAVE HANS
             </h1>
             <p className="text-[11px] font-bold text-[#bbf7d0] tracking-wide mt-0.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)]">
               {hasStarted ? '在终曲播放完毕前护送 韩吉 突围登上飞机' : '拖动方块开始突围'}

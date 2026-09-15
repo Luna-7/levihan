@@ -253,6 +253,18 @@
       </select>
     </div>
 
+    <div class="panel" id="inbox-panel">
+      <div class="spread" style="margin-bottom:12px">
+        <h2 style="margin:0">📮 云端待审收件箱</h2>
+        <button class="btn-sm" id="inbox-refresh">↻ 刷新待审投稿</button>
+      </div>
+      <div class="muted" id="inbox-status">登录后点击刷新，查看小说和树洞待审内容。</div>
+      <h3>✍️ 小说稿件审核</h3>
+      <div id="inbox-novels"></div>
+      <h3>🍃 树洞纸条审核</h3>
+      <div id="inbox-notes"></div>
+    </div>
+
     <!-- 已收录作品 -->
     <div class="panel" id="bk-panel" data-page-node-id="6gFnUcCwsrfARsrivblWLQ">
       <div class="spread" style="margin-bottom:12px" data-page-node-id="FiviVc5TPEkFHxMS2uUaHo">
@@ -1098,6 +1110,44 @@ function updateProgress(done, total){
   $('bar').style.width = pct + '%';
   $('prog-text').textContent = '已处理 ' + done + ' / ' + total + ' 张（' + pct + '%）';
 }
+
+/* ============ 云端待审收件箱 ============ */
+function loadInbox(){
+  if (LOCAL_PREVIEW) return;
+  $('inbox-status').textContent = '正在读取待审投稿…';
+  api({ action:'inboxList' }).then(function(res){
+    var items = Array.isArray(res.items) ? res.items : [];
+    $('inbox-status').textContent = '待审投稿：' + items.length + ' 条';
+    renderInboxType('novel', items.filter(function(item){ return item.type === 'novel'; }), $('inbox-novels'));
+    renderInboxType('treehole', items.filter(function(item){ return item.type === 'treehole'; }), $('inbox-notes'));
+  }).catch(function(err){ $('inbox-status').textContent = '读取失败：' + (err.message || String(err)); });
+}
+function renderInboxType(type, items, container){
+  if (!items.length) { container.innerHTML = '<p class="muted">暂无待审内容</p>'; return; }
+  container.innerHTML = items.map(function(item){
+    var title = type === 'novel' ? item.title : item.sender;
+    var content = type === 'novel' ? item.body : item.content;
+    return '<div class="panel" style="margin:8px 0;padding:12px" data-inbox-id="' + esc(item._id) + '">' +
+      '<b>' + esc(title) + '</b> <span class="muted">' + esc(item.createdAt || '') + '</span>' +
+      '<p class="muted">' + esc(type === 'novel' ? ('作者：' + item.author + ' · 邮箱：' + item.email + ' · 备注：' + (item.notes || '无')) : ('心情：' + (item.mood || ''))) + '</p>' +
+      '<details><summary>查看完整内容</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:340px;overflow:auto">' + esc(content || '') + '</pre></details>' +
+      '<div class="row" style="margin-top:10px"><button class="btn-sm btn-gold" data-review="approve">✓ 通过并发布</button>' +
+      '<button class="btn-sm btn-danger" data-review="reject">✕ 驳回</button></div></div>';
+  }).join('');
+}
+function reviewInbox(id, decision){
+  if (!confirm(decision === 'approve' ? '确认通过并立即发布到主站？' : '确认驳回这条投稿？')) return;
+  $('inbox-status').textContent = '正在处理投稿…';
+  api({ action:'inboxReview', id:id, decision:decision }).then(function(){ loadInbox(); })
+    .catch(function(err){ $('inbox-status').textContent = '审核失败：' + (err.message || String(err)); });
+}
+$('inbox-refresh').onclick = loadInbox;
+$('inbox-panel').addEventListener('click', function(event){
+  var button = event.target.closest('[data-review]');
+  if (!button) return;
+  var card = button.closest('[data-inbox-id]');
+  if (card) reviewInbox(card.getAttribute('data-inbox-id'), button.getAttribute('data-review'));
+});
 
 /* ============ 上传主流程 ============ */
 function setBusy(on){

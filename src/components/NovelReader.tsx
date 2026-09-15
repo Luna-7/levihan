@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GroupNovel } from '../types/doujinArchive';
 import { cosService } from '../services/cosClient';
 import { soundManager } from '../utils/audio';
+import { AuthorWithLink } from '../utils/authorLink';
 
 interface Props {
   novel: GroupNovel;
@@ -95,7 +96,7 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
           <div className="min-w-0">
             <h2 className="font-pixel text-xs sm:text-sm font-bold text-[#1E3A2B] truncate">{novel.title}</h2>
             <p className="text-[10px] font-retro-jp text-[#7A6958] truncate">
-              {novel.author} · 共 {novel.chars || 0} 字
+              <AuthorWithLink author={novel.author} customUrl={novel.authorUrl} defaultColorClass="text-[#7A6958]" /> · 共 {novel.chars || 0} 字
             </p>
           </div>
         </div>

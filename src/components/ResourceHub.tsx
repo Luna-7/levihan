@@ -38,6 +38,7 @@ export const ResourceHub: React.FC<Props> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'anime' | 'creative' | 'manga' | 'au-novel' | 'ao3' | 'pixiv' | 'doujin'>('anime');
   const [visitedArtists, setVisitedArtists] = useState<Set<string>>(new Set());
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Load visited Pixiv artists from localStorage
   useEffect(() => {
@@ -100,105 +101,139 @@ export const ResourceHub: React.FC<Props> = ({
   const mangaLinks = RESOURCE_LINKS.filter((r) => r.category === 'manga' || r.category === 'link');
 
   const renderResourceGrid = (links: ResourceLink[]) => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
       {links.map((item) => (
         <div
           key={item.id}
           onClick={() => handleAutoJump(item.url, item.code)}
-          className="bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-sm p-3 flex flex-col justify-between cursor-pointer transition-all hover:shadow-sm group active:scale-[0.99]"
+          className="relative bg-[#FFFDF5] border-2 border-[#1E4334] rounded-none p-3 flex flex-col justify-between cursor-pointer transition-all duration-75 shadow-none hover:bg-[#F9F5EA] hover:border-[#2A5C47] active:scale-[0.98] active:translate-y-0.5 active:bg-[#F0E8D5] group select-none"
           title="点击即可自动复制提取码并打开网盘"
         >
+          {/* Pixel Corner Screws */}
+          <span className="absolute top-1 left-1 w-1.5 h-1.5 bg-[#1E4334]/20 pointer-events-none" />
+          <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-[#1E4334]/20 pointer-events-none" />
+          <span className="absolute bottom-1 left-1 w-1.5 h-1.5 bg-[#1E4334]/20 pointer-events-none" />
+          <span className="absolute bottom-1 right-1 w-1.5 h-1.5 bg-[#1E4334]/20 pointer-events-none" />
+
           <div>
             {/* Top Badges */}
             <div className="flex items-center justify-between gap-2 mb-2">
               <span
-                className={`text-[11px] px-2 py-0.5 rounded-xs font-retro-jp font-bold ${
+                className={`text-[11px] px-2 py-0.5 rounded-none font-pixel font-bold border-2 ${
                   item.platform === '百度网盘'
-                    ? 'bg-[#EBF5FB] text-[#2980B9] border border-[#AED6F1]'
+                    ? 'bg-[#EBF5FB] text-[#1A5276] border-[#2980B9]'
                     : item.platform === '夸克网盘'
-                    ? 'bg-[#FEF9E7] text-[#B7950B] border border-[#F9E79F]'
-                    : 'bg-[#FADBD8] text-[#922B21] border border-[#F5B7B1]'
+                    ? 'bg-[#FEF9E7] text-[#7D6608] border-[#B7950B]'
+                    : 'bg-[#FADBD8] text-[#78281F] border-[#C0392B]'
                 }`}
               >
                 {item.platform}
               </span>
 
               {item.code ? (
-                <span className="font-pixel text-[11px] text-[#B7791F] bg-[#FAF5E8] border border-[#D4AC0D] px-2 py-0.5 rounded-xs font-bold flex items-center gap-1">
+                <span className="font-pixel text-[11px] text-[#7D6608] bg-[#FEF9E7] border-2 border-[#B7950B] px-2 py-0.5 rounded-none font-bold flex items-center gap-1 shadow-none">
                   <span>📋 提取码</span>
                   <span>{item.code}</span>
                 </span>
               ) : (
-                <span className="font-retro-jp text-[11px] text-[#27AE60] bg-[#E8F8F5] border border-[#A2D9CE] px-1.5 py-0.5 rounded-xs">
+                <span className="font-pixel text-[11px] text-[#1E8449] bg-[#E8F8F5] border-2 border-[#27AE60] px-2 py-0.5 rounded-none font-bold">
                   免提取码
                 </span>
               )}
             </div>
 
-            {/* Title - Fully visible with clean text wrapping */}
+            {/* Title */}
             <h3 className="font-bold font-retro-jp text-xs sm:text-sm text-[#2D2319] group-hover:text-[#1E4334] leading-relaxed break-words">
               {item.title}
             </h3>
-
-            {item.description && (
-              <p className="text-[11px] font-retro-jp text-[#7A6958] mt-1.5 leading-relaxed">
-                {item.description}
-              </p>
-            )}
           </div>
 
           {/* Action Hint */}
-          <div className="mt-2.5 pt-2 border-t border-dashed border-[#E8E1CE] flex items-center justify-between text-[11px] font-retro-jp text-[#7A6958] group-hover:text-[#1E4334]">
+          <div className="mt-2.5 pt-1.5 border-t-2 border-dashed border-[#1E4334]/20 flex items-center justify-between text-[11px] font-pixel text-[#7A6958] group-hover:text-[#1E4334]">
             <span className="flex items-center gap-1">
               <span>🚀</span>
-              <span>点击直接跳转下载</span>
+              <span>点击跳转网盘</span>
             </span>
-            <span className="font-bold">↗</span>
+            <span className="font-bold group-hover:translate-x-0.5 transition-transform">↗</span>
           </div>
         </div>
       ))}
     </div>
   );
 
-  return (
-    <div className="relative bg-[#FAF5E8] border-2 border-[#1E3A2B] rounded-md p-3.5 sm:p-4 my-3 shadow-sm text-[#2C241D]">
-      {/* Ribbon Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 mb-3 border-b-2 border-dashed border-[#D5C9AF]">
-        <div className="flex items-center gap-2">
-          <div className="bg-[#1E4334] text-[#F9E79F] px-2.5 py-0.5 text-xs font-pixel rounded-xs tracking-wider">
-            RESOURCE ARCHIVES
-          </div>
-        </div>
+  const tabsList = [
+    { key: 'anime', label: '📺 动漫原片全集' },
+    { key: 'creative', label: '🎬 二创剪辑/MMD素材' },
+    { key: 'manga', label: '📖 漫画全集/手稿资料' },
+    { key: 'au-novel', label: '📜 官方AU小说阅读' },
+    { key: 'ao3', label: '🌐 AO3官方与镜像速查' },
+    { key: 'pixiv', label: '🎨 PIXIV画师跳转墙' },
+  ];
 
-        {/* Tab Filters */}
-        <div className="flex flex-wrap gap-1">
-          {[
-            { key: 'anime', label: '📺 动漫原片' },
-            { key: 'creative', label: '🎬 二创素材' },
-            { key: 'manga', label: '📖 漫画/资料' },
-            { key: 'au-novel', label: '📜 官方AU小说' },
-            { key: 'ao3', label: '🌐 AO3镜像' },
-            { key: 'pixiv', label: '🎨 PIXIV墙' },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => {
-                soundManager.playBlip();
-                if (tab.key === 'doujin' && onGoToDoujin) {
-                  onGoToDoujin();
-                } else {
-                  setActiveTab(tab.key as typeof activeTab);
-                }
-              }}
-              className={`px-2 py-0.5 text-xs font-retro-jp rounded-xs border transition-all cursor-pointer ${
-                activeTab === tab.key
-                  ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold'
-                  : 'bg-[#FFFEEF] text-[#5B4636] border-[#D1C5AD] hover:bg-[#F3EAD5]'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+  return (
+    <div className="relative bg-transparent p-0 sm:p-1 my-0 text-[#2C241D]">
+      {/* 像素风主题自定义下拉导航控制栏 */}
+      <div className="mb-4 pb-2 border-b-2 border-dashed border-[#1E4334]/25 bg-[#EAE2CE]/40 p-1.5 border-2 border-[#1E4334]">
+        <div className="relative w-full max-w-sm">
+          {/* 下拉菜单触发按钮 */}
+          <button
+            type="button"
+            onClick={() => {
+              soundManager.playBlip();
+              setIsDropdownOpen(!isDropdownOpen);
+            }}
+            className="w-full bg-[#FFFDF5] text-[#1E4334] border-2 border-[#1E4334] font-pixel text-xs sm:text-sm py-2 px-3 rounded-none cursor-pointer flex items-center justify-between transition-all duration-75 hover:bg-[#FAF5E8] active:scale-[0.98] active:translate-y-0.5 focus:outline-none font-bold select-none"
+          >
+            <div className="flex items-center gap-2 truncate">
+              <span className="text-[#B7791F]">▶</span>
+              <span className="truncate">
+                {tabsList.find((t) => t.key === activeTab)?.label || '选择分类'}
+              </span>
+            </div>
+            <span className="text-[#1E4334] text-xs font-bold shrink-0 ml-2">
+              {isDropdownOpen ? '▲' : '▼'}
+            </span>
+          </button>
+
+          {/* 自定义复古像素主题下拉弹窗 */}
+          {isDropdownOpen && (
+            <>
+              {/* 点击外部遮罩关闭 */}
+              <div
+                className="fixed inset-0 z-20"
+                onClick={() => setIsDropdownOpen(false)}
+              />
+              <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-[#FFFDF5] border-2 border-[#1E4334] rounded-none shadow-[3px_3px_0px_#10241B] max-h-80 overflow-y-auto">
+                {tabsList.map((t) => {
+                  const isActive = activeTab === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => {
+                        soundManager.playBlip();
+                        setActiveTab(t.key as typeof activeTab);
+                        setIsDropdownOpen(false);
+                      }}
+                      className={`w-full text-left py-2 px-3 border-b border-dashed border-[#1E4334]/20 transition-all duration-75 flex items-center justify-between cursor-pointer select-none active:scale-[0.98] ${
+                        isActive
+                          ? 'bg-[#1E4334] text-[#F9E79F] font-bold'
+                          : 'bg-[#FFFDF5] text-[#2C241D] hover:bg-[#F3EAD5] hover:text-[#1E4334]'
+                      }`}
+                    >
+                      <span className="font-pixel text-xs sm:text-sm tracking-wide truncate">
+                        {t.label}
+                      </span>
+                      {isActive && (
+                        <span className="font-pixel text-xs text-[#F9E79F] shrink-0 ml-2">
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -209,36 +244,37 @@ export const ResourceHub: React.FC<Props> = ({
         </div>
       )}
 
-      {/* AO3 SECTION */}
+      {/* AO3 SECTION (平面卡片) */}
       {(activeTab === 'ao3') && (
-        <div className="mb-4 bg-[#FFFEEF] border border-[#D5C9AF] rounded-sm p-3">
-          <div className="flex items-center gap-2 text-xs font-pixel text-[#1E4334] font-bold mb-2">
-            <span>🌐 AO3 访问 / 镜像速查</span>
+        <div className="mb-4 bg-[#FFFDF5] border-2 border-[#1E4334] rounded-none p-3.5 shadow-none">
+          <div className="flex items-center gap-2 text-xs font-pixel text-[#1E4334] font-bold mb-2.5 pb-2 border-b-2 border-dashed border-[#1E4334]/20">
+            <span>🌐</span>
+            <span>AO3 访问 / 镜像速查</span>
           </div>
 
-          <div className="p-2 bg-[#FBEDE9] border border-[#E74C3C] rounded-xs text-xs font-retro-jp text-[#900C3F] mb-3 leading-relaxed">
+          <div className="p-2.5 bg-[#FBEDE9] border-2 border-[#C0392B] rounded-none text-xs font-retro-jp text-[#900C3F] mb-3 leading-relaxed shadow-none">
             ⚠️ <b>OTW 官方提醒</b>：官网以外的镜像站都是第三方运营，在镜像站登录可能泄露账号密码。官方主站永远只认 <b>archiveofourown.org</b>。
           </div>
 
           <div className="space-y-3 text-xs font-retro-jp">
-            <div className="flex items-center justify-between gap-1.5 sm:gap-3 p-2 bg-[#EAF2EE] border border-[#B3D1C2] rounded-xs text-[11px] sm:text-xs font-retro-jp w-full">
+            <div className="flex items-center justify-between gap-1.5 sm:gap-3 p-2.5 bg-[#EAF2EE] border-2 border-[#1E4334] rounded-none text-[11px] sm:text-xs font-retro-jp w-full shadow-none">
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="font-bold text-[#1E4334] shrink-0">★ 官方主站入口</span>
+                <span className="font-bold text-[#1E4334] shrink-0 font-pixel">★ 官方主站入口</span>
                 <span className="text-[10px] sm:text-[11px] text-[#7A6958] hidden xs:inline truncate">(最安全，部分网络需代理)</span>
               </div>
               <a
                 href="https://archiveofourown.org/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#1E4334] text-[#F9E79F] font-pixel text-[10px] sm:text-xs rounded-xs hover:bg-[#2A5C47] transition-all shadow-2xs shrink-0"
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#1E4334] text-[#F9E79F] font-pixel text-[10px] sm:text-xs rounded-none border-2 border-[#10241B] hover:bg-[#2A5C47] transition-all shadow-none shrink-0 font-bold"
               >
                 <span>archiveofourown.org ↗</span>
               </a>
             </div>
 
             <div>
-              <span className="font-bold text-[#5B4636] block mb-1">官方安全备用域名:</span>
-              <div className="flex flex-wrap gap-1.5">
+              <span className="font-bold text-[#5B4636] font-pixel block mb-1.5">官方安全备用域名:</span>
+              <div className="flex flex-wrap gap-2">
                 {[
                   'https://archiveofourown.com/',
                   'https://archiveofourown.net/',
@@ -254,7 +290,7 @@ export const ResourceHub: React.FC<Props> = ({
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-2 py-1 bg-[#FAF5E8] border border-[#BFA985] rounded-xs text-[#4A3828] hover:bg-[#F3EAD5] hover:text-[#1E4334] transition-all"
+                      className="px-2.5 py-1 bg-[#FAF5E8] border-2 border-[#1E4334] rounded-none text-[#4A3828] font-pixel text-[11px] shadow-none hover:bg-[#F3EAD5] hover:text-[#1E4334] transition-all"
                     >
                       {domain}
                     </a>
@@ -269,7 +305,7 @@ export const ResourceHub: React.FC<Props> = ({
       {/* SECTION 1: 📺 动漫原片 */}
       {(activeTab === 'anime') && animeLinks.length > 0 && (
         <div className="mb-4">
-          <div className="text-xs font-pixel text-[#1E4334] font-bold mb-2 flex items-center justify-between">
+          <div className="text-xs sm:text-sm font-pixel text-[#1E4334] font-bold mb-3 flex items-center justify-between border-b-2 border-dashed border-[#1E4334]/25 pb-2">
             <span className="flex items-center gap-1.5">
               <span>📺</span>
               <span>动漫原片全集</span>
@@ -284,7 +320,7 @@ export const ResourceHub: React.FC<Props> = ({
         <div className="space-y-6">
           {cutLinks.length > 0 && (
             <div>
-              <div className="text-xs font-pixel text-[#1E4334] font-bold mb-2.5 flex items-center justify-between">
+              <div className="text-xs sm:text-sm font-pixel text-[#1E4334] font-bold mb-3 flex items-center justify-between border-b-2 border-dashed border-[#1E4334]/25 pb-2">
                 <span className="flex items-center gap-1.5">
                   <span>🎬</span>
                   <span>Cut 剪辑素材</span>
@@ -296,7 +332,7 @@ export const ResourceHub: React.FC<Props> = ({
 
           {mmdLinks.length > 0 && (
             <div>
-              <div className="text-xs font-pixel text-[#1E4334] font-bold mb-2.5 flex items-center justify-between">
+              <div className="text-xs sm:text-sm font-pixel text-[#1E4334] font-bold mb-3 flex items-center justify-between border-b-2 border-dashed border-[#1E4334]/25 pb-2">
                 <span className="flex items-center gap-1.5">
                   <span>📦</span>
                   <span>MMD 模型包</span>
@@ -311,7 +347,7 @@ export const ResourceHub: React.FC<Props> = ({
       {/* SECTION 3: 📖 漫画与原画资料 */}
       {(activeTab === 'manga') && mangaLinks.length > 0 && (
         <div className="mb-4">
-          <div className="text-xs font-pixel text-[#1E4334] font-bold mb-2 flex items-center justify-between">
+          <div className="text-xs sm:text-sm font-pixel text-[#1E4334] font-bold mb-3 flex items-center justify-between border-b-2 border-dashed border-[#1E4334]/25 pb-2">
             <span className="flex items-center gap-1.5">
               <span>📖</span>
               <span>漫画全集、手稿与资料</span>
@@ -321,17 +357,14 @@ export const ResourceHub: React.FC<Props> = ({
         </div>
       )}
 
-      {/* PIXIV JUMP WALL */}
+      {/* PIXIV JUMP WALL (平面卡片) */}
       {(activeTab === 'pixiv') && (
-        <div className="mb-4 bg-[#FFFEEF] border border-[#D5C9AF] rounded-sm p-3">
-          <div className="pb-2.5 mb-2.5 border-b border-[#E8E1CE] space-y-2.5">
+        <div className="mb-4 bg-[#FFFDF5] border-2 border-[#1E4334] rounded-none p-3.5 shadow-none">
+          <div className="pb-2.5 mb-3 border-b-2 border-dashed border-[#1E4334]/25 space-y-2">
             {/* Title */}
             <div className="flex items-center justify-between gap-2">
               <span className="font-pixel text-xs sm:text-sm text-[#1E4334] font-bold">
                 🎨 PIXIV画师跳转墙
-              </span>
-              <span className="text-[11px] font-retro-jp text-[#7A6958]">
-                💡 直接点击卡片即可跳转 Pixiv 画师主页
               </span>
             </div>
 
@@ -339,14 +372,14 @@ export const ResourceHub: React.FC<Props> = ({
             <div className="flex justify-end">
               <button
                 onClick={handleResetDonePixiv}
-                className="py-1.5 px-3 bg-[#FAF5E8] hover:bg-[#EAE2CE] text-[#8C7A68] border border-[#D5C9AF] text-xs font-retro-jp rounded-xs transition-all text-center flex items-center justify-center gap-1 cursor-pointer select-none"
+                className="py-1 px-3 bg-[#FAF5E8] hover:bg-[#EAE2CE] text-[#1E4334] border-2 border-[#1E4334] text-xs font-pixel rounded-none shadow-none transition-all text-center flex items-center justify-center gap-1 cursor-pointer select-none"
               >
                 <span>👁️</span> 重置已读
               </button>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-1.5 max-h-80 overflow-y-auto pr-1">
+          <div className="flex flex-wrap gap-2 max-h-96 overflow-y-auto pr-1">
             {PIXIV_ARTISTS_DATA.map((artist) => {
               const key = artist.id || artist.url;
               const isVisited = visitedArtists.has(key);
@@ -358,13 +391,13 @@ export const ResourceHub: React.FC<Props> = ({
                   key={key}
                   onClick={() => handleOpenArtist(artist)}
                   style={{ backgroundColor: bg, borderColor: border, color: '#2C241D' }}
-                  className={`px-2 py-1 text-xs font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1.5 select-none hover:opacity-90 hover:shadow-2xs ${
+                  className={`px-2.5 py-1 text-xs font-retro-jp rounded-none border-2 border-[#1E4334] shadow-none hover:bg-[#F3EAD5] cursor-pointer transition-all flex items-center gap-1.5 select-none ${
                     isVisited ? 'opacity-60 grayscale-[30%]' : ''
                   }`}
                   title={`点击直接在新标签打开 ${artist.name} 的 Pixiv 主页 ↗`}
                 >
                   <span className="text-[10px]">{isVisited ? '👁️' : '✦'}</span>
-                  <span>{artist.name}</span>
+                  <span className="font-medium">{artist.name}</span>
                 </div>
               );
             })}

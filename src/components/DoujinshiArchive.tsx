@@ -8,6 +8,8 @@ import { cosService } from '../services/cosClient';
 import { NovelModule } from './NovelModule';
 import LazyComicPage from './LazyComicPage';
 import { DOUJIN_SESSION_KEY, DoujinMaintenanceGate } from './DoujinMaintenanceGate';
+import { AuthorWithLink } from '../utils/authorLink';
+import { newestBooksFirst } from '../utils/workSort';
 
 interface Props {
   onCopyCode?: (code: string) => void;
@@ -17,7 +19,7 @@ interface Props {
 
 export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources }) => {
   // 归档数据状态（优先加载远端 COS archive.json，兜底使用本地 Excel 录入数据）
-  const [books, setBooks] = useState<DoujinBookItem[]>(DOUJIN_ARCHIVE_DATA);
+  const [books, setBooks] = useState<DoujinBookItem[]>(() => newestBooksFirst(DOUJIN_ARCHIVE_DATA));
   const [isLoadingArchive, setIsLoadingArchive] = useState<boolean>(false);
 
   // 搜索与多维筛选
@@ -64,7 +66,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     try {
       const loaded = await cosService.loadArchiveData();
       if (loaded && loaded.length > 0) {
-        setBooks(loaded);
+        setBooks(newestBooksFirst(loaded));
         if (showToastNotice) {
           onShowToast(`已同步 COS 存储桶归档数据，共 ${loaded.length} 部作品 📦`);
         }
@@ -108,7 +110,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   };
 
   // 过滤同人本列表
-  const filteredBooks = books.filter((book) => {
+  const filteredBooks = newestBooksFirst(books.filter((book) => {
     const matchCat = (book.category || '漫画本') === selectedCategory;
     const matchTag = selectedTag === '全部' || book.tags.includes(selectedTag);
     const q = searchQuery.trim().toLowerCase();
@@ -123,7 +125,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
       book.tags.some((t) => t.toLowerCase().includes(q));
 
     return matchCat && matchTag && matchSearch;
-  });
+  }));
 
   // 处理封面加载失败
   const handleCoverError = (bookId: string) => {
@@ -175,7 +177,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                 {readingBook.titleZh}
               </h2>
               <p className="text-[10px] font-retro-jp text-[#7A6958] truncate">
-                作者：{readingBook.circle} · 共 {totalPages} 页
+                作者：<AuthorWithLink author={readingBook.circle} customUrl={readingBook.authorUrl} defaultColorClass="text-[#7A6958]" orangeColorClass="text-[#D35400]" /> · 共 {totalPages} 页
                 {isDetectingPages ? '（动态校准中...）' : ''}
               </p>
             </div>
@@ -237,32 +239,34 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
       </div>
 
       {/* 筛选与搜索栏 */}
-      <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-md p-2.5 space-y-2">
+      <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-md p-2.5 sm:p-3 space-y-2">
         {/* 分类栏与标签 */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs font-retro-jp">
-          <span className="text-[10px] font-pixel text-[#8C7A68] mr-1">分类:</span>
-          {allCategories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => {
-                soundManager.playBlip();
-                setSelectedCategory(cat);
-              }}
-              className={`px-2 py-0.5 rounded-xs border transition-all cursor-pointer text-[11px] ${
-                selectedCategory === cat
-                  ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-xs'
-                  : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs font-retro-jp">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+            <span className="text-[10px] font-pixel text-[#8C7A68] mr-1 shrink-0">分类:</span>
+            {allCategories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => {
+                  soundManager.playBlip();
+                  setSelectedCategory(cat);
+                }}
+                className={`px-2.5 py-1 rounded-xs border transition-all cursor-pointer text-xs shrink-0 select-none active:scale-95 ${
+                  selectedCategory === cat
+                    ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-xs'
+                    : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5] active:bg-[#EAE2CE]'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
 
           {/* 标签行：漫画本的标签与小说本不通用，小说本模块有自己的题材筛选，此处隐藏 */}
           {(selectedCategory === '插画集' || isMangaUnlocked) && (
-            <>
-              <span className="text-[10px] font-pixel text-[#8C7A68] ml-2 mr-1">标签:</span>
-              <div className="flex flex-wrap gap-1">
+            <div className="flex items-center gap-1 overflow-x-auto pt-1 sm:pt-0 sm:border-l sm:border-dashed sm:border-[#D5C9AF] sm:pl-2 scrollbar-none">
+              <span className="text-[10px] font-pixel text-[#8C7A68] mr-1 shrink-0">标签:</span>
+              <div className="flex items-center gap-1 flex-nowrap sm:flex-wrap">
                 {allTags.map((tag) => (
                   <button
                     key={tag}
@@ -270,17 +274,17 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                       soundManager.playBlip();
                       setSelectedTag(tag);
                     }}
-                    className={`px-1.5 py-0.5 rounded-xs border text-[10px] font-retro-jp transition-all cursor-pointer ${
+                    className={`px-2 py-0.5 rounded-xs border text-[11px] font-retro-jp transition-all cursor-pointer whitespace-nowrap shrink-0 select-none active:scale-95 ${
                       selectedTag === tag
-                        ? 'bg-[#B7791F] text-[#FFFEEF] border-[#B7791F] font-bold'
-                        : 'bg-[#FAF5E8] text-[#7A6958] border-[#E0D5BE] hover:bg-white'
+                        ? 'bg-[#B7791F] text-[#FFFEEF] border-[#B7791F] font-bold shadow-2xs'
+                        : 'bg-[#FAF5E8] text-[#7A6958] border-[#E0D5BE] hover:bg-white active:bg-[#EAE2CE]'
                     }`}
                   >
                     {tag}
                   </button>
                 ))}
               </div>
-            </>
+            </div>
           )}
         </div>
 
@@ -331,27 +335,17 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
             >
               <div className="space-y-2">
                 {/* 顶部标题与分类徽章 */}
-                <div className="flex items-start justify-between gap-1.5">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-pixel text-[9px] px-1.5 py-0.2 bg-[#1E4334] text-[#F9E79F] rounded-xs font-bold">
-                        {book.category || '漫画本'}
-                      </span>
-                      {book.pages && (
-                        <span className="text-[10px] font-retro-jp text-[#8C7A68]">
-                          {book.pages}P
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="font-pixel text-xs sm:text-[13px] font-bold text-[#1E3A2B] group-hover:text-[#B7791F] mt-1 break-words leading-snug transition-colors">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-pixel text-[9px] px-1.5 py-0.5 bg-[#1E4334] text-[#F9E79F] rounded-xs font-bold shrink-0">
+                      {book.category || '漫画本'}
+                    </span>
+                    <h3 className="font-pixel text-xs sm:text-[13px] font-bold text-[#1E3A2B] group-hover:text-[#B7791F] truncate min-w-0 flex-1 leading-snug transition-colors" title={book.titleZh}>
                       {book.titleZh}
                     </h3>
-                    {book.titleJp && (
-                      <div className="text-[10px] font-retro-jp text-[#8C7A68] italic truncate">
-                        {book.titleJp}
-                      </div>
-                    )}
+                    {book.pages && <span className="text-[10px] font-retro-jp text-[#8C7A68] shrink-0">{book.pages}P</span>}
                   </div>
+                  {book.titleJp && <div className="text-[10px] font-retro-jp text-[#8C7A68] italic truncate mt-1">{book.titleJp}</div>}
                 </div>
 
                 {/* 封面图片展示区 (来源 腾讯云 COS CDN 链接映射，竖版漫画本比例 2:3，悬浮显示点击阅读长图) */}
@@ -396,8 +390,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                 <div className="bg-[#FAF5E8] border border-[#EBE3D0] rounded-xs p-2 space-y-1 text-[11px] font-retro-jp">
                   <div className="flex items-start gap-1">
                     <span className="font-bold text-[#8C6B38] shrink-0 w-10 text-right">作者:</span>
-                    <span className="text-[#3E342B] font-bold flex-1 break-words">
-                      {book.circle || '未知'}
+                    <span className="font-bold flex-1 break-words">
+                      <AuthorWithLink author={book.circle} customUrl={book.authorUrl} defaultColorClass="text-[#3E342B]" orangeColorClass="text-[#D35400]" />
                     </span>
                   </div>
 

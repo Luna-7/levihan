@@ -75,3 +75,5 @@ export interface AuNovelStory {
   paragraphsZh: string[];
   paragraphsEn: string[];
 }
+
+export type NavigationTab = 'home' | 'resources' | 'doujinshi' | 'tatakaru' | 'dispatch';

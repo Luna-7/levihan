@@ -14,31 +14,34 @@ interface Props {
   children: React.ReactNode;
   onOpenChest?: () => void;
   chestOpened?: boolean;
+  isGamePlaying?: boolean;
 }
 
 export const RetroPixelFrame: React.FC<Props> = ({
   children,
   onOpenChest,
   chestOpened = false,
+  isGamePlaying = false,
 }) => {
   return (
-    <div className="w-full max-w-4xl mx-auto my-2 xs:my-4 sm:my-6 md:my-8 px-1.5 xs:px-2 sm:px-4 transition-all duration-300">
-      {/* Outer Card with Dynamic responsive Stitched Border & Corner Pixel Hearts */}
-      <div className="retro-frame-card relative bg-[#FBF7EC] border-2 xs:border-4 md:border-[6px] border-[#1E4334] rounded-md xs:rounded-lg p-2.5 xs:p-4 sm:p-6 md:p-8 lg:p-10 shadow-xl transition-all duration-300">
-        {/* Inner Gold/Brown Stitched Dotted Line */}
-        <div className="absolute inset-1 xs:inset-2 md:inset-3 border sm:border-2 border-dashed border-[#D4B26F] pointer-events-none rounded-sm xs:rounded-md" />
-
-        {/* 4 Corner Purple Pixel Hearts */}
+    <div className={`w-full ${isGamePlaying ? 'max-w-5xl my-0 sm:my-1' : 'max-w-4xl my-0 sm:my-4 md:my-6'} mx-auto px-0 sm:px-4 transition-all duration-300`}>
+      {/* Outer Card with Dynamic responsive Border */}
+      <div className={`retro-frame-card relative bg-[#FBF7EC] border-t-2 xs:border-t-3 sm:border-t-4 md:border-t-[5px] border-x-2 xs:border-x-3 sm:border-x-4 md:border-x-[5px] border-b-0 sm:border-b-4 md:border-b-[5px] border-[#1E4334] rounded-t-none xs:rounded-t-md sm:rounded-lg rounded-b-none sm:rounded-b-lg ${
+        isGamePlaying
+          ? 'p-1 xs:p-1.5 sm:p-3 pb-2 sm:pb-3'
+          : 'p-2.5 xs:p-3 sm:p-5 md:p-7 pb-24 sm:pb-7'
+      } shadow-xl transition-all duration-300 min-h-screen sm:min-h-0`}>
+        {/* 4 Corner Purple Pixel Hearts - Bottom hearts hidden on mobile (tucked under nav), visible on web */}
         <div className="absolute -top-2.5 xs:-top-3.5 -left-2.5 xs:-left-3.5 z-20 scale-75 xs:scale-100">
           <PixelHeart size={26} />
         </div>
         <div className="absolute -top-2.5 xs:-top-3.5 -right-2.5 xs:-right-3.5 z-20 scale-75 xs:scale-100">
           <PixelHeart size={26} />
         </div>
-        <div className="absolute -bottom-2.5 xs:-bottom-3.5 -left-2.5 xs:-left-3.5 z-20 scale-75 xs:scale-100">
+        <div className="absolute -bottom-2.5 xs:-bottom-3.5 -left-2.5 xs:-left-3.5 z-20 scale-75 xs:scale-100 hidden sm:block">
           <PixelHeart size={26} />
         </div>
-        <div className="absolute -bottom-2.5 xs:-bottom-3.5 -right-2.5 xs:-right-3.5 z-20 scale-75 xs:scale-100">
+        <div className="absolute -bottom-2.5 xs:-bottom-3.5 -right-2.5 xs:-right-3.5 z-20 scale-75 xs:scale-100 hidden sm:block">
           <PixelHeart size={26} />
         </div>
 
@@ -93,25 +96,6 @@ export const RetroPixelFrame: React.FC<Props> = ({
 
         {/* Content Container */}
         <div className="relative z-10">{children}</div>
-
-        {/* Bottom Retro Footer */}
-        <footer className="mt-4 pt-3 border-t-2 border-dashed border-[#D5C9AF] text-center">
-          <div className="bg-[#1E4334] text-[#FAF5E8] px-2.5 py-1.5 xs:px-3 xs:py-2 rounded-xs flex flex-col sm:flex-row items-center justify-between gap-2 shadow-xs text-xs">
-            <div className="flex items-center gap-1.5 font-pixel text-[#F9E79F] font-bold text-[10px] xs:text-xs">
-              <span>🥔 利韩土豆仓</span>
-              <span className="text-[#FAF5E8] font-normal">· 调查兵团粮仓</span>
-            </div>
-
-            <div className="font-retro-jp text-[9px] xs:text-[11px] text-[#D5F5E3] tracking-wide">
-              ✦ 利韩专一向同好交流 · 严禁商用倒卖与公开二传 ✦
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] xs:text-[10px] font-pixel text-[#EAA83B]">心臓を捧げよ</span>
-              <span className="text-xs xs:text-sm">🥔</span>
-            </div>
-          </div>
-        </footer>
       </div>
     </div>
   );

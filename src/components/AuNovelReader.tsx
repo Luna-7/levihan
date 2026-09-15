@@ -6,7 +6,7 @@ interface AuNovelReaderProps {
   onShowToast: (msg: string) => void;
 }
 
-type FontSize = 'sm' | 'md' | 'lg';
+type FontSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 /**
  * 格式化章节中文名称：
@@ -29,8 +29,8 @@ export const formatCleanChineseTitle = (raw: string): string => {
 };
 
 export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => {
-  // 阅读参数：字号 ('sm' | 'md' | 'lg') 与夜间模式
-  const [fontSize, setFontSize] = useState<FontSize>('sm');
+  // 阅读参数：5档字号 ('xs' | 'sm' | 'md' | 'lg' | 'xl') 与夜间模式
+  const [fontSize, setFontSize] = useState<FontSize>('md');
   const [isNightMode, setIsNightMode] = useState<boolean>(false);
 
   // 展开章节集合（默认展开第一篇）
@@ -102,15 +102,19 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  // 段落字号缩放样式
+  // 80年代报刊排版：字号 + 宽松行距 leading 增强
   const getParagraphTextSize = () => {
     switch (fontSize) {
+      case 'xs':
+        return 'text-[12px] sm:text-[13px] leading-[2.1] sm:leading-[2.2] tracking-normal';
       case 'sm':
-        return 'text-[10px] sm:text-[11px] leading-relaxed';
+        return 'text-[13px] sm:text-[14px] leading-[2.15] sm:leading-[2.25] tracking-normal';
       case 'md':
-        return 'text-[11px] sm:text-xs leading-relaxed';
+        return 'text-[14.5px] sm:text-[16px] leading-[2.2] sm:leading-[2.35] tracking-wide';
       case 'lg':
-        return 'text-xs sm:text-[13px] leading-relaxed';
+        return 'text-[16.5px] sm:text-[18px] leading-[2.3] sm:leading-[2.45] tracking-wide';
+      case 'xl':
+        return 'text-[18.5px] sm:text-[20px] leading-[2.4] sm:leading-[2.55] tracking-wider';
     }
   };
 
@@ -121,74 +125,45 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
         isNightMode ? 'text-[#DCD5C6]' : 'text-[#3E342B]'
       }`}
     >
-      {/* 🛠️ 悬浮工具栏 (字号调整 & 夜间模式切换) */}
+      {/* 🛠️ 悬浮工具栏 (80s 报刊风 5 档字号选择 & 夜间模式) */}
       <div
         id="au-floating-toolbar"
-        className={`fixed bottom-5 right-4 sm:bottom-6 sm:right-6 z-40 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border shadow-lg transition-all backdrop-blur-md ${
+        className={`fixed bottom-5 right-4 sm:bottom-6 sm:right-6 z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-none border-2 shadow-[3px_3px_0px_#10241B] transition-all backdrop-blur-md ${
           isNightMode
-            ? 'bg-[#181D1A]/90 border-[#384E3F] text-[#EDE7D9]'
-            : 'bg-[#FFFEEF]/95 border-[#1E4334] text-[#1E4334]'
+            ? 'bg-[#181D1A]/95 border-[#384E3F] text-[#EDE7D9]'
+            : 'bg-[#FFFDF5]/95 border-[#1E4334] text-[#1E4334]'
         }`}
-        style={{ boxShadow: isNightMode ? '0 8px 24px rgba(0,0,0,0.6)' : '0 8px 24px rgba(30,67,52,0.18)' }}
       >
-        {/* 字号选择：小 / 中 / 大 */}
-        <div className="flex items-center border-r pr-1.5 mr-0.5 border-dashed border-current/25">
-          <span className="text-[9px] font-pixel opacity-70 mr-1 hidden xs:inline">字号</span>
-          <div className="flex items-center gap-0.5">
-            <button
-              id="font-size-sm-btn"
-              onClick={() => {
-                soundManager.playBlip();
-                setFontSize('sm');
-                onShowToast('字号：小');
-              }}
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-pixel transition-all cursor-pointer ${
-                fontSize === 'sm'
-                  ? isNightMode
-                    ? 'bg-[#384E3F] text-[#F9E79F] font-bold'
-                    : 'bg-[#1E4334] text-[#F9E79F] font-bold'
-                  : 'hover:bg-current/10 opacity-70'
-              }`}
-              title="小字号"
-            >
-              小
-            </button>
-            <button
-              id="font-size-md-btn"
-              onClick={() => {
-                soundManager.playBlip();
-                setFontSize('md');
-                onShowToast('字号：中');
-              }}
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-pixel transition-all cursor-pointer ${
-                fontSize === 'md'
-                  ? isNightMode
-                    ? 'bg-[#384E3F] text-[#F9E79F] font-bold'
-                    : 'bg-[#1E4334] text-[#F9E79F] font-bold'
-                  : 'hover:bg-current/10 opacity-70'
-              }`}
-              title="中字号"
-            >
-              中
-            </button>
-            <button
-              id="font-size-lg-btn"
-              onClick={() => {
-                soundManager.playBlip();
-                setFontSize('lg');
-                onShowToast('字号：大');
-              }}
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-pixel transition-all cursor-pointer ${
-                fontSize === 'lg'
-                  ? isNightMode
-                    ? 'bg-[#384E3F] text-[#F9E79F] font-bold'
-                    : 'bg-[#1E4334] text-[#F9E79F] font-bold'
-                  : 'hover:bg-current/10 opacity-70'
-              }`}
-              title="大字号"
-            >
-              大
-            </button>
+        {/* 字号选择：微 / 小 / 中 / 大 / 特大 */}
+        <div className="flex items-center border-r pr-2 mr-0.5 border-dashed border-current/30">
+          <span className="text-[10px] font-pixel opacity-80 mr-1.5 hidden xs:inline">字号</span>
+          <div className="flex items-center gap-1">
+            {[
+              { key: 'xs', label: '微' },
+              { key: 'sm', label: '小' },
+              { key: 'md', label: '中' },
+              { key: 'lg', label: '大' },
+              { key: 'xl', label: '特大' },
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => {
+                  soundManager.playBlip();
+                  setFontSize(item.key as FontSize);
+                  onShowToast(`字号调整为：${item.label}`);
+                }}
+                className={`px-1.5 py-0.5 rounded-none text-[10px] sm:text-[11px] font-pixel transition-all cursor-pointer border ${
+                  fontSize === item.key
+                    ? isNightMode
+                      ? 'bg-[#384E3F] text-[#F9E79F] border-[#F9E79F] font-bold shadow-[1px_1px_0px_#F9E79F]'
+                      : 'bg-[#1E4334] text-[#F9E79F] border-[#10241B] font-bold shadow-[1px_1px_0px_#10241B]'
+                    : 'bg-transparent border-transparent hover:border-current/30 opacity-75'
+                }`}
+                title={`字号：${item.label}`}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -198,16 +173,16 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
           onClick={() => {
             soundManager.playBlip();
             setIsNightMode(!isNightMode);
-            onShowToast(!isNightMode ? '已切换至夜间深色阅读模式 🌙' : '已切换至日间羊皮纸模式 ☀️');
+            onShowToast(!isNightMode ? '已切换至夜间墨黑报刊模式 🌙' : '已切换至 80s 复古羊皮纸风 📜');
           }}
-          className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-pixel transition-all cursor-pointer ${
+          className={`flex items-center gap-1 px-2 py-0.5 rounded-none border text-[10px] sm:text-xs font-pixel transition-all cursor-pointer ${
             isNightMode
-              ? 'bg-[#2A352D] hover:bg-[#344238] text-[#F9E79F]'
-              : 'bg-[#EAE2CE] hover:bg-[#DDD3BB] text-[#1E4334]'
+              ? 'bg-[#2A352D] border-[#384E3F] text-[#F9E79F] hover:bg-[#344238]'
+              : 'bg-[#EAE2CE] border-[#1E4334] text-[#1E4334] hover:bg-[#DDD3BB]'
           }`}
-          title={isNightMode ? '切换至日间模式' : '切换至夜间模式'}
+          title={isNightMode ? '切换至日间报刊' : '切换至夜间报刊'}
         >
-          <span>{isNightMode ? '🌙 夜间' : '☀️ 日间'}</span>
+          <span>{isNightMode ? '🌙 夜间' : '📜 报纸'}</span>
         </button>
 
         {/* 置顶按钮 */}
@@ -216,58 +191,38 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
             soundManager.playBlip();
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className="px-1.5 py-0.5 rounded-full text-[10px] font-pixel hover:bg-current/10 opacity-70 cursor-pointer"
+          className="px-1.5 py-0.5 rounded-none text-[10px] font-pixel hover:bg-current/10 opacity-75 cursor-pointer"
           title="回到顶部"
         >
-          ↑
+          ▲
         </button>
       </div>
 
-      {/* 主阅读容器 */}
+      {/* 沉浸式 80 年代报刊风主阅读区 (狭窄报纸栏目宽度 max-w-2xl，宽裕行距与复古版面) */}
       <div
-        className={`relative w-full max-w-4xl mx-auto rounded-xl p-3 sm:p-5 md:p-6 transition-colors duration-200 border-2 sm:border-3 ${
-          isNightMode
-            ? 'bg-[#151916] border-[#2A3A2F] shadow-xl'
-            : 'bg-[#FAF5E8] border-[#1E4334] shadow-md'
+        className={`relative w-full max-w-2xl mx-auto p-1 sm:p-2 transition-colors duration-200 border-0 shadow-none ${
+          isNightMode ? 'bg-transparent text-[#DCD5C6]' : 'bg-transparent text-[#3E342B]'
         }`}
       >
-        {/* 内层虚线框 */}
-        <div
-          className={`absolute inset-2 border border-dashed rounded-lg pointer-events-none ${
-            isNightMode ? 'border-[#33473A]/60' : 'border-[#D4B26F]'
-          }`}
-        />
-
-        {/* 顶部标题：简约大气 */}
-        <div className="relative text-center mb-3 pt-0.5">
-          <h1
-            className={`font-pixel text-base sm:text-lg md:text-xl tracking-wide font-bold ${
-              isNightMode ? 'text-[#F9E79F]' : 'text-[#1E4334]'
-            }`}
-          >
-            AU 官方小说短篇集
-          </h1>
-        </div>
-
-        {/* 📄 百度网盘纯英文版跳转卡片：重新设计，仅仅出现“AU官方小说英文版 ↗”，点击直接跳转 */}
+        {/* 📄 百度网盘纯英文版跳转卡片：简约外链条 (平面极简) */}
         <div
           id="au-english-docx-card"
           onClick={handleOpenEnglishDoc}
-          className={`relative mb-3.5 px-3 py-2 rounded-md border cursor-pointer transition-all hover:scale-[1.004] active:scale-[0.995] flex items-center justify-center gap-1.5 group select-none ${
+          className={`relative mb-3.5 px-3 py-2 rounded-none border-2 cursor-pointer transition-all flex items-center justify-center gap-1.5 group select-none shadow-none ${
             isNightMode
-              ? 'bg-[#1B231E] border-[#384E3F] hover:border-[#F9E79F] text-[#F9E79F]'
-              : 'bg-[#FFFEEF] border-[#1E4334] hover:border-[#B7791F] text-[#1E4334]'
+              ? 'bg-[#1D2520] border-[#384E3F] hover:border-[#F9E79F] text-[#F9E79F]'
+              : 'bg-[#FFFDF5] border-[#1E4334] hover:bg-[#F3EAD5] hover:border-[#B7791F] text-[#1E4334]'
           }`}
           title="点击直接跳转至百度网盘（提取码: 9fpv）"
         >
           <span className="font-pixel text-[11px] sm:text-xs font-bold tracking-wide flex items-center gap-1.5">
-            <span>AU官方小说英文版</span>
+            <span>📄 AU官方小说英文版</span>
             <span className="text-xs group-hover:translate-x-0.5 transition-transform">↗</span>
           </span>
         </div>
 
         {/* 简约操作栏：目录索引与全部展开/收起 */}
-        <div className="relative flex items-center justify-between gap-2 mb-3 pb-1.5 border-b border-dashed border-current/20 font-retro-jp text-[11px]">
+        <div className="relative flex items-center justify-between gap-2 mb-3 pb-1.5 border-b-2 border-dashed border-current/25 font-retro-jp text-[11px]">
           <div className="flex items-center gap-2">
             <button
               id="au-toc-toggle-btn"
@@ -275,14 +230,14 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
                 soundManager.playBlip();
                 setShowToc(!showToc);
               }}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border font-pixel text-[10px] sm:text-[11px] cursor-pointer transition-all ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-none border-2 font-pixel text-[10px] sm:text-[11px] cursor-pointer transition-all shadow-none ${
                 showToc
                   ? isNightMode
                     ? 'bg-[#384E3F] text-[#F9E79F] border-[#384E3F]'
                     : 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334]'
                   : isNightMode
                   ? 'bg-[#212823] text-[#D4CBC0] border-[#384A3D] hover:bg-[#28322B]'
-                  : 'bg-[#FAF5E8] text-[#5B4636] border-[#C5B495] hover:bg-white'
+                  : 'bg-[#FAF5E8] text-[#5B4636] border-[#1E4334] hover:bg-white'
               }`}
             >
               <span>📖 篇目目录</span>
@@ -294,10 +249,10 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
             <button
               id="au-expand-all-btn"
               onClick={handleExpandAll}
-              className={`px-2 py-0.5 rounded-sm border font-pixel text-[10px] cursor-pointer transition-all ${
+              className={`px-2 py-1 rounded-none border-2 font-pixel text-[10px] cursor-pointer transition-all shadow-none ${
                 isNightMode
                   ? 'bg-[#212823] hover:bg-[#2B352E] text-[#D4CBC0] border-[#384A3D]'
-                  : 'bg-[#FAF5E8] hover:bg-white text-[#5B4636] border-[#C5B495]'
+                  : 'bg-[#FAF5E8] hover:bg-white text-[#5B4636] border-[#1E4334]'
               }`}
             >
               全部展开
@@ -305,10 +260,10 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
             <button
               id="au-collapse-all-btn"
               onClick={handleCollapseAll}
-              className={`px-2 py-0.5 rounded-sm border font-pixel text-[10px] cursor-pointer transition-all ${
+              className={`px-2 py-1 rounded-none border-2 font-pixel text-[10px] cursor-pointer transition-all shadow-none ${
                 isNightMode
                   ? 'bg-[#212823] hover:bg-[#2B352E] text-[#D4CBC0] border-[#384A3D]'
-                  : 'bg-[#FAF5E8] hover:bg-white text-[#5B4636] border-[#C5B495]'
+                  : 'bg-[#FAF5E8] hover:bg-white text-[#5B4636] border-[#1E4334]'
               }`}
             >
               全部收起
@@ -319,13 +274,13 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
         {/* 篇目目录抽屉：按要求 button 设为多行，完整显示各篇中文名称 */}
         {showToc && (
           <div
-            className={`relative mb-4 p-3 rounded-lg border shadow-xs transition-colors ${
+            className={`relative mb-4 p-3 rounded-none border-2 shadow-none transition-colors ${
               isNightMode
                 ? 'bg-[#1B221E] border-[#384E3F]'
-                : 'bg-[#FFFEEF] border-[#1E4334]'
+                : 'bg-[#FFFDF5] border-[#1E4334]'
             }`}
           >
-            <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-dashed border-current/20">
+            <div className="flex items-center justify-between pb-1.5 mb-2 border-b-2 border-dashed border-current/20">
               <h3
                 className={`font-pixel text-[11px] font-bold flex items-center gap-1.5 ${
                   isNightMode ? 'text-[#F9E79F]' : 'text-[#1E4334]'
@@ -335,27 +290,27 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
               </h3>
               <button
                 onClick={() => setShowToc(false)}
-                className="text-[10px] opacity-70 hover:opacity-100 cursor-pointer"
+                className="text-[10px] font-pixel opacity-70 hover:opacity-100 cursor-pointer"
               >
                 ✕ 收起
               </button>
             </div>
 
             {/* 多列网格，每个 button 设置多行，完整列出中文名 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1.5 max-h-72 overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
               {AU_NOVEL_STORIES.map((story) => {
                 const cleanTitle = formatCleanChineseTitle(story.titleZh);
                 return (
                   <button
                     key={story.id}
                     onClick={() => handleJumpToChapter(story.id)}
-                    className={`w-full text-left py-1.5 px-2 rounded-xs border-b border-dashed border-current/15 text-[10px] sm:text-[11px] font-retro-jp leading-snug transition-colors flex items-start gap-1.5 cursor-pointer whitespace-normal break-words ${
+                    className={`w-full text-left py-1.5 px-2.5 rounded-none border-2 text-[11px] font-retro-jp leading-snug transition-all flex items-start gap-1.5 cursor-pointer whitespace-normal break-words shadow-none ${
                       isNightMode
-                        ? 'text-[#C9C1B2] hover:text-[#F9E79F] hover:bg-[#252E28]'
-                        : 'text-[#4A3E31] hover:text-[#1E4334] hover:bg-[#F3EAD5]'
+                        ? 'border-[#384E3F] text-[#C9C1B2] hover:text-[#F9E79F] hover:bg-[#252E28]'
+                        : 'border-[#1E4334] text-[#4A3E31] hover:text-[#1E4334] hover:bg-[#F3EAD5]'
                     }`}
                   >
-                    <span className="font-pixel text-[9px] text-[#B7791F] shrink-0 font-bold mt-0.5">
+                    <span className="font-pixel text-[10px] text-[#B7791F] shrink-0 font-bold mt-0.5">
                       #{story.num.toString().padStart(2, '0')}
                     </span>
                     <span className="break-words flex-1 leading-snug">{cleanTitle}</span>
@@ -366,8 +321,8 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
           </div>
         )}
 
-        {/* 章节卡片列表：字体缩小，button 设为多行并完全列出中文名，随设备动态自适应 */}
-        <div className="relative flex flex-col gap-2">
+        {/* 章节卡片列表：平面卡片风格 (Flat Cards) */}
+        <div className="relative flex flex-col gap-3">
           {AU_NOVEL_STORIES.map((story) => {
             const isOpen = openIds.has(story.id);
             const cleanTitle = formatCleanChineseTitle(story.titleZh);
@@ -377,44 +332,44 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
               <div
                 key={story.id}
                 id={story.id}
-                className={`rounded-md overflow-hidden transition-all border scroll-mt-4 ${
+                className={`rounded-none overflow-hidden transition-all border-2 scroll-mt-4 shadow-none ${
                   isOpen
                     ? isNightMode
-                      ? 'bg-[#19201C] border-[#384E3F] shadow-xs'
-                      : 'bg-[#FFFEEF] border-[#1E4334] shadow-xs'
+                      ? 'bg-[#151C18] border-[#384E3F]'
+                      : 'bg-[#F8F4E8] border-[#1E4334]'
                     : isNightMode
                     ? 'bg-[#1F2621] border-[#2D3830] hover:border-[#384E3F]'
-                    : 'bg-[#FAF5E8] border-[#C5B495] hover:border-[#1E4334]'
+                    : 'bg-[#FFFDF5] border-[#1E4334] hover:bg-[#F5EDE0]'
                 }`}
               >
-                {/* 章节折叠头部 Button：多行显示、无省略号、完全列出中文名称 */}
+                {/* 章节折叠头部 Button */}
                 <button
                   onClick={() => handleToggleCard(story.id)}
-                  className={`w-full flex items-start justify-between text-left p-2 sm:p-2.5 transition-colors cursor-pointer border-0 ${
+                  className={`w-full flex items-start justify-between text-left p-2.5 sm:p-3 transition-colors cursor-pointer border-0 select-none ${
                     isOpen
                       ? isNightMode
-                        ? 'bg-[#27342B] text-[#F9E79F]'
-                        : 'bg-[#1E4334] text-[#F9E79F]'
+                        ? 'bg-[#27342B] text-[#F9E79F] border-b-2 border-[#384E3F]'
+                        : 'bg-[#1E4334] text-[#F9E79F] border-b-2 border-[#10241B]'
                       : isNightMode
                       ? 'bg-[#222A24] text-[#DDD6C8] hover:bg-[#29332C]'
                       : 'bg-[#F5EDE0] text-[#3E342B] hover:bg-[#EFE4D2]'
                   }`}
                 >
-                  <div className="flex items-start gap-1.5 min-w-0 pr-2 flex-1">
+                  <div className="flex items-start gap-2 min-w-0 pr-2 flex-1">
                     <span
-                      className={`font-pixel text-[9px] px-1.5 py-0.5 rounded-xs shrink-0 font-bold mt-0.5 ${
+                      className={`font-pixel text-[10px] px-2 py-0.5 rounded-none shrink-0 font-bold mt-0.5 border ${
                         isOpen
                           ? isNightMode
-                            ? 'bg-[#F9E79F] text-[#1E2520]'
-                            : 'bg-[#F9E79F] text-[#1E4334]'
+                            ? 'bg-[#F9E79F] text-[#1E2520] border-[#F9E79F]'
+                            : 'bg-[#F9E79F] text-[#1E4334] border-[#10241B]'
                           : isNightMode
-                          ? 'bg-[#314135] text-[#D8E6DC]'
-                          : 'bg-[#1E4334] text-[#F9E79F]'
+                          ? 'bg-[#314135] text-[#D8E6DC] border-[#384E3F]'
+                          : 'bg-[#1E4334] text-[#F9E79F] border-[#10241B]'
                       }`}
                     >
                       #{story.num.toString().padStart(2, '0')}
                     </span>
-                    <h3 className="font-pixel text-[10.5px] sm:text-[11.5px] font-bold tracking-normal break-words whitespace-normal leading-snug flex-1">
+                    <h3 className="font-pixel text-[11px] sm:text-[12.5px] font-bold tracking-normal break-words whitespace-normal leading-snug flex-1">
                       {cleanTitle}
                     </h3>
                   </div>
@@ -434,21 +389,29 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
                   </div>
                 </button>
 
-                {/* 章节正文：字体缩小、完全展示、根据设备与字号动态调整 */}
+                {/* 章节正文：80 年代报刊宽间距排版 */}
                 {isOpen && (
                   <div
-                    className={`p-2.5 sm:p-3.5 md:p-4 border-t border-dashed transition-colors space-y-2 ${
+                    className={`p-3.5 sm:p-5 md:p-6 border-t-2 border-dashed transition-colors space-y-3 ${
                       isNightMode
-                        ? 'bg-[#181E1B] border-[#2C3B30] text-[#D3CAC0]'
-                        : 'bg-[#FFFEEF] border-[#D5C9AF] text-[#3E342B]'
+                        ? 'bg-[#141A17] border-[#2C3B30] text-[#D8D0C5]'
+                        : 'bg-[#F8F4E8] border-[#1E4334]/25 text-[#2D241C]'
                     }`}
                   >
+                    {/* 报纸章节子标 */ }
+                    <div className="flex items-center justify-between pb-2 mb-3 border-b border-double border-current/25 font-pixel text-[10px] opacity-75">
+                      <span>✦ GAZETTE ARTICLE NO. {story.num}</span>
+                      <span>PAGE {story.num} OF {AU_NOVEL_STORIES.length}</span>
+                    </div>
+
                     <div className={`font-retro-jp break-words select-text ${getParagraphTextSize()}`}>
                       {paragraphs.map((para, pIdx) => (
                         <p
                           key={pIdx}
-                          className="mb-1.5 sm:mb-2 text-justify select-text"
-                          style={{ textIndent: '1.75em' }}
+                          className="mb-3.5 sm:mb-4.5 text-justify select-text tracking-wide"
+                          style={{
+                            textIndent: '2em',
+                          }}
                         >
                           {para}
                         </p>
@@ -456,15 +419,15 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
                     </div>
 
                     {/* 底部微型操作：复制 & 上/下篇 */}
-                    <div className="pt-1.5 border-t border-dashed border-current/15 flex items-center justify-between text-[10px] font-retro-jp opacity-75">
+                    <div className="pt-2 mt-4 border-t-2 border-dashed border-current/20 flex items-center justify-between text-[11px] font-retro-jp opacity-80">
                       <button
                         onClick={(e) => handleCopyStory(e, story.num, cleanTitle, paragraphs)}
-                        className="hover:underline flex items-center gap-1 cursor-pointer"
+                        className="hover:underline flex items-center gap-1 cursor-pointer font-pixel text-[10px]"
                       >
-                        <span>📋 复制本篇</span>
+                        <span>📋 复制本篇全文</span>
                       </button>
 
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-3 font-pixel text-[10px]">
                         {story.num > 1 && (
                           <button
                             onClick={() => handleJumpToChapter(`s${story.num - 1}`)}
@@ -490,17 +453,17 @@ export const AuNovelReader: React.FC<AuNovelReaderProps> = ({ onShowToast }) => 
           })}
         </div>
 
-        {/* 简约 Footer */}
-        <div className="relative mt-4 pt-2 border-t border-dashed border-current/20 text-center font-retro-jp text-[10px] opacity-60 flex items-center justify-between">
-          <span>进击的巨人 AU 官方短篇小说</span>
+        {/* 80s 报纸尾部 Footer */}
+        <div className="relative mt-6 pt-3 border-t-2 border-double border-current/30 text-center font-retro-jp text-[11px] opacity-75 flex items-center justify-between">
+          <span className="font-pixel text-[10px]">❖ 进击的巨人 AU 官方短篇小说 · 80S GAZETTE PRINT ❖</span>
           <button
             onClick={() => {
               soundManager.playBlip();
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="underline font-pixel text-[9px] cursor-pointer hover:opacity-100"
+            className="underline font-pixel text-[10px] cursor-pointer hover:opacity-100"
           >
-            ↑ 回到顶部
+            ▲ 回到顶部
           </button>
         </div>
       </div>

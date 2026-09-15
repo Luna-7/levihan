@@ -1,130 +1,134 @@
 import React from 'react';
+import { Volume2, VolumeX } from 'lucide-react';
 import { PixelPotion, PixelStar } from './PixelIcons';
-import { soundManager } from '../utils/audio';
+import { ImageNavBar } from './ImageNavBar';
+import { NavigationTab } from '../types';
 
 interface Props {
-  activeTab: 'home' | 'resources' | 'doujinshi' | 'tatakaru';
-  onSelectTab: (tab: 'home' | 'resources' | 'doujinshi' | 'tatakaru') => void;
-  isSoundMuted: boolean;
-  onToggleSound: () => void;
-  onCopyGroupNumber: () => void;
+  activeTab: NavigationTab;
+  onSelectTab: (tab: NavigationTab) => void;
+  isSoundMuted?: boolean;
+  onToggleSound?: () => void;
+  onCopyGroupNumber?: () => void;
+  onShowToast: (msg: string) => void;
 }
 
 export const HeaderCard: React.FC<Props> = ({
   activeTab,
   onSelectTab,
-  isSoundMuted,
+  isSoundMuted = false,
   onToggleSound,
-  onCopyGroupNumber,
 }) => {
+  // Tab-specific metadata for dynamic top banner
+  const tabHeaders = {
+    home: {
+      icon: '🥔',
+      title: '利韩土豆仓',
+      subTitle: 'LEVI × HANS',
+      desc: '同好交流 & 招募',
+      themeBg: 'bg-[#1E4334]',
+      themeBorder: 'border-[#153025]',
+      btnBg: 'bg-[#245340] hover:bg-[#2e6850] border-[#37755c] text-[#D5F5E3]',
+    },
+    resources: {
+      icon: '📚',
+      title: '资源外链库',
+      subTitle: 'RESOURCE ARCHIVES',
+      desc: '动画原片 · 二创素材 · 画师推荐',
+      themeBg: 'bg-[#16382B]',
+      themeBorder: 'border-[#0F281E]',
+      btnBg: 'bg-[#1e4c3a] hover:bg-[#27614a] border-[#337a5f] text-[#D5F5E3]',
+    },
+    doujinshi: {
+      icon: '🍠',
+      title: '土豆粮仓驻地',
+      subTitle: 'LEVIHAN DOUJIN',
+      desc: '汉化本 · 插画集 · 同人小说',
+      themeBg: 'bg-[#4C336C]',
+      themeBorder: 'border-[#362250]',
+      btnBg: 'bg-[#5f4185] hover:bg-[#724f9e] border-[#7d57ad] text-[#F3E8FF]',
+    },
+    tatakaru: {
+      icon: '⚔️',
+      title: '兵团娱乐室 · 塔塔开',
+      subTitle: 'TATAKARU MINI GAMES',
+      desc: '拯救韩吉 · 合成大土豆',
+      themeBg: 'bg-[#7D291D]',
+      themeBorder: 'border-[#5A1C13]',
+      btnBg: 'bg-[#9b3426] hover:bg-[#b53d2d] border-[#c44937] text-[#FFE8E5]',
+    },
+    dispatch: {
+      icon: '✉️',
+      title: '联络 · 调查兵团',
+      subTitle: 'WALL ROSE DISPATCH',
+      desc: '战术研讨 · 作品分享 · 商业定制',
+      themeBg: 'bg-[#5A3825]',
+      themeBorder: 'border-[#382012]',
+      btnBg: 'bg-[#734A2E] hover:bg-[#855737] border-[#996841] text-[#FAF5E8]',
+    },
+  };
+
+  const currentHeader = tabHeaders[activeTab];
+
   return (
-    <header className="relative mb-4 space-y-2.5 sm:space-y-3.5 transition-all duration-300">
-      {/* Sleek Minimal Top Header Banner - responsive padding and border */}
-      <div className="bg-[#1E4334] text-[#FAF5E8] border-2 sm:border-[3px] border-[#153025] rounded-md px-3 py-2.5 xs:px-4 xs:py-3.5 shadow-md relative overflow-hidden flex items-center justify-between gap-3 transition-all">
+    <header className="relative mb-3 sm:mb-4 space-y-2 sm:space-y-3 transition-all duration-300">
+      {/* Sleek Dynamic Top Header Banner - Changes dynamically with active tab */}
+      <div className={`${currentHeader.themeBg} text-[#FAF5E8] border-2 sm:border-[3px] ${currentHeader.themeBorder} rounded-md px-2.5 py-2 xs:px-4 xs:py-3 shadow-md relative overflow-hidden flex items-center justify-between gap-2 sm:gap-3 transition-colors duration-300`}>
         {/* Background pixel star accent */}
         <div className="absolute top-2 left-6 opacity-20 pointer-events-none">
           <PixelStar size={14} />
         </div>
-        <div className="absolute top-2 right-12 opacity-15 pointer-events-none">
+        <div className="absolute top-2 right-16 opacity-15 pointer-events-none">
           <PixelStar size={12} />
         </div>
 
         {/* Title and Badge Info */}
-        <div className="flex items-center gap-2 relative z-10 min-w-0">
-          <span className="text-xl sm:text-2xl shrink-0">🥔</span>
+        <div className="flex items-center gap-1.5 xs:gap-2.5 relative z-10 min-w-0">
+          <span className="text-xl sm:text-2xl shrink-0 transition-transform duration-200">
+            {currentHeader.icon}
+          </span>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="font-pixel text-sm xs:text-base sm:text-xl md:text-2xl text-[#F9E79F] tracking-wide font-black truncate">
-                利韩土豆仓
+            <div className="flex items-center gap-1.5 xs:gap-2">
+              <h1 className="font-pixel text-xs xs:text-sm sm:text-lg md:text-xl text-[#F9E79F] tracking-wide font-black truncate">
+                {currentHeader.title}
               </h1>
-              <span className="hidden xs:inline-block shrink-0">
+              <span className="hidden sm:inline-block shrink-0">
                 <PixelPotion size={16} />
               </span>
             </div>
-            <div className="flex flex-col mt-1 sm:mt-1.5">
-              <span className="font-pixel text-[9px] xs:text-[10px] sm:text-[11px] text-[#F9E79F] tracking-wider font-bold">
-                LEVI × HANGE
+            <div className="flex items-center gap-1.5 mt-0.5 sm:mt-1">
+              <span className="font-pixel text-[8px] xs:text-[9px] sm:text-[10px] text-[#F9E79F] tracking-wider font-bold shrink-0">
+                {currentHeader.subTitle}
               </span>
-              <span className="font-retro-jp text-[8px] xs:text-[9px] sm:text-[10px] text-[#D5F5E3] tracking-wider mt-0.5">
-                同好交流 & 资源站
+              <span className="hidden xs:inline font-retro-jp text-[8px] xs:text-[9px] sm:text-[10px] text-[#D5F5E3] tracking-wider truncate">
+                · {currentHeader.desc}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Sound Toggle - Styled to blend in perfectly with the bg-[#1E4334] background */}
-        <button
-          onClick={onToggleSound}
-          className="text-xs px-2 py-1 rounded-xs bg-[#1E4334] text-[#1E4334] border border-[#1E4334] cursor-pointer flex items-center gap-1 shrink-0 select-none transition-colors"
-          title={isSoundMuted ? '开启音效' : '静音'}
-        >
-          <span>{isSoundMuted ? '🔇' : '🔊'}</span>
-          <span className="hidden xs:inline text-[10px] sm:text-[11px] font-bold">{isSoundMuted ? '静音' : '音效'}</span>
-        </button>
+        {/* Mini Borderless Global Sound Effect Switch */}
+        {onToggleSound && (
+          <button
+            type="button"
+            onClick={onToggleSound}
+            className="relative z-10 p-1 sm:p-1.5 text-[#F9E79F]/80 hover:text-[#F9E79F] hover:bg-black/20 active:scale-90 transition-all cursor-pointer flex items-center justify-center shrink-0 border-0 outline-hidden"
+            title={isSoundMuted ? '点击开启全局音效 🔇' : '点击静音全局音效 🔊'}
+            aria-label={isSoundMuted ? '开启全局音效' : '静音全局音效'}
+          >
+            {isSoundMuted ? (
+              <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-300/90 hover:text-red-200 transition-colors" />
+            ) : (
+              <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#F9E79F] transition-colors" />
+            )}
+          </button>
+        )}
       </div>
 
-      {/* Navigation Tabs - responsive tab paddings, dynamic alignment and balanced grid on mobile & desktop */}
-      <nav aria-label="主要导航" className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 w-full">
-        <button
-          onClick={() => {
-            soundManager.playBlip();
-            onSelectTab('home');
-          }}
-          className={`w-full justify-center px-2 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1 sm:gap-1.5 min-w-0 select-none ${
-            activeTab === 'home'
-              ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-2xs'
-              : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
-          }`}
-        >
-          <span className="shrink-0">🏠</span>
-          <span className="truncate">兵团驻地</span>
-        </button>
-
-        <button
-          onClick={() => {
-            soundManager.playBlip();
-            onSelectTab('resources');
-          }}
-          className={`w-full justify-center px-2 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1 sm:gap-1.5 min-w-0 select-none ${
-            activeTab === 'resources'
-              ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-2xs'
-              : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
-          }`}
-        >
-          <span className="shrink-0">📚</span>
-          <span className="truncate">资源外链</span>
-        </button>
-
-        <button
-          onClick={() => {
-            soundManager.playBlip();
-            onSelectTab('doujinshi');
-          }}
-          className={`w-full justify-center px-2 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1 sm:gap-1.5 min-w-0 select-none ${
-            activeTab === 'doujinshi'
-              ? 'bg-[#5B3F8A] text-[#F9E79F] border-[#5B3F8A] font-bold shadow-2xs'
-              : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
-          }`}
-        >
-          <span className="shrink-0">🍠</span>
-          <span className="truncate">土豆粮仓驻地</span>
-        </button>
-
-        <button
-          onClick={() => {
-            soundManager.playBlip();
-            onSelectTab('tatakaru');
-          }}
-          className={`w-full justify-center px-2 py-1.5 sm:px-3.5 sm:py-2 text-xs sm:text-sm font-retro-jp rounded-xs border cursor-pointer transition-all flex items-center gap-1 sm:gap-1.5 min-w-0 select-none ${
-            activeTab === 'tatakaru'
-              ? 'bg-[#B3402F] text-[#F9E79F] border-[#B3402F] font-bold shadow-2xs'
-              : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
-          }`}
-        >
-          <span className="shrink-0">⚔️</span>
-          <span className="truncate">塔塔开</span>
-        </button>
-      </nav>
+      {/* 图片导航栏 (采用用户上传的城墙图片为底座，完美嵌入自由之翼、利威尔趴趴、韩吉趴趴、双刃与草花) */}
+      <ImageNavBar activeTab={activeTab} onSelectTab={onSelectTab} isMobile={false} />
     </header>
   );
 };
+
+

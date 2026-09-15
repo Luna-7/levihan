@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { RecommendItem, GroupNovel } from '../types/doujinArchive';
 import { soundManager } from '../utils/audio';
 import { NovelReader } from './NovelReader';
+import { AuthorWithLink } from '../utils/authorLink';
+import { newestNovelsFirst, newestRecsFirst } from '../utils/workSort';
 
 interface Props {
   searchQuery: string;
@@ -71,7 +73,7 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
 
   const filteredNovels = useMemo(
     () =>
-      novels.filter((n) => {
+      newestNovelsFirst(novels.filter((n) => {
         const matchSearch =
           !q ||
           n.title.toLowerCase().includes(q) ||
@@ -79,13 +81,13 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
           (n.authorNote && n.authorNote.toLowerCase().includes(q)) ||
           (n.tags || []).some((t) => t.toLowerCase().includes(q));
         return matchSearch;
-      }),
+      })),
     [novels, q]
   );
 
   const filteredRecs = useMemo(
     () =>
-      recs.filter((r) => {
+      newestRecsFirst(recs.filter((r) => {
         const matchGenre = genre === '全部' || r.type === genre || r.rating === genre;
         const matchSearch =
           !q ||
@@ -95,7 +97,7 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
           (r.recommender && r.recommender.toLowerCase().includes(q)) ||
           (r.reason && r.reason.toLowerCase().includes(q));
         return matchGenre && matchSearch;
-      }),
+      })),
     [recs, genre, q]
   );
 
@@ -244,7 +246,7 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
                     <div className="bg-[#FAF5E8] border border-[#EBE3D0] rounded-xs p-2 space-y-1 text-[11px] font-retro-jp">
                       <div className="flex items-start gap-1">
                         <span className="font-bold text-[#8C6B38] shrink-0 w-10 text-right">作者:</span>
-                        <span className="text-[#3E342B] font-bold flex-1 break-words">{novel.author || '佚名'}</span>
+                        <span className="text-[#3E342B] font-bold flex-1 break-words"><AuthorWithLink author={novel.author} customUrl={novel.authorUrl} /></span>
                       </div>
                       <div className="flex items-start gap-1">
                         <span className="font-bold text-[#7A6958] shrink-0 w-10 text-right">字数:</span>
