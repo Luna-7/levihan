@@ -119,10 +119,13 @@ export class COSService {
    */
   public getPageUrl(book: DoujinBookItem, pageIndex: number): string {
     const folder = (book.bookFolder || book.id).replace(/^\/|\/$/g, '');
+    const actualName = book.pageFiles?.[pageIndex - 1];
+    if (actualName) return this.getObjectUrl(`${folder}/${actualName.replace(/^\//, '')}`);
     const prefix = book.pagePrefix ?? 'image';
     const padDigits = book.pagePadDigits ?? 2;
     const pageNumStr = pageIndex.toString().padStart(padDigits, '0');
-    return this.getObjectUrl(`${folder}/${prefix}${pageNumStr}.webp`);
+    const ext = book.coverFile?.match(/\.(webp|jpe?g|png|gif|avif)$/i)?.[1] || 'webp';
+    return this.getObjectUrl(`${folder}/${prefix}${pageNumStr}.${ext}`);
   }
 
   /**

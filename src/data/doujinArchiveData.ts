@@ -48,11 +48,14 @@ export const getCosPageUrl = (
 ): string => {
   const base = (customCdnUrl || TENCENT_COS_CONFIG.cdnBaseUrl).replace(/\/$/, '');
   const folder = (book.bookFolder || book.id).replace(/^\/|\/$/g, '');
+  const actualName = book.pageFiles?.[pageIndex - 1];
+  if (actualName) return `${base}/${folder}/${actualName.replace(/^\//, '')}`;
   const prefix = book.pagePrefix ?? 'image';
   const padDigits = book.pagePadDigits ?? 2;
   const pageNumStr = pageIndex.toString().padStart(padDigits, '0');
+  const ext = book.coverFile?.match(/\.(webp|jpe?g|png|gif|avif)$/i)?.[1] || 'webp';
 
-  return `${base}/${folder}/${prefix}${pageNumStr}.webp`;
+  return `${base}/${folder}/${prefix}${pageNumStr}.${ext}`;
 };
 
 /**

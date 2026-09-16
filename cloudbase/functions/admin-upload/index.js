@@ -227,6 +227,14 @@ function normalizeBook(raw) {
     book.pagePadDigits = padDigits;
   }
 
+  if (Array.isArray(raw.pageFiles)) {
+    const pageFiles = raw.pageFiles.map((name) => String(name || '').trim());
+    if (pageFiles.length !== pages || pageFiles.some((name) => !FILE_RE.test(name))) {
+      throw httpError('页面文件列表不合法', 400);
+    }
+    book.pageFiles = pageFiles;
+  }
+
   return book;
 }
 

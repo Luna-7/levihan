@@ -1052,17 +1052,40 @@ function syncButtons(){
 /* ============ 图片处理 ============ */
 function toWebp(file, quality){
   if (!file.type || file.type === 'image/webp') return Promise.resolve({ blob:file, name:file.name });
-  return createImageBitmap(file).then(function(bmp){
+  function draw(source, width, height){
     var c = document.createElement('canvas');
-    c.width = bmp.width; c.height = bmp.height;
-    c.getContext('2d').drawImage(bmp, 0, 0);
-    if (bmp.close) bmp.close();
+    c.width = width; c.height = height;
+    c.getContext('2d').drawImage(source, 0, 0);
+    if (source.close) source.close();
     return new Promise(function(res, rej){
       c.toBlob(function(blob){
-        if (!blob || blob.type !== 'image/webp') { rej(new Error('当前浏览器无法编码 WebP，请改用 Chrome / Edge')); return; }
+        if (!blob || blob.type !== 'image/webp') { rej(new Error('当前浏览器无法编码 WebP，请关闭“自动转 WebP”后重试')); return; }
         res({ blob:blob, name: file.name.replace(/\.[^.]+$/, '') + '.webp' });
       }, 'image/webp', quality);
     });
+  }
+  function decodeWithImage(){
+    return new Promise(function(res, rej){
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        URL.revokeObjectURL(url);
+        res({ source:img, width:img.naturalWidth, height:img.naturalHeight });
+      };
+      img.onerror = function(){
+        URL.revokeObjectURL(url);
+        rej(new Error('浏览器无法读取“' + file.name + '”；请先转成 JPG、PNG 或 WebP'));
+      };
+      img.src = url;
+    });
+  }
+  var decoded = typeof createImageBitmap === 'function'
+    ? createImageBitmap(file).then(function(bmp){ return { source:bmp, width:bmp.width, height:bmp.height }; })
+        .catch(function(){ return decodeWithImage(); })
+    : decodeWithImage();
+  return decoded.then(function(image){
+    if (!image.width || !image.height) throw new Error('图片尺寸无效：' + file.name);
+    return draw(image.source, image.width, image.height);
   });
 }
 
@@ -1079,8 +1102,10 @@ function toBase64(blob){
   });
 }
 
-function pageName(i, pad, prefix){
-  return (prefix || 'image') + String(i + 1).padStart(pad, '0') + '.webp';
+function pageName(i, pad, prefix, sourceName){
+  var match = String(sourceName || '').match(/\.(webp|jpe?g|png|gif|avif)$/i);
+  var ext = match ? match[1].toLowerCase().replace('jpeg', 'jpg') : 'webp';
+  return (prefix || 'image') + String(i + 1).padStart(pad, '0') + '.' + ext;
 }
 
 /* 并发池 */
@@ -1182,7 +1207,7 @@ function uploadAll(){
       return p.then(function(r){
         if (r.blob.size > envMax) throw new Error('转换后仍超过 ' + fmtSize(envMax));
         return toBase64(r.blob).then(function(b64){
-          prepared[i] = { b64: b64, size: r.blob.size, type: r.blob.type || 'image/webp' };
+          prepared[i] = { b64: b64, size: r.blob.size, type: r.blob.type || 'image/webp', name:r.name || f.name };
           f.preparedSize = r.blob.size;
         });
       }).catch(function(err){
@@ -1194,13 +1219,16 @@ function uploadAll(){
   chain.then(function(){
     var okIdx = [];
     files.forEach(function(f, i){ if (f.status !== 'err') okIdx.push(i); });
-    if (!okIdx.length) throw new Error('所有图片都处理失败，请检查文件格式。');
+    if (!okIdx.length) {
+      var firstError = files.map(function(f){ return f.err; }).filter(Boolean)[0];
+      throw new Error('所有图片都处理失败：' + (firstError || '请检查文件格式'));
+    }
 
     return pool(okIdx, 3, function(k){
       var i = okIdx[k], f = files[i], p = prepared[i];
       f.status = 'busy'; updateFileNode(i);
       return api({
-        action:'upload', bookId: form.id, fileName: pageName(i, pad, prefix),
+        action:'upload', bookId: form.id, fileName: pageName(i, pad, prefix, p.name),
         dataBase64: p.b64, contentType: p.type
       }).then(function(){
         f.status = 'done'; updateFileNode(i); return true;
@@ -1214,15 +1242,14 @@ function uploadAll(){
       var msg = '⚠ 有 ' + failed.length + ' 张上传失败，已停止写入归档。\n' +
         failed.slice(0, 5).map(function(f, i){ return '  · 第 ' + (files.indexOf(f) + 1) + ' 张（' + f.name + '）：' + f.err; }).join('\n') +
         (failed.length > 5 ? '\n  …' : '') + '\n修好后点「上传并发布」会重传全部图片（同名覆盖）。';
-      show($('main-msg'), 'err', msg);
-      setBusy(false);
-      return;
+      throw new Error(msg);
     }
     // 全部成功 → 写入归档
     var book = Object.assign({}, form);
     book.pages = files.length || form.pages;
     book.bookFolder = form.bookFolder || form.id;
-    book.coverFile = form.coverFile || 'image01.webp';
+    book.pageFiles = prepared.map(function(p, i){ return pageName(i, pad, prefix, p && p.name); });
+    book.coverFile = form.coverFile || pageName(0, pad, prefix, prepared[0] && prepared[0].name);
     return api({ action:'publish', book: book }).then(function(d){
       show($('main-msg'), 'ok',
         '✅ 发布成功：' + book.id + ' · ' + book.titleZh + '（共 ' + d.count + ' 本）\n' +
