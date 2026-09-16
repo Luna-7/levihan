@@ -1,124 +1,15 @@
-<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#286615" />
-  <meta name="description" content="利韩兵团的活动、公告、游戏与树洞入口。" />
-  <title>Levi × Hans｜利韩兵团</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect rx='14' width='64' height='64' fill='%23612f16'/%3E%3Cpath d='M14 18h36v28H14z' fill='%23d79a4d' stroke='%23301b0e' stroke-width='4'/%3E%3Cpath d='m23 25 9 16 9-16M18 32h28' fill='none' stroke='%23fff1bf' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="./styles.css" />
-</head>
-<body>
-  <main class="world">
-    <button class="sound-toggle" type="button" aria-label="关闭背景环境音" aria-pressed="true">
-      <img src="./assets/sound.png" alt="" />
-      <span class="sound-state" aria-hidden="true">♪</span>
-    </button>
-
-    <section class="activity-section" aria-labelledby="activity-title">
-      <img class="activity-frame" src="./assets/activity-board.png" alt="" />
-      <div class="activity-content">
-        <div class="section-heading">
-          <p class="eyebrow">RECENT MISSIONS</p>
-          <h1 id="activity-title">近期利韩活动</h1>
-          <span class="activity-count">03</span>
-        </div>
-        <div id="activity-list" class="activity-list" aria-live="polite"></div>
-      </div>
-    </section>
-
-    <section class="notice-section" aria-labelledby="notice-title">
-      <img class="notice-frame" src="./assets/notice-board.png" alt="" />
-      <div class="notice-content">
-        <div class="notice-title-row">
-          <span class="notice-dot"></span>
-          <h2 id="notice-title">兵团公告</h2>
-          <span class="notice-index" id="notice-index">01 / 03</span>
-        </div>
-        <div class="ticker" aria-live="polite">
-          <button class="ticker-button prev" type="button" aria-label="上一条公告">‹</button>
-          <div class="ticker-viewport"><div id="ticker-track" class="ticker-track"></div></div>
-          <button class="ticker-button next" type="button" aria-label="下一条公告">›</button>
-        </div>
-      </div>
-    </section>
-
-    <nav class="entry-signs" aria-label="互动入口">
-      <button class="hanging-sign" type="button" data-panel="games" aria-expanded="false">
-        <img class="sign-board" src="./assets/small-board.png" alt="" />
-        <span class="sign-label"><img src="./assets/tatakae.png" alt="" /><strong>塔塔开</strong><small>进入游戏</small></span>
-      </button>
-      <button class="hanging-sign" type="button" data-panel="treehole" aria-expanded="false">
-        <img class="sign-board" src="./assets/small-board.png" alt="" />
-        <span class="sign-label"><img src="./assets/tree-hole.png" alt="" /><strong>树洞</strong><small>投递心声</small></span>
-      </button>
-    </nav>
-
-    <section id="games-panel" class="drop-panel" hidden aria-labelledby="games-title">
-      <button class="panel-close" type="button" aria-label="收起游戏选择">×</button>
-      <p class="eyebrow">GAME SELECT</p>
-      <h2 id="games-title">选择游戏</h2>
-      <div class="game-grid">
-        <button id="start-tatakae" class="game-card" type="button">
-          <img src="./assets/tatakae.png" alt="" />
-          <span><strong>塔塔开！</strong><small>训练场 · 30 秒</small></span>
-          <b>开始 ›</b>
-        </button>
-        <div class="game-card locked" aria-disabled="true">
-          <span class="lock-mark">?</span>
-          <span><strong>秘密行动</strong><small>筹备中</small></span>
-        </div>
-      </div>
-    </section>
-
-    <section id="treehole-panel" class="drop-panel treehole-panel" hidden aria-labelledby="treehole-title">
-      <button class="panel-close" type="button" aria-label="收起树洞">×</button>
-      <p class="eyebrow">ANONYMOUS LETTER</p>
-      <h2 id="treehole-title">利韩兵团树洞心声投递</h2>
-      <p class="panel-intro">想说的话留在这里。无需署名，认真写下就好。</p>
-      <form id="treehole-form">
-        <label>此刻的心情
-          <div class="mood-options" role="group" aria-label="选择心情">
-            <button type="button" data-mood="晴朗">☀ 晴朗</button>
-            <button type="button" data-mood="平静">☁ 平静</button>
-            <button type="button" data-mood="低落">☂ 低落</button>
-            <button type="button" data-mood="愤怒">⚡ 愤怒</button>
-          </div>
-          <input id="mood" name="mood" type="hidden" />
-        </label>
-        <label for="message">心声</label>
-        <textarea id="message" name="message" maxlength="500" required placeholder="写下想对兵团说的话……"></textarea>
-        <div class="form-row">
-          <span id="char-count">0 / 500</span>
-          <button class="submit-letter" type="submit">封存并投递</button>
-        </div>
-      </form>
-      <div id="letter-success" class="letter-success" hidden>
-        <span>✓</span><strong>心声已封存</strong><p>谢谢你愿意说出来。</p>
-      </div>
-    </section>
-
-    <nav class="bottom-dock" aria-label="兵团导航">
-      <img class="dock-frame" src="./assets/dock-board.png" alt="" />
-      <div class="dock-items">
-        <a href="#activity-title"><img src="./assets/base.png" alt="" /><span>驻地</span></a>
-        <a href="#notice-title"><img src="./assets/barn.png" alt="" /><span>粮仓</span></a>
-        <button type="button" data-dock-panel="treehole"><img src="./assets/contact.png" alt="" /><span>联络</span></button>
-        <a href="#activity-title"><img src="./assets/links.png" alt="" /><span>资源</span></a>
-      </div>
-    </nav>
-  </main>
-
-  <section id="immersive-game" class="immersive-game" hidden aria-labelledby="game-title">
-    <div class="game-hud"><span>得分 <b id="score">0</b></span><h2 id="game-title">塔塔开训练场</h2><span>时间 <b id="timer">30</b></span></div>
-    <p class="game-instruction" id="game-instruction">点击出现的目标，完成兵团训练</p>
-    <button id="game-target" class="game-target" type="button" aria-label="训练目标"><span>⚔</span></button>
-    <div id="game-finish" class="game-finish" hidden><p>训练完成</p><strong><span id="final-score">0</span> 分</strong><button id="replay-game" type="button">再来一次</button></div>
-    <button id="exit-game" class="exit-game" type="button">退出训练</button>
-  </section>
-
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="./app.js"></script>
-</body>
-</html>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#163a18"><meta name="description" content="利韩兵团像素驻地：活动、公告、游戏和树洞。"><title>Levi × Hans｜利韩兵团</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect rx='8' width='64' height='64' fill='%23502b15'/%3E%3Cpath d='M13 16h38v32H13z' fill='%23d99a4b' stroke='%232a160b' stroke-width='5'/%3E%3Cpath d='m21 24 11 18 11-18M17 32h30' fill='none' stroke='%23fff0ac' stroke-width='4'/%3E%3C/svg%3E"><link rel="stylesheet" href="./styles.css"></head><body>
+<main class="pixel-world" id="home"><div class="game-stage">
+<button class="sound-button pixel-button" type="button" aria-pressed="true" aria-label="关闭环境音"><img src="./assets/sound.png" alt=""><span>ON</span></button>
+<header class="brand-sign" aria-label="Levi × Hans 利韩兵团"><div class="brand-copy"><small>LEVI × HANS</small><strong>利韩兵团驻地</strong></div></header>
+<section class="board-cluster" aria-label="兵团信息面板"><img class="board-set" src="./assets/pixel-board-set.png" alt=""><img class="board-moss" src="./assets/pixel-moss.png" alt="">
+<section class="activity-window" aria-labelledby="activity-title"><div class="panel-kicker"><span>RECENT MISSION</span><b id="activity-page">01 / 03</b></div><h1 id="activity-title">近期利韩活动</h1><article id="activity-card" class="activity-card"></article><div class="activity-controls"><button class="pixel-button prev-activity" type="button" aria-label="上一项活动">◀</button><div class="activity-dots" aria-hidden="true"></div><button class="pixel-button next-activity" type="button" aria-label="下一项活动">▶</button></div></section>
+<img class="pixel-person hange" src="./assets/hange-pixel.png" alt="韩吉像素人物"><img class="pixel-person levi" src="./assets/levi-pixel.png" alt="利威尔像素人物">
+<section class="notice-window" id="notice" aria-labelledby="notice-title"><div class="notice-heading"><span>●</span><h2 id="notice-title">兵团公告</h2></div><div class="notice-line"><b id="notice-label">最新公告</b><p id="notice-copy"></p></div><div class="notice-controls"><button type="button" aria-label="上一条公告">▲</button><button type="button" aria-label="下一条公告">▼</button></div></section>
+<div class="portal-window" aria-label="互动入口"><button class="portal-button" type="button" data-open="games"><img src="./assets/tatakae.png" alt=""><span><strong>塔塔开</strong><small>选择游戏</small></span></button><button class="portal-button" type="button" data-open="treehole"><img src="./assets/tree-hole.png" alt=""><span><strong>树洞</strong><small>投递心声</small></span></button></div></section>
+<nav class="pixel-nav" aria-label="兵团导航"><img class="nav-frame" src="./assets/pixel-nav-frame.png" alt=""><div class="nav-items"><a href="#home" data-view="home" aria-label="兵团驻地"><img src="./assets/base.png" alt=""><span>驻地</span></a><a href="#notice" data-view="notice" aria-label="兵团公告"><img src="./assets/barn.png" alt=""><span>公告</span></a><a href="#treehole" data-open="treehole" aria-label="联络与树洞"><img src="./assets/contact.png" alt=""><span>联络</span></a><a href="#resources" data-open="resources" aria-label="资源外链"><img src="./assets/links.png" alt=""><span>资源</span></a></div></nav>
+</div></main>
+<div class="modal-layer" id="modal-layer" hidden><section class="pixel-modal" id="games-panel" hidden aria-labelledby="games-title"><button class="modal-close pixel-button" type="button" aria-label="关闭">×</button><p class="modal-kicker">GAME SELECT</p><h2 id="games-title">选择游戏</h2><button class="game-option" id="start-tatakae" type="button"><img src="./assets/tatakae.png" alt=""><span><strong>塔塔开！</strong><small>30 秒兵团训练</small></span><b>START ▶</b></button><div class="game-option disabled"><span class="mystery">?</span><span><strong>秘密行动</strong><small>尚未解锁</small></span></div></section>
+<section class="pixel-modal" id="treehole-panel" hidden aria-labelledby="treehole-title"><button class="modal-close pixel-button" type="button" aria-label="关闭">×</button><p class="modal-kicker">ANONYMOUS LETTER</p><h2 id="treehole-title">利韩兵团树洞心声投递</h2><form id="treehole-form"><div class="moods" role="group" aria-label="选择心情"><button type="button">☀ 晴朗</button><button type="button">☁ 平静</button><button type="button">☂ 低落</button><button type="button">⚡ 生气</button></div><label for="message">想对兵团说的话</label><textarea id="message" maxlength="500" required placeholder="心声会被认真收好……"></textarea><div class="form-actions"><span id="char-count">0 / 500</span><button class="pixel-button submit-button" type="submit">投递心声</button></div></form><div class="success-message" hidden><b>心声已封存 ✓</b><span>谢谢你愿意说出来。</span></div></section>
+<section class="pixel-modal" id="resources-panel" hidden aria-labelledby="resources-title"><button class="modal-close pixel-button" type="button" aria-label="关闭">×</button><p class="modal-kicker">LINK PORTAL</p><h2 id="resources-title">兵团资源入口</h2><div class="resource-links"><a href="#home" data-close-modal><img src="./assets/base.png" alt=""><span><strong>兵团驻地</strong><small>返回活动首页</small></span></a><a href="#notice" data-close-modal><img src="./assets/barn.png" alt=""><span><strong>公告档案</strong><small>查看最新公告</small></span></a><button type="button" data-switch="treehole"><img src="./assets/contact.png" alt=""><span><strong>树洞联络</strong><small>匿名投递心声</small></span></button></div></section></div>
+<section class="battle-screen" id="battle-screen" hidden aria-label="塔塔开训练场"><div class="battle-hud"><span>SCORE <b id="score">000</b></span><strong>TATAKAE!</strong><span>TIME <b id="timer">30</b></span></div><button id="battle-target" class="battle-target" type="button" aria-label="训练目标">⚔</button><div id="battle-finish" class="battle-finish" hidden><small>MISSION CLEAR</small><strong><span id="final-score">0</span> 分</strong><button id="replay-game" class="pixel-button" type="button">再来一次</button></div><button id="exit-game" class="exit-game pixel-button" type="button">退出训练</button></section><div class="toast" id="toast" role="status" aria-live="polite"></div><script src="./app.js"></script></body></html>
