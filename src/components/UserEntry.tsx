@@ -15,6 +15,22 @@ const phoneNumber = (raw: string) => {
   return `+86 ${digits}`;
 };
 
+const errorMessage = (error: unknown) => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  if (error && typeof error === 'object') {
+    const value = error as Record<string, unknown>;
+    for (const key of ['message', 'errorMessage', 'errMsg']) {
+      if (typeof value[key] === 'string' && value[key]) return value[key] as string;
+    }
+    if (value.error && typeof value.error === 'object') {
+      const nested = value.error as Record<string, unknown>;
+      if (typeof nested.message === 'string' && nested.message) return nested.message;
+    }
+  }
+  return '操作失败，请稍后重试';
+};
+
 export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>('login');
@@ -30,10 +46,14 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   const [newNickname, setNewNickname] = useState('');
 
   const call = async (name: string, data: Record<string, unknown> = {}) => {
-    const response = await cloudbase.callFunction({ name, data });
-    const result = response?.result || response;
-    if (result?.ok === false) throw new Error(result.message || '操作失败');
-    return result;
+    try {
+      const response = await cloudbase.callFunction({ name, data });
+      const result = response?.result || response;
+      if (result?.ok === false) throw new Error(result.message || '操作失败，请稍后重试');
+      return result;
+    } catch (error) {
+      throw new Error(errorMessage(error));
+    }
   };
   const refresh = async () => {
     try {
@@ -49,7 +69,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     if (busy) return;
     setBusy(true);
     try { await task(); }
-    catch (error) { onShowToast(error instanceof Error ? error.message : '操作失败'); }
+    catch (error) { onShowToast(errorMessage(error)); }
     finally { setBusy(false); }
   };
   const resetSms = () => { setSmsCode(''); setVerification(null); };
