@@ -40,7 +40,9 @@ export const AgeConsentSchema = z.object({
   policyVersion: PolicyVersionSchema,
   acceptedAt: TimestampSchema,
 }).strict();
-export const AgeConsentInputSchema = AgeConsentSchema;
+export const AgeConsentInputSchema = z.object({
+  policyVersion: PolicyVersionSchema,
+}).strict();
 export const AgeConsentResponseSchema = AgeConsentSchema;
 
 export const LoginInputSchema = z.object({
@@ -129,6 +131,7 @@ export const R18AssetAccessInputSchema = z.object({
 export const R18AssetAccessResponseSchema = z.object({
   signedUrl: z.string().url(),
   expiresAt: TimestampSchema,
+  expiresInSeconds: z.number().int().min(300).max(600),
 }).strict();
 
 export const AdminOperationInputSchema = z.object({
