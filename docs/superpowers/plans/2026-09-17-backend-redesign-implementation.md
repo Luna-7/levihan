@@ -50,6 +50,25 @@
 5. 回滚文件只移除本迁移新对象，不碰旧表；README 记录备份、预演、执行和校验顺序。
 6. 运行 schema 验证测试并提交：`feat: add backend v2 database schema`。
 
+### Task 2A: 立即清除仓库中的明文管理凭据
+
+**Files:**
+- Modify: `.workbuddy/tests/test-admin-channel.py`
+- Modify: `.workbuddy/tests/test-admin-ui.cjs`
+- Modify: `.workbuddy/tests/shots-admin.cjs`
+- Modify: `.env.example`
+- Modify: `docs/operations/backend-v2-runbook.md` if it already exists, otherwise create `docs/operations/security-rotation.md`
+- Create: `scripts/verify-no-secrets.mjs`
+- Create: `scripts/verify-no-secrets.test.ts`
+- Modify: `package.json`
+
+**Steps:**
+1. 先写扫描测试并确认它能发现当前硬编码管理员口令；扫描工作树时排除 `.git`、依赖、构建产物和明确的假值样例。
+2. 三个远程/截图脚本改为读取 `ADMIN_TEST_PASSWORD`；缺失时远程测试清晰跳过，交互截图脚本清晰失败，不再提供默认口令。
+3. 文档要求立即轮换旧管理员口令、撤销现有 token，并说明删除当前文件不能清理 Git 历史；是否重写公开历史必须单独评估并协调所有协作者。
+4. 添加 `verify:secrets` 脚本并运行测试、扫描和 lint。
+5. 提交：`security: remove hardcoded admin credential`。
+
 ### Task 3: 构建统一 API 内核
 
 **Files:**
