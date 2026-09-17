@@ -15,6 +15,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "verify:levels": "node scripts/verify-save-hange-levels.ts",
+    "verify:backend-schema": "node scripts/verify-backend-schema.mjs",
     "prebuild": "node scripts/generate-admin-pixiv.mjs"
   },
   "allowScripts": {
