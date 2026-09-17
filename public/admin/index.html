@@ -214,11 +214,9 @@
   .crop-box{position:absolute;cursor:move;box-shadow:0 0 0 9999px rgba(0,0,0,.55);outline:1.5px solid var(--gold)}
   .crop-box .h{position:absolute;right:-7px;bottom:-7px;width:15px;height:15px;background:var(--gold);
                border:1.5px solid #fff;border-radius:3px;cursor:nwse-resize}
-  .mask-item{position:absolute;background-size:100% 100%;background-repeat:no-repeat;cursor:move;box-shadow:0 0 0 1px rgba(255,255,255,.55) inset}
-  .mask-item.sel{outline:2px dashed #2F7ADB;outline-offset:0}
-  .mask-item .h{position:absolute;right:-6px;bottom:-6px;width:13px;height:13px;background:#2F7ADB;
-                border:1.5px solid #fff;border-radius:3px;cursor:nwse-resize;display:none}
-  .mask-item.sel .h{display:block}
+  #ed-paint{position:absolute;left:0;top:0;pointer-events:none}
+  #ed-brush-cursor{position:absolute;pointer-events:none;border:1.5px dashed rgba(255,255,255,.85);
+                box-shadow:0 0 0 1px rgba(0,0,0,.35) inset;border-radius:50%;transform:translate(-50%,-50%);display:none}
   .ed-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:center;
             background:rgba(255,255,255,.96);border-radius:8px;padding:9px 12px}
   .ed-tools .grp{display:flex;gap:6px;align-items:center;padding-right:10px;border-right:1.5px solid var(--rule)}
@@ -585,7 +583,8 @@
     <div class="ed-canvas" id="ed-canvas">
       <img id="ed-img" alt="">
       <div id="ed-crop" class="crop-box hide"><i class="h"></i></div>
-      <div id="ed-masks"></div>
+      <canvas id="ed-paint"></canvas>
+      <div id="ed-brush-cursor"></div>
     </div>
   </div>
   <div class="ed-hint" id="ed-hint"></div>
@@ -596,9 +595,12 @@
       <button class="btn-sm" id="ed-crop-fit">最大化</button>
     </div>
     <div class="grp">
-      <span class="lb-t">马赛克涂抹（拖拽打码）</span>
-      <button class="btn-sm" id="ed-mask-mode">＋ 拖拽画马赛克</button>
-      <button class="btn-sm" id="ed-del-mask">删除选中</button>
+      <span class="lb-t">马赛克涂抹（画笔）</span>
+      <button class="btn-sm" id="ed-mask-mode">✎ 画笔涂抹</button>
+      <button class="btn-sm bsel" data-brush="small">细</button>
+      <button class="btn-sm bsel sel" data-brush="medium">中</button>
+      <button class="btn-sm bsel" data-brush="large">粗</button>
+      <button class="btn-sm" id="ed-del-mask">🧹 清空涂抹</button>
     </div>
     <div class="grp">
       <button class="btn-sm" id="ed-undo">↶ 撤销</button>
@@ -1705,10 +1707,18 @@ var ed = null;
 var edDrag = null;
 var MAX_UNDO = 10;
 var COVER_RATIO = 2 / 3;   // 站点封面 aspect-[2/3]
-// 马赛克涂抹：预览与导出都把涂抹区域打成马赛克（不再画半透明色块）
-// 块尺寸 = 输出长边 ÷ MOSAIC_DIV，预览与导出用同一比例，观感一致
+// 画笔涂抹：strokes = [{ r: 半径(占图宽比例), pts: [[x,y],...] }]（归一化坐标）
+// 预览：整图先打成马赛克底图 ed.mosaicSnap，笔刷沿路径把底图「盖章」到覆盖层画布
+// 导出：同一思路在原图分辨率上做——先整图马赛克，再用涂抹蒙版裁贴回成品
 var MOSAIC_DIV = 40;    // 长边 ÷ 40 → 1920px 图约 48px 一块
 var MOSAIC_MIN = 8;     // 最小块尺寸（像素）
+var BRUSH_R = { small: 0.018, medium: 0.035, large: 0.065 };  // 半径 / 图宽
+
+function cloneStrokes(strokes){
+  return (strokes || []).map(function(s){
+    return { r: s.r, pts: s.pts.map(function(p){ return [p[0], p[1]]; }) };
+  });
+}
 
 function loadImage(src){
   return new Promise(function(res, rej){
@@ -1739,29 +1749,53 @@ function pixelateRect(ctx, rx, ry, rw, rh, block){
   ctx.imageSmoothingEnabled = true;
 }
 
-// 预览用：从视图分辨率快照里取涂抹区域的马赛克 dataURL（带缓存，拖拽时不卡）
-var mosaicCache = {};
-function mosaicBlockView(){
-  var v = ed.view;
-  return Math.max(4, Math.round(Math.max(v.w, v.h) / MOSAIC_DIV));
+// 在 ctx 上沿路径盖马赛克印章（用 same-size 的马赛克底图 mosaicSnap 取样，网格全局对齐）
+function stampStroke(ctx, stroke, mosaicSnap, vw, vh){
+  var r = Math.max(2, stroke.r * vw);
+  var step = Math.max(1, r * 0.35);
+  var pts = stroke.pts;
+  if (!pts.length) return;
+  var dab = function(x, y){
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x * vw, y * vh, r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(mosaicSnap, 0, 0);
+    ctx.restore();
+  };
+  dab(pts[0][0], pts[0][1]);
+  for (var i = 1; i < pts.length; i++) {
+    var ax = pts[i - 1][0], ay = pts[i - 1][1];
+    var bx = pts[i][0], by = pts[i][1];
+    var dist = Math.hypot(bx - ax, by - ay) * vw;
+    var n = Math.max(1, Math.round(dist / step));
+    for (var k = 1; k <= n; k++) dab(ax + (bx - ax) * k / n, ay + (by - ay) * k / n);
+  }
 }
-function mosaicDataURL(m){
-  var v = ed.view, snap = ed.snap;
-  if (!snap) return '';
-  var rx = Math.max(0, Math.floor(m.x * v.w)), ry = Math.max(0, Math.floor(m.y * v.h));
-  var rw = Math.min(v.w - rx, Math.ceil(m.w * v.w)), rh = Math.min(v.h - ry, Math.ceil(m.h * v.h));
-  if (rw < 2 || rh < 2) return '';
-  var key = rx + ',' + ry + ',' + rw + ',' + rh;
-  if (mosaicCache[key]) return mosaicCache[key];
-  var t = document.createElement('canvas');
-  t.width = rw; t.height = rh;
-  var tc = t.getContext('2d');
-  tc.drawImage(snap, rx, ry, rw, rh, 0, 0, rw, rh);
-  pixelateRect(tc, 0, 0, rw, rh, mosaicBlockView());
-  var url = t.toDataURL('image/png');
-  if (Object.keys(mosaicCache).length > 120) mosaicCache = {};  // 简单防膨胀
-  mosaicCache[key] = url;
-  return url;
+
+// 把 strokes 渲染成涂抹蒙版画布（alpha=1 处为涂抹区），size 可指定输出分辨率
+function buildMaskCanvas(strokes, W, H, outW, outH){
+  var m = document.createElement('canvas');
+  m.width = outW; m.height = outH;
+  var mc = m.getContext('2d');
+  mc.fillStyle = '#fff';
+  mc.strokeStyle = '#fff';
+  mc.lineCap = 'round'; mc.lineJoin = 'round';
+  strokes.forEach(function(s){
+    var r = Math.max(1, s.r * W * (outW / W));
+    if (s.pts.length === 1) {
+      mc.beginPath();
+      mc.arc(s.pts[0][0] * outW, s.pts[0][1] * outH, r, 0, Math.PI * 2);
+      mc.fill();
+      return;
+    }
+    mc.lineWidth = r * 2;
+    mc.beginPath();
+    mc.moveTo(s.pts[0][0] * outW, s.pts[0][1] * outH);
+    for (var i = 1; i < s.pts.length; i++) mc.lineTo(s.pts[i][0] * outW, s.pts[i][1] * outH);
+    mc.stroke();
+  });
+  return m;
 }
 
 function defaultCrop(){
@@ -1784,8 +1818,8 @@ function openEditor(i){
       isCover: (i === 0),
       crop: null,
       cropOn: true,
-      masks: [],
-      active: -1,
+      strokes: [],
+      brush: 'medium',
       mode: 'none',
       history: [],
       view: { w: 0, h: 0 }
@@ -1793,7 +1827,7 @@ function openEditor(i){
     if (f.op) {
       ed.crop = f.op.crop ? cloneRect(f.op.crop) : null;
       ed.cropOn = !!f.op.crop;
-      ed.masks = (f.op.masks || []).map(cloneRect);
+      ed.strokes = cloneStrokes(f.op.strokes);
     }
     if (ed.isCover && !ed.crop) ed.crop = defaultCrop();
     $('editor').classList.remove('hide');
@@ -1809,7 +1843,9 @@ function closeEditor(){
   $('editor').classList.add('hide');
   edDrag = null; ed = null;
   $('ed-img').removeAttribute('src');
-  $('ed-masks').innerHTML = '';
+  $('ed-brush-cursor').style.display = 'none';
+  var pc = $('ed-paint');
+  pc.getContext('2d').clearRect(0, 0, pc.width, pc.height);
   $('ed-crop').classList.add('hide');
 }
 
@@ -1825,11 +1861,31 @@ function layoutEditor(){
   ed.snap = document.createElement('canvas');
   ed.snap.width = ed.view.w; ed.snap.height = ed.view.h;
   ed.snap.getContext('2d').drawImage(ed.img, 0, 0, ed.view.w, ed.view.h);
-  mosaicCache = {};
+  // 整图马赛克底图：笔刷盖章的取样板（块尺寸与导出同比例）
+  ed.mosaicSnap = document.createElement('canvas');
+  ed.mosaicSnap.width = ed.view.w; ed.mosaicSnap.height = ed.view.h;
+  ed.mosaicSnap.getContext('2d').drawImage(ed.snap, 0, 0);
+  pixelateRect(ed.mosaicSnap.getContext('2d'), 0, 0, ed.view.w, ed.view.h,
+    Math.max(MOSAIC_MIN, Math.round(Math.max(ed.view.w, ed.view.h) / MOSAIC_DIV)));
+  // 覆盖层画布与图同尺寸
+  var pc = $('ed-paint');
+  pc.width = ed.view.w; pc.height = ed.view.h;
+  pc.style.width = ed.view.w + 'px';
+  pc.style.height = ed.view.h + 'px';
   var img = $('ed-img');
   img.style.width = ed.view.w + 'px';
   img.style.height = ed.view.h + 'px';
   renderEditor();
+}
+
+// 全量重画涂抹覆盖层（undo / 还原 / 尺寸变化后调用）
+function redrawPaint(){
+  if (!ed) return;
+  var pc = $('ed-paint');
+  var ctx = pc.getContext('2d');
+  ctx.clearRect(0, 0, pc.width, pc.height);
+  if (!ed.mosaicSnap) return;
+  ed.strokes.forEach(function(s){ stampStroke(ctx, s, ed.mosaicSnap, ed.view.w, ed.view.h); });
 }
 
 function renderEditor(){
@@ -1845,22 +1901,17 @@ function renderEditor(){
   } else {
     cb.classList.add('hide');
   }
-  $('ed-masks').innerHTML = ed.masks.map(function(m, k){
-    return '<div class="mask-item' + (k === ed.active ? ' sel' : '') + '" data-k="' + k + '"' +
-      ' style="left:' + (m.x * v.w) + 'px;top:' + (m.y * v.h) + 'px;width:' + (m.w * v.w) + 'px;height:' + (m.h * v.h) + 'px">' +
-      '<i class="h"></i></div>';
-  }).join('');
-  // 逐块贴上真实马赛克（所见即导出所得）
-  Array.prototype.forEach.call($('ed-masks').children, function(el){
-    var m = ed.masks[parseInt(el.getAttribute('data-k'), 10)];
-    var url = m ? mosaicDataURL(m) : '';
-    if (url) el.style.backgroundImage = 'url("' + url + '")';
+  redrawPaint();
+  Array.prototype.forEach.call(document.querySelectorAll('.bsel'), function(b){
+    b.classList.toggle('sel', b.getAttribute('data-brush') === ed.brush);
   });
   $('ed-hint').textContent = ed.isCover
     ? '封面：金框内的区域会被裁成 2:3 作为封面（站点卡片按此比例居中裁切）。拖拽金框移动，右下角方块缩放，比例锁定。'
-    : '在图上按住并拖拽即可画出马赛克涂抹块（所见即导出所得，可叠加）；点选后可移动 / 缩放 / 删除。';
-  $('ed-mask-mode').textContent = (ed.mode === 'mask') ? '● 画马赛克中（再点退出）' : '＋ 拖拽画马赛克';
+    : '选「✎ 画笔涂抹」后按住鼠标在图上涂抹，走过的区域即打上马赛克（所见即导出所得，可反复叠加）；笔刷三档可调，🧹 清空全部涂抹。';
+  $('ed-mask-mode').textContent = (ed.mode === 'mask') ? '● 涂抹中（再点退出）' : '✎ 画笔涂抹';
   $('ed-crop-toggle').textContent = ed.cropOn ? '隐藏裁剪框' : '显示裁剪框';
+  $('ed-canvas').style.cursor = (ed.mode === 'mask') ? 'crosshair' : '';
+  $('ed-brush-cursor').style.display = (ed.mode === 'mask') ? 'block' : 'none';
   if (ed.isCover) drawThumb();
 }
 
@@ -1875,19 +1926,13 @@ function drawThumb(){
   } else {
     ctx.drawImage(ed.img, 0, 0, 54, 81);
   }
-  ed.masks.forEach(function(m){
-    var x, y, w, h;
-    if (ed.cropOn && ed.crop) {
-      var cw = ed.crop.w * W, ch = ed.crop.h * H;
-      x = (m.x * W - ed.crop.x * W) / cw * 54;
-      y = (m.y * H - ed.crop.y * H) / ch * 81;
-      w = m.w * W / cw * 54;
-      h = m.h * H / ch * 81;
-    } else {
-      x = m.x * 54; y = m.y * 81; w = m.w * 54; h = m.h * 81;
-    }
-    pixelateRect(ctx, x, y, w, h, 3);
-  });
+  // 缩略图：先做一个马赛克副本，再沿笔画把马赛克「盖」回缩略图（复用 stampStroke 插值）
+  var ms = document.createElement('canvas');
+  ms.width = 54; ms.height = 81;
+  var msc = ms.getContext('2d');
+  msc.drawImage(c, 0, 0);
+  pixelateRect(msc, 0, 0, 54, 81, 3);
+  ed.strokes.forEach(function(s){ stampStroke(ctx, s, ms, 54, 81); });
   $('ed-thumb').src = c.toDataURL('image/png');
 }
 
@@ -1895,7 +1940,7 @@ function pushHistory(){
   if (!ed) return;
   ed.history.push({
     crop: cloneRect(ed.crop), cropOn: ed.cropOn,
-    masks: ed.masks.map(cloneRect)
+    strokes: cloneStrokes(ed.strokes)
   });
   if (ed.history.length > MAX_UNDO) ed.history.shift();
 }
@@ -1904,8 +1949,7 @@ function edUndo(){
   var s = ed.history.pop();
   ed.crop = cloneRect(s.crop);
   ed.cropOn = s.cropOn;
-  ed.masks = s.masks.map(cloneRect);
-  ed.active = -1;                 // 只回退几何，不退出当前模式
+  ed.strokes = cloneStrokes(s.strokes);
   renderEditor();
 }
 function edReset(){
@@ -1913,7 +1957,7 @@ function edReset(){
   pushHistory();
   ed.crop = ed.isCover ? defaultCrop() : null;
   ed.cropOn = true;
-  ed.masks = []; ed.active = -1; ed.mode = 'none';
+  ed.strokes = []; ed.mode = 'none';
   renderEditor();
 }
 
@@ -1928,26 +1972,14 @@ function edRel(e){
 $('ed-canvas').addEventListener('pointerdown', function(e){
   if (!ed) return;
   var t = e.target;
-  var mi = t.closest ? t.closest('.mask-item') : null;
   var isH = !!(t.classList && t.classList.contains('h'));
   var d = null;
 
-  if (mi && isH) {
-    var k1 = parseInt(mi.getAttribute('data-k'), 10);
-    pushHistory();
-    ed.active = k1;
-    d = { type:'mask-resize', k:k1, x0:e.clientX, y0:e.clientY, m:cloneRect(ed.masks[k1]) };
-  } else if (mi) {
-    var k2 = parseInt(mi.getAttribute('data-k'), 10);
-    pushHistory();
-    ed.active = k2;
-    d = { type:'mask-move', k:k2, x0:e.clientX, y0:e.clientY, m:cloneRect(ed.masks[k2]) };
-  } else if (ed.mode === 'mask') {
+  if (ed.mode === 'mask') {
     pushHistory();
     var p = edRel(e);
-    ed.masks.push({ x:p.x, y:p.y, w:0, h:0 });
-    ed.active = ed.masks.length - 1;
-    d = { type:'mask-new', k:ed.active, x0:e.clientX, y0:e.clientY, ox:p.x, oy:p.y };
+    ed.strokes.push({ r: BRUSH_R[ed.brush] || BRUSH_R.medium, pts: [[p.x, p.y]] });
+    d = { type:'paint', x0:e.clientX, y0:e.clientY };
   } else if (ed.isCover && ed.cropOn && ed.crop && t.closest && t.closest('#ed-crop')) {
     pushHistory();
     d = {
@@ -1955,7 +1987,6 @@ $('ed-canvas').addEventListener('pointerdown', function(e){
       x0: e.clientX, y0: e.clientY, c: cloneRect(ed.crop)
     };
   } else {
-    if (ed.active !== -1) { ed.active = -1; renderEditor(); }
     return;
   }
 
@@ -1966,25 +1997,35 @@ $('ed-canvas').addEventListener('pointerdown', function(e){
 });
 
 $('ed-canvas').addEventListener('pointermove', function(e){
-  if (!ed || !edDrag) return;
+  if (!ed) return;
+  // 笔刷光标跟随（涂抹模式）
+  var cur = $('ed-brush-cursor');
+  if (ed.mode === 'mask') {
+    var rc = $('ed-canvas').getBoundingClientRect();
+    var rad = Math.max(4, (BRUSH_R[ed.brush] || BRUSH_R.medium) * ed.view.w);
+    cur.style.width = cur.style.height = (rad * 2) + 'px';
+    cur.style.left = (e.clientX - rc.left) + 'px';
+    cur.style.top = (e.clientY - rc.top) + 'px';
+    cur.style.display = 'block';
+  }
+  if (!edDrag) return;
   var d = edDrag;
+
+  if (d.type === 'paint') {
+    var p = edRel(e);
+    var s = ed.strokes[ed.strokes.length - 1];
+    var last = s.pts[s.pts.length - 1];
+    if (Math.hypot(p.x - last[0], p.y - last[1]) * ed.view.w < 2) return;
+    s.pts.push([p.x, p.y]);
+    // 只盖这一小段（last→p），不全量重绘，拖动丝滑
+    stampStroke($('ed-paint').getContext('2d'), { r: s.r, pts: [last, p] }, ed.mosaicSnap, ed.view.w, ed.view.h);
+    return;
+  }
+
   var dx = (e.clientX - d.x0) / ed.view.w;
   var dy = (e.clientY - d.y0) / ed.view.h;
 
-  if (d.type === 'mask-new') {
-    var p = edRel(e);
-    var m = ed.masks[d.k];
-    m.x = Math.min(d.ox, p.x); m.y = Math.min(d.oy, p.y);
-    m.w = Math.abs(p.x - d.ox); m.h = Math.abs(p.y - d.oy);
-  } else if (d.type === 'mask-move') {
-    var mm = ed.masks[d.k];
-    mm.x = clamp(d.m.x + dx, 0, 1 - mm.w);
-    mm.y = clamp(d.m.y + dy, 0, 1 - mm.h);
-  } else if (d.type === 'mask-resize') {
-    var mr = ed.masks[d.k];
-    mr.w = clamp(d.m.w + dx, 0.01, 1 - mr.x);
-    mr.h = clamp(d.m.h + dy, 0.01, 1 - mr.y);
-  } else if (d.type === 'crop-move') {
+  if (d.type === 'crop-move') {
     ed.crop.x = clamp(d.c.x + dx, 0, 1 - ed.crop.w);
     ed.crop.y = clamp(d.c.y + dy, 0, 1 - ed.crop.h);
   } else if (d.type === 'crop-resize') {
@@ -1999,20 +2040,22 @@ $('ed-canvas').addEventListener('pointermove', function(e){
 function endEdDrag(){
   if (!edDrag) return;
   var d = edDrag; edDrag = null;
-  if (d.type === 'mask-new') {
-    var m = ed.masks[d.k];
-    if (m.w * ed.view.w < 6 || m.h * ed.view.h < 6) {
-      ed.masks.splice(d.k, 1);
-      ed.active = -1;
+  if (d.type === 'paint') {
+    var s = ed.strokes[ed.strokes.length - 1];
+    if (s && s.pts.length < 2 && ed.view.w * s.r < 3) {
+      // 误触（几乎没画）→ 丢弃并回滚历史
+      ed.strokes.pop();
       ed.history.pop();
     }
+    if (ed.isCover) drawThumb();
+    return;
   }
   renderEditor();
 }
 $('ed-canvas').addEventListener('pointerup', endEdDrag);
 $('ed-canvas').addEventListener('pointercancel', endEdDrag);
 
-/* 合成导出：裁剪 + 马赛克涂抹 → WebP */
+/* 合成导出：裁剪 + 画笔马赛克 → WebP */
 function burnImage(img, op){
   var W = img.naturalWidth, H = img.naturalHeight;
   var sx = 0, sy = 0, sw = W, sh = H;
@@ -2023,12 +2066,22 @@ function burnImage(img, op){
   var ctx = c.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, ow, oh);
   ctx.drawImage(img, sx, sy, sw, sh, 0, 0, ow, oh);
-  if (op.masks.length) {
-    var kx = ow / sw, ky = oh / sh;
-    var block = Math.max(MOSAIC_MIN, Math.round(Math.max(ow, oh) / MOSAIC_DIV));
-    op.masks.forEach(function(m){
-      pixelateRect(ctx, (m.x * W - sx) * kx, (m.y * H - sy) * ky, m.w * W * kx, m.h * H * ky, block);
-    });
+  if (op.strokes.length) {
+    // 1) 整图（输出分辨率）打成马赛克
+    var mosaic = document.createElement('canvas');
+    mosaic.width = ow; mosaic.height = oh;
+    var mc = mosaic.getContext('2d');
+    mc.drawImage(c, 0, 0);
+    pixelateRect(mc, 0, 0, ow, oh, Math.max(MOSAIC_MIN, Math.round(Math.max(ow, oh) / MOSAIC_DIV)));
+    // 2) 涂抹蒙版（自然分辨率 → 对齐裁剪区缩放到输出尺寸）
+    var mask = buildMaskCanvas(op.strokes, W, H, W, H);
+    var clip = document.createElement('canvas');
+    clip.width = ow; clip.height = oh;
+    clip.getContext('2d').drawImage(mask, sx, sy, sw, sh, 0, 0, ow, oh);
+    // 3) 蒙版裁贴：mosaic 只保留涂抹区，贴回成品
+    mc.globalCompositeOperation = 'destination-in';
+    mc.drawImage(clip, 0, 0);
+    ctx.drawImage(mosaic, 0, 0);
   }
   return new Promise(function(res){ c.toBlob(function(b){ res(b); }, 'image/webp', 0.94); });
 }
@@ -2038,7 +2091,7 @@ function edDone(){
   var i = ed.idx;
   var op = {
     crop: (ed.isCover && ed.cropOn && ed.crop) ? cloneRect(ed.crop) : null,
-    masks: ed.masks.map(cloneRect)
+    strokes: cloneStrokes(ed.strokes)
   };
   var btn = $('ed-done');
   btn.disabled = true;
@@ -2046,7 +2099,7 @@ function edDone(){
     if (!blob) throw new Error('图片导出失败，请换用 Chrome / Edge');
     if (blob.size > envMax) throw new Error('编辑后 ' + fmtSize(blob.size) + '，超过单张上限 ' + fmtSize(envMax));
     var f = files[i];
-    if (!op.crop && !op.masks.length) {
+    if (!op.crop && !op.strokes.length) {
       // 无改动 → 还原成原始文件
       if (f.url !== f.originalUrl) { try { URL.revokeObjectURL(f.url); } catch(e){} }
       f.file = f.originalFile;
@@ -2352,16 +2405,21 @@ $('ed-crop-fit').onclick = function(){
 $('ed-mask-mode').onclick = function(){
   if (!ed) return;
   ed.mode = (ed.mode === 'mask') ? 'none' : 'mask';
-  ed.active = -1;
   renderEditor();
 };
 $('ed-del-mask').onclick = function(){
-  if (!ed || ed.active < 0) return;
+  if (!ed || !ed.strokes.length) return;
   pushHistory();
-  ed.masks.splice(ed.active, 1);
-  ed.active = -1;
+  ed.strokes = [];
   renderEditor();
 };
+Array.prototype.forEach.call(document.querySelectorAll('.bsel'), function(b){
+  b.onclick = function(){
+    if (!ed) return;
+    ed.brush = b.getAttribute('data-brush');
+    renderEditor();
+  };
+});
 $('ed-undo').onclick = edUndo;
 $('ed-reset').onclick = edReset;
 $('ed-cancel').onclick = closeEditor;
