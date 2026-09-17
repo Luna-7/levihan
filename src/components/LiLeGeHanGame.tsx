@@ -1,44 +1,54 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { soundManager } from '../utils/audio';
 import { RotateCcw, Undo2, Shuffle, PackagePlus } from 'lucide-react';
+import {
+  LIHAN_SPRITE_SRC,
+  SPRITE_BG_SIZE,
+  CARD_SPRITE_POS,
+  BLOCK_SPRITE_POS,
+  TRAY_SLOTS,
+} from '../data/lihanSprite';
 
 export interface CardType {
   id: string;
   name: string;
-  imageSrc: string;
 }
 
-const TILE_BG = '/images/lihan/block_bg.png';
-const TILE_MASK = '/images/lihan/blackMask.png';
+// 16 种图案全部来自单张雪碧图（lihan-sheet.webp），按 CARD_SPRITE_POS 切片
+export const CARD_TYPES: CardType[] = Array.from({ length: 16 }, (_, index) => ({
+  id: `card-${index + 1}`,
+  name: `卡片${index + 1}`,
+}));
 
-export const CARD_TYPES: CardType[] = Array.from({ length: 16 }, (_, index) => {
-  const number = index + 1;
-  return {
-    id: `card-${number}`,
-    name: `卡片${number}`,
-    imageSrc: `/images/lihan/card-${number}.png`,
-  };
+const spriteCellStyle = (pos: { x: number; y: number }): React.CSSProperties => ({
+  backgroundImage: `url(${LIHAN_SPRITE_SRC})`,
+  backgroundSize: `${SPRITE_BG_SIZE.x}% ${SPRITE_BG_SIZE.y}%`,
+  backgroundPosition: `${pos.x}% ${pos.y}%`,
+  backgroundRepeat: 'no-repeat' as const,
 });
 
-const TileFace: React.FC<{ cardInfo: CardType; isCovered?: boolean }> = ({ cardInfo, isCovered = false }) => (
-  <div
-    className="relative w-full h-full overflow-hidden rounded-[4px] shadow-[1px_2px_0px_#233D12]"
-    style={{ backgroundImage: `url(${TILE_BG})`, backgroundSize: '100% 100%' }}
-    aria-label={isCovered ? '未揭开的麻将牌' : cardInfo.name}
-  >
-    {!isCovered && (
-      <img
-        src={cardInfo.imageSrc}
-        alt=""
-        className="absolute inset-[3px] w-[calc(100%-6px)] h-[calc(100%-8px)] object-contain pointer-events-none"
-        draggable={false}
-      />
-    )}
-    {isCovered && (
-      <img src={TILE_MASK} alt="" className="absolute inset-0 w-full h-full pointer-events-none" draggable={false} />
-    )}
-  </div>
-);
+const TileFace: React.FC<{ cardInfo: CardType; isCovered?: boolean }> = ({ cardInfo, isCovered = false }) => {
+  const idx = Math.max(0, CARD_TYPES.findIndex((c) => c.id === cardInfo.id));
+  const pos = CARD_SPRITE_POS[idx] ?? CARD_SPRITE_POS[0];
+  return (
+    <div
+      className="relative w-full h-full overflow-hidden rounded-[4px] shadow-[1px_2px_0px_#233D12]"
+      aria-label={cardInfo.name}
+    >
+      {/* 方块底（雪碧图切片，比例与元素一致无拉伸） */}
+      <div className="absolute inset-0" style={spriteCellStyle(BLOCK_SPRITE_POS)} />
+      {/* 图案始终渲染：羊了个羊规则里被压住的牌也露出图案，只是不可点击 */}
+      <div className="absolute inset-0" style={spriteCellStyle(pos)} />
+      {isCovered && (
+        // 被压住时仅叠加一层浅暗化，提示不可点击（图案仍然可见）
+        <div
+          className="absolute inset-0 pointer-events-none rounded-[4px]"
+          style={{ background: 'rgba(28,38,24,0.32)' }}
+        />
+      )}
+    </div>
+  );
+};
 
 export interface CardInstance {
   id: number;
@@ -59,6 +69,19 @@ interface Props {
 const CARD_W = 46;
 const CARD_H = 54;
 const TRAY_CAPACITY = 7;
+
+// 灰色空底板（装饰用占位牌，无交互）：铺在牌阵下方，模拟羊了个羊的底图
+const GHOST_TILES: { x: number; y: number }[] = (() => {
+  const arr: { x: number; y: number }[] = [];
+  for (let r = 0; r < 5; r++) {
+    for (let c = 0; c < 7; c++) {
+      const x = 17 + c * 46 + (r % 2) * 23;
+      const y = 76 + r * 44;
+      if (x + CARD_W <= 320 && y + CARD_H <= 310) arr.push({ x, y });
+    }
+  }
+  return arr;
+})();
 
 export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
   // 仅保留最难关卡（玛利亚决战·极难迷阵）
@@ -116,34 +139,44 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
 
     const allPos: { x: number; y: number; layer: number }[] = [];
 
-    // 参考图构图：顶部左右横向盲盒，中央五列交错牌阵，左右独立侧列。
-    // 横向盲盒的牌底只露出窄边，末张正面朝外。
-    for (let i = 0; i < 10; i++) {
-      allPos.push({ x: 44 + i * 5, y: 16, layer: i + 2 });
-      allPos.push({ x: 274 - i * 8, y: 16, layer: i + 2 });
-    }
-
-    // 中央 5 × 7 棋盘。微小交叠和前后层级形成参考图的灰色暗牌层。
-    for (let row = 0; row < 7; row++) {
-      for (let col = 0; col < 5; col++) {
-        allPos.push({
-          x: 68 + col * 44,
-          y: 82 + row * 43,
-          layer: (row + col) % 2,
-        });
+    // 参考羊了个羊构图：中央层叠牌阵（相邻行错位半张、逐层上叠，下层被压住呈灰色暗牌）
+    // 第 1 层：4 行 × 5 列，奇数行右错半张
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 5; c++) {
+        allPos.push({ x: 40 + c * 46 + (r % 2) * 23, y: 92 + r * 44, layer: 1 });
       }
     }
 
-    // 左右侧列留出空隙，形成参考图中的开阔轮廓。
-    for (let row = 0; row < 7; row++) {
-      allPos.push({ x: 12, y: 83 + row * 50, layer: 2 });
-      allPos.push({ x: 263, y: 83 + row * 50, layer: 2 });
+    // 第 2 层：4 行 × 4 列，继续错位压在第 1 层上
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        allPos.push({ x: 52 + c * 46 + (r % 2) * 23, y: 106 + r * 44, layer: 2 });
+      }
     }
 
-    // 三张前景牌压在中央核心上，增加层叠的视觉焦点。
-    allPos.push({ x: 108, y: 194, layer: 13 });
-    allPos.push({ x: 152, y: 194, layer: 13 });
-    allPos.push({ x: 196, y: 194, layer: 13 });
+    // 第 3 层：2 行 × 4 列
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 4; c++) {
+        allPos.push({ x: 75 + c * 46 + (r % 2) * 23, y: 120 + r * 44, layer: 3 });
+      }
+    }
+
+    // 第 4 层：核心 1 行 × 4 列，形成层叠视觉焦点
+    for (let c = 0; c < 4; c++) {
+      allPos.push({ x: 98 + c * 46, y: 142, layer: 4 });
+    }
+
+    // 顶部左右横向牌堆：牌底只露出窄边，逐张叠高（参考图上方的堆叠横排）
+    for (let i = 0; i < 7; i++) {
+      allPos.push({ x: 36 + i * 7, y: 14, layer: 6 + i });
+      allPos.push({ x: 236 - i * 7, y: 14, layer: 6 + i });
+    }
+
+    // 左右纵向牌堆：只露上边，压住牌阵两翼
+    for (let i = 0; i < 5; i++) {
+      allPos.push({ x: 14, y: 92 + i * 6, layer: 6 + i });
+      allPos.push({ x: 260, y: 92 + i * 6, layer: 6 + i });
+    }
 
     for (let i = 0; i < deck.length && i < allPos.length; i++) {
       newCards.push({
@@ -187,7 +220,7 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       if (width <= 0 || height <= 0) return;
-      const nextScale = Math.min((width - 12) / 320, (height - 16) / 445, 1.6);
+      const nextScale = Math.min((width - 12) / 320, (height - 16) / 310, 1.6);
       setScale(Math.max(0.1, nextScale));
     });
     ro.observe(board);
@@ -432,13 +465,10 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
 
   return (
     <div className="relative w-full h-full min-h-0 flex flex-col gap-1 select-none text-[#263819] font-pixel p-1 sm:p-2 overflow-hidden">
-      {/* 横向盲盒 + 中央交错牌阵，自适应视口大小 */}
+      {/* 横向盲盒 + 中央交错牌阵，自适应视口大小（背景透出草丛底图，不做硬边框） */}
       <div
         ref={boardAreaRef}
-        className="relative flex-1 min-h-0 w-full border-2 sm:border-3 border-[#82B94D] overflow-hidden select-none flex items-center justify-center"
-        style={{
-          background: 'radial-gradient(circle at 50% 38%, #D0FFA5 0%, #B9FB84 72%, #A5E96F 100%)',
-        }}
+        className="relative flex-1 min-h-0 w-full overflow-hidden select-none flex items-center justify-center"
       >
         {/* 浮动在背景图右上方的重整按钮 */}
         <button
@@ -455,11 +485,28 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
           style={{
             position: 'relative',
             width: '320px',
-            height: '445px',
+            height: '310px',
             transform: `scale(${scale})`,
             transformOrigin: 'center center',
           }}
         >
+          {/* 灰色空底板装饰层（无交互，垫在所有真实卡牌下方） */}
+          {GHOST_TILES.map((g, i) => (
+            <div
+              key={`ghost-${i}`}
+              className="absolute rounded-[4px] pointer-events-none"
+              style={{
+                left: `${g.x}px`,
+                top: `${g.y}px`,
+                width: `${CARD_W}px`,
+                height: `${CARD_H}px`,
+                zIndex: 0,
+                background: 'linear-gradient(180deg, #99A396 0%, #7C857A 100%)',
+                boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.18), 0 2px 0 rgba(52,60,48,0.35)',
+              }}
+            />
+          ))}
+
           {cards
             .filter((card) => card.state === 'board')
             .sort((a, b) => a.layer - b.layer || a.id - b.id)
@@ -515,80 +562,97 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
         </div>
       )}
 
-      {/* 底部 7 格麻将收集槽 */}
-      <div className="w-full shrink-0 bg-[#9A632A] border-3 sm:border-4 border-[#704110] p-1 shadow-[3px_3px_0px_#704110]">
-        <div className="grid grid-cols-7 gap-0.5 sm:gap-1 bg-[#8B501C] border-2 border-[#C48332] p-0.5 sm:p-1 items-center"
-          style={{ height: 'clamp(42px, 12vw, 66px)' }}>
-          {Array.from({ length: TRAY_CAPACITY }).map((_, index) => {
-            const card = tray[index];
-            if (card) {
-              const cardInfo = cardTypeMap.get(card.typeId) || CARD_TYPES[0];
-              const isEliminating = eliminatingIds.includes(card.id);
+      {/* 底部 7 格麻将收集槽（卡槽图为雪碧图切片，卡牌按实测内槽位置叠加） */}
+      <div
+        className="relative w-full max-w-[440px] mx-auto shrink-0 select-none"
+        style={{
+          aspectRatio: '3 / 1',
+          backgroundImage: `url(${LIHAN_SPRITE_SRC})`,
+          backgroundSize: '100% 100%',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        {tray.map((card, index) => {
+          const slot = TRAY_SLOTS[index] ?? TRAY_SLOTS[TRAY_SLOTS.length - 1];
+          const cardInfo = cardTypeMap.get(card.typeId) || CARD_TYPES[0];
+          const isEliminating = eliminatingIds.includes(card.id);
 
-              return (
-                <div
-                  key={card.id}
-                  className={`w-full h-full select-none transition-all duration-150 ${
-                    isEliminating ? 'scale-125 animate-ping' : 'animate-scaleUp'
-                  }`}
-                >
-                  <TileFace cardInfo={cardInfo} />
-                </div>
-              );
-            }
-
-            return (
+          return (
+            <div
+              key={card.id}
+              className="absolute"
+              style={{
+                left: `${slot.left}%`,
+                top: `${slot.top}%`,
+                width: `${slot.width}%`,
+                height: `${slot.height}%`,
+              }}
+            >
+              {/* 卡牌锁定 46:54 比例、按槽高适配、槽内水平居中，避免被槽位比例拉伸 */}
               <div
-                key={`empty-${index}`}
-                className="w-full h-full border border-dashed border-[#B47733] bg-[#6E3D16]/45"
-              />
-            );
-          })}
-        </div>
+                className={`relative mx-auto h-full transition-all duration-150 ${
+                  isEliminating ? 'scale-125 animate-ping' : 'animate-scaleUp'
+                }`}
+                style={{ aspectRatio: '46 / 54' }}
+              >
+                <TileFace cardInfo={cardInfo} />
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* 底部三大道具栏 (彻底删除所有类似 "悔棋1张 (1/1)", "空出3格 (1/1)", "打破死局 (1/1)" 等复杂副标题设计) */}
-      <div className="w-full shrink-0 grid grid-cols-3 gap-1 sm:gap-2">
+      {/* 底部三大道具栏 (羊了个羊同款：蓝色圆角、图标在上文字在下、右上角 ⊕ 角标) */}
+      <div className="w-full shrink-0 grid grid-cols-3 gap-2 sm:gap-3 px-0.5">
         <button
           onClick={handlePropMoveOut}
           disabled={propMoveOutUsed || tray.length === 0}
-          className={`min-h-[40px] sm:min-h-[44px] py-1 px-1 border-2 flex items-center justify-center gap-1 transition-all ${
+          className={`relative h-[50px] sm:h-[56px] rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
             propMoveOutUsed || tray.length === 0
-              ? 'bg-[#263819] text-[#80936D] border-[#527729] cursor-not-allowed opacity-50'
-              : 'bg-[#168DEB] hover:bg-[#33A3F0] text-white border-[#07539B] shadow-[2px_3px_0px_#163B2E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
+              ? 'bg-gradient-to-b from-[#C7CDD4] to-[#9AA3AD] border-[#7B848D] cursor-not-allowed opacity-70'
+              : 'bg-gradient-to-b from-[#54C0FF] to-[#1B8FE8] border-[#0E6BB8] shadow-[0_3px_0px_#0E5E9E] hover:from-[#6BCBFF] hover:to-[#2F9EF2] cursor-pointer'
           }`}
-          title="移出"
+          title="移出 3 张到备战区"
         >
-          <PackagePlus className="w-4 h-4 text-[#FFC83D]" />
-          <span className="font-bold text-xs">移出</span>
+          <PackagePlus className="w-4 h-4 text-white" strokeWidth={2.5} />
+          <span className="font-bold text-[11px] text-white leading-none">移出</span>
+          <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-[#17181C] text-white text-[11px] font-black flex items-center justify-center border-2 border-white/80 shadow-sm pointer-events-none">
+            +
+          </span>
         </button>
 
         <button
           onClick={handlePropUndo}
           disabled={propUndoUsed || !historyMove}
-          className={`min-h-[40px] sm:min-h-[44px] py-1 px-1 border-2 flex items-center justify-center gap-1 transition-all ${
+          className={`relative h-[50px] sm:h-[56px] rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
             propUndoUsed || !historyMove
-              ? 'bg-[#263819] text-[#80936D] border-[#527729] cursor-not-allowed opacity-50'
-              : 'bg-[#168DEB] hover:bg-[#33A3F0] text-white border-[#07539B] shadow-[2px_3px_0px_#163B2E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
+              ? 'bg-gradient-to-b from-[#C7CDD4] to-[#9AA3AD] border-[#7B848D] cursor-not-allowed opacity-70'
+              : 'bg-gradient-to-b from-[#54C0FF] to-[#1B8FE8] border-[#0E6BB8] shadow-[0_3px_0px_#0E5E9E] hover:from-[#6BCBFF] hover:to-[#2F9EF2] cursor-pointer'
           }`}
-          title="撤回"
+          title="撤回上一张"
         >
-          <Undo2 className="w-4 h-4 text-[#FFC83D]" />
-          <span className="font-bold text-xs">撤回</span>
+          <Undo2 className="w-4 h-4 text-white" strokeWidth={2.5} />
+          <span className="font-bold text-[11px] text-white leading-none">撤回</span>
+          <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-[#17181C] text-white text-[11px] font-black flex items-center justify-center border-2 border-white/80 shadow-sm pointer-events-none">
+            +
+          </span>
         </button>
 
         <button
           onClick={handlePropShuffle}
           disabled={propShuffleUsed}
-          className={`min-h-[40px] sm:min-h-[44px] py-1 px-1 border-2 flex items-center justify-center gap-1 transition-all ${
+          className={`relative h-[50px] sm:h-[56px] rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
             propShuffleUsed
-              ? 'bg-[#263819] text-[#80936D] border-[#527729] cursor-not-allowed opacity-50'
-              : 'bg-[#168DEB] hover:bg-[#33A3F0] text-white border-[#07539B] shadow-[2px_3px_0px_#163B2E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
+              ? 'bg-gradient-to-b from-[#C7CDD4] to-[#9AA3AD] border-[#7B848D] cursor-not-allowed opacity-70'
+              : 'bg-gradient-to-b from-[#54C0FF] to-[#1B8FE8] border-[#0E6BB8] shadow-[0_3px_0px_#0E5E9E] hover:from-[#6BCBFF] hover:to-[#2F9EF2] cursor-pointer'
           }`}
-          title="洗牌"
+          title="阵型洗牌"
         >
-          <Shuffle className="w-4 h-4 text-[#FFC83D]" />
-          <span className="font-bold text-xs">洗牌</span>
+          <Shuffle className="w-4 h-4 text-white" strokeWidth={2.5} />
+          <span className="font-bold text-[11px] text-white leading-none">洗牌</span>
+          <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-[#17181C] text-white text-[11px] font-black flex items-center justify-center border-2 border-white/80 shadow-sm pointer-events-none">
+            +
+          </span>
         </button>
       </div>
 

@@ -213,5 +213,11 @@ export const soundManager = {
     } catch {
       // ignore
     }
-  }
+  },
+
+  // 新视觉外壳使用的轻量音效名称；复用已有合成音，不改变声音资源。
+  playWoodTap: () => soundManager.playBlip(),
+  playPageTurn: () => soundManager.playBlip(),
+  playScrollOpen: () => soundManager.playBlip(),
+  playStamp: () => soundManager.playCoin()
 };

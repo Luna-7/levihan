@@ -118,6 +118,7 @@ export default function LazyComicPage({
       ref={containerRef}
       className={className}
       data-page={pageNumber}
+      style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
     >
       {!shouldLoad ? (
         // 占位容器，维持滚动高度
@@ -134,7 +135,9 @@ export default function LazyComicPage({
               referrerPolicy={referrerPolicy}
               loading="lazy"
               decoding="async"
-              className="w-full h-auto block m-0 p-0 border-0 align-top select-none"
+              draggable={false}
+              className="w-full h-auto block m-0 p-0 border-0 align-top select-none touch-pan-x touch-pan-y"
+              style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
             />
           )}
 

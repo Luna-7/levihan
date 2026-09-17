@@ -26,7 +26,7 @@ import { applyMove, createInitialPieces, isVictory } from './gameLogic';
 import type { MoveDelta } from './gameLogic';
 import { DIFFICULTIES, DIFFICULTY_ORDER } from './levels';
 import type { Difficulty, Piece } from './levels';
-import { HOST_BGM_MESSAGE_TYPE } from './constants';
+import { HOST_BGM_MESSAGE_TYPE, HOST_RESULT_MESSAGE_TYPE, RANKED_DIFFICULTY } from './constants';
 
 /**
  * 对局音乐状态通知：嵌在主站 iframe 里时通知父页面（TatakaruGame）。
@@ -37,6 +37,23 @@ import { HOST_BGM_MESSAGE_TYPE } from './constants';
 const notifyHostBgm = (state: 'start' | 'end') => {
   try {
     window.parent?.postMessage({ type: HOST_BGM_MESSAGE_TYPE, state }, '*');
+  } catch {
+    /* 独立打开（无父页面）时忽略 */
+  }
+};
+
+/**
+ * 对局结果上报：只有「绝境」难度突围成功才发送，宿主据此记入头号玩家。
+ * 其余难度与所有失败局都不上报 —— 榜单只收录绝境突围成绩。
+ */
+const notifyHostResult = (payload: {
+  difficulty: string;
+  moves: number;
+  timeUsedSeconds: number;
+  duration: number;
+}) => {
+  try {
+    window.parent?.postMessage({ type: HOST_RESULT_MESSAGE_TYPE, ...payload }, '*');
   } catch {
     /* 独立打开（无父页面）时忽略 */
   }
@@ -160,6 +177,16 @@ export const SaveHangeGame: React.FC = () => {
     setTimeline({ elapsed, remaining: Math.max(0, duration - elapsed), duration });
     setHasWon(true);
     setIsGameOver(false);
+
+    // 只有绝境难度的突围成绩才进头号玩家
+    if (difficultyRef.current === RANKED_DIFFICULTY) {
+      notifyHostResult({
+        difficulty: RANKED_DIFFICULTY,
+        moves: movesRef.current,
+        timeUsedSeconds: elapsed,
+        duration,
+      });
+    }
 
     haptic([30, 50, 30, 50, 90]);
     notifyHostBgm('end'); // 对局音乐停止 → 宿主恢复共用 BGM

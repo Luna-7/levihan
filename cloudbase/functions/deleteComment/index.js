@@ -1,0 +1,2 @@
+const tcb=require('@cloudbase/node-sdk');const app=tcb.init({env:tcb.SYMBOL_CURRENT_ENV});const db=app.database();
+exports.main=async event=>{const{uid}=app.auth().getUserInfo();if(!uid)throw new Error('AUTH_REQUIRED');const ref=db.collection('comments').doc(String(event.id)),comment=(await ref.get()).data?.[0];if(!comment||comment.authorUid!==uid)throw new Error('NOT_COMMENT_OWNER');await ref.update({status:'deleted',content:'',deletedAt:new Date()});return{ok:true};};

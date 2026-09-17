@@ -1,0 +1,2 @@
+const tcb=require('@cloudbase/node-sdk');const app=tcb.init({env:tcb.SYMBOL_CURRENT_ENV});const db=app.database();
+exports.main=async event=>{const{uid}=app.auth().getUserInfo();const admin=(await db.collection('users').doc(uid).get()).data?.[0];if(!admin||admin.role!=='admin')throw new Error('ADMIN_REQUIRED');await db.collection('treehole_posts').doc(String(event.id)).update({status:'approved',approvedAt:new Date(),approvedBy:uid});return{ok:true};};

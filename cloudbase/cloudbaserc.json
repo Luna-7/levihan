@@ -20,6 +20,83 @@
         "COS_REGION": "ap-nanjing",
         "ALLOWED_ORIGINS": "https://levihan-tudou-d0g7jivue1ccc4a35-1325571558.tcloudbaseapp.com,http://localhost:5173,http://localhost:4173,https://admin.levihan.asia,https://www.levihan.asia,https://levihan.asia"
       }
+    },
+    {
+      "name": "validateRegistrationInvite",
+      "type": "Event",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 10,
+      "memorySize": 128,
+      "description": "验证粮仓钥匙",
+      "installDependency": true,
+      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+    },
+    {
+      "name": "createUserProfile",
+      "type": "Event",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 10,
+      "memorySize": 128,
+      "description": "创建邀请制用户档案",
+      "installDependency": true,
+      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+    },
+    {
+      "name": "getUserAccount",
+      "type": "Event",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 10,
+      "memorySize": 128,
+      "description": "读取用户与粮仓钥匙信息",
+      "installDependency": true,
+      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+    },
+    {
+      "name": "updateNickname",
+      "type": "Event",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 10,
+      "memorySize": 128,
+      "description": "登录成员修改统一昵称",
+      "installDependency": true,
+      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+    },
+    {
+      "name": "generateInviteCode",
+      "type": "Event",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 10,
+      "memorySize": 128,
+      "description": "按用户额度生成粮仓钥匙",
+      "installDependency": true,
+      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+    },
+    {
+      "name": "submitGameScore",
+      "type": "Event",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 10,
+      "memorySize": 128,
+      "description": "提交小游戏成绩并折算积分（需登录，服务端重算，每人每游戏每日 30 次）",
+      "installDependency": true,
+      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+    },
+    {
+      "name": "getGameLeaderboard",
+      "type": "Event",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 10,
+      "memorySize": 128,
+      "description": "读取头号玩家排行榜（公开可读，游客无需登录）",
+      "installDependency": true,
+      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
     }
   ]
 }

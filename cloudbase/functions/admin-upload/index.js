@@ -26,6 +26,8 @@
  *   novelSave     (token) {id?,title,author,body,authorNote?,warning?,tags?} → { novel, novels }
  *   novelDelete   (token) {id}                     → { id, novels }
  *   recs          (token) {items: RecommendItem[]} → { count }   // 落桶 recs.json
+ *   submitContact {kind,content,...} (公开)        → 联络来信写入云端收件箱（type=contact）
+ *   authorLib     (token) {authors?}              → 作者链接登记表（不传=读取；传=整表覆盖）
  */
 'use strict';
 
@@ -37,8 +39,13 @@ const BUCKET = process.env.COS_BUCKET || 'levihan-1325571558';
 const REGION = process.env.COS_REGION || 'ap-nanjing';
 const ARCHIVE_KEY = 'archive.json';
 const TAGS_KEY = 'tags.json';   // 全站标签库（string[]），供上传台下拉选择
+const AUTHORS_KEY = 'authors.json'; // 作者链接登记表（[{name,url,createdAt,updatedAt}]），上传台自动补全 + 可导出 Excel
+const ANNOUNCEMENTS_KEY = 'announcements.json'; // 首页公告栏（公开读取、管理员写入）
+const ANNOUNCEMENT_DIR = 'announcements/';
+const FORUM_KEY = 'restaurant-forum.json';
+const FORUM_DIR = 'restaurant-forum/';
+const MAX_AUTHORS = 500;
 const INBOX_COLLECTION = 'submission_inbox';
-const TREEHOLE_KEY = 'treehole.json';
 const NOVELS_KEY = 'novels.json';   // 在线小说索引（GroupNovel[]）
 const NOVEL_DIR = 'novels/';        // 在线小说正文：novels/{id}.txt（纯文本）
 const MAX_NOVEL_CHARS = 500000;     // 单篇正文字数上限
@@ -124,6 +131,55 @@ async function writeArchive(books) {
   });
 }
 
+async function readAnnouncements() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: ANNOUNCEMENTS_KEY });
+    const text = Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body);
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+
+async function writeAnnouncements(items) {
+  await putObject({
+    Bucket: BUCKET, Region: REGION, Key: ANNOUNCEMENTS_KEY,
+    Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'),
+    ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache',
+  });
+}
+
+async function readForum() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: FORUM_KEY });
+    const parsed = JSON.parse(Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+async function writeForum(items) {
+  await putObject({ Bucket: BUCKET, Region: REGION, Key: FORUM_KEY,
+    Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'), ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache' });
+}
+
+function normalizeAnnouncement(raw) {
+  const tag = String(raw.tag || '').trim().slice(0, 20);
+  const title = String(raw.title || '').trim().slice(0, 100);
+  const author = String(raw.author || '').trim().slice(0, 40);
+  const time = String(raw.time || '').trim().slice(0, 40);
+  const link = String(raw.link || '').trim().slice(0, 500);
+  const description = String(raw.description || '').trim().slice(0, 2000);
+  if (!tag || !title || !author) throw httpError('标签、标题和发布人为必填项', 400);
+  if (link && !/^(https?:\/\/|\/|\?)/i.test(link)) throw httpError('跳转链接须为 http(s) 地址或站内相对地址', 400);
+  const id = String(raw.id || `notice-${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60);
+  if (!id) throw httpError('公告 ID 无效', 400);
+  return { id, tag, title, author, time, link, description, image: String(raw.image || '').trim().slice(0, 500) };
+}
+
 /** 读取全站标签库；文件不存在则视为空数组 */
 async function readTagLib() {
   try {
@@ -170,6 +226,72 @@ function deriveTagsFromBooks(books) {
     });
   });
   return normalizeTagLib(out);
+}
+
+/* ------------------------------ 作者链接登记表 ------------------------------ */
+
+/** 读取作者链接登记表；文件不存在则视为空数组 */
+async function readAuthorLib() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: AUTHORS_KEY });
+    const text = Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body);
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+
+async function writeAuthorLib(authors) {
+  await putObject({
+    Bucket: BUCKET,
+    Region: REGION,
+    Key: AUTHORS_KEY,
+    Body: Buffer.from(JSON.stringify(authors, null, 2), 'utf8'),
+    ContentType: 'application/json; charset=utf-8',
+    CacheControl: 'no-cache',
+  });
+}
+
+/** 整表覆盖前的清洗：作者名唯一、链接须为 http(s)、限长限量 */
+function normalizeAuthorLib(input) {
+  const list = Array.isArray(input) ? input : [];
+  const out = [];
+  const seen = new Set();
+  list.forEach((raw) => {
+    const name = String((raw && raw.name) || '').trim().slice(0, 60);
+    const url = String((raw && raw.url) || '').trim().slice(0, 300);
+    if (!name || seen.has(name)) return;
+    if (url && !/^https?:\/\//i.test(url)) return;
+    seen.add(name);
+    out.push({
+      name,
+      url,
+      createdAt: String((raw && raw.createdAt) || '').trim() || new Date().toISOString(),
+      updatedAt: String((raw && raw.updatedAt) || '').trim() || new Date().toISOString(),
+    });
+  });
+  return out.slice(0, MAX_AUTHORS);
+}
+
+/** 自动登记：同名作者更新链接，新作者插入表头；无变化返回 false */
+async function upsertAuthor(name, url) {
+  const n = String(name || '').trim().slice(0, 60);
+  const u = String(url || '').trim().slice(0, 300);
+  if (!n || !u || !/^https?:\/\//i.test(u) || n === '未知') return false;
+  const authors = await readAuthorLib();
+  const found = authors.find((a) => a && a.name === n);
+  const now = new Date().toISOString();
+  if (found) {
+    if (found.url === u) return false;
+    found.url = u;
+    found.updatedAt = now;
+  } else {
+    authors.unshift({ name: n, url: u, createdAt: now, updatedAt: now });
+  }
+  await writeAuthorLib(authors.slice(0, MAX_AUTHORS));
+  return true;
 }
 
 /** 字段顺序与 sync-archive.mjs / 前端 DoujinBookItem 保持一致 */
@@ -332,9 +454,31 @@ function normalizeRecs(items) {
     if (recommender) item.recommender = recommender;
     const reason = String((raw && raw.reason) || '').trim();
     if (reason) item.reason = reason;
+    const createdAt = String((raw && raw.createdAt) || '').trim();
+    if (createdAt) item.createdAt = createdAt;
     out.push(item);
   });
   return out;
+}
+
+async function readRecs() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: 'recs.json' });
+    const text = Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body);
+    const parsed = JSON.parse(text);
+    return normalizeRecs(Array.isArray(parsed) ? parsed : []);
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+
+async function writeRecs(items) {
+  const recs = normalizeRecs(items);
+  await putObject({ Bucket: BUCKET, Region: REGION, Key: 'recs.json',
+    Body: Buffer.from(JSON.stringify(recs, null, 2), 'utf8'),
+    ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache' });
+  return recs;
 }
 
 /** 列出某目录下全部对象 Key（自动翻页） */
@@ -364,21 +508,33 @@ function assertDbResult(result) {
   return result.data;
 }
 
-async function readPublishedNotes() {
-  try {
-    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: TREEHOLE_KEY });
-    const parsed = JSON.parse(Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body));
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (err) {
-    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
-    throw err;
-  }
-}
+/** 联络（DispatchHub 呈递函）允许的表单种类 */
+const CONTACT_KINDS = {
+  feedback: '战术研讨',
+  'translate-release': '汉化发布',
+  novel: '同人小说',
+  'art-comic': '插画/短漫',
+  recommend: '安利推荐',
+  'translate-request': '汉化请求',
+  'custom-order': '商业定制',
+};
 
-async function writePublishedNotes(notes) {
-  await putObject({ Bucket: BUCKET, Region: REGION, Key: TREEHOLE_KEY,
-    Body: Buffer.from(JSON.stringify(notes, null, 2), 'utf8'),
-    ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache' });
+/** 校验并规范化联络来信内容 */
+function normalizeContactItem(payload) {
+  const kind = String(payload.kind || '').trim();
+  if (!CONTACT_KINDS[kind]) throw httpError('未知的联络类型', 400);
+  const content = String(payload.content || '').replace(/\r\n?/g, '\n').trim().slice(0, 5000);
+  const title = String(payload.title || '').trim().slice(0, 120);
+  const reason = String(payload.reason || '').trim().slice(0, 2000);
+  if (!content && !title && !reason) throw httpError('联络内容不能为空', 400);
+  const email = String(payload.email || '').trim();
+  if (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120)) throw httpError('请填写有效邮箱', 400);
+  const item = { kind, kindLabel: CONTACT_KINDS[kind], title, content, reason, email };
+  ['name', 'author', 'homepage', 'source', 'translator', 'typesetter', 'notes', 'link', 'category'].forEach((k) => {
+    const v = String(payload[k] == null ? '' : payload[k]).trim().slice(0, 300);
+    if (v) item[k] = v;
+  });
+  return item;
 }
 
 async function submitToInbox(type, payload) {
@@ -402,12 +558,24 @@ async function submitToInbox(type, payload) {
     item = { title, author, email, body,
       authorUrl: authorUrl.slice(0, 300),
       notes: String(payload.notes || '').trim().slice(0, 2000) };
-  } else {
-    const content = String(payload.content || '').trim();
-    if (!content || content.length > 300) throw httpError('纸条不能为空或超过 300 字', 400);
-    item = { sender: String(payload.sender || '匿名调查兵').trim().slice(0, 20) || '匿名调查兵',
-      mood: String(payload.mood || '💚 守护利韩').trim().slice(0, 30), content };
-  }
+  } else if (type === 'announcement') {
+    const title = String(payload.title || '').trim().slice(0, 100);
+    const author = String(payload.author || '').trim().slice(0, 40);
+    if (!title || !author) throw httpError('请填写企划标题和发布人', 400);
+    const description = String(payload.description || '').trim().slice(0, 2000);
+    if (!description) throw httpError('请填写企划宣传文本', 400);
+    item = { title, author, time: String(payload.time || '').trim().slice(0, 40), description,
+      link: String(payload.link || '').trim().slice(0, 500), image: String(payload.image || '').trim().slice(0, 500), tag: '企划' };
+  } else if (type === 'recommend') {
+    const title = String(payload.title || '').trim().slice(0, 120);
+    const link = String(payload.link || '').trim().slice(0, 500);
+    if (!title || !/^https?:\/\//i.test(link)) throw httpError('请填写推荐标题和有效链接', 400);
+    item = { title, link, author: String(payload.author || '').trim().slice(0, 80) || '匿名推荐人',
+      reason: String(payload.reason || '').trim().slice(0, 2000), category: String(payload.category || '').trim().slice(0, 40),
+      rating: String(payload.rating || '').trim().slice(0, 20) };
+  } else if (type === 'contact') {
+    item = normalizeContactItem(payload);
+  } else throw httpError('不支持的投稿类型', 400);
   const id = crypto.randomUUID();
   assertDbResult(await inboxDb().from(INBOX_COLLECTION).insert({ id, type, status: 'pending', payload: item, created_at: now, updated_at: now }));
   return { ok: true, id, status: 'pending' };
@@ -428,14 +596,19 @@ async function reviewInbox(payload) {
       const novelId = 'nv-' + id.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 32);
       await handle('novelSave', { id: novelId, title: item.title, author: item.author,
         authorUrl: item.authorUrl, body: item.body, authorNote: item.notes });
-    } else if (item.type === 'treehole') {
-      const notes = await readPublishedNotes();
-      if (!notes.some((n) => n.id === id)) {
-        notes.unshift({ id, sender: item.sender, mood: item.mood, content: item.content,
-          timestamp: now, potatoes: 1 });
-        await writePublishedNotes(notes);
-      }
-    } else throw httpError('不支持的投稿类型', 400);
+    } else if (item.type === 'announcement') {
+      await handle('announcementSave', { item: { tag: '利韩企划', title: item.title, time: item.time,
+        author: item.author, link: item.link, image: item.image, description: item.description } });
+    } else if (item.type === 'recommend') {
+      const recs = await readRecs();
+      recs.unshift(normalizeRecs([{ title: item.title, url: item.link, type: item.category || '推荐',
+        rating: item.rating || '未分级', recommender: item.author, reason: item.reason,
+        createdAt: new Date().toISOString() }])[0]);
+      await writeRecs(recs);
+    } else if (item.type !== 'contact') {
+      // contact（联络来信）没有发布动作，approve 仅表示「已读处理」
+      throw httpError('不支持的投稿类型', 400);
+    }
   }
   assertDbResult(await db.from(INBOX_COLLECTION).update({ status: decision === 'approve' ? 'published' : 'rejected', updated_at: now }).eq('id', id).eq('status', 'pending'));
   return { ok: true, id, status: decision === 'approve' ? 'published' : 'rejected' };
@@ -444,7 +617,9 @@ async function reviewInbox(payload) {
 async function handle(action, payload) {
   switch (action) {
     case 'submitNovel': return submitToInbox('novel', payload);
-    case 'submitTreehole': return submitToInbox('treehole', payload);
+    case 'submitContact': return submitToInbox('contact', payload);
+    case 'submitAnnouncement': return submitToInbox('announcement', payload);
+    case 'submitRecommend': return submitToInbox('recommend', payload);
     case 'inboxList': {
       const rows = assertDbResult(await inboxDb().from(INBOX_COLLECTION).select('id,type,payload,created_at').eq('status', 'pending').order('created_at', { ascending: false }).limit(100));
       return { ok: true, items: (rows || []).map((row) => ({ _id: row.id, type: row.type, createdAt: row.created_at, ...(row.payload || {}) })) };
@@ -465,6 +640,102 @@ async function handle(action, payload) {
       if (!adminPassword()) throw httpError('服务端尚未配置管理员口令', 503);
       if (!safeEqual(String(payload.password || ''), adminPassword())) throw httpError('口令不正确', 401);
       return { ok: true, ...makeToken() };
+    }
+
+    case 'announcementList': {
+      const items = await readAnnouncements();
+      return { ok: true, count: items.length, items };
+    }
+
+    case 'announcementImageUpload': {
+      const imageBase64 = String(payload.imageBase64 || '');
+      if (!imageBase64 || Math.floor((imageBase64.length * 3) / 4) > MAX_BYTES) throw httpError('图片为空或超过 4MB', 413);
+      const key = `${ANNOUNCEMENT_DIR}submissions/${Date.now()}-${crypto.randomBytes(4).toString('hex')}.webp`;
+      await putObject({ Bucket: BUCKET, Region: REGION, Key: key, Body: Buffer.from(imageBase64, 'base64'), ContentType: 'image/webp', CacheControl: 'public, max-age=31536000' });
+      return { ok: true, url: `https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${key}` };
+    }
+
+    case 'announcementSave': {
+      const item = normalizeAnnouncement(payload.item || {});
+      const imageBase64 = String(payload.imageBase64 || '');
+      if (imageBase64) {
+        if (Math.floor((imageBase64.length * 3) / 4) > MAX_BYTES) throw httpError('公告图片超过 4MB 上限', 413);
+        const body = Buffer.from(imageBase64, 'base64');
+        if (!body.length) throw httpError('公告图片内容为空', 400);
+        const key = `${ANNOUNCEMENT_DIR}${item.id}.webp`;
+        await putObject({ Bucket: BUCKET, Region: REGION, Key: key, Body: body,
+          ContentType: 'image/webp', CacheControl: 'public, max-age=31536000' });
+        item.image = `https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${key}?v=${Date.now()}`;
+      }
+      const items = await readAnnouncements();
+      const index = items.findIndex((entry) => entry && entry.id === item.id);
+      const now = new Date().toISOString();
+      const next = { ...(index >= 0 ? items[index] : {}), ...item, updatedAt: now };
+      if (index >= 0) items[index] = next;
+      else items.unshift({ ...next, createdAt: now });
+      await writeAnnouncements(items.slice(0, 30));
+      return { ok: true, item: next, items };
+    }
+
+    case 'announcementDelete': {
+      const id = String(payload.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60);
+      if (!id) throw httpError('公告 ID 无效', 400);
+      const items = await readAnnouncements();
+      const target = items.find((entry) => entry && entry.id === id);
+      if (!target) throw httpError('公告不存在', 404);
+      if (target.image && target.image.includes(`/${ANNOUNCEMENT_DIR}${id}.webp`)) {
+        await deleteMultipleObject({ Bucket: BUCKET, Region: REGION, Objects: [{ Key: `${ANNOUNCEMENT_DIR}${id}.webp` }] });
+      }
+      const next = items.filter((entry) => entry && entry.id !== id);
+      await writeAnnouncements(next);
+      return { ok: true, id, items: next };
+    }
+
+    case 'forumList': return { ok: true, posts: await readForum() };
+
+    case 'forumPublish': {
+      const title = String(payload.title || '').trim().slice(0, 100);
+      const body = String(payload.body || '').trim().slice(0, 3000);
+      const author = String(payload.author || '').trim().slice(0, 40);
+      if (!title || (!body && !payload.imageBase64) || !author) throw httpError('标题、昵称及正文或图片不能为空', 400);
+      const id = `post-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+      let image = '';
+      const b64 = String(payload.imageBase64 || '');
+      if (b64) {
+        if (Math.floor((b64.length * 3) / 4) > MAX_BYTES) throw httpError('帖子图片超过 4MB', 413);
+        const key = `${FORUM_DIR}${id}.webp`;
+        await putObject({ Bucket: BUCKET, Region: REGION, Key: key, Body: Buffer.from(b64, 'base64'), ContentType: 'image/webp', CacheControl: 'public, max-age=31536000' });
+        image = `https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${key}`;
+      }
+      const posts = await readForum();
+      const post = { id, author, title, body, image, potatoes: 0, createdAt: new Date().toISOString(), comments: [] };
+      posts.unshift(post); await writeForum(posts.slice(0, 300));
+      return { ok: true, post, posts };
+    }
+
+    case 'forumComment': {
+      const postId = String(payload.postId || '').trim();
+      const body = String(payload.body || '').trim().slice(0, 1000);
+      const author = String(payload.author || '').trim().slice(0, 40);
+      if (!postId || !body || !author) throw httpError('评论内容和昵称不能为空', 400);
+      const posts = await readForum(); const post = posts.find((p) => p && p.id === postId);
+      if (!post) throw httpError('帖子不存在', 404);
+      post.comments = Array.isArray(post.comments) ? post.comments : [];
+      post.comments.push({ id: `comment-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`, author, body, createdAt: new Date().toISOString(), potatoes: 0 });
+      await writeForum(posts); return { ok: true, posts };
+    }
+
+    case 'forumDelete': {
+      const id = String(payload.id || '').trim(); const posts = await readForum();
+      const next = posts.filter((p) => p && p.id !== id); await writeForum(next);
+      return { ok: true, posts: next };
+    }
+
+    case 'forumCommentDelete': {
+      const posts = await readForum(); const post = posts.find((p) => p && p.id === String(payload.postId || ''));
+      if (!post) throw httpError('帖子不存在', 404);
+      post.comments = (post.comments || []).filter((c) => c && c.id !== String(payload.commentId || ''));
+      await writeForum(posts); return { ok: true, posts };
     }
 
     case 'catalog': {
@@ -488,6 +759,18 @@ async function handle(action, payload) {
       const next = normalizeTagLib(payload.tags);
       await writeTagLib(next);
       return { ok: true, tags: next };
+    }
+
+    /** 作者链接登记表：不传 authors = 读取；传 authors = 整表覆盖（供后台手工增删 + 导出 Excel） */
+    case 'authorLib': {
+      if (payload.authors !== undefined) {
+        if (!Array.isArray(payload.authors)) throw httpError('authors 必须是数组', 400);
+        const next = normalizeAuthorLib(payload.authors);
+        await writeAuthorLib(next);
+        return { ok: true, count: next.length, authors: next };
+      }
+      const authors = await readAuthorLib();
+      return { ok: true, count: authors.length, authors };
     }
 
     case 'upload': {
@@ -536,6 +819,9 @@ async function handle(action, payload) {
       let added = 0;
       book.tags.forEach((t) => { if (lib.indexOf(t) < 0) { lib.push(t); added += 1; } });
       if (added) await writeTagLib(normalizeTagLib(lib));
+
+      // 自动登记「作者名 + 主页链接」到登记表，下次输入同名作者会自动带出链接
+      try { await upsertAuthor(book.circle, book.authorUrl); } catch (e) { console.error('[authorLib] 登记失败', e && e.message); }
 
       return { ok: true, replaced, count: books.length, books };
     }
@@ -599,6 +885,10 @@ async function handle(action, payload) {
       }
       novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
       await writeNovels(novels);
+
+      // 在线小说同样自动登记作者链接
+      try { await upsertAuthor(meta.author, meta.authorUrl); } catch (e) { console.error('[authorLib] 登记失败', e && e.message); }
+
       return { ok: true, replaced, novel: meta, count: novels.length, novels };
     }
 
@@ -620,17 +910,10 @@ async function handle(action, payload) {
     /* -------- 站外推荐表（recs.json，整表覆盖；SSOT 是腾讯表格，此处只做落桶） -------- */
 
     case 'recs': {
+      if (payload.items === undefined) return { ok: true, items: await readRecs() };
       if (!Array.isArray(payload.items)) throw httpError('items 必须是数组', 400);
-      const recs = normalizeRecs(payload.items);
-      await putObject({
-        Bucket: BUCKET,
-        Region: REGION,
-        Key: 'recs.json',
-        Body: Buffer.from(JSON.stringify(recs, null, 2), 'utf8'),
-        ContentType: 'application/json; charset=utf-8',
-        CacheControl: 'no-cache',
-      });
-      return { ok: true, count: recs.length };
+      const recs = await writeRecs(payload.items);
+      return { ok: true, count: recs.length, items: recs };
     }
 
     default:
@@ -714,7 +997,7 @@ const server = http.createServer(async (req, res) => {
   const token = payload.token || req.headers['x-admin-token'] || '';
 
   try {
-    if (!['status', 'login', 'submitNovel', 'submitTreehole'].includes(action) && !verifyToken(token)) {
+    if (!['status', 'login', 'submitNovel', 'submitContact', 'submitAnnouncement', 'submitRecommend', 'announcementList', 'announcementImageUpload', 'forumList', 'forumPublish', 'forumComment'].includes(action) && !verifyToken(token)) {
       throw httpError('未授权或登录已过期，请重新登录', 401);
     }
     send(res, 200, await handle(action, payload), origin);
@@ -771,7 +1054,7 @@ exports.main = async (event) => {
   }
 
   try {
-    if (!['status', 'login', 'submitNovel', 'submitTreehole'].includes(action) && !verifyToken(token)) {
+    if (!['status', 'login', 'submitNovel', 'submitContact', 'submitAnnouncement', 'submitRecommend', 'announcementList', 'announcementImageUpload', 'forumList', 'forumPublish', 'forumComment'].includes(action) && !verifyToken(token)) {
       throw httpError('未授权或登录已过期，请重新登录', 401);
     }
     return respond(200, await handle(action, payload));

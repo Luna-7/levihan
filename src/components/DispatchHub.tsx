@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { soundManager } from '../utils/audio';
 import { submitToInbox } from '../utils/submissionInbox';
 
@@ -10,7 +11,6 @@ interface UploadedFileItem {
   id: string;
   name: string;
   size: number;
-  file: File;
 }
 
 export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
@@ -52,8 +52,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
   const [nvHomepage, setNvHomepage] = useState<string>('');
   const [nvEmail, setNvEmail] = useState<string>('');
   const [nvNotes, setNvNotes] = useState<string>('');
-  const [nvBody, setNvBody] = useState<string>('');
-  const [isSubmittingNovel, setIsSubmittingNovel] = useState(false);
   const [nvFiles, setNvFiles] = useState<UploadedFileItem[]>([]);
 
   // Form States - Art Comic
@@ -90,7 +88,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
 
   // Helper for retro transition
   const triggerTransition = (callback: () => void) => {
-    soundManager.playBlip();
+    soundManager.playScrollOpen();
     setIsLoading(true);
     setTimeout(() => {
       callback();
@@ -101,7 +99,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
   };
 
   const copyToClipboard = async (text: string) => {
-    soundManager.playCoin();
+    soundManager.playStamp();
     try {
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text);
@@ -126,6 +124,21 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
     return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email);
   };
 
+  // 联络呈递：把表单内容真正送进管理员后台的「联络收件箱」；失败时返回 false，由调用方走剪贴板兜底
+  const sendToInbox = async (kind: string, fields: Record<string, string>) => {
+    try {
+      const payload: Record<string, unknown> = { kind };
+      Object.entries(fields).forEach(([key, value]) => {
+        const v = value.trim();
+        if (v) payload[key] = v;
+      });
+      await submitToInbox('submitContact', payload);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const handleAddFiles = (
     files: FileList | null,
     setter: React.Dispatch<React.SetStateAction<UploadedFileItem[]>>
@@ -136,7 +149,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       id: `${f.name}-${Date.now()}-${Math.random()}`,
       name: f.name,
       size: f.size,
-      file: f,
     }));
     setter((prev) => [...prev, ...newItems]);
     onShowToast(`已添加 ${newItems.length} 个本地文件 📁`);
@@ -165,11 +177,23 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       `----------------------------------------`,
     ].join('\n');
 
+    const sent = await sendToInbox('feedback', {
+      category: feedbackCategory,
+      name: feedbackName,
+      email: feedbackEmail,
+      content: feedbackContent,
+    });
+    if (sent) {
+      onShowToast('调查报告已呈递至收件箱！📬');
+      setFeedbackContent('');
+      return;
+    }
+
     const copied = await copyToClipboard(reportText);
     if (copied) {
-      onShowToast('调查报告已生成并复制到剪贴板！📋');
+      onShowToast('联络通道繁忙，报告已复制到剪贴板 📋');
     } else {
-      onShowToast('已记录报告！请手动保存内容 💾');
+      onShowToast('联络通道繁忙，请稍后重试 ⚠️');
     }
     setFeedbackContent('');
   };
@@ -202,52 +226,73 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       `----------------------------------------`,
     ].join('\n');
 
+    const sent = await sendToInbox('translate-release', {
+      title: trBookName,
+      source: trSource,
+      author: trOriginalAuthor,
+      translator: trTranslator,
+      typesetter: trTypesetter,
+      homepage: trHomepage,
+      email: trEmail,
+      notes: trNotes,
+      content: fileNames,
+    });
+    if (sent) {
+      onShowToast('自作发布函已呈递至收件箱！📬');
+      return;
+    }
+
     const copied = await copyToClipboard(letterText);
     if (copied) {
-      onShowToast('自作发布函已生成并复制到剪贴板！📤');
+      onShowToast('联络通道繁忙，发布函已复制到剪贴板 📋');
     } else {
-      onShowToast('自作发布函已生成！💾');
+      onShowToast('联络通道繁忙，请稍后重试 ⚠️');
     }
   };
 
   // 3. 呈递小说
   const handleSubmitNovel = async () => {
-    if (!nvTitle.trim() || !nvAuthor.trim()) {
-      onShowToast('请填写小说标题和作者 ⚠️');
+    if (!nvTitle.trim()) {
+      onShowToast('请填写作品名称 ⚠️');
       return;
     }
     if (!nvEmail.trim() || !isValidEmail(nvEmail.trim())) {
       onShowToast('请填写有效的邮箱联系方式 ⚠️');
       return;
     }
-    let body = nvBody.trim();
-    if (nvFiles.length) {
-      if (nvFiles.length !== 1 || !/\.(txt|md)$/i.test(nvFiles[0].name) || nvFiles[0].size > 1024 * 1024) {
-        onShowToast('第一期仅支持一份 1MB 以内的 .txt 或 .md 小说稿件 ⚠️');
-        return;
-      }
-      try { body = (await nvFiles[0].file.text()).trim(); } catch {
-        onShowToast('无法读取小说文件，请换成 UTF-8 编码的纯文本 ⚠️');
-        return;
-      }
-    }
-    if (!body || body.length > 500000) {
-      onShowToast('请填写正文，且不超过 50 万字 ⚠️');
+
+    const fileNames = nvFiles.map((f) => f.name).join(', ');
+    const dateStr = new Date().toLocaleString('zh-CN', { hour12: false });
+    const letterText = [
+      `【利韩土豆仓 · 同人小说呈递函】`,
+      `作品名称: ${nvTitle.trim()}`,
+      `创作者: ${nvAuthor.trim() || '未署名'}`,
+      `主页链接: ${nvHomepage.trim() || '未提供'}`,
+      `邮箱联系方式: ${nvEmail.trim()}`,
+      `上传附件: ${fileNames || '未附加本地文件'}`,
+      `备注: ${nvNotes.trim() || '无'}`,
+      `呈递时间: ${dateStr}`,
+      `----------------------------------------`,
+    ].join('\n');
+
+    const sent = await sendToInbox('novel', {
+      title: nvTitle,
+      author: nvAuthor,
+      homepage: nvHomepage,
+      email: nvEmail,
+      notes: nvNotes,
+      content: fileNames,
+    });
+    if (sent) {
+      onShowToast('小说作品函已呈递至收件箱！📬');
       return;
     }
-    setIsSubmittingNovel(true);
-    try {
-      await submitToInbox('submitNovel', {
-        title: nvTitle.trim(), author: nvAuthor.trim(), email: nvEmail.trim(),
-        authorUrl: nvHomepage.trim(), notes: nvNotes.trim(), body,
-      });
-      onShowToast('小说稿件已进入云端待审收件箱，审核通过后才会显示在主站 📮');
-      setNvBody('');
-      setNvFiles([]);
-    } catch (error) {
-      onShowToast((error as Error).message);
-    } finally {
-      setIsSubmittingNovel(false);
+
+    const copied = await copyToClipboard(letterText);
+    if (copied) {
+      onShowToast('联络通道繁忙，作品函已复制到剪贴板 📋');
+    } else {
+      onShowToast('联络通道繁忙，请稍后重试 ⚠️');
     }
   };
 
@@ -276,11 +321,24 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       `----------------------------------------`,
     ].join('\n');
 
+    const sent = await sendToInbox('art-comic', {
+      title: artTitle,
+      author: artAuthor,
+      homepage: artHomepage,
+      email: artEmail,
+      notes: artNotes,
+      content: fileNames,
+    });
+    if (sent) {
+      onShowToast('插画/短漫函已呈递至收件箱！📬');
+      return;
+    }
+
     const copied = await copyToClipboard(letterText);
     if (copied) {
-      onShowToast('插画/短漫函已生成并复制到剪贴板！🎨');
+      onShowToast('联络通道繁忙，插画函已复制到剪贴板 📋');
     } else {
-      onShowToast('插画/短漫函已生成！💾');
+      onShowToast('联络通道繁忙，请稍后重试 ⚠️');
     }
   };
 
@@ -305,11 +363,25 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       `----------------------------------------`,
     ].join('\n');
 
+    const sent = await sendToInbox('recommend', {
+      title: recTitle,
+      link: recLink,
+      reason: recReason,
+      content: recReason,
+    });
+    if (sent) {
+      onShowToast('安利推荐已呈递至收件箱！📬');
+      setRecTitle('');
+      setRecLink('');
+      setRecReason('');
+      return;
+    }
+
     const copied = await copyToClipboard(recText);
     if (copied) {
-      onShowToast('安利推荐已生成并复制到剪贴板！✨');
+      onShowToast('联络通道繁忙，推荐已复制到剪贴板 📋');
     } else {
-      onShowToast('已记录安利推荐！💾');
+      onShowToast('联络通道繁忙，请稍后重试 ⚠️');
     }
     setRecTitle('');
     setRecLink('');
@@ -341,11 +413,25 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       `----------------------------------------`,
     ].join('\n');
 
+    const sent = await sendToInbox('translate-request', {
+      title: transTitle,
+      source: transSource,
+      reason: transReason,
+      content: transReason,
+    });
+    if (sent) {
+      onShowToast('汉化心愿已呈递至收件箱！📬');
+      setTransTitle('');
+      setTransSource('');
+      setTransReason('');
+      return;
+    }
+
     const copied = await copyToClipboard(transText);
     if (copied) {
-      onShowToast('汉化心愿已生成并复制到剪贴板！📜');
+      onShowToast('联络通道繁忙，心愿已复制到剪贴板 📋');
     } else {
-      onShowToast('已记录汉化心愿！💾');
+      onShowToast('联络通道繁忙，请稍后重试 ⚠️');
     }
     setTransTitle('');
     setTransSource('');
@@ -374,11 +460,25 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       `----------------------------------------`,
     ].join('\n');
 
+    const sent = await sendToInbox('custom-order', {
+      name: coName,
+      email: coContact,
+      content: coDesc,
+    });
+    if (sent) {
+      onShowToast('定制需求已呈递至收件箱！📬');
+      setTimeout(() => {
+        setIsCustomModalOpen(false);
+        setCoDesc('');
+      }, 1000);
+      return;
+    }
+
     const copied = await copyToClipboard(orderText);
     if (copied) {
-      onShowToast('定制需求已生成并复制到剪贴板！📋');
+      onShowToast('联络通道繁忙，需求已复制到剪贴板 📋');
     } else {
-      onShowToast('已保存定制需求！💾');
+      onShowToast('联络通道繁忙，请稍后重试 ⚠️');
     }
     setTimeout(() => {
       setIsCustomModalOpen(false);
@@ -387,13 +487,31 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
   };
 
   return (
-    <div className="w-full max-w-[680px] mx-auto select-none space-y-4 font-retro-jp text-[#203429]">
-      {/* 羊皮信封主体 - 仅保留一个统一边框 */}
-      <div className="relative bg-gradient-to-b from-[#FAF4E5] via-[#F5ECDB] to-[#EFE1C9] p-3 sm:p-5 overflow-hidden border-2 border-[#8C6C47] shadow-[2px_2px_0px_#261307]">
+    <div className="w-full h-full min-h-0 flex flex-col justify-between gap-2.5 sm:gap-3 font-retro-jp text-[#203429] p-0.5">
+      {/* ====================================================
+          卡片 1：复古花纹信封 (Vintage Envelope Dispatch Form)
+         ==================================================== */}
+      <div className="relative flex-1 flex flex-col vintage-envelope-bg p-2.5 sm:p-3.5 overflow-hidden border-2 border-[#1E4334] shadow-[2px_2px_0px_#153025] rounded-md min-h-0">
+        {/* 信封四角复古花纹装饰角 (Retro filigree corner accents) */}
+        <div className="absolute top-1 left-1 text-[#8C6C47]/30 text-[10px] pointer-events-none select-none">⚜</div>
+        <div className="absolute top-1 right-1 text-[#8C6C47]/30 text-[10px] pointer-events-none select-none">⚜</div>
+        <div className="absolute bottom-1 left-1 text-[#8C6C47]/30 text-[10px] pointer-events-none select-none">⚜</div>
+        <div className="absolute bottom-1 right-1 text-[#8C6C47]/30 text-[10px] pointer-events-none select-none">⚜</div>
+
+        {/* 信封右上角复古邮戳与微型火漆印章 */}
+        <div className="absolute top-2 right-2 flex items-center gap-1.5 pointer-events-none select-none opacity-85">
+          <div className="vintage-postmark-stamp px-1.5 py-0.5 text-[9px] font-pixel text-[#8C6C47] border-[#8C6C47]/60 tracking-wider">
+            104·DISPATCH
+          </div>
+          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#A8321E] via-[#8B2515] to-[#541408] flex items-center justify-center shadow-xs">
+            <span className="text-[10px]">🥔</span>
+          </div>
+        </div>
+
         {/* 复古像素风加载遮罩 */}
         {isLoading && (
           <div className="absolute inset-0 bg-[#F6EED9]/92 z-50 flex flex-col items-center justify-center gap-2 backdrop-blur-xs">
-            <svg className="w-10 h-10 animate-spin" viewBox="0 0 24 24" fill="none">
+            <svg className="w-8 h-8 animate-spin" viewBox="0 0 24 24" fill="none">
               <rect x="10.5" y="1" width="3" height="3" fill="#1E4334" />
               <rect x="17" y="3.5" width="3" height="3" fill="#285A46" />
               <rect x="20" y="10.5" width="3" height="3" fill="#3D7B62" />
@@ -409,67 +527,28 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
           </div>
         )}
 
-        {/* 信封顶部封盖折痕盖条 */}
-        <div className="relative z-10 -mx-1 -mt-1 sm:-mx-2 sm:-mt-2 mb-3 px-3 py-2 bg-gradient-to-b from-[#EFE2C6] to-[#E6D4B2] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {/* 火漆印章 */}
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#A8321E] via-[#8B2515] to-[#541408] flex items-center justify-center">
-              <span className="text-xs">🥔</span>
-            </div>
-            <span className="font-pixel text-[10px] text-[#463426] font-bold tracking-wider">
-              WALL ROSE · 联络
-            </span>
-          </div>
-          <div className="px-1.5 py-0.5 bg-white/40 font-pixel text-[9px] text-[#5C4A3A]">
-            NO. 104-LH
-          </div>
-        </div>
-
-        {/* 导航选项卡 Tabs: 战术研讨 / 作品分享 */}
-        <div className="grid grid-cols-2 gap-2 mb-3 relative z-10">
+        {/* 联络仅保留战术研讨；作品与企划投稿已移至各自模块。 */}
+        <div className="grid grid-cols-1 gap-1.5 mb-2 relative z-10 max-w-sm shrink-0">
           <button
             type="button"
             onClick={() => triggerTransition(() => setMainTab('feedback'))}
-            className={`w-full py-2 px-3 text-xs sm:text-sm font-bold  cursor-pointer flex items-center justify-center gap-1.5 transition-all shadow-[1px_1px_0px_#261307] ${
+            className={`w-full py-1.5 px-2.5 text-xs font-bold cursor-pointer flex items-center justify-center gap-1.5 transition-all shadow-[1px_1px_0px_#261307] whitespace-nowrap shrink-0 border border-[#1E4334] ${
               mainTab === 'feedback'
-                ? 'bg-[#1E4334] text-[#F9E79F] '
-                : 'bg-[#F8F1DE] text-[#5C4A3A]  hover:bg-[#F1E5CB]'
+                ? 'bg-[#1E4334] text-[#F9E79F]'
+                : 'bg-[#F8F1DE] text-[#5C4A3A] hover:bg-[#F1E5CB]'
             }`}
           >
             <span>🕊️</span>
             <span>战术研讨</span>
           </button>
-          <button
-            type="button"
-            onClick={() => triggerTransition(() => setMainTab('share'))}
-            className={`w-full py-2 px-3 text-xs sm:text-sm font-bold  cursor-pointer flex items-center justify-center gap-1.5 transition-all shadow-[1px_1px_0px_#261307] ${
-              mainTab === 'share'
-                ? 'bg-[#1E4334] text-[#F9E79F] '
-                : 'bg-[#F8F1DE] text-[#5C4A3A]  hover:bg-[#F1E5CB]'
-            }`}
-          >
-            <span>📖</span>
-            <span>作品分享</span>
-          </button>
         </div>
 
         {/* ======================= MODULE 1: 战术研讨 ======================= */}
         {mainTab === 'feedback' && (
-          <section className="bg-[#FAF4E4] p-3 sm:p-4 relative z-10 space-y-3">
-            <div className=" -transparent pb-2">
-              <h2 className="font-pixel text-xs sm:text-sm text-[#1E4334] font-bold flex items-center gap-1.5">
-                <span>🕊️</span>
-                <span>调查兵团 · 战术研讨与战场反馈</span>
-              </h2>
-              <p className="text-[11px] text-[#5C4A3A] mt-1 leading-relaxed">
-                为利韩土豆仓的同好体验与互动小游戏进言献策。无论玩法手感、彩蛋创意还是排查异常，随时倾听。
-              </p>
-            </div>
-
+          <section className="bg-[#FAF4E4]/90 p-2 sm:p-2.5 relative z-10 space-y-2 border border-[#8C6C47]/20 rounded-xs flex-1 min-h-0 flex flex-col overflow-y-auto">
             {/* 类别 Chips */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#203429] block">类别</label>
-              <div className="flex flex-wrap gap-1.5">
+            <div className="space-y-1">
+              <div className="flex flex-wrap gap-1">
                 {['🎮 玩法手感', '💡 新功能与彩蛋', '🐛 异常排查', '📦 素材提供', '🤝 网站助手', '💬 随便聊聊'].map((cat) => (
                   <button
                     key={cat}
@@ -478,10 +557,10 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                       soundManager.playBlip();
                       setFeedbackCategory(cat);
                     }}
-                    className={`px-2.5 py-1 text-xs  rounded-none cursor-pointer transition-all shadow-[1px_1px_0px_#261307] ${
+                    className={`px-2 py-0.5 text-[11px] cursor-pointer transition-all shadow-[1px_1px_0px_#261307] border border-[#8C6C47]/30 ${
                       feedbackCategory === cat
-                        ? 'bg-[#1E4334] text-[#F9E79F]  font-bold'
-                        : 'bg-[#F8F1DE] text-[#5C4A3A]  hover:bg-[#F1E5CB]'
+                        ? 'bg-[#1E4334] text-[#F9E79F] font-bold border-[#1E4334]'
+                        : 'bg-[#F8F1DE] text-[#5C4A3A] hover:bg-[#F1E5CB]'
                     }`}
                   >
                     {cat}
@@ -490,41 +569,42 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
               </div>
             </div>
 
-            {/* 士兵代号 / 称呼 */}
-            <div className="space-y-1">
-              <label htmlFor="fb-name" className="text-xs font-bold text-[#203429] block">
-                士兵代号 / 称呼
-              </label>
-              <input
-                id="fb-name"
-                type="text"
-                value={feedbackName}
-                onChange={(e) => setFeedbackName(e.target.value)}
-                maxLength={30}
-                placeholder="例如：特务班同好"
-                className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2.5 py-1.5 text-xs text-[#203429] outline-hidden"
-              />
-            </div>
+            {/* 士兵代号 / 称呼 与 联络邮箱 (并排紧凑排布) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              <div className="space-y-0.5">
+                <label htmlFor="fb-name" className="text-[11px] font-bold text-[#203429] block">
+                  士兵代号 / 称呼
+                </label>
+                <input
+                  id="fb-name"
+                  type="text"
+                  value={feedbackName}
+                  onChange={(e) => setFeedbackName(e.target.value)}
+                  maxLength={30}
+                  placeholder="例如：特务班同好"
+                  className="w-full bg-[#F8F1DE] border border-[#8C6C47]/30 focus:border-[#1E4334] px-2 py-1 text-xs text-[#203429] outline-hidden rounded-xs"
+                />
+              </div>
 
-            {/* 联络邮箱 */}
-            <div className="space-y-1">
-              <label htmlFor="fb-email" className="text-xs font-bold text-[#203429] block">
-                联络邮箱
-              </label>
-              <input
-                id="fb-email"
-                type="email"
-                value={feedbackEmail}
-                onChange={(e) => setFeedbackEmail(e.target.value)}
-                maxLength={80}
-                placeholder="用于接收调查兵团回函 (可选)"
-                className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2.5 py-1.5 text-xs text-[#203429] outline-hidden"
-              />
+              <div className="space-y-0.5">
+                <label htmlFor="fb-email" className="text-[11px] font-bold text-[#203429] block">
+                  联络邮箱
+                </label>
+                <input
+                  id="fb-email"
+                  type="email"
+                  value={feedbackEmail}
+                  onChange={(e) => setFeedbackEmail(e.target.value)}
+                  maxLength={80}
+                  placeholder="用于接收回函 (可选)"
+                  className="w-full bg-[#F8F1DE] border border-[#8C6C47]/30 focus:border-[#1E4334] px-2 py-1 text-xs text-[#203429] outline-hidden rounded-xs"
+                />
+              </div>
             </div>
 
             {/* 战术研讨详情 */}
-            <div className="space-y-1">
-              <label htmlFor="fb-content" className="text-xs font-bold text-[#203429] block">
+            <div className="space-y-0.5 flex-1 flex flex-col min-h-0">
+              <label htmlFor="fb-content" className="text-[11px] font-bold text-[#203429] block shrink-0">
                 战术研讨详情
               </label>
               <textarea
@@ -532,15 +612,15 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                 value={feedbackContent}
                 onChange={(e) => setFeedbackContent(e.target.value)}
                 placeholder="请详细描述您的建议、遇到的问题、或者想分享的同好感想..."
-                rows={4}
-                className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] p-2 text-xs text-[#203429] outline-hidden resize-y"
+                rows={2}
+                className="w-full flex-1 min-h-[64px] bg-[#F8F1DE] border border-[#8C6C47]/30 focus:border-[#1E4334] p-1.5 text-xs text-[#203429] outline-hidden resize-none rounded-xs"
               />
             </div>
 
             <button
               type="button"
               onClick={handleSubmitFeedback}
-              className="w-full py-2 px-3 bg-gradient-to-b from-[#1E4334] to-[#153025] hover:from-[#245340] hover:to-[#1a3d2f] text-[#F9E79F]  font-bold text-xs sm:text-sm cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_#153025] flex items-center justify-center gap-1.5"
+              className="w-full shrink-0 py-1.5 px-3 bg-gradient-to-b from-[#1E4334] to-[#153025] hover:from-[#245340] hover:to-[#1a3d2f] text-[#F9E79F] font-bold text-xs cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 shadow-[1px_1px_0px_#153025] flex items-center justify-center gap-1.5 border border-[#153025] rounded-xs"
             >
               <span>✉️</span>
               <span>呈递调查报告</span>
@@ -548,81 +628,39 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
           </section>
         )}
 
-        {/* ======================= MODULE 2: 作品分享 ======================= */}
+        {/* ======================= MODULE 2: 投递自作 ======================= */}
         {mainTab === 'share' && (
-          <section className="bg-[#FAF4E4] p-3 sm:p-4 relative z-10 space-y-3">
-            {/* 3 个子模块切换药丸 */}
-            <div className="flex flex-wrap gap-1.5 p-1.5 bg-[#F3E9D2] ">
-              <button
-                type="button"
-                onClick={() => triggerTransition(() => setShareSub('self'))}
-                className={`flex-1 min-w-[90px] py-1.5 px-2 text-xs font-bold cursor-pointer transition-all ${
-                  shareSub === 'self'
-                    ? 'bg-[#1E4334] text-[#F9E79F] shadow-xs'
-                    : 'bg-transparent text-[#5C4A3A] hover:bg-[#E7DBC1]'
-                }`}
-              >
-                <span>📤 投递自作</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => triggerTransition(() => setShareSub('recommend'))}
-                className={`flex-1 min-w-[90px] py-1.5 px-2 text-xs font-bold cursor-pointer transition-all ${
-                  shareSub === 'recommend'
-                    ? 'bg-[#1E4334] text-[#F9E79F] shadow-xs'
-                    : 'bg-transparent text-[#5C4A3A] hover:bg-[#E7DBC1]'
-                }`}
-              >
-                <span>✨ 安利推荐</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => triggerTransition(() => setShareSub('translate'))}
-                className={`flex-1 min-w-[90px] py-1.5 px-2 text-xs font-bold cursor-pointer transition-all ${
-                  shareSub === 'translate'
-                    ? 'bg-[#1E4334] text-[#F9E79F] shadow-xs'
-                    : 'bg-transparent text-[#5C4A3A] hover:bg-[#E7DBC1]'
-                }`}
-              >
-                <span>📜 汉化请求</span>
-              </button>
-            </div>
-
-            {/* 子模块 1: 投递自作 */}
-            {shareSub === 'self' && (
-              <div className="space-y-3">
-                {/* 作品形式选择: 汉化发布 / 同人小说 / 同人插画短漫 */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#203429] block">作品形式</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { id: 'translate-release', label: '📚 汉化发布' },
-                      { id: 'novel', label: '✍️ 同人小说' },
-                      { id: 'art-comic', label: '🎨 同人插画/短漫' },
-                    ].map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() =>
-                          triggerTransition(() =>
-                            setWorkType(item.id as 'translate-release' | 'novel' | 'art-comic')
-                          )
-                        }
-                        className={`px-2.5 py-1 text-xs  cursor-pointer transition-all shadow-[1px_1px_0px_#261307] ${
-                          workType === item.id
-                            ? 'bg-[#1E4334] text-[#F9E79F]  font-bold'
-                            : 'bg-[#F8F1DE] text-[#5C4A3A]  hover:bg-[#F1E5CB]'
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
+          <section className="bg-[#FAF4E4]/90 p-2 sm:p-2.5 relative z-10 space-y-2 border border-[#8C6C47]/20 rounded-xs flex-1 min-h-0 flex flex-col overflow-y-auto">
+            <div className="space-y-2 flex-1 flex flex-col min-h-0">
+              {/* 作品形式选择: 汉化发布 / 同人小说 / 同人插画短漫 */}
+              <div className="flex flex-nowrap overflow-x-auto gap-1 scrollbar-none">
+                  {[
+                    { id: 'translate-release', label: '📚 汉化发布' },
+                    { id: 'novel', label: '✍️ 同人小说' },
+                    { id: 'art-comic', label: '🎨 同人插画/短漫' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() =>
+                        triggerTransition(() =>
+                          setWorkType(item.id as 'translate-release' | 'novel' | 'art-comic')
+                        )
+                      }
+                      className={`px-2 py-1 text-xs cursor-pointer transition-all shadow-[1px_1px_0px_#261307] whitespace-nowrap shrink-0 border border-[#1E4334] rounded-xs ${
+                        workType === item.id
+                          ? 'bg-[#1E4334] text-[#F9E79F] font-bold'
+                          : 'bg-[#F8F1DE] text-[#5C4A3A] hover:bg-[#F1E5CB]'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
                 </div>
 
                 {/* 形式 A: 汉化发布 */}
                 {workType === 'translate-release' && (
-                  <div className="space-y-2.5 pt-1">
+                  <div className="space-y-2.5 pt-1 flex-1 flex flex-col">
                     <div className="space-y-1">
                       <label htmlFor="tr-book-name" className="text-xs font-bold text-[#203429] block">
                         本子名 <span className="text-[#A8321E]">*</span>
@@ -796,8 +834,8 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                       )}
                     </div>
 
-                    <div className="space-y-1">
-                      <label htmlFor="tr-notes" className="text-xs font-bold text-[#203429] block">
+                    <div className="space-y-1 flex-1 flex flex-col min-h-0">
+                      <label htmlFor="tr-notes" className="text-xs font-bold text-[#203429] block shrink-0">
                         备注
                       </label>
                       <textarea
@@ -806,14 +844,14 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                         onChange={(e) => setTrNotes(e.target.value)}
                         placeholder="授权说明、解压密码或收录注意事项..."
                         rows={2}
-                        className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] p-2 text-xs outline-hidden resize-y"
+                        className="w-full flex-1 min-h-[60px] bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] p-2 text-xs outline-hidden resize-y"
                       />
                     </div>
 
                     <button
                       type="button"
                       onClick={handleSubmitTranslateRelease}
-                      className="w-full py-2 px-3 bg-gradient-to-b from-[#1E4334] to-[#153025] hover:from-[#245340] hover:to-[#1a3d2f] text-[#F9E79F]  font-bold text-xs sm:text-sm cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_#153025] flex items-center justify-center gap-1.5"
+                      className="w-full shrink-0 py-2 px-3 bg-gradient-to-b from-[#1E4334] to-[#153025] hover:from-[#245340] hover:to-[#1a3d2f] text-[#F9E79F]  font-bold text-xs sm:text-sm cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_#153025] flex items-center justify-center gap-1.5"
                     >
                       <span>📤</span>
                       <span>呈递自作</span>
@@ -823,7 +861,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
 
                 {/* 形式 B: 同人小说 */}
                 {workType === 'novel' && (
-                  <div className="space-y-2.5 pt-1">
+                  <div className="space-y-2.5 pt-1 flex-1 flex flex-col">
                     <div className="space-y-1">
                       <label htmlFor="nv-title" className="text-xs font-bold text-[#203429] block">
                         作品名称 <span className="text-[#A8321E]">*</span>
@@ -907,7 +945,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                         <input
                           ref={fileInputRefNv}
                           type="file"
-                          accept=".txt,.md,text/plain,text/markdown"
+                          multiple
                           onChange={(e) => handleAddFiles(e.target.files, setNvFiles)}
                           className="hidden"
                         />
@@ -917,7 +955,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                             点击选择文件 或 拖拽至此处
                           </span>
                           <span className="text-[10px] text-[#5C4A3A]">
-                            第一期支持单份 .txt / .md（1MB 内），也可直接粘贴正文
+                            支持 .txt / .docx / .pdf / .epub / 压缩包
                           </span>
                         </div>
                       </div>
@@ -947,15 +985,8 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                       )}
                     </div>
 
-                    <div className="space-y-1">
-                      <label htmlFor="nv-body" className="text-xs font-bold text-[#203429] block">小说正文 <span className="text-[#A8321E]">*</span></label>
-                      <textarea id="nv-body" value={nvBody} onChange={(e) => setNvBody(e.target.value)} rows={8}
-                        placeholder="可直接粘贴正文；如选了 .txt / .md 文件，以文件内容为准"
-                        className="w-full bg-[#F8F1DE] p-2 text-xs outline-hidden resize-y" />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label htmlFor="nv-notes" className="text-xs font-bold text-[#203429] block">
+                    <div className="space-y-1 flex-1 flex flex-col min-h-0">
+                      <label htmlFor="nv-notes" className="text-xs font-bold text-[#203429] block shrink-0">
                         备注
                       </label>
                       <textarea
@@ -964,15 +995,14 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                         onChange={(e) => setNvNotes(e.target.value)}
                         placeholder="篇幅分卷、阅读警告或寄语..."
                         rows={2}
-                        className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] p-2 text-xs outline-hidden resize-y"
+                        className="w-full flex-1 min-h-[60px] bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] p-2 text-xs outline-hidden resize-y"
                       />
                     </div>
 
                     <button
                       type="button"
                       onClick={handleSubmitNovel}
-                      disabled={isSubmittingNovel}
-                      className="w-full py-2 px-3 bg-gradient-to-b from-[#1E4334] to-[#153025] hover:from-[#245340] hover:to-[#1a3d2f] text-[#F9E79F]  font-bold text-xs sm:text-sm cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_#153025] flex items-center justify-center gap-1.5"
+                      className="w-full shrink-0 py-2 px-3 bg-gradient-to-b from-[#1E4334] to-[#153025] hover:from-[#245340] hover:to-[#1a3d2f] text-[#F9E79F]  font-bold text-xs sm:text-sm cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_#153025] flex items-center justify-center gap-1.5"
                     >
                       <span>✍️</span>
                       <span>呈递小说作品</span>
@@ -982,7 +1012,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
 
                 {/* 形式 C: 同人插画/短漫 */}
                 {workType === 'art-comic' && (
-                  <div className="space-y-2.5 pt-1">
+                  <div className="space-y-2.5 pt-1 flex-1 flex flex-col">
                     <div className="space-y-1">
                       <label htmlFor="art-title" className="text-xs font-bold text-[#203429] block">
                         作品名 <span className="text-[#A8321E]">*</span>
@@ -1106,8 +1136,8 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                       )}
                     </div>
 
-                    <div className="space-y-1">
-                      <label htmlFor="art-notes" className="text-xs font-bold text-[#203429] block">
+                    <div className="space-y-1 flex-1 flex flex-col min-h-0">
+                      <label htmlFor="art-notes" className="text-xs font-bold text-[#203429] block shrink-0">
                         备注
                       </label>
                       <textarea
@@ -1116,14 +1146,14 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                         onChange={(e) => setArtNotes(e.target.value)}
                         placeholder="画集简介或展示要求..."
                         rows={2}
-                        className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] p-2 text-xs outline-hidden resize-y"
+                        className="w-full flex-1 min-h-[60px] bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] p-2 text-xs outline-hidden resize-y"
                       />
                     </div>
 
                     <button
                       type="button"
                       onClick={handleSubmitArtComic}
-                      className="w-full py-2 px-3 bg-gradient-to-b from-[#1E4334] to-[#153025] hover:from-[#245340] hover:to-[#1a3d2f] text-[#F9E79F]  font-bold text-xs sm:text-sm cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_#153025] flex items-center justify-center gap-1.5"
+                      className="w-full shrink-0 py-2 px-3 bg-gradient-to-b from-[#1E4334] to-[#153025] hover:from-[#245340] hover:to-[#1a3d2f] text-[#F9E79F]  font-bold text-xs sm:text-sm cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_#153025] flex items-center justify-center gap-1.5"
                     >
                       <span>🎨</span>
                       <span>呈递插画/短漫</span>
@@ -1131,150 +1161,49 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                   </div>
                 )}
               </div>
-            )}
-
-            {/* 子模块 2: 安利推荐 */}
-            {shareSub === 'recommend' && (
-              <div className="space-y-2.5 pt-1">
-                <div className="space-y-1">
-                  <label htmlFor="rec-title" className="text-xs font-bold text-[#203429] block">
-                    推荐作品名称 / 原作者 <span className="text-[#A8321E]">*</span>
-                  </label>
-                  <input
-                    id="rec-title"
-                    type="text"
-                    value={recTitle}
-                    onChange={(e) => setRecTitle(e.target.value)}
-                    maxLength={60}
-                    placeholder="例如：某知名太太神级名篇"
-                    className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2.5 py-1.5 text-xs outline-hidden"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label htmlFor="rec-link" className="text-xs font-bold text-[#203429] block">
-                    作品出处或阅读链接
-                  </label>
-                  <input
-                    id="rec-link"
-                    type="text"
-                    value={recLink}
-                    onChange={(e) => setRecLink(e.target.value)}
-                    maxLength={150}
-                    placeholder="Pixiv / 微博 / AO3 对应作品链接"
-                    className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2.5 py-1.5 text-xs outline-hidden"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label htmlFor="rec-reason" className="text-xs font-bold text-[#203429] block">
-                    简要推荐理由 <span className="text-[#A8321E]">*</span>
-                  </label>
-                  <textarea
-                    id="rec-reason"
-                    value={recReason}
-                    onChange={(e) => setRecReason(e.target.value)}
-                    placeholder="说说为什么推荐这部作品、核心萌点或阅读感受..."
-                    rows={3}
-                    className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] p-2 text-xs outline-hidden resize-y"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleSubmitRecommend}
-                  className="w-full py-2 px-3 bg-gradient-to-b from-[#1E4334] to-[#153025] hover:from-[#245340] hover:to-[#1a3d2f] text-[#F9E79F]  font-bold text-xs sm:text-sm cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_#153025] flex items-center justify-center gap-1.5"
-                >
-                  <span>✨</span>
-                  <span>提交安利推荐</span>
-                </button>
-              </div>
-            )}
-
-            {/* 子模块 3: 请求汉化组汉化 */}
-            {shareSub === 'translate' && (
-              <div className="space-y-2.5 pt-1">
-                <div className="space-y-1">
-                  <label htmlFor="trans-title" className="text-xs font-bold text-[#203429] block">
-                    待汉化作品原名 / 原作者 <span className="text-[#A8321E]">*</span>
-                  </label>
-                  <input
-                    id="trans-title"
-                    type="text"
-                    value={transTitle}
-                    onChange={(e) => setTransTitle(e.target.value)}
-                    maxLength={80}
-                    placeholder="原作日文名 / 作者名 / 展会场贩志"
-                    className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2.5 py-1.5 text-xs outline-hidden"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label htmlFor="trans-source" className="text-xs font-bold text-[#203429] block">
-                    原作图源 / 生肉地址 / 出处 <span className="text-[#A8321E]">*</span>
-                  </label>
-                  <input
-                    id="trans-source"
-                    type="text"
-                    value={transSource}
-                    onChange={(e) => setTransSource(e.target.value)}
-                    maxLength={150}
-                    placeholder="Pixiv系列 / 虎穴 / 自备扫描件网盘链接"
-                    className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2.5 py-1.5 text-xs outline-hidden"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label htmlFor="trans-reason" className="text-xs font-bold text-[#203429] block">
-                    求汉化理由与作品类型 <span className="text-[#A8321E]">*</span>
-                  </label>
-                  <textarea
-                    id="trans-reason"
-                    value={transReason}
-                    onChange={(e) => setTransReason(e.target.value)}
-                    placeholder="说明为什么渴望看到该作品的精修汉化、本子类型及页数..."
-                    rows={3}
-                    className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] p-2 text-xs outline-hidden resize-y"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleSubmitTranslate}
-                  className="w-full py-2 px-3 bg-gradient-to-b from-[#1E4334] to-[#153025] hover:from-[#245340] hover:to-[#1a3d2f] text-[#F9E79F]  font-bold text-xs sm:text-sm cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_#153025] flex items-center justify-center gap-1.5"
-                >
-                  <span>📜</span>
-                  <span>呈递汉化心愿函</span>
-                </button>
-              </div>
-            )}
           </section>
         )}
       </div>
 
-      {/* 信封下方低调定制客单小广告 */}
-      <div className="w-full flex justify-center">
-        <div className="inline-flex flex-wrap items-center justify-center gap-2 px-3 py-1.5 bg-[#FAF4E4]/90 text-xs text-[#5C4A3A] shadow-[1px_1px_0px_#261307] border border-[#8C6C47]/40">
-          <span className="w-1.5 h-1.5 bg-[#1E4334] shrink-0" />
-          <span className="text-[11px] text-[#5C4A3A]">
-            工坊承接各类个人/同人主页、网页小游戏等定制化网页客单
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              soundManager.playCoin();
-              setIsCustomModalOpen(true);
-            }}
-            className="px-2 py-0.5 bg-[#F8F1DE] hover:bg-[#1E4334] hover:text-[#F9E79F] text-[#1E4334] border border-[#1E4334]/50 text-[11px] font-bold cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
-          >
-            <span>💬</span>
-            <span>联系制作者</span>
-          </button>
+      {/* ====================================================
+          卡片 2：联系制作者 / 工坊商业与同好定制卡片 (Craftsman Workshop Card)
+         ==================================================== */}
+      <div className="relative vintage-envelope-bg p-2.5 sm:p-3 overflow-hidden border-2 border-[#1E4334] shadow-[2px_2px_0px_#153025] rounded-md flex flex-col sm:flex-row items-center justify-between gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-6 h-6 rounded-xs bg-[#1E4334] text-[#F9E79F] flex items-center justify-center shrink-0 shadow-xs text-xs">
+            🛠️
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-[#1E4334] flex items-center gap-1.5 flex-wrap">
+              <span className="px-2 py-0.5 border border-dashed border-[#1E4334]/60 text-[#1E4334] font-medium text-xs rounded-xs inline-block bg-[#FAF4E4]/60">
+                独立开发与同好定制
+              </span>
+              <span className="px-1 py-0.2 bg-[#1E4334]/10 text-[#1E4334] text-[10px] rounded-xs font-mono border border-dashed border-[#1E4334]/30">
+                COMMISSION
+              </span>
+            </div>
+            <p className="text-[11px] text-[#5C4A3A] truncate mt-0.5">
+              承接各类同人主页、个人站点、网页小游戏与互动功能定制
+            </p>
+          </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            soundManager.playCoin();
+            setIsCustomModalOpen(true);
+          }}
+          className="w-full sm:w-auto px-3 py-1 bg-[#1E4334] hover:bg-[#255642] text-[#F9E79F] border border-[#153025] text-xs font-bold cursor-pointer transition-all shadow-[1px_1px_0px_#153025] flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap rounded-xs active:translate-x-0.5 active:translate-y-0.5"
+        >
+          <span>💬</span>
+          <span>联系制作者</span>
+          <span>→</span>
+        </button>
       </div>
 
       {/* 商业定制沟通弹窗 */}
-      {isCustomModalOpen && (
+      {typeof document !== 'undefined' && isCustomModalOpen && createPortal(
         <div
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsCustomModalOpen(false);
@@ -1352,7 +1281,8 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

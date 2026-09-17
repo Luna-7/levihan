@@ -97,6 +97,28 @@
 
     <!-- 移除外部广告 SDK（imasdk.googleapis.com），避免外网请求 -->
 
+    <!-- 战功上报：在 Cocos 写入存档时把分数回传给宿主页面。
+         只 hook Storage.prototype.setItem，不改动 project.js。
+         宿主（TatakaruGame）监听 type='daxigua-result' 的 message。 -->
+    <script type="text/javascript">
+        (function () {
+            var KEY_RE = /playerData\d+$/;
+            var originalSetItem = Storage.prototype.setItem;
+            Storage.prototype.setItem = function (key, value) {
+                try {
+                    if (KEY_RE.test(key)) {
+                        var data = JSON.parse(value);
+                        var score = Math.max(Number(data && data.score) || 0, Number(data && data.highScore) || 0);
+                        if (score > 0 && window.parent !== window) {
+                            window.parent.postMessage({ type: 'daxigua-result', score: score }, '*');
+                        }
+                    }
+                } catch (e) { /* 非 JSON 或跨域时静默 */ }
+                return originalSetItem.apply(this, arguments);
+            };
+        })();
+    </script>
+
     <script src="src/settings.js" charset="utf-8"></script>
 
     <script type="text/javascript">

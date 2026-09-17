@@ -9,9 +9,11 @@ interface Props {
   children: React.ReactNode;
   enabled?: boolean;
   onUnlock?: () => void;
+  loginRequired?: boolean;
+  onLogin?: () => void;
 }
 
-export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = true, onUnlock }) => {
+export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = true, onUnlock, loginRequired = false, onLogin }) => {
   const [isUnlocked, setIsUnlocked] = useState(() => {
     try {
       return window.sessionStorage.getItem(DOUJIN_SESSION_KEY) === 'true';
@@ -100,7 +102,7 @@ export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = tru
           <span className="absolute -right-4 sm:-right-8 top-[52%] text-xl sm:text-2xl rotate-12 pointer-events-none" aria-hidden="true">🥔</span>
           <button
             type="button"
-            onClick={handleSecretClick}
+            onClick={loginRequired ? undefined : handleSecretClick}
             onContextMenu={(event) => event.preventDefault()}
             className="inline-flex items-center justify-center w-52 h-48 sm:w-72 sm:h-64 cursor-default select-none touch-manipulation pixel-art"
             style={{ WebkitTouchCallout: 'none' }}
@@ -115,11 +117,17 @@ export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = tru
           </button>
         </div>
 
-        <h2 className="mt-4 font-pixel text-lg sm:text-xl text-[#1E4334] tracking-wide">维护中</h2>
+        <h2 className="mt-4 font-pixel text-lg sm:text-xl text-[#1E4334] tracking-wide">
+          {loginRequired ? '漫画粮仓仅向登录成员开放' : '维护中'}
+        </h2>
         <p className="mt-3 font-retro-jp text-sm sm:text-base text-[#7A6958]">
-          粮仓正在整理中，请稍后再来 🍠
+          {loginRequired ? '原访问密码已取消，登录后即可直接查看漫画与评论区。' : '粮仓正在整理中，请稍后再来 🍠'}
         </p>
-        <div className="mt-5 mx-auto w-full max-w-[260px]" aria-label="整理进度 68%">
+        {loginRequired ? (
+          <button type="button" onClick={onLogin} className="mt-6 px-6 py-3 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-pixel text-xs font-bold cursor-pointer hover:bg-[#285A46]">
+            登录后进入漫画粮仓
+          </button>
+        ) : <div className="mt-5 mx-auto w-full max-w-[260px]" aria-label="整理进度 68%">
           <div className="flex items-center justify-between mb-1.5 font-pixel text-[8px] text-[#8C7A68]">
             <span>ARCHIVE PREPARING...</span>
             <span>68%</span>
@@ -139,10 +147,10 @@ export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = tru
               }}
             />
           </div>
-        </div>
+        </div>}
       </div>
 
-      {showAdmin && (
+      {!loginRequired && showAdmin && (
         <div
           className="fixed inset-0 z-[100] bg-[#1E2B24]/55 flex items-center justify-center p-4 overflow-y-auto"
           role="dialog"

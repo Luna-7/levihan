@@ -3,6 +3,7 @@ import { Volume2, VolumeX } from 'lucide-react';
 import { PixelPotion, PixelStar } from './PixelIcons';
 import { ImageNavBar } from './ImageNavBar';
 import { NavigationTab } from '../types';
+import { UserEntry } from './UserEntry';
 
 interface Props {
   activeTab: NavigationTab;
@@ -18,6 +19,7 @@ export const HeaderCard: React.FC<Props> = ({
   onSelectTab,
   isSoundMuted = false,
   onToggleSound,
+  onShowToast,
 }) => {
   // Tab-specific metadata for dynamic top banner
   const tabHeaders = {
@@ -89,7 +91,7 @@ export const HeaderCard: React.FC<Props> = ({
           </span>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 xs:gap-2">
-              <h1 className="font-pixel text-xs xs:text-sm sm:text-lg md:text-xl text-[#F9E79F] tracking-wide font-black truncate">
+              <h1 className="font-pixel text-sm xs:text-base sm:text-lg md:text-xl text-[#F9E79F] tracking-wide font-black truncate">
                 {currentHeader.title}
               </h1>
               <span className="hidden sm:inline-block shrink-0">
@@ -97,10 +99,10 @@ export const HeaderCard: React.FC<Props> = ({
               </span>
             </div>
             <div className="flex items-center gap-1.5 mt-0.5 sm:mt-1">
-              <span className="font-pixel text-[8px] xs:text-[9px] sm:text-[10px] text-[#F9E79F] tracking-wider font-bold shrink-0">
+              <span className="font-pixel text-[10px] xs:text-[11px] sm:text-[10px] text-[#F9E79F] tracking-wider font-bold shrink-0">
                 {currentHeader.subTitle}
               </span>
-              <span className="hidden xs:inline font-retro-jp text-[8px] xs:text-[9px] sm:text-[10px] text-[#D5F5E3] tracking-wider truncate">
+              <span className="hidden xs:inline font-retro-jp text-[10px] xs:text-[11px] sm:text-[10px] text-[#D5F5E3] tracking-wider truncate">
                 · {currentHeader.desc}
               </span>
             </div>
@@ -108,6 +110,8 @@ export const HeaderCard: React.FC<Props> = ({
         </div>
 
         {/* Mini Borderless Global Sound Effect Switch */}
+        <div className="relative z-10 flex items-center gap-1.5 shrink-0">
+        <UserEntry onShowToast={onShowToast} />
         {onToggleSound && (
           <button
             type="button"
@@ -123,6 +127,7 @@ export const HeaderCard: React.FC<Props> = ({
             )}
           </button>
         )}
+        </div>
       </div>
 
       {/* 图片导航栏 (采用用户上传的城墙图片为底座，完美嵌入自由之翼、利威尔趴趴、韩吉趴趴、双刃与草花) */}
@@ -130,5 +135,3 @@ export const HeaderCard: React.FC<Props> = ({
     </header>
   );
 };
-
-

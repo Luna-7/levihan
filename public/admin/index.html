@@ -4,7 +4,7 @@
 <meta charset="utf-8" data-page-node-id="Y8DpNY2LxZD2mqG6YzTM9L">
 <meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="WJCacGGq8uacjSIYi7e77s">
 <meta name="robots" content="noindex,nofollow,noarchive" data-page-node-id="nzdVfmMXyOVAFFjrcvguFU">
-<title>土豆粮仓 · 上传台</title>
+<title>利韩土豆仓 · 管理工作台</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" data-page-node-id="m63IDgjo2MUtQPFGflEwnM">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin data-page-node-id="KOBVtVPM4hqtIgfrlBGGLG">
 <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&family=VT323&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet" data-page-node-id="zkXkoWrrN9T4W6Spi3HXge">
@@ -42,7 +42,7 @@
   label{font-size:12px;font-weight:700;color:var(--ink);display:flex;gap:5px;align-items:baseline}
   label .tag{font-weight:400;color:var(--ink-3);font-size:11px}
   label .req{color:var(--danger);font-weight:900}
-  input[type=text],input[type=password],input[type=number],input[type=url],select,textarea{
+  input[type=text],input[type=password],input[type=number],input[type=url],input[type=date],select,textarea{
     width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;background:#fff;
     color:var(--ink);font-family:inherit;font-size:13.5px;outline:none;transition:border-color .15s}
   input:focus,select:focus,textarea:focus{border-color:var(--green-2);box-shadow:0 0 0 3px rgba(30,67,52,.08)}
@@ -65,6 +65,15 @@
   .mode-switch{margin:16px 0 18px;padding:10px 14px;background:var(--paper);border:1.5px solid var(--green-2);
                border-radius:8px;box-shadow:2px 2px 0 rgba(30,67,52,.12)}
   .mode-switch select{width:min(260px,100%)}
+  .admin-tabs{position:sticky;top:10px;z-index:45;display:flex;gap:7px;overflow-x:auto;margin:16px 0 18px;
+              padding:8px;background:rgba(251,247,236,.96);backdrop-filter:blur(10px);border:2px solid var(--green-2);
+              border-radius:12px;box-shadow:3px 3px 0 rgba(30,67,52,.14);scrollbar-width:thin}
+  .admin-tab{flex:1 0 auto;min-width:122px;border-color:transparent;background:transparent;color:var(--ink-3);white-space:nowrap}
+  .admin-tab:hover:not(:disabled){background:#F1EADA;color:var(--green-2)}
+  .admin-tab.active{background:var(--green-2);color:var(--paper);border-color:var(--green-2);box-shadow:0 3px 8px rgba(30,67,52,.2)}
+  .admin-page-head{margin:0 0 12px;padding:12px 15px;border-left:4px solid var(--gold);background:#FFF9EC;border-radius:0 8px 8px 0}
+  .admin-page-head h2{margin:0 0 2px;font-size:17px}
+  [data-admin-page].hide+.panel{margin-top:0}
   .category-select{cursor:pointer;border-color:var(--green-2);background:#FFFCF4;font-weight:700}
   .author-link-hint{min-height:18px;margin-top:3px}
   #bk-list{max-height:min(48vh,430px);overflow-y:auto;overscroll-behavior:contain;padding:2px 8px 2px 2px;
@@ -108,6 +117,19 @@
   .bk .info{flex:1;min-width:0}
   .bk .id{font-family:'VT323',monospace;font-size:15px;color:var(--gold-2);font-weight:700}
   .bk .t{font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .notice-preview{width:100%;max-width:560px;aspect-ratio:16/9;object-fit:cover;border:1.5px solid var(--line);
+                  border-radius:8px;background:#EEE7D7;display:block;margin-top:8px}
+  .notice-row{display:flex;gap:10px;align-items:center;padding:9px;border:1.5px solid var(--rule);
+              border-radius:8px;background:var(--card);margin-top:8px}
+  .notice-row img{width:120px;aspect-ratio:16/9;object-fit:cover;border-radius:5px;background:#EDE7D8;flex:none}
+  .notice-row .info{flex:1;min-width:0}
+  /* ---- author registry table ---- */
+  .author-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
+  .author-table th,.author-table td{border:1.5px solid var(--rule);padding:6px 8px;text-align:left;vertical-align:middle}
+  .author-table th{background:#F3EDDD;color:var(--ink-2);font-weight:700;white-space:nowrap}
+  .author-table td a{color:#1F5B38;word-break:break-all}
+  .author-table td.muted{white-space:nowrap}
+  .author-table tr:hover td{background:#FBF7EC}
   /* ---- misc ---- */
   .note{border-left:3px solid var(--gold);background:#FFF9EC;padding:9px 12px;border-radius:0 6px 6px 0;
         font-size:12.5px;color:var(--ink-2);margin:12px 0}
@@ -214,7 +236,7 @@
     <div class="panel" data-page-node-id="4A4oZEMRDmXJAGBs9aIf1V">
       <div style="text-align:center;margin-bottom:16px" data-page-node-id="GOEaDQMCAzhEogbHePMoIY">
         <div class="px" style="font-size:15px;color:var(--green-2)" data-page-node-id="QQBC1SetpGYFYHQWsqcU9M">🥔</div>
-        <h1 style="margin-top:10px" data-page-node-id="FGK8PMfNVTPHHUuCbEiNDO">土豆粮仓 · 上传台</h1>
+        <h1 style="margin-top:10px" data-page-node-id="FGK8PMfNVTPHHUuCbEiNDO">利韩土豆仓 · 管理工作台</h1>
         <p class="muted" style="margin:6px 0 0" data-page-node-id="wbmBiCS98Prc6FCWEqoO4U">仅限管理员使用</p>
       </div>
       <div class="f" data-page-node-id="KPjnfjnOwk8aNbTsuv7eXS">
@@ -236,37 +258,115 @@
       <div class="spread" data-page-node-id="KMBwiIYoDF4mulEVzuZWE8">
         <div class="row" style="gap:10px" data-page-node-id="tevdWb7M7rtCleQ6UBgCwC">
           <span class="px" style="font-size:13px;color:var(--green-2)" data-page-node-id="OgUHoEra8mGLsvBnAXfRPy">🥔</span>
-          <h1 data-page-node-id="AkgGLQnIiRmBbCRn8qX3lr">土豆粮仓 · 上传台</h1>
+          <h1 data-page-node-id="AkgGLQnIiRmBbCRn8qX3lr">利韩土豆仓 · 管理工作台</h1>
         </div>
         <button class="btn-sm" id="btn-logout" data-page-node-id="naJKsiaxQiHVY36RklDKI7">退出登录</button>
       </div>
       <div class="muted" style="margin-top:8px" id="env-info" data-page-node-id="EamxdIFL8xzWob8c0TtHxf">正在连接…</div>
     </div>
 
-    <div class="row mode-switch" aria-label="作品分类选择">
-      <label for="f-category">分类 <span class="req">*</span></label>
+    <nav class="admin-tabs" aria-label="管理台功能切换">
+      <button type="button" class="admin-tab active" data-admin-tab="manga">📚 漫画上传</button>
+      <button type="button" class="admin-tab" data-admin-tab="novel">✍️ 小说管理</button>
+      <button type="button" class="admin-tab" data-admin-tab="announcement">📢 公告管理</button>
+      <button type="button" class="admin-tab" data-admin-tab="inbox">📬 联络收件箱</button>
+      <button type="button" class="admin-tab" data-admin-tab="authors">📇 作者登记</button>
+      <button type="button" class="admin-tab" data-admin-tab="forum">🌳 餐厅论坛</button>
+    </nav>
+
+    <div class="admin-page-head" data-admin-page="manga">
+      <h2>📚 漫画上传</h2><div class="muted">管理已收录漫画、作品信息与内页图片。</div>
+    </div>
+    <div class="row mode-switch" data-admin-page="manga" aria-label="作品分类选择">
+      <label for="f-category">作品类型 <span class="req">*</span></label>
       <select id="f-category" class="category-select" aria-label="作品分类">
         <option value="漫画本" selected>漫画本</option>
-        <option value="小说本">小说本</option>
         <option value="插画集">插画集</option>
         <option value="商业志">商业志</option>
       </select>
     </div>
 
-    <div class="panel" id="inbox-panel">
+    <div class="admin-page-head hide" data-admin-page="inbox"><h2>📬 联络收件箱</h2><div class="muted">处理站内来信与小说投稿。</div></div>
+    <div class="panel hide" id="inbox-panel" data-admin-page="inbox">
       <div class="spread" style="margin-bottom:12px">
-        <h2 style="margin:0">📮 云端待审收件箱</h2>
-        <button class="btn-sm" id="inbox-refresh">↻ 刷新待审投稿</button>
+        <h2 style="margin:0">📬 联络收件箱</h2>
+        <button class="btn-sm" id="inbox-refresh">↻ 刷新收件箱</button>
       </div>
-      <div class="muted" id="inbox-status">登录后点击刷新，查看小说和树洞待审内容。</div>
-      <h3>✍️ 小说稿件审核</h3>
+      <div class="muted" id="inbox-status">登录后点击刷新，查看「联络」里呈递的来信与小说投稿。</div>
+      <h3>✉️ 联络来信（战术研讨 / 投递自作 / 定制沟通）</h3>
+      <div id="inbox-contacts"></div>
+      <h3>✍️ 小说投稿</h3>
       <div id="inbox-novels"></div>
-      <h3>🍃 树洞纸条审核</h3>
-      <div id="inbox-notes"></div>
     </div>
 
+    <div class="admin-page-head hide" data-admin-page="announcement"><h2>📢 公告管理</h2><div class="muted">维护首页公告卡片、横版图片与跳转入口。</div></div>
+    <div class="panel hide" id="announcement-panel" data-admin-page="announcement">
+      <div class="spread" style="margin-bottom:12px">
+        <h2 style="margin:0">📢 首页公告栏</h2>
+        <button class="btn-sm" id="an-reload">↻ 刷新公告</button>
+      </div>
+      <details open style="margin-bottom:16px"><summary>待审核企划</summary><div id="an-review"><p class="muted">暂无待审核企划</p></div></details>
+      <div id="an-list"><p class="muted">登录后自动载入公告。</p></div>
+      <div class="grid" style="margin-top:16px">
+        <div class="f">
+          <label for="an-tag">标签 <span class="req">*</span> <span class="tag">如：粮仓特报、功能更新、利韩企划</span></label>
+          <input type="text" id="an-tag" maxlength="20" list="an-tag-list" placeholder="粮仓特报">
+          <datalist id="an-tag-list"><option value="粮仓特报"><option value="功能更新"><option value="利韩企划"></datalist>
+        </div>
+        <div class="f span2">
+          <label for="an-title">标题 <span class="req">*</span></label>
+          <input type="text" id="an-title" maxlength="100" placeholder="公告标题">
+        </div>
+        <div class="f">
+          <label for="an-time">时间 <span class="tag">选填</span></label>
+          <input type="date" id="an-time">
+        </div>
+        <div class="f">
+          <label for="an-author">发布人 <span class="req">*</span></label>
+          <input type="text" id="an-author" maxlength="40" placeholder="粮仓管理员">
+        </div>
+        <div class="f span2">
+          <label for="an-link">跳转链接 <span class="tag">选填；填写后公告才显示跳转按钮</span></label>
+          <input type="url" id="an-link" maxlength="500" placeholder="https://… 或 /站内路径">
+        </div>
+        <div class="f span2"><label for="an-description">公告宣传文本 <span class="tag">选填</span></label><textarea id="an-description" rows="4" maxlength="2000" placeholder="公告栏正文"></textarea></div>
+        <div class="f span2">
+          <label for="an-image">横版图片 <span class="tag">选填；将自动居中裁成 16:9、1200×675 WebP</span></label>
+          <input type="file" id="an-image" accept="image/*">
+          <img id="an-image-preview" class="notice-preview hide" alt="公告横版图片预览">
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn-gold" id="an-save">发布公告</button>
+        <button class="btn-sm" id="an-clear">清空表单</button>
+      </div>
+      <div class="msg" id="an-msg"></div>
+    </div>
+
+    <!-- 作者链接登记表：发布作品时自动登记「作者名 + 主页链接」，输入同名作者自动带出链接，可导出 Excel -->
+    <div class="admin-page-head hide" data-admin-page="authors"><h2>📇 作者登记</h2><div class="muted">统一维护作者、社团及主页链接。</div></div>
+    <div class="panel hide" id="author-panel" data-admin-page="authors">
+      <div class="spread" style="margin-bottom:12px">
+        <h2 style="margin:0">📇 作者链接登记表</h2>
+        <div class="row" style="gap:6px">
+          <button class="btn-sm" id="author-reload">↻ 刷新</button>
+          <button class="btn-sm btn-gold" id="author-export">⬇ 导出 Excel</button>
+        </div>
+      </div>
+      <div class="muted" id="author-status">发布作品或在线小说时，会自动把「作者名 + 主页链接」登记到这里；下次输入同名作者，上传台会自动带出链接。</div>
+      <div class="row" style="margin:10px 0;gap:6px;flex-wrap:wrap">
+        <input type="text" id="al-name" placeholder="作者 / 社团名" style="max-width:220px">
+        <input type="url" id="al-url" placeholder="https:// 主页链接（可空）" style="max-width:320px">
+        <button class="btn-sm btn-gold" id="author-add">＋ 登记</button>
+      </div>
+      <div id="author-list"></div>
+    </div>
+
+    <div class="admin-page-head hide" data-admin-page="forum"><h2>🌳 餐厅论坛收录区</h2><div class="muted">展开帖子后可删除整帖或单条言论。</div></div>
+    <div class="panel hide" id="forum-panel" data-admin-page="forum"><div class="spread"><h2>论坛帖子</h2><button class="btn-sm" id="forum-reload">↻ 刷新</button></div><div id="forum-admin-list"><p class="muted">加载中…</p></div><div class="msg" id="forum-msg"></div></div>
+
     <!-- 已收录作品 -->
-    <div class="panel" id="bk-panel" data-page-node-id="6gFnUcCwsrfARsrivblWLQ">
+    <div class="panel" id="bk-panel" data-admin-page="manga" data-page-node-id="6gFnUcCwsrfARsrivblWLQ">
       <div class="spread" style="margin-bottom:12px" data-page-node-id="FiviVc5TPEkFHxMS2uUaHo">
         <h2 style="margin:0" data-page-node-id="IYpnDIkGBPv287jygxdrEe"><span class="n" data-page-node-id="ytF97SP8ofKVIXvoVagowv">A</span> 已收录作品 <span class="muted" id="bk-count" data-page-node-id="PxWTykMMoRUWZ9Gw9sLeNG"></span></h2>
         <button class="btn-sm" id="btn-reload" data-page-node-id="mMzk8Q9VnoXKsVSw7LCjfl">↻ 刷新列表</button>
@@ -275,7 +375,7 @@
     </div>
 
     <!-- 作品信息 -->
-    <div class="panel" id="book-panel" data-page-node-id="WkOpGAVJle1SiWlCSxB1Tf">
+    <div class="panel" id="book-panel" data-admin-page="manga" data-page-node-id="WkOpGAVJle1SiWlCSxB1Tf">
       <h2 data-page-node-id="9zoT8ZxdW7rMI7AB7er5km"><span class="n" data-page-node-id="fv7rRNqfgA5AtV8daZAdV6">B</span> 作品信息 <span class="muted" id="mode-hint" data-page-node-id="tKYFWY2wJHGsxSghcUxoUU">（新建）</span></h2>
 
       <div class="grid" data-page-node-id="qaHDO5ECP0FQrvWTvK0pLW">
@@ -366,7 +466,7 @@
     </div>
 
     <!-- 上传图片 -->
-    <div class="panel" id="images-panel" data-page-node-id="vJDBThRpWJCVsaxuGJzieD">
+    <div class="panel" id="images-panel" data-admin-page="manga" data-page-node-id="vJDBThRpWJCVsaxuGJzieD">
       <div class="spread" style="margin-bottom:12px" data-page-node-id="Qt9bTFg8kOhwp75yNGQlmU">
         <h2 style="margin:0" data-page-node-id="4IcfHIynEa2ZJNDS2hrHGS"><span class="n" data-page-node-id="nNzGdLNojMdoBIO9fjRTHn">C</span> 内页图片 <span class="muted" id="files-count" data-page-node-id="Mkm0h5T7z5gy1Pk90mbuDE">未选择</span></h2>
         <div class="row" style="gap:8px" data-page-node-id="8RuKymaLM1RnXSi3kH2GbH">
@@ -404,7 +504,8 @@
     </div>
 
     <!-- 在线小说 -->
-    <div class="panel hide" id="nv-panel-top" data-page-node-id="nvpanel0000000000000000000a">
+    <div class="admin-page-head hide" data-admin-page="novel"><h2>✍️ 小说管理</h2><div class="muted">发布、编辑或删除在线小说。</div></div>
+    <div class="panel hide" id="nv-panel-top" data-admin-page="novel" data-page-node-id="nvpanel0000000000000000000a">
       <div class="spread" style="margin-bottom:12px" data-page-node-id="nvpanel0000000000000000000b">
         <h2 style="margin:0" data-page-node-id="nvpanel0000000000000000000c"><span class="n" data-page-node-id="nvpanel0000000000000000000d">D</span> 在线小说 <span class="muted" id="nv-count" data-page-node-id="nvpanel0000000000000000000e"></span></h2>
         <div class="row" style="gap:8px" data-page-node-id="nvpanel0000000000000000000f">
@@ -412,6 +513,9 @@
           <button class="btn-sm" id="btn-nv-clear" data-page-node-id="nvpanel00000000000000000011">清空表单</button>
         </div>
       </div>
+      <div class="row" style="margin-bottom:12px"><button class="btn-sm btn-primary" data-novel-admin-kind="novels">已收录作品</button><button class="btn-sm" data-novel-admin-kind="recs">站外推荐</button><button class="btn-sm" data-novel-admin-kind="review">待审核</button></div>
+      <div id="nv-review" class="hide"><p class="muted">暂无待审核投稿</p></div>
+      <div id="rec-admin" class="hide"><div id="rec-admin-list"></div><p class="muted">站外推荐与在线小说分开保存、分开处理。</p></div>
 
       <div id="nv-list" data-page-node-id="nvpanel00000000000000000012"><p class="muted" data-page-node-id="nvpanel00000000000000000013">加载中…</p></div>
 
@@ -529,6 +633,10 @@ var token = sessionStorage.getItem(TOKEN_KEY) || '';
 var books = [];
 var files = [];          // { file, url, status, err, name }
 var envMax = MAX_FILE;
+var announcements = [];
+var anEditingId = '';
+var anImageBase64 = '';
+var anExistingImage = '';
 
 /* ============ 小工具 ============ */
 function $(id){ return document.getElementById(id); }
@@ -582,6 +690,8 @@ function onAuthFail(err){
 }
 
 
+var authorLib = [];   // 云端作者链接登记表（authors.json），上传台自动补全的数据源
+
 function pixivAliases(name){
   var raw = String(name || '').trim();
   var clean = raw.replace(/[\(（].*?[\)）]/g, '').trim();
@@ -591,19 +701,31 @@ function pixivAliases(name){
   raw.split('/').forEach(function(part){ aliases.push(part.trim()); });
   return aliases.filter(Boolean).map(function(x){ return x.toLocaleLowerCase(); });
 }
-function findPixivAuthorUrl(input){
+function matchInAuthorTable(input, table){
   var name = String(input || '').trim().toLocaleLowerCase();
-  if (!name) return '';
-  var artists = window.LEVIHAN_PIXIV_ARTISTS || [];
+  if (!name) return [];
   var matches = [];
-  artists.forEach(function(artist){
-    pixivAliases(artist.name).forEach(function(alias){
-      if (alias === name || (alias.length >= 3 && name.indexOf(alias) >= 0))
-        matches.push({ alias:alias, url:artist.url });
+  (table || []).forEach(function(entry){
+    pixivAliases(entry && entry.name).forEach(function(alias){
+      if ((alias === name || (alias.length >= 3 && name.indexOf(alias) >= 0)) && (entry.url || '').trim())
+        matches.push({ alias: alias, url: String(entry.url).trim() });
     });
   });
   matches.sort(function(a,b){ return b.alias.length - a.alias.length; });
-  return matches.length ? matches[0].url : '';
+  return matches;
+}
+/** 作者链接匹配：云端登记表优先，Pixiv 画师表兜底 */
+function findAuthorUrl(input){
+  var reg = matchInAuthorTable(input, authorLib);
+  if (reg.length) return reg[0].url;
+  var pixiv = matchInAuthorTable(input, window.LEVIHAN_PIXIV_ARTISTS || []);
+  return pixiv.length ? pixiv[0].url : '';
+}
+function authorUrlSource(input){
+  var reg = matchInAuthorTable(input, authorLib);
+  if (reg.length) return '作者登记表';
+  var pixiv = matchInAuthorTable(input, window.LEVIHAN_PIXIV_ARTISTS || []);
+  return pixiv.length ? 'Pixiv 画师表' : '';
 }
 function suggestAuthorUrl(){
   var field = $('f-authorUrl');
@@ -612,25 +734,45 @@ function suggestAuthorUrl(){
     $('author-link-hint').textContent = '已使用手动填写的主页链接。';
     return;
   }
-  var found = findPixivAuthorUrl($('f-circle').value);
+  var found = findAuthorUrl($('f-circle').value);
   field.value = found;
   lastSuggestedAuthorUrl = found;
-  $('author-link-hint').textContent = found ? '✓ 已从 Pixiv 画师表匹配主页链接，可手动修改。' : '';
+  var src = authorUrlSource($('f-circle').value);
+  $('author-link-hint').textContent = found ? '✓ 已从' + src + '匹配主页链接，可手动修改。' : '';
 }
 function suggestNovelAuthorUrl(){
   var field = $('nv-authorUrl');
   var current = field.value.trim();
   if (current && current !== lastSuggestedNovelAuthorUrl) return;
-  var found = findPixivAuthorUrl($('nv-author').value);
+  var found = findAuthorUrl($('nv-author').value);
   field.value = found;
   lastSuggestedNovelAuthorUrl = found;
-  $('nv-author-link-hint').textContent = found ? '✓ 已从 Pixiv 画师表匹配主页链接，可手动修改。' : '';
+  var src = authorUrlSource($('nv-author').value);
+  $('nv-author-link-hint').textContent = found ? '✓ 已从' + src + '匹配主页链接，可手动修改。' : '';
 }
 function syncCategory(){
-  var novelMode = $('f-category').value === '小说本';
-  ['bk-panel','book-panel','images-panel'].forEach(function(id){ $(id).classList.toggle('hide', novelMode); });
-  $('nv-panel-top').classList.toggle('hide', !novelMode);
+  // 功能区改为独立页面后，作品类型只影响漫画归档字段，不再承担页面切换。
 }
+
+var activeAdminPage = 'manga';
+function switchAdminPage(page, updateHash){
+  var allowed = ['manga','novel','announcement','inbox','authors','forum'];
+  if (allowed.indexOf(page) < 0) page = 'manga';
+  activeAdminPage = page;
+  document.querySelectorAll('[data-admin-page]').forEach(function(el){
+    el.classList.toggle('hide', el.getAttribute('data-admin-page') !== page);
+  });
+  document.querySelectorAll('[data-admin-tab]').forEach(function(tab){
+    var on = tab.getAttribute('data-admin-tab') === page;
+    tab.classList.toggle('active', on); tab.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  if (updateHash !== false) history.replaceState(null, '', '#admin-' + page);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+document.querySelector('.admin-tabs').addEventListener('click', function(e){
+  var tab = e.target.closest('[data-admin-tab]');
+  if (tab) switchAdminPage(tab.getAttribute('data-admin-tab'));
+});
 function bookOrder(book){
   var id = /^lh-(\d+)$/.exec(book.id || '');
   return id ? Number(id[1]) : -1;
@@ -668,16 +810,107 @@ function enterMain(){
     $('env-info').textContent = '👀 本地预览模式 · 可查看上传台界面；云端数据与发布操作需在正式站点登录。';
     $('bk-list').innerHTML = '<p class="muted">本地预览不加载云端作品列表。</p>';
     $('nv-list').innerHTML = '<p class="muted">本地预览不加载云端小说列表。</p>';
+    $('author-list').innerHTML = '<p class="muted">本地预览不加载云端登记表。</p>';
+    $('inbox-contacts').innerHTML = '<p class="muted">本地预览不加载云端收件箱。</p>';
+    $('inbox-novels').innerHTML = '';
     $('btn-nv-save').disabled = true;
     $('btn-reload').disabled = true;
     $('btn-nv-reload').disabled = true;
+    $('author-add').disabled = true;
+    $('author-export').disabled = true;
   } else {
     refreshEnv();
+    loadAnnouncements();
     loadBooks();
     loadNovels();
+    loadAuthorLib();
+    loadInbox();
+    loadRecsAdmin();
+    loadForumAdmin();
   }
   syncButtons();   // 初始态：没填 ID → 两个按钮都灰；填了 ID → 「仅更新信息」可用
 }
+
+/* ============ 首页公告栏 ============ */
+function renderAnnouncements(){
+  var box = $('an-list');
+  if (!announcements.length) { box.innerHTML = '<p class="muted">还没有后台公告；主站会继续显示内置示例。</p>'; return; }
+  box.innerHTML = announcements.map(function(item){
+    return '<div class="notice-row">' +
+      (item.image ? '<img src="' + esc(item.image) + '" alt="">' : '') +
+      '<div class="info"><div><span class="chip">' + esc(item.tag) + '</span> <b>' + esc(item.title) + '</b></div>' +
+      '<div class="muted">' + esc(item.time || '未填写时间') + ' · ' + esc(item.author) + (item.link ? ' · 已设置跳转' : '') + '</div></div>' +
+      '<button class="btn-sm" data-an-edit="' + esc(item.id) + '">编辑</button>' +
+      '<button class="btn-sm btn-danger" data-an-del="' + esc(item.id) + '">删除</button></div>';
+  }).join('');
+}
+function loadAnnouncements(){
+  $('an-list').innerHTML = '<p class="muted">加载中…</p>';
+  api({ action:'announcementList' }).then(function(d){ announcements = d.items || []; renderAnnouncements(); })
+    .catch(function(err){ if (onAuthFail(err)) return; $('an-list').innerHTML = '<p class="muted">读取失败：' + esc(err.message || err) + '</p>'; });
+}
+function resetAnnouncementForm(){
+  anEditingId = ''; anImageBase64 = ''; anExistingImage = '';
+  ['an-tag','an-title','an-time','an-author','an-link','an-description','an-image'].forEach(function(id){ $(id).value = ''; });
+  $('an-image-preview').src = ''; $('an-image-preview').classList.add('hide');
+  $('an-save').textContent = '发布公告'; hide($('an-msg'));
+}
+function cropAnnouncementImage(file){
+  if (!file || !/^image\//.test(file.type)) return Promise.reject(new Error('请选择图片文件。'));
+  return new Promise(function(resolve, reject){
+    var img = new Image(); var url = URL.createObjectURL(file);
+    img.onload = function(){
+      try {
+        var canvas = document.createElement('canvas'); canvas.width = 1200; canvas.height = 675;
+        var sw = img.naturalWidth, sh = Math.round(sw * 9 / 16);
+        if (sh > img.naturalHeight) { sh = img.naturalHeight; sw = Math.round(sh * 16 / 9); }
+        var sx = Math.round((img.naturalWidth - sw) / 2), sy = Math.round((img.naturalHeight - sh) / 2);
+        canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, 1200, 675);
+        URL.revokeObjectURL(url);
+        var data = canvas.toDataURL('image/webp', .86); resolve(data);
+      } catch(e) { URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('图片读取失败。')); };
+    img.src = url;
+  });
+}
+function saveAnnouncement(){
+  var item = { id: anEditingId || undefined, tag:$('an-tag').value.trim(), title:$('an-title').value.trim(),
+    time:$('an-time').value, author:$('an-author').value.trim(), link:$('an-link').value.trim(), description:$('an-description').value.trim(), image:anExistingImage };
+  if (!item.tag || !item.title || !item.author) { show($('an-msg'),'err','请填写标签、标题和发布人。'); return; }
+  var btn = $('an-save'); btn.disabled = true; hide($('an-msg'));
+  api({ action:'announcementSave', item:item, imageBase64:anImageBase64 }).then(function(d){
+    announcements = d.items || []; renderAnnouncements(); resetAnnouncementForm();
+    show($('an-msg'),'ok','✓ 公告已保存，主站公告栏会自动读取。');
+  }).catch(function(err){ if (onAuthFail(err)) return; show($('an-msg'),'err',err.message || String(err)); })
+    .then(function(){ btn.disabled = false; });
+}
+$('an-image').addEventListener('change', function(){
+  var file = this.files && this.files[0]; if (!file) return;
+  show($('an-msg'),'info','正在生成 16:9 横版图片…');
+  cropAnnouncementImage(file).then(function(data){
+    anImageBase64 = data.split(',')[1] || ''; $('an-image-preview').src = data;
+    $('an-image-preview').classList.remove('hide'); hide($('an-msg'));
+  }).catch(function(err){ show($('an-msg'),'err',err.message || String(err)); });
+});
+$('an-save').addEventListener('click', saveAnnouncement);
+$('an-clear').addEventListener('click', resetAnnouncementForm);
+$('an-reload').addEventListener('click', loadAnnouncements);
+$('an-list').addEventListener('click', function(e){
+  var edit = e.target.closest('[data-an-edit]'), del = e.target.closest('[data-an-del]');
+  if (edit) {
+    var item = announcements.find(function(x){ return x.id === edit.getAttribute('data-an-edit'); }); if (!item) return;
+    anEditingId = item.id; anExistingImage = item.image || ''; anImageBase64 = '';
+    $('an-tag').value=item.tag||''; $('an-title').value=item.title||''; $('an-time').value=item.time||'';
+    $('an-author').value=item.author||''; $('an-link').value=item.link||''; $('an-description').value=item.description||'';
+    $('an-image-preview').src=item.image||''; $('an-image-preview').classList.toggle('hide',!item.image);
+    $('an-save').textContent='保存修改'; window.scrollTo({top:$('announcement-panel').offsetTop-12,behavior:'smooth'});
+  } else if (del) {
+    var id=del.getAttribute('data-an-del'); if (!confirm('确定删除这条公告？')) return;
+    api({action:'announcementDelete',id:id}).then(function(d){ announcements=d.items||[]; renderAnnouncements(); resetAnnouncementForm(); })
+      .catch(function(err){ if(onAuthFail(err))return; show($('an-msg'),'err',err.message||String(err)); });
+  }
+});
 
 function refreshEnv(){
   api({ action:'status' }).then(function(d){
@@ -876,6 +1109,7 @@ function saveNovel(){
       novels = d.novels || [];
       renderNovelList();
       resetNovelForm();
+      loadAuthorLib();   // 小说作者链接已自动登记
       show($('nv-msg'), 'ok', d.replaced ? '✓ 已更新《' + form.title + '》' : '✓ 已发布《' + form.title + '》');
     })
     .catch(function(err){
@@ -1136,43 +1370,176 @@ function updateProgress(done, total){
   $('prog-text').textContent = '已处理 ' + done + ' / ' + total + ' 张（' + pct + '%）';
 }
 
-/* ============ 云端待审收件箱 ============ */
+/* ============ 联络收件箱 ============ */
 function loadInbox(){
   if (LOCAL_PREVIEW) return;
-  $('inbox-status').textContent = '正在读取待审投稿…';
+  $('inbox-status').textContent = '正在读取收件箱…';
   api({ action:'inboxList' }).then(function(res){
     var items = Array.isArray(res.items) ? res.items : [];
-    $('inbox-status').textContent = '待审投稿：' + items.length + ' 条';
+    $('inbox-status').textContent = '未处理来信：' + items.length + ' 条';
+    renderInboxType('contact', items.filter(function(item){ return item.type === 'contact'; }), $('inbox-contacts'));
     renderInboxType('novel', items.filter(function(item){ return item.type === 'novel'; }), $('inbox-novels'));
-    renderInboxType('treehole', items.filter(function(item){ return item.type === 'treehole'; }), $('inbox-notes'));
+    renderReviewItems(items.filter(function(item){ return item.type === 'announcement'; }), $('an-review'), '企划');
+    renderReviewItems(items.filter(function(item){ return item.type === 'novel' || item.type === 'recommend'; }), $('nv-review'), '投稿');
   }).catch(function(err){ $('inbox-status').textContent = '读取失败：' + (err.message || String(err)); });
 }
+function renderReviewItems(items, container, label){
+  if (!items.length) { container.innerHTML='<p class="muted">暂无待审核' + label + '</p>'; return; }
+  container.innerHTML=items.map(function(item){
+    var kind=item.type==='announcement'?'企划公告':item.type==='recommend'?'站外推荐':'在线小说';
+    var detail=item.body||item.description||item.reason||'';
+    return '<div class="notice-row" data-inbox-id="'+esc(item._id)+'"><div class="info"><b>'+esc(kind+' · '+(item.title||'未命名'))+'</b><div class="muted">提交人：'+esc(item.author||'匿名')+(item.link?' · '+esc(item.link):'')+'</div>'+(detail?'<details><summary>查看内容</summary><pre style="white-space:pre-wrap">'+esc(detail)+'</pre></details>':'')+'</div><button class="btn-sm btn-gold" data-review="approve">通过</button><button class="btn-sm btn-danger" data-review="reject">拒绝</button></div>';
+  }).join('');
+}
 function renderInboxType(type, items, container){
-  if (!items.length) { container.innerHTML = '<p class="muted">暂无待审内容</p>'; return; }
+  if (!items.length) { container.innerHTML = '<p class="muted">暂无未处理来信</p>'; return; }
   container.innerHTML = items.map(function(item){
-    var title = type === 'novel' ? item.title : item.sender;
-    var content = type === 'novel' ? item.body : item.content;
+    var title, meta;
+    if (type === 'contact') {
+      title = (item.kindLabel || '联络') + ' · ' + (item.title || item.name || '匿名来信');
+      var metaParts = [];
+      if (item.name) metaParts.push('称呼：' + item.name);
+      if (item.author) metaParts.push('创作者：' + item.author);
+      if (item.email) metaParts.push('邮箱：' + item.email);
+      if (item.homepage) metaParts.push('主页：' + item.homepage);
+      if (item.link) metaParts.push('链接：' + item.link);
+      if (item.source) metaParts.push('来源：' + item.source);
+      if (item.translator) metaParts.push('汉化：' + item.translator);
+      if (item.typesetter) metaParts.push('嵌字：' + item.typesetter);
+      if (item.category) metaParts.push('类别：' + item.category);
+      if (item.notes) metaParts.push('备注：' + item.notes);
+      meta = metaParts.join(' · ');
+      var detail = item.content || '';
+      if (item.reason) detail = (detail ? detail + '\n\n' : '') + '【理由】\n' + item.reason;
+      var actions = '<button class="btn-sm btn-gold" data-review="approve">✓ 已读处理</button>' +
+        '<button class="btn-sm btn-danger" data-review="reject">✕ 忽略</button>';
+      return '<div class="panel" style="margin:8px 0;padding:12px" data-inbox-id="' + esc(item._id) + '">' +
+        '<b>' + esc(title) + '</b> <span class="muted">' + esc(item.createdAt || '') + '</span>' +
+        (meta ? '<p class="muted">' + esc(meta) + '</p>' : '') +
+        '<details><summary>查看来信内容</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:340px;overflow:auto">' + esc(detail || '（无正文）') + '</pre></details>' +
+        '<div class="row" style="margin-top:10px">' + actions + '</div></div>';
+    }
+    title = item.title;
+    meta = '作者：' + item.author + ' · 邮箱：' + item.email + ' · 备注：' + (item.notes || '无');
     return '<div class="panel" style="margin:8px 0;padding:12px" data-inbox-id="' + esc(item._id) + '">' +
       '<b>' + esc(title) + '</b> <span class="muted">' + esc(item.createdAt || '') + '</span>' +
-      '<p class="muted">' + esc(type === 'novel' ? ('作者：' + item.author + ' · 邮箱：' + item.email + ' · 备注：' + (item.notes || '无')) : ('心情：' + (item.mood || ''))) + '</p>' +
-      '<details><summary>查看完整内容</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:340px;overflow:auto">' + esc(content || '') + '</pre></details>' +
+      '<p class="muted">' + esc(meta) + '</p>' +
+      '<details><summary>查看完整内容</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:340px;overflow:auto">' + esc(item.body || '') + '</pre></details>' +
       '<div class="row" style="margin-top:10px"><button class="btn-sm btn-gold" data-review="approve">✓ 通过并发布</button>' +
       '<button class="btn-sm btn-danger" data-review="reject">✕ 驳回</button></div></div>';
   }).join('');
 }
-function reviewInbox(id, decision){
-  if (!confirm(decision === 'approve' ? '确认通过并立即发布到主站？' : '确认驳回这条投稿？')) return;
-  $('inbox-status').textContent = '正在处理投稿…';
+function reviewInbox(id, decision, isContact){
+  var msg;
+  if (isContact) msg = decision === 'approve' ? '确认标记这封来信为「已处理」？' : '确认忽略这封来信？';
+  else msg = decision === 'approve' ? '确认通过并立即发布到主站？' : '确认驳回这条投稿？';
+  if (!confirm(msg)) return;
+  $('inbox-status').textContent = '正在处理来信…';
   api({ action:'inboxReview', id:id, decision:decision }).then(function(){ loadInbox(); })
-    .catch(function(err){ $('inbox-status').textContent = '审核失败：' + (err.message || String(err)); });
+    .catch(function(err){ $('inbox-status').textContent = '处理失败：' + (err.message || String(err)); });
 }
 $('inbox-refresh').onclick = loadInbox;
 $('inbox-panel').addEventListener('click', function(event){
   var button = event.target.closest('[data-review]');
   if (!button) return;
   var card = button.closest('[data-inbox-id]');
-  if (card) reviewInbox(card.getAttribute('data-inbox-id'), button.getAttribute('data-review'));
+  if (!card) return;
+  var section = card.closest('#inbox-contacts') ? 'contact' : 'novel';
+  reviewInbox(card.getAttribute('data-inbox-id'), button.getAttribute('data-review'), section === 'contact');
 });
+['an-review','nv-review'].forEach(function(id){ $(id).addEventListener('click',function(event){
+  var button=event.target.closest('[data-review]'); if(!button)return;
+  var card=button.closest('[data-inbox-id]'); if(!card)return;
+  reviewInbox(card.getAttribute('data-inbox-id'),button.getAttribute('data-review'),false);
+}); });
+
+var adminRecs=[];
+function loadRecsAdmin(){
+  if(LOCAL_PREVIEW)return;
+  api({action:'recs'}).then(function(res){adminRecs=res.items||[];renderRecsAdmin();}).catch(function(){});
+}
+function renderRecsAdmin(){
+  $('rec-admin-list').innerHTML=adminRecs.length?adminRecs.map(function(r,i){return '<div class="notice-row"><div class="info"><b>'+esc(r.title)+'</b><div class="muted">'+esc(r.type)+' · '+esc(r.url)+'</div></div><button class="btn-sm btn-danger" data-rec-del="'+i+'">删除</button></div>';}).join(''):'<p class="muted">暂无站外推荐</p>';
+}
+$('rec-admin-list').addEventListener('click',function(e){var b=e.target.closest('[data-rec-del]');if(!b)return;var i=Number(b.getAttribute('data-rec-del'));if(!confirm('删除这条站外推荐？'))return;adminRecs.splice(i,1);api({action:'recs',items:adminRecs}).then(function(res){adminRecs=res.items||adminRecs;renderRecsAdmin();});});
+document.querySelectorAll('[data-novel-admin-kind]').forEach(function(btn){btn.addEventListener('click',function(){var k=btn.getAttribute('data-novel-admin-kind');$('nv-list').classList.toggle('hide',k!=='novels');$('rec-admin').classList.toggle('hide',k!=='recs');$('nv-review').classList.toggle('hide',k!=='review');document.querySelectorAll('[data-novel-admin-kind]').forEach(function(x){x.classList.toggle('btn-primary',x===btn);});});});
+
+var forumPosts=[];
+function loadForumAdmin(){if(LOCAL_PREVIEW)return;api({action:'forumList'}).then(function(res){forumPosts=res.posts||[];renderForumAdmin();}).catch(function(err){show($('forum-msg'),'err',err.message||String(err));});}
+function renderForumAdmin(){var box=$('forum-admin-list');if(!forumPosts.length){box.innerHTML='<p class="muted">暂无论坛帖子</p>';return;}box.innerHTML=forumPosts.map(function(p){return '<details class="panel" style="margin:8px 0;padding:12px"><summary>'+esc(p.title)+' · '+esc(p.author)+'</summary><p style="white-space:pre-wrap">'+esc(p.body||'（仅图片）')+'</p>'+(p.image?'<img src="'+esc(p.image)+'" style="max-width:260px;max-height:180px;object-fit:contain">':'')+'<div class="row"><button class="btn-sm btn-danger" data-forum-post-del="'+esc(p.id)+'">删除整帖</button></div><div style="margin-top:10px">'+(p.comments||[]).map(function(c){return '<div class="notice-row"><div class="info"><b>'+esc(c.author)+'</b><div>'+esc(c.body)+'</div></div><button class="btn-sm btn-danger" data-forum-comment-del="'+esc(c.id)+'" data-post-id="'+esc(p.id)+'">删除言论</button></div>';}).join('')+'</div></details>';}).join('');}
+$('forum-reload').onclick=loadForumAdmin;
+$('forum-admin-list').addEventListener('click',function(e){var post=e.target.closest('[data-forum-post-del]'),comment=e.target.closest('[data-forum-comment-del]');if(post){if(!confirm('删除整篇帖子及其评论？'))return;api({action:'forumDelete',id:post.getAttribute('data-forum-post-del')}).then(function(res){forumPosts=res.posts||[];renderForumAdmin();});}else if(comment){if(!confirm('删除这条言论？'))return;api({action:'forumCommentDelete',postId:comment.getAttribute('data-post-id'),commentId:comment.getAttribute('data-forum-comment-del')}).then(function(res){forumPosts=res.posts||[];renderForumAdmin();});}});
+
+/* ============ 作者链接登记表 ============ */
+function loadAuthorLib(){
+  if (LOCAL_PREVIEW) return;
+  $('author-status').textContent = '正在读取登记表…';
+  api({ action:'authorLib' }).then(function(res){
+    authorLib = Array.isArray(res.authors) ? res.authors : [];
+    $('author-status').textContent = '登记表共 ' + authorLib.length + ' 位作者；上传台输入同名作者会自动带出链接。';
+    renderAuthorLib();
+  }).catch(function(err){ $('author-status').textContent = '读取失败：' + (err.message || String(err)); });
+}
+function renderAuthorLib(){
+  var box = $('author-list');
+  if (!authorLib.length) { box.innerHTML = '<p class="muted">还没有登记记录；发布作品或在线小说时会自动登记。</p>'; return; }
+  box.innerHTML = '<table class="author-table"><thead><tr><th style="width:22%">作者 / 社团</th><th>主页链接</th><th style="width:12%">更新日期</th><th style="width:70px"></th></tr></thead><tbody>' +
+    authorLib.map(function(a, i){
+      return '<tr>' +
+        '<td>' + esc(a.name) + '</td>' +
+        '<td>' + (a.url ? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener">' + esc(a.url) + '</a>' : '<span class="muted">未登记链接</span>') + '</td>' +
+        '<td class="muted">' + esc(String(a.updatedAt || '').slice(0, 10)) + '</td>' +
+        '<td><button class="btn-sm btn-danger" data-author-del="' + i + '">删除</button></td>' +
+      '</tr>';
+    }).join('') + '</tbody></table>';
+}
+function saveAuthorLib(next){
+  authorLib = next;
+  $('author-status').textContent = '正在保存登记表…';
+  return api({ action:'authorLib', authors: next }).then(function(res){
+    authorLib = Array.isArray(res.authors) ? res.authors : authorLib;
+    renderAuthorLib();
+    $('author-status').textContent = '✓ 已保存，登记表共 ' + authorLib.length + ' 位作者。';
+  }).catch(function(err){
+    if (onAuthFail(err)) return;
+    $('author-status').textContent = '保存失败：' + (err.message || String(err));
+  });
+}
+$('author-reload').onclick = loadAuthorLib;
+$('author-add').onclick = function(){
+  var name = $('al-name').value.trim();
+  var url = $('al-url').value.trim();
+  if (!name) { alert('请填写作者 / 社团名。'); return; }
+  if (url && !/^https?:\/\//i.test(url)) { alert('主页链接需以 http:// 或 https:// 开头。'); return; }
+  var next = authorLib.filter(function(a){ return a.name !== name; });
+  next.unshift({ name: name, url: url, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  $('al-name').value = ''; $('al-url').value = '';
+  saveAuthorLib(next);
+};
+$('author-list').addEventListener('click', function(event){
+  var btn = event.target.closest('[data-author-del]');
+  if (!btn) return;
+  var idx = Number(btn.getAttribute('data-author-del'));
+  var row = authorLib[idx];
+  if (!row) return;
+  if (!confirm('删除「' + row.name + '」的登记记录？')) return;
+  saveAuthorLib(authorLib.filter(function(_, i){ return i !== idx; }));
+});
+$('author-export').onclick = function(){
+  if (!authorLib.length) { alert('登记表为空，暂无可导出的数据。'); return; }
+  var cell = function(v){ return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
+  var fmt = function(iso){ return String(iso || '').slice(0, 19).replace('T', ' '); };
+  var csv = '\uFEFF作者/社团,主页链接,登记时间,更新时间\n' + authorLib.map(function(a){
+    return [cell(a.name), cell(a.url || ''), cell(fmt(a.createdAt)), cell(fmt(a.updatedAt))].join(',');
+  }).join('\n');
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '作者链接登记表-' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+};
 
 /* ============ 上传主流程 ============ */
 function setBusy(on){
@@ -1207,7 +1574,7 @@ function uploadAll(){
       return p.then(function(r){
         if (r.blob.size > envMax) throw new Error('转换后仍超过 ' + fmtSize(envMax));
         return toBase64(r.blob).then(function(b64){
-          prepared[i] = { b64: b64, size: r.blob.size, type: r.blob.type || 'image/webp', name:r.name || f.name };
+          prepared[i] = { b64:b64, size:r.blob.size, type:r.blob.type || 'image/webp', name:r.name || f.name };
           f.preparedSize = r.blob.size;
         });
       }).catch(function(err){
@@ -1257,6 +1624,7 @@ function uploadAll(){
         '预览：' + CDN + '/' + (book.bookFolder || book.id) + '/' + (book.coverFile || 'image01.webp'));
       resetForm();
       loadBooks();
+      loadAuthorLib();   // 作者链接已自动登记，刷新登记表
     });
   }).catch(function(err){
     if (onAuthFail(err)) return;
@@ -1272,6 +1640,7 @@ function publishOnly(){
   api({ action:'publish', book: form }).then(function(d){
     show($('main-msg'), 'ok', '✅ 已更新归档信息：' + form.id + '（共 ' + d.count + ' 本）');
     loadBooks();
+    loadAuthorLib();   // 作者链接已自动登记，刷新登记表
   }).catch(function(err){
     if (onAuthFail(err)) return;
     show($('main-msg'), 'err', '✗ ' + (err.message || String(err)));
@@ -1982,6 +2351,8 @@ $('bk-list').addEventListener('click', function(e){
 });
 
 /* ============ 启动 ============ */
+var initialAdminPage = (location.hash.match(/^#admin-(manga|novel|announcement|inbox|authors|forum)$/) || [])[1] || 'manga';
+switchAdminPage(initialAdminPage, false);
 if (LOCAL_PREVIEW || token) enterMain();
 else { $('view-login').classList.remove('hide'); }
 </script>

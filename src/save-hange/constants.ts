@@ -35,5 +35,15 @@ export const FALLBACK_TRACK_SECONDS = 236;
 /** 与宿主 TatakaruGame 约定的对局 BGM 通知协议（不可改名） */
 export const HOST_BGM_MESSAGE_TYPE = 'save-hange-bgm';
 
+/**
+ * 与宿主约定的对局结果通知协议。
+ * 只有「绝境」难度突围成功才上报 —— 头号玩家只收录绝境难度。
+ * 载荷：{ type, difficulty: 'hard', moves, timeUsedSeconds, duration }
+ */
+export const HOST_RESULT_MESSAGE_TYPE = 'save-hange-result';
+
+/** 唯一进入头号玩家的难度 */
+export const RANKED_DIFFICULTY = 'hard';
+
 /** 一次拖拽/点击/按键操作，无论滑动几格，都只记为 1 次移动 */
 export const MOVES_PER_OPERATION = 1;

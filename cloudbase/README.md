@@ -89,10 +89,9 @@ NODE_PATH=/Users/luna/.workbuddy/binaries/node/workspace/node_modules \
 
 ## 第一阶段：云端待审收件箱
 
-小说稿件与树洞纸条经主站表单发送到 `admin-upload` 的 `submitNovel` / `submitTreehole`，
-存入 CloudBase PostgreSQL `public.submission_inbox`。管理员后台使用原令牌调用
-`inboxList` / `inboxReview`。通过小说后调用原 `novelSave`，写入 `novels.json` 和
-`novels/{id}.txt`；通过树洞纸条后写入 `treehole.json`。驳回只更新私有收件箱状态。
+小说稿件经主站表单发送到 `admin-upload` 的 `submitNovel`，存入 CloudBase PostgreSQL
+`public.submission_inbox`。管理员后台使用原令牌调用 `inboxList` / `inboxReview`。
+通过小说后调用原 `novelSave`，写入 `novels.json` 和 `novels/{id}.txt`；驳回只更新私有收件箱状态。
 
 SQL 建表和私有权限配置见 `migrations/20260915_submission_inbox.sql`。前端不持有
 CloudBase 数据库服务密钥；云函数只从环境变量 `CLOUDBASE_APIKEY` 读取它。

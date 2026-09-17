@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { RecommendItem, GroupNovel } from '../types/doujinArchive';
 import { soundManager } from '../utils/audio';
 import { NovelReader } from './NovelReader';
 import { AuthorWithLink } from '../utils/authorLink';
 import { newestNovelsFirst, newestRecsFirst } from '../utils/workSort';
+import { submitToInbox } from '../utils/submissionInbox';
 
 interface Props {
   searchQuery: string;
@@ -62,6 +64,21 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
   const [genre, setGenre] = useState<string>('全部');
   const [openRec, setOpenRec] = useState<RecommendItem | null>(null);
   const [reading, setReading] = useState<GroupNovel | null>(null);
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploadKind, setUploadKind] = useState<'novel' | 'recommend'>('novel');
+  const [uploadTitle, setUploadTitle] = useState('');
+  const [uploadAuthor, setUploadAuthor] = useState('');
+  const [uploadEmail, setUploadEmail] = useState('');
+  const [uploadAuthorUrl, setUploadAuthorUrl] = useState('');
+  const [uploadBody, setUploadBody] = useState('');
+  const [uploadNotes, setUploadNotes] = useState('');
+  const [uploadFileName, setUploadFileName] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [recTitle, setRecTitle] = useState('');
+  const [recLink, setRecLink] = useState('');
+  const [recAuthor, setRecAuthor] = useState('');
+  const [recReason, setRecReason] = useState('');
+  const [recCategory, setRecCategory] = useState('原作向');
 
   // 题材 = 数据里 (type ∪ rating) 去重，不写死（R / 清水 与现PA / 原作同级）
   const genreList = useMemo(
@@ -142,6 +159,70 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
     }
   };
 
+  const handleNovelFile = async (file?: File) => {
+    if (!file) return;
+    if (!/\.(txt|md)$/i.test(file.name)) {
+      onShowToast('目前仅支持 UTF-8 的 .txt 或 .md 文件');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      onShowToast('小说文件不能超过 1MB');
+      return;
+    }
+    try {
+      const content = await file.text();
+      setUploadBody(content);
+      setUploadFileName(file.name);
+      if (!uploadTitle) setUploadTitle(file.name.replace(/\.(txt|md)$/i, ''));
+      onShowToast(`已读取《${file.name}》`);
+    } catch {
+      onShowToast('无法读取文件，请确认它是 UTF-8 文本');
+    }
+  };
+
+  const handleNovelSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (uploadKind === 'recommend') {
+      if (!recTitle.trim() || !recLink.trim()) { onShowToast('请填写推荐名称和外链'); return; }
+      setIsUploading(true);
+      try {
+        await submitToInbox('submitRecommend', { title: recTitle.trim(), link: recLink.trim(), author: recAuthor.trim(), reason: recReason.trim(), category: recCategory });
+        setShowUpload(false); setRecTitle(''); setRecLink(''); setRecReason('');
+        onShowToast('推荐已提交，审核通过后会进入站外推荐');
+      } catch (error) { onShowToast(error instanceof Error ? error.message : '推荐提交失败'); }
+      finally { setIsUploading(false); }
+      return;
+    }
+    if (!uploadTitle.trim() || !uploadAuthor.trim() || !uploadEmail.trim() || !uploadBody.trim()) {
+      onShowToast('请填写标题、作者、邮箱和小说正文');
+      return;
+    }
+    setIsUploading(true);
+    try {
+      await submitToInbox('submitNovel', {
+        title: uploadTitle.trim(),
+        author: uploadAuthor.trim(),
+        email: uploadEmail.trim(),
+        authorUrl: uploadAuthorUrl.trim(),
+        body: uploadBody.trim(),
+        notes: uploadNotes.trim(),
+      });
+      setShowUpload(false);
+      setUploadTitle('');
+      setUploadAuthor('');
+      setUploadEmail('');
+      setUploadAuthorUrl('');
+      setUploadBody('');
+      setUploadNotes('');
+      setUploadFileName('');
+      onShowToast('小说已提交，审核通过后会进入在线粮仓 📚');
+    } catch (error) {
+      onShowToast(error instanceof Error ? error.message : '小说提交失败，请稍后重试');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   // 推荐理由文本：@推荐人 说：…（只有推荐人 / 只有理由时分别降级）
   const reasonText = (r: RecommendItem): string | null => {
     if (r.recommender && r.reason) return `@${r.recommender} 说：${r.reason}`;
@@ -211,7 +292,16 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
       {/* 第一段：在线小说（竖版卡片瀑布流，手机 2 列） */}
       {showNovels && (
         <div className="space-y-2">
-          <h3 className="font-pixel text-xs font-bold text-[#1E3A2B]">在线小说 · 共 {filteredNovels.length} 篇</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-pixel text-xs font-bold text-[#1E3A2B]">在线小说 · 共 {filteredNovels.length} 篇</h3>
+            <button
+              type="button"
+              onClick={() => setShowUpload(true)}
+              className="px-3 py-1.5 bg-[#1E4334] text-[#F9E79F] border border-[#153025] font-pixel text-[10px] font-bold cursor-pointer active:scale-95 transition-transform whitespace-nowrap"
+            >
+              ↑ 上传小说 / 推荐
+            </button>
+          </div>
           {filteredNovels.length === 0 ? (
             <div className="p-6 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
               还没有在线小说，敬请期待～
@@ -426,6 +516,53 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
 
       {/* 在线阅读器 */}
       {reading && <NovelReader novel={reading} onClose={() => setReading(null)} />}
+
+      {showUpload && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100] bg-black/65 flex items-center justify-center p-3" onMouseDown={(e) => e.target === e.currentTarget && setShowUpload(false)}>
+          <form onSubmit={handleNovelSubmit} className="w-full max-w-lg max-h-[90dvh] overflow-y-auto bg-[#FFFEEF] border-2 border-[#1E4334] rounded-lg p-4 sm:p-5 space-y-3 font-retro-jp text-[#2C241D] shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-[#D5C9AF] pb-2">
+              <div>
+                <h3 className="font-pixel text-sm font-bold text-[#1E4334]">上传小说 / 推荐</h3>
+                <p className="text-[10px] text-[#7A6958] mt-1">投稿将进入待审收件箱，通过后公开展示。</p>
+              </div>
+              <button type="button" onClick={() => setShowUpload(false)} className="text-lg text-[#5B4636] cursor-pointer" aria-label="关闭上传窗口">×</button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setUploadKind('novel')} className={`py-2 border font-bold text-xs ${uploadKind === 'novel' ? 'bg-[#1E4334] text-[#F9E79F]' : 'bg-white text-[#5B4636]'}`}>上传小说</button>
+              <button type="button" onClick={() => setUploadKind('recommend')} className={`py-2 border font-bold text-xs ${uploadKind === 'recommend' ? 'bg-[#1E4334] text-[#F9E79F]' : 'bg-white text-[#5B4636]'}`}>推荐外链</button>
+            </div>
+
+            {uploadKind === 'novel' ? <><div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <label className="text-xs font-bold">标题<input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} maxLength={80} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
+              <label className="text-xs font-bold">作者<input value={uploadAuthor} onChange={(e) => setUploadAuthor(e.target.value)} maxLength={40} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
+              <label className="text-xs font-bold">联系邮箱<input type="email" value={uploadEmail} onChange={(e) => setUploadEmail(e.target.value)} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
+              <label className="text-xs font-bold">作者主页（选填）<input type="url" value={uploadAuthorUrl} onChange={(e) => setUploadAuthorUrl(e.target.value)} className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
+            </div>
+
+            <label className="block p-3 border border-dashed border-[#1E4334] bg-[#F3EAD5] text-center cursor-pointer hover:bg-[#E8E0CB]">
+              <span className="block font-bold text-xs">选择 .txt / .md 文件（最大 1MB）</span>
+              <span className="block text-[10px] text-[#7A6958] mt-1">{uploadFileName || '也可以直接在下方粘贴正文'}</span>
+              <input type="file" accept=".txt,.md,text/plain,text/markdown" className="hidden" onChange={(e) => void handleNovelFile(e.target.files?.[0])} />
+            </label>
+
+            <label className="block text-xs font-bold">小说正文<textarea value={uploadBody} onChange={(e) => setUploadBody(e.target.value)} rows={10} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334] resize-y leading-relaxed" /></label>
+            <label className="block text-xs font-bold">给审核员的备注（选填）<textarea value={uploadNotes} onChange={(e) => setUploadNotes(e.target.value)} rows={2} maxLength={2000} className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334] resize-y" /></label>
+
+            </> : <div className="space-y-2">
+              <label className="block text-xs font-bold">作品名称<input value={recTitle} onChange={(e) => setRecTitle(e.target.value)} required className="mt-1 w-full p-2 bg-white border border-[#BFA985]" /></label>
+              <label className="block text-xs font-bold">外链<input type="url" value={recLink} onChange={(e) => setRecLink(e.target.value)} required className="mt-1 w-full p-2 bg-white border border-[#BFA985]" /></label>
+              <div className="grid grid-cols-2 gap-2"><label className="block text-xs font-bold">推荐人<input value={recAuthor} onChange={(e) => setRecAuthor(e.target.value)} className="mt-1 w-full p-2 bg-white border border-[#BFA985]" /></label><label className="block text-xs font-bold">分类<select value={recCategory} onChange={(e) => setRecCategory(e.target.value)} className="mt-1 w-full p-2 bg-white border border-[#BFA985]"><option>原作向</option><option>现代AU</option><option>短篇</option><option>其他</option></select></label></div>
+              <label className="block text-xs font-bold">推荐理由<textarea value={recReason} onChange={(e) => setRecReason(e.target.value)} rows={4} className="mt-1 w-full p-2 bg-white border border-[#BFA985]" /></label>
+            </div>}
+
+            <button type="submit" disabled={isUploading} className="w-full py-2.5 bg-[#1E4334] text-[#F9E79F] border border-[#153025] font-pixel text-xs font-bold cursor-pointer disabled:opacity-50">
+              {isUploading ? '提交中…' : uploadKind === 'novel' ? '提交小说稿件' : '提交推荐审核'}
+            </button>
+          </form>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

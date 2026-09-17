@@ -92,7 +92,7 @@ export const ImageNavBar: React.FC<Props> = ({ activeTab, onSelectTab, isMobile 
                 key={item.id}
                 type="button"
                 onClick={() => handleClick(item.id)}
-                className={`flex flex-col items-center justify-end py-1 px-0.5 relative transition-all duration-150 cursor-pointer min-h-[54px] ${
+                className={`flex flex-col items-center justify-end py-1.5 px-0.5 relative transition-all duration-150 cursor-pointer min-h-[60px] ${
                   isActive ? 'scale-105' : 'opacity-85 hover:opacity-100 active:scale-95'
                 }`}
               >
@@ -103,7 +103,7 @@ export const ImageNavBar: React.FC<Props> = ({ activeTab, onSelectTab, isMobile 
 
                 {/* Embedded Uploaded Image */}
                 <div
-                  className={`w-7 h-7 flex items-center justify-center transition-transform duration-200 ${
+                  className={`w-8 h-8 flex items-center justify-center transition-transform duration-200 ${
                     isActive ? 'scale-110 drop-shadow-[0_0_8px_rgba(249,231,159,0.85)]' : 'hover:scale-105'
                   }`}
                 >
@@ -117,7 +117,7 @@ export const ImageNavBar: React.FC<Props> = ({ activeTab, onSelectTab, isMobile 
 
                 {/* Tab Label */}
                 <span
-                  className={`font-retro-jp text-[10px] tracking-tight mt-0.5 leading-none truncate max-w-full text-center ${
+                  className={`font-retro-jp text-xs tracking-tight mt-1 leading-none truncate max-w-full text-center ${
                     isActive
                       ? 'text-[#F9E79F] font-bold drop-shadow-[0_1px_3px_#000]'
                       : 'text-[#F4ECE1] drop-shadow-[0_1px_2px_#000]'
