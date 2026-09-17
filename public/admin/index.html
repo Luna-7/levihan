@@ -214,7 +214,7 @@
   .crop-box{position:absolute;cursor:move;box-shadow:0 0 0 9999px rgba(0,0,0,.55);outline:1.5px solid var(--gold)}
   .crop-box .h{position:absolute;right:-7px;bottom:-7px;width:15px;height:15px;background:var(--gold);
                border:1.5px solid #fff;border-radius:3px;cursor:nwse-resize}
-  .mask-item{position:absolute;background:rgba(30,67,52,.5);cursor:move;box-shadow:0 0 0 1px rgba(255,255,255,.55) inset}
+  .mask-item{position:absolute;background-size:100% 100%;background-repeat:no-repeat;cursor:move;box-shadow:0 0 0 1px rgba(255,255,255,.55) inset}
   .mask-item.sel{outline:2px dashed #2F7ADB;outline-offset:0}
   .mask-item .h{position:absolute;right:-6px;bottom:-6px;width:13px;height:13px;background:#2F7ADB;
                 border:1.5px solid #fff;border-radius:3px;cursor:nwse-resize;display:none}
@@ -596,8 +596,8 @@
       <button class="btn-sm" id="ed-crop-fit">最大化</button>
     </div>
     <div class="grp">
-      <span class="lb-t">遮挡块（主题绿 50%）</span>
-      <button class="btn-sm" id="ed-mask-mode">＋ 拖拽画遮挡</button>
+      <span class="lb-t">马赛克涂抹（拖拽打码）</span>
+      <button class="btn-sm" id="ed-mask-mode">＋ 拖拽画马赛克</button>
       <button class="btn-sm" id="ed-del-mask">删除选中</button>
     </div>
     <div class="grp">
@@ -1705,8 +1705,10 @@ var ed = null;
 var edDrag = null;
 var MAX_UNDO = 10;
 var COVER_RATIO = 2 / 3;   // 站点封面 aspect-[2/3]
-// 遮挡块颜色：主题绿 --green-2 #1E4334 @ 50%，与 CSS `.mask-item` 必须保持一致
-var MASK_COLOR = 'rgba(30, 67, 52, 0.5)';
+// 马赛克涂抹：预览与导出都把涂抹区域打成马赛克（不再画半透明色块）
+// 块尺寸 = 输出长边 ÷ MOSAIC_DIV，预览与导出用同一比例，观感一致
+var MOSAIC_DIV = 40;    // 长边 ÷ 40 → 1920px 图约 48px 一块
+var MOSAIC_MIN = 8;     // 最小块尺寸（像素）
 
 function loadImage(src){
   return new Promise(function(res, rej){
@@ -1718,6 +1720,49 @@ function loadImage(src){
 }
 function cloneRect(r){ return r ? { x:r.x, y:r.y, w:r.w, h:r.h } : null; }
 function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
+
+// 把 ctx 上指定矩形区域打成马赛克：先缩到块网格，再无平滑放大回填。
+// 边界向外取整，避免边缘漏出 1px 原始像素（打码场景这点很重要）。
+function pixelateRect(ctx, rx, ry, rw, rh, block){
+  var x0 = Math.max(0, Math.floor(rx)), y0 = Math.max(0, Math.floor(ry));
+  var x1 = Math.min(ctx.canvas.width, Math.ceil(rx + rw));
+  var y1 = Math.min(ctx.canvas.height, Math.ceil(ry + rh));
+  rw = x1 - x0; rh = y1 - y0;
+  if (rw < 1 || rh < 1) return;
+  var bw = Math.max(1, Math.round(rw / block));
+  var bh = Math.max(1, Math.round(rh / block));
+  var t = document.createElement('canvas');
+  t.width = bw; t.height = bh;
+  t.getContext('2d').drawImage(ctx.canvas, x0, y0, rw, rh, 0, 0, bw, bh);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(t, 0, 0, bw, bh, x0, y0, rw, rh);
+  ctx.imageSmoothingEnabled = true;
+}
+
+// 预览用：从视图分辨率快照里取涂抹区域的马赛克 dataURL（带缓存，拖拽时不卡）
+var mosaicCache = {};
+function mosaicBlockView(){
+  var v = ed.view;
+  return Math.max(4, Math.round(Math.max(v.w, v.h) / MOSAIC_DIV));
+}
+function mosaicDataURL(m){
+  var v = ed.view, snap = ed.snap;
+  if (!snap) return '';
+  var rx = Math.max(0, Math.floor(m.x * v.w)), ry = Math.max(0, Math.floor(m.y * v.h));
+  var rw = Math.min(v.w - rx, Math.ceil(m.w * v.w)), rh = Math.min(v.h - ry, Math.ceil(m.h * v.h));
+  if (rw < 2 || rh < 2) return '';
+  var key = rx + ',' + ry + ',' + rw + ',' + rh;
+  if (mosaicCache[key]) return mosaicCache[key];
+  var t = document.createElement('canvas');
+  t.width = rw; t.height = rh;
+  var tc = t.getContext('2d');
+  tc.drawImage(snap, rx, ry, rw, rh, 0, 0, rw, rh);
+  pixelateRect(tc, 0, 0, rw, rh, mosaicBlockView());
+  var url = t.toDataURL('image/png');
+  if (Object.keys(mosaicCache).length > 120) mosaicCache = {};  // 简单防膨胀
+  mosaicCache[key] = url;
+  return url;
+}
 
 function defaultCrop(){
   var W = ed.natural.w, H = ed.natural.h;
@@ -1776,6 +1821,11 @@ function layoutEditor(){
   var r = Math.min(maxW / ed.natural.w, maxH / ed.natural.h, 1);
   ed.view.w = Math.max(1, Math.round(ed.natural.w * r));
   ed.view.h = Math.max(1, Math.round(ed.natural.h * r));
+  // 视图分辨率快照：马赛克预览的采样源（视图尺寸变化时重建）
+  ed.snap = document.createElement('canvas');
+  ed.snap.width = ed.view.w; ed.snap.height = ed.view.h;
+  ed.snap.getContext('2d').drawImage(ed.img, 0, 0, ed.view.w, ed.view.h);
+  mosaicCache = {};
   var img = $('ed-img');
   img.style.width = ed.view.w + 'px';
   img.style.height = ed.view.h + 'px';
@@ -1800,10 +1850,16 @@ function renderEditor(){
       ' style="left:' + (m.x * v.w) + 'px;top:' + (m.y * v.h) + 'px;width:' + (m.w * v.w) + 'px;height:' + (m.h * v.h) + 'px">' +
       '<i class="h"></i></div>';
   }).join('');
+  // 逐块贴上真实马赛克（所见即导出所得）
+  Array.prototype.forEach.call($('ed-masks').children, function(el){
+    var m = ed.masks[parseInt(el.getAttribute('data-k'), 10)];
+    var url = m ? mosaicDataURL(m) : '';
+    if (url) el.style.backgroundImage = 'url("' + url + '")';
+  });
   $('ed-hint').textContent = ed.isCover
     ? '封面：金框内的区域会被裁成 2:3 作为封面（站点卡片按此比例居中裁切）。拖拽金框移动，右下角方块缩放，比例锁定。'
-    : '在图上按住并拖拽即可画出绿色遮挡块（主题绿 · 半透明，可叠加）；点选后可移动 / 缩放 / 删除。';
-  $('ed-mask-mode').textContent = (ed.mode === 'mask') ? '● 画遮挡中（再点退出）' : '＋ 拖拽画遮挡';
+    : '在图上按住并拖拽即可画出马赛克涂抹块（所见即导出所得，可叠加）；点选后可移动 / 缩放 / 删除。';
+  $('ed-mask-mode').textContent = (ed.mode === 'mask') ? '● 画马赛克中（再点退出）' : '＋ 拖拽画马赛克';
   $('ed-crop-toggle').textContent = ed.cropOn ? '隐藏裁剪框' : '显示裁剪框';
   if (ed.isCover) drawThumb();
 }
@@ -1819,7 +1875,6 @@ function drawThumb(){
   } else {
     ctx.drawImage(ed.img, 0, 0, 54, 81);
   }
-  ctx.fillStyle = MASK_COLOR;
   ed.masks.forEach(function(m){
     var x, y, w, h;
     if (ed.cropOn && ed.crop) {
@@ -1831,7 +1886,7 @@ function drawThumb(){
     } else {
       x = m.x * 54; y = m.y * 81; w = m.w * 54; h = m.h * 81;
     }
-    ctx.fillRect(x, y, w, h);
+    pixelateRect(ctx, x, y, w, h, 3);
   });
   $('ed-thumb').src = c.toDataURL('image/png');
 }
@@ -1957,7 +2012,7 @@ function endEdDrag(){
 $('ed-canvas').addEventListener('pointerup', endEdDrag);
 $('ed-canvas').addEventListener('pointercancel', endEdDrag);
 
-/* 合成导出：裁剪 + 遮挡块 → WebP */
+/* 合成导出：裁剪 + 马赛克涂抹 → WebP */
 function burnImage(img, op){
   var W = img.naturalWidth, H = img.naturalHeight;
   var sx = 0, sy = 0, sw = W, sh = H;
@@ -1969,10 +2024,10 @@ function burnImage(img, op){
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, ow, oh);
   ctx.drawImage(img, sx, sy, sw, sh, 0, 0, ow, oh);
   if (op.masks.length) {
-    ctx.fillStyle = MASK_COLOR;
+    var kx = ow / sw, ky = oh / sh;
+    var block = Math.max(MOSAIC_MIN, Math.round(Math.max(ow, oh) / MOSAIC_DIV));
     op.masks.forEach(function(m){
-      var kx = ow / sw, ky = oh / sh;
-      ctx.fillRect((m.x * W - sx) * kx, (m.y * H - sy) * ky, m.w * W * kx, m.h * H * ky);
+      pixelateRect(ctx, (m.x * W - sx) * kx, (m.y * H - sy) * ky, m.w * W * kx, m.h * H * ky, block);
     });
   }
   return new Promise(function(res){ c.toBlob(function(b){ res(b); }, 'image/webp', 0.94); });
