@@ -48,18 +48,18 @@ export const EASY_LAYOUT: readonly Piece[] = [
   { id: 'titan_4', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 3, y: 4 },
 ];
 
-/** 普通：经典横刀立马布局，韩吉被封在正上方 */
+/** 普通：双侧竖块交错，出口由横块与小块封锁 */
 export const NORMAL_LAYOUT: readonly Piece[] = [
-  { id: 'hange', name: '韩吉', type: 'target', w: 2, h: 2, x: 1, y: 0 },
-  { id: 'founding_eren', name: '始祖巨人', type: 'horizontal', w: 2, h: 1, x: 1, y: 2 },
+  { id: 'hange', name: '韩吉', type: 'target', w: 2, h: 2, x: 1, y: 1 },
+  { id: 'founding_eren', name: '始祖巨人', type: 'horizontal', w: 2, h: 1, x: 1, y: 3 },
   { id: 'eren', name: '艾伦', type: 'vertical', w: 1, h: 2, x: 0, y: 0 },
-  { id: 'ymir', name: '尤弥尔', type: 'vertical', w: 1, h: 2, x: 3, y: 0 },
-  { id: 'floch', name: '弗洛克', type: 'vertical', w: 1, h: 2, x: 0, y: 2 },
-  { id: 'zeke', name: '吉克', type: 'vertical', w: 1, h: 2, x: 3, y: 2 },
-  { id: 'titan_1', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 1, y: 3 },
-  { id: 'titan_2', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 2, y: 3 },
-  { id: 'titan_3', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 0, y: 4 },
-  { id: 'titan_4', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 3, y: 4 },
+  { id: 'ymir', name: '尤弥尔', type: 'vertical', w: 1, h: 2, x: 3, y: 1 },
+  { id: 'floch', name: '弗洛克', type: 'vertical', w: 1, h: 2, x: 0, y: 3 },
+  { id: 'zeke', name: '吉克', type: 'vertical', w: 1, h: 2, x: 3, y: 3 },
+  { id: 'titan_1', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 1, y: 0 },
+  { id: 'titan_2', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 2, y: 0 },
+  { id: 'titan_3', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 1, y: 4 },
+  { id: 'titan_4', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 2, y: 4 },
 ];
 
 /** 困难：韩吉被压在左上角，出口附近封锁最重 */
@@ -90,7 +90,7 @@ export const DIFFICULTIES: Record<Difficulty, DifficultyConfig> = {
     name: '普通',
     sublabel: '经典阻击',
     tag: 'NORMAL',
-    description: '标准经典华容道布局，在插曲结束前突围',
+    description: '双侧竖块交错，出口由横块与小块封锁',
     initialPieces: NORMAL_LAYOUT,
   },
   hard: {
