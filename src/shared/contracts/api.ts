@@ -1,129 +1,57 @@
-export type ContentRating = 'general' | 'r18';
+import type { z } from 'zod';
+import type {
+  AdminOperationInputSchema,
+  AdminOperationResponseSchema,
+  AgeConsentInputSchema,
+  AgeConsentResponseSchema,
+  AuthenticatedUserSchema,
+  CommentInputSchema,
+  CommentSchema,
+  ContentRatingSchema,
+  LoginInputSchema,
+  LoginResponseSchema,
+  R18AssetAccessInputSchema,
+  R18AssetAccessResponseSchema,
+  ReadingProgressInputSchema,
+  ReadingProgressSchema,
+  RecoveryCodeInputSchema,
+  RecoveryCodeResponseSchema,
+  RegistrationChallengeAnswerInputSchema,
+  RegistrationChallengeAnswerResponseSchema,
+  RegistrationChallengeRequestSchema,
+  RegistrationChallengeResponseSchema,
+  RegistrationInputSchema,
+  RegistrationResponseSchema,
+  SubmissionInputSchema,
+  SubmissionResponseSchema,
+  WorkSummaryInputSchema,
+  WorkSummarySchema,
+} from './schemas';
 
-export type RegistrationChallengeRequest = Record<string, never>;
-
-export interface RegistrationChallengeResponse {
-  challengeId: string;
-  prompt: string;
-  expiresAt: string;
-}
-
-export interface RegistrationInput {
-  challengeId: string;
-  answer: string;
-  username: string;
-  password: string;
-}
-
-export interface RegistrationResponse {
-  userId: string;
-  username: string;
-  recoveryCode: string;
-}
-
-export interface LoginInput {
-  username: string;
-  password: string;
-}
-
-export interface AuthenticatedUser {
-  id: string;
-  username: string;
-  adultDeclared: boolean;
-}
-
-export interface LoginResponse {
-  accessToken: string;
-  expiresAt: string;
-  user: AuthenticatedUser;
-}
-
-export interface RecoveryCodeInput {
-  recoveryCode: string;
-  newPassword: string;
-}
-
-export interface RecoveryCodeResponse {
-  accessToken: string;
-  expiresAt: string;
-}
-
-export interface WorkSummaryInput {
-  title: string;
-  summary: string;
-  contentRating: ContentRating;
-}
-
-export interface WorkSummary extends WorkSummaryInput {
-  id: string;
-  authorName: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CommentInput {
-  workId: string;
-  body: string;
-}
-
-export interface Comment {
-  id: string;
-  workId: string;
-  authorName: string;
-  body: string;
-  createdAt: string;
-}
-
-export interface ReadingProgressInput {
-  workId: string;
-  position: number;
-}
-
-export interface ReadingProgress extends ReadingProgressInput {
-  updatedAt: string;
-}
-
-export type SubmissionInput =
-  | {
-      title: string;
-      body: string;
-      contentRating: 'general';
-    }
-  | {
-      title: string;
-      body: string;
-      contentRating: 'r18';
-      adultDeclared: true;
-    };
-
-export interface SubmissionResponse {
-  submissionId: string;
-  status: 'pending';
-  createdAt: string;
-}
-
-export interface R18AssetAccessInput {
-  workId: string;
-  adultDeclared: true;
-}
-
-export interface R18AssetAccessResponse {
-  signedUrl: string;
-  expiresInSeconds: number;
-}
-
-export type AdminOperation =
-  | 'approve_submission'
-  | 'reject_submission'
-  | 'remove_comment'
-  | 'unpublish_work';
-
-export interface AdminOperationInput {
-  operation: AdminOperation;
-  targetId: string;
-}
-
-export interface AdminOperationResponse {
-  targetId: string;
-  status: 'completed';
-}
+export type ContentRating = z.infer<typeof ContentRatingSchema>;
+export type RegistrationChallengeRequest = z.infer<typeof RegistrationChallengeRequestSchema>;
+export type RegistrationChallengeResponse = z.infer<typeof RegistrationChallengeResponseSchema>;
+export type RegistrationChallengeAnswerInput = z.infer<typeof RegistrationChallengeAnswerInputSchema>;
+export type RegistrationChallengeAnswerResponse = z.infer<typeof RegistrationChallengeAnswerResponseSchema>;
+export type RegistrationInput = z.infer<typeof RegistrationInputSchema>;
+export type RegistrationResponse = z.infer<typeof RegistrationResponseSchema>;
+export type AgeConsentInput = z.infer<typeof AgeConsentInputSchema>;
+export type AgeConsentResponse = z.infer<typeof AgeConsentResponseSchema>;
+export type AuthenticatedUser = z.infer<typeof AuthenticatedUserSchema>;
+export type LoginInput = z.infer<typeof LoginInputSchema>;
+export type LoginResponse = z.infer<typeof LoginResponseSchema>;
+export type RecoveryCodeInput = z.infer<typeof RecoveryCodeInputSchema>;
+export type RecoveryCodeResponse = z.infer<typeof RecoveryCodeResponseSchema>;
+export type WorkSummaryInput = z.infer<typeof WorkSummaryInputSchema>;
+export type WorkSummary = z.infer<typeof WorkSummarySchema>;
+export type CommentInput = z.infer<typeof CommentInputSchema>;
+export type Comment = z.infer<typeof CommentSchema>;
+export type ReadingProgressInput = z.infer<typeof ReadingProgressInputSchema>;
+export type ReadingProgress = z.infer<typeof ReadingProgressSchema>;
+export type SubmissionInput = z.infer<typeof SubmissionInputSchema>;
+export type SubmissionResponse = z.infer<typeof SubmissionResponseSchema>;
+export type R18AssetAccessInput = z.infer<typeof R18AssetAccessInputSchema>;
+export type R18AssetAccessResponse = z.infer<typeof R18AssetAccessResponseSchema>;
+export type AdminOperationInput = z.infer<typeof AdminOperationInputSchema>;
+export type AdminOperationResponse = z.infer<typeof AdminOperationResponseSchema>;
+export type AdminOperation = AdminOperationInput['operation'];
