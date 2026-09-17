@@ -8,6 +8,7 @@ type SmsMode = 'login' | 'register';
 type VerificationInfo = { verification_id: string; is_user: boolean };
 type Account = { nickname: string; createdAt?: string; inviterNickname?: string; inviteQuota?: number; invites?: Array<{ code: string; status: string }> };
 type Props = { onShowToast: (message: string) => void };
+const INVITE_VALIDATION_URL = 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/validateRegistrationInvite';
 
 const phoneNumber = (raw: string) => {
   const digits = raw.replace(/\D/g, '');
@@ -55,6 +56,16 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
       throw new Error(errorMessage(error));
     }
   };
+  const validateInvite = async (code: string) => {
+    const response = await fetch(INVITE_VALIDATION_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: JSON.stringify({ code }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.ok) throw new Error(result?.message || '粮仓钥匙服务暂时不可用，请稍后重试');
+    return result;
+  };
   const refresh = async () => {
     try {
       const user = await cloudbase.auth().getCurrentUser();
@@ -87,7 +98,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
       if (mode === 'register') {
         if (!keyReady) throw new Error('请先验证粮仓钥匙');
         if (nickname.trim().length < 2) throw new Error('昵称至少需要 2 个字');
-        await call('validateRegistrationInvite', { code: keyCode.trim().toUpperCase() });
+        await validateInvite(keyCode.trim().toUpperCase());
       }
       const formatted = phoneNumber(phone);
       const info = await cloudbase.auth().getVerification({ phone_number: formatted });
@@ -124,7 +135,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   const verifyKey = (event: React.FormEvent) => {
     event.preventDefault();
     void run(async () => {
-      const result = await call('validateRegistrationInvite', { code: keyCode.trim().toUpperCase() });
+      const result = await validateInvite(keyCode.trim().toUpperCase());
       setKeyCode(result.code); setKeyReady(true); resetSms(); onShowToast('粮仓钥匙有效');
     });
   };
