@@ -1,0 +1,2 @@
+const tcb=require('@cloudbase/node-sdk');const crypto=require('crypto');const app=tcb.init({env:tcb.SYMBOL_CURRENT_ENV});const db=app.database();
+exports.main=async event=>{const code=String(event.code||'').trim().toUpperCase();const row=(await db.collection('invite_codes').where({code,status:'unused'}).limit(1).get()).data[0];if(!row||new Date(row.expiresAt)<=new Date())return{ok:false,message:'邀请码无效或已过期'};return{ok:true,code,creatorNickname:row.creatorNickname,validationToken:crypto.createHash('sha256').update(code+String(row._id)).digest('hex')};};
