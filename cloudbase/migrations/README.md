@@ -61,7 +61,15 @@ runtime grants are installed.
    against production using a server-side administrative connection. Verify
    `pgcrypto`, all v2 tables, RLS state, the runtime role's grants/policies,
    and the atomic routines before API deployment.
-6. Deploy the API only after runtime access is installed, then test
+6. Bootstrap the first administrator only through an audited, owner-operated
+   maintenance procedure; public registration always creates a `member` and
+   cannot create the initial admin. Generate its Argon2id password hash and
+   recovery-code HMAC offline, insert the corresponding recovery-code row, and
+   set `app_users.recovery_confirmed_at = clock_timestamp()` explicitly. Never
+   place the plaintext password, recovery code, pepper, or resulting hashes in
+   this repository or deployment logs. Any later promotion must use
+   `promote_app_user`.
+7. Deploy the API only after runtime access is installed, then test
    registration, cookie session rotation, recovery-code replay, idempotent
    interactions, upload confirmation, and snapshot jobs against a
    non-production account.

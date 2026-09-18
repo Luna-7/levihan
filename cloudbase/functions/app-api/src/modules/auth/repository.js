@@ -23,6 +23,9 @@ function rpcRow(result, operation) {
     if (operation === 'register' && result && result.error && String(result.error.code) === '23505') {
       throw new ApiError(409, 'STATE_CONFLICT', 'Username is unavailable');
     }
+    if (operation === 'login' && result && result.error && String(result.error.code) === '23514') {
+      throw new ApiError(401, 'AUTH_REQUIRED', 'Invalid username or password');
+    }
     if (['register', 'answer', 'recover', 'confirm', 'logout'].includes(operation) && result && result.error && String(result.error.code) === '23514') {
       throw new ApiError(operation === 'logout' ? 401 : 400, operation === 'logout' ? 'AUTH_REQUIRED' : 'VALIDATION_FAILED', operation === 'recover' ? 'Recovery request could not be completed' : 'Request could not be completed');
     }
@@ -90,6 +93,15 @@ function createAuthRepository({ rdb }) {
       }), 'register');
       if (!row || typeof row.user_id !== 'string' || typeof row.session_id !== 'string') throw dependency();
       return { userId: row.user_id, sessionId: row.session_id };
+    },
+
+    async validateRegistrationTicket(ticketTokenHash) {
+      const value = rpcRow(await rdb.rpc('validate_registration_ticket', {
+        p_ticket_token_hash: ticketTokenHash,
+      }), 'ticket-validation');
+      const valid = value && typeof value === 'object' ? Object.values(value)[0] : value;
+      if (typeof valid !== 'boolean') throw dependency();
+      return valid;
     },
 
     async findUserByUsername(username) {

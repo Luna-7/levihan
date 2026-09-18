@@ -38,6 +38,7 @@ DROP FUNCTION IF EXISTS public.confirm_recovery_session(text, text);
 DROP FUNCTION IF EXISTS public.create_login_session(uuid, text, timestamptz, text, text);
 DROP FUNCTION IF EXISTS public.rotate_user_session(text, text, timestamptz, text);
 DROP FUNCTION IF EXISTS public.consume_registration_ticket(text, text, text, text, timestamptz, text, text);
+DROP FUNCTION IF EXISTS public.validate_registration_ticket(text);
 DROP FUNCTION IF EXISTS public.answer_registration_challenge(uuid, boolean, integer, integer, text, timestamptz);
 DROP FUNCTION IF EXISTS public.backend_v2_validate_submission_asset();
 DROP FUNCTION IF EXISTS public.backend_v2_enforce_comment_reply_depth();

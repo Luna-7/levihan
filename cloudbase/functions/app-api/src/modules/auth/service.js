@@ -109,15 +109,18 @@ function createAuthService({
 
     async register(ctx) {
       const body = strictBody(ctx.body, ['registrationTicket', 'username', 'password']);
-      if (!OPAQUE.test(body.registrationTicket || '')) throw new ApiError(400, 'VALIDATION_FAILED', 'Invalid registration ticket');
+      if (!OPAQUE.test(body.registrationTicket || '')) throw new ApiError(400, 'VALIDATION_FAILED', 'Registration could not be completed');
       const username = canonicalUsername(body.username);
       const password = validPassword(body.password);
+      const ticketTokenHash = hash('registration-ticket', body.registrationTicket);
+      const ticketValid = await repository.validateRegistrationTicket(ticketTokenHash);
+      if (!ticketValid) throw new ApiError(400, 'VALIDATION_FAILED', 'Registration could not be completed');
       const passwordHash = await passwordHasher.hash(password);
       const recovery = recoveryCode();
       const secrets = sessionSecrets();
       const sessionExpiresAt = plus(30 * 24 * 60 * 60 * 1000);
       const result = await repository.consumeRegistrationTicket({
-        ticketTokenHash: hash('registration-ticket', body.registrationTicket), username, passwordHash,
+        ticketTokenHash, username, passwordHash,
         sessionTokenHash: hash('session', secrets.sessionToken), sessionExpiresAt: sessionExpiresAt.toISOString(),
         recoveryCodeHash: hash('recovery-code', recovery), ipHash: hash('ip', requireIp(ctx)),
       });

@@ -56,12 +56,34 @@ describe('quiz-only authentication routes', () => {
     for (const path of ['/auth/challenges', '/auth/challenges/{id}/answer', '/auth/register', '/auth/login', '/auth/recover']) {
       expect(api.router.resolve('POST', path).metadata).toMatchObject({ csrfExempt: true, idempotency: { mode: 'none' } });
     }
-    expect(api.router.resolve('POST', '/auth/register').metadata.rateLimit).toBe(false);
+    expect(api.router.resolve('POST', '/auth/register').metadata.rateLimit).toEqual([
+      { bucket: 'registration-attempt-ip', limit: 5, windowSeconds: 60 },
+    ]);
     expect(api.router.resolve('POST', '/auth/recovery-confirm').metadata).toMatchObject({ idempotency: { mode: 'none' } });
     expect(api.router.resolve('POST', '/auth/recovery-confirm').metadata.csrfExempt).not.toBe(true);
     expect(api.router.resolve('POST', '/auth/recovery-confirm').metadata.sessionRequired).not.toBe(true);
     expect(api.router.resolve('POST', '/auth/logout').metadata).toMatchObject({ sessionRequired: true, idempotency: { mode: 'none' } });
     expect(api.router.resolve('GET', '/me').metadata).toMatchObject({ sessionRequired: true });
+  });
+});
+
+describe('registration attempt throttling', () => {
+  it('rejects a limited registration before invoking the Argon-backed handler', async () => {
+    const register = vi.fn();
+    const rpc = vi.fn(async (name) => {
+      if (name === 'resolve_user_session') return { data: [], error: null };
+      if (name === 'consume_rate_limit_bucket') return { data: [{ accepted: false, retry_after_seconds: 30 }], error: null };
+      throw new Error(`unexpected rpc ${name}`);
+    });
+    const rdb = { rpc, from: vi.fn() };
+    const cloudbase = { SYMBOL_CURRENT_ENV: 'current', init: vi.fn(() => ({ rdb: vi.fn(() => rdb) })) };
+    const api = createRuntime({ env, cloudbase, authService: { register }, logger: { info() {}, error() {} } });
+    const response = await api.handle(request('/auth/register', {
+      registrationTicket: 'R'.repeat(43), username: 'reader_01', password: 'a-secure-password',
+    }));
+    expect(response.statusCode).toBe(429);
+    expect(JSON.parse(response.body).errorCode).toBe('RATE_LIMITED');
+    expect(register).not.toHaveBeenCalled();
   });
 });
 
@@ -82,7 +104,7 @@ function hmac(domain, value) {
 function service(overrides = {}) {
   const repository = {
     listActiveQuestions: vi.fn(), createChallenge: vi.fn(), getChallengeQuestion: vi.fn(),
-    answerChallenge: vi.fn(), consumeRegistrationTicket: vi.fn(), findUserByUsername: vi.fn(),
+    answerChallenge: vi.fn(), validateRegistrationTicket: vi.fn(), consumeRegistrationTicket: vi.fn(), findUserByUsername: vi.fn(),
     createLoginSession: vi.fn(), revokeSession: vi.fn(), consumeRecoveryCode: vi.fn(), confirmRecoveryCode: vi.fn(), getUserProfile: vi.fn(),
     ...overrides.repository,
   };
@@ -126,10 +148,14 @@ describe('authentication service', () => {
   });
 
   it('registers a canonical member atomically and returns recovery code but no session token', async () => {
-    const { auth, repository, passwordHasher } = service({ repository: { consumeRegistrationTicket: vi.fn().mockResolvedValue({ userId: '550e8400-e29b-41d4-a716-446655440010' }) } });
+    const { auth, repository, passwordHasher } = service({ repository: {
+      validateRegistrationTicket: vi.fn().mockResolvedValue(true),
+      consumeRegistrationTicket: vi.fn().mockResolvedValue({ userId: '550e8400-e29b-41d4-a716-446655440010' }),
+    } });
     const ctx = context({ body: { registrationTicket: 'R'.repeat(43), username: '  Reader_01 ', password: 'a-secure-password' } });
     const response = await auth.register(ctx);
     expect(passwordHasher.hash).toHaveBeenCalledWith('a-secure-password');
+    expect(repository.validateRegistrationTicket).toHaveBeenCalledWith(hmac('registration-ticket', 'R'.repeat(43)));
     expect(repository.consumeRegistrationTicket).toHaveBeenCalledWith(expect.objectContaining({
       ticketTokenHash: hmac('registration-ticket', 'R'.repeat(43)), username: 'reader_01', passwordHash: 'argon:a-secure-password',
       recoveryCodeHash: hmac('recovery-code', 'ABCD-EFGH-JKLM-NPQR'), sessionTokenHash: hmac('session', 'T'.repeat(43)), ipHash: hmac('ip', '203.0.113.10'),
@@ -138,6 +164,26 @@ describe('authentication service', () => {
     expect(JSON.stringify(response)).not.toContain('T'.repeat(43));
     expect(ctx.cookiesSet.join('\n')).toMatch(/lv_session=.*HttpOnly.*Secure.*SameSite=Lax/);
     expect(ctx.cookiesSet.join('\n')).toMatch(/lv_csrf=.*Secure.*SameSite=Lax/);
+  });
+
+  it('rejects an invalid registration ticket before invoking Argon', async () => {
+    const { auth, repository, passwordHasher } = service({ repository: {
+      validateRegistrationTicket: vi.fn().mockResolvedValue(false),
+    } });
+    await expect(auth.register(context({ body: {
+      registrationTicket: 'R'.repeat(43), username: 'reader_01', password: 'a-secure-password',
+    } }))).rejects.toMatchObject({ status: 400, errorCode: 'VALIDATION_FAILED', message: 'Registration could not be completed' });
+    expect(passwordHasher.hash).not.toHaveBeenCalled();
+    expect(repository.consumeRegistrationTicket).not.toHaveBeenCalled();
+  });
+
+  it('does not distinguish malformed registration tickets from unknown tickets', async () => {
+    const { auth, repository, passwordHasher } = service();
+    await expect(auth.register(context({ body: {
+      registrationTicket: 'not-an-opaque-ticket', username: 'reader_01', password: 'a-secure-password',
+    } }))).rejects.toMatchObject({ status: 400, errorCode: 'VALIDATION_FAILED', message: 'Registration could not be completed' });
+    expect(repository.validateRegistrationTicket).not.toHaveBeenCalled();
+    expect(passwordHasher.hash).not.toHaveBeenCalled();
   });
 
   it('uses the same safe login failure for missing users and wrong passwords', async () => {
@@ -261,6 +307,19 @@ describe('authentication infrastructure adapters', () => {
   it('maps only the registration-success quota error to a safe 429', async () => {
     const repository = createAuthRepository({ rdb: { from: vi.fn(), rpc: vi.fn().mockResolvedValue({ data: null, error: { code: 'P0001', message: 'registration_success_rate_limited' } }) } });
     await expect(repository.consumeRegistrationTicket({})).rejects.toMatchObject({ status: 429, errorCode: 'RATE_LIMITED', message: 'Too many successful registrations' });
+  });
+
+  it('preflights only hashed registration tickets and maps unconfirmed login rejection safely', async () => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: true, error: null })
+      .mockResolvedValueOnce({ data: null, error: { code: '23514', message: 'login user is missing, inactive, or recovery-unconfirmed' } });
+    const repository = createAuthRepository({ rdb: { from: vi.fn(), rpc } });
+    await expect(repository.validateRegistrationTicket('a'.repeat(64))).resolves.toBe(true);
+    await expect(repository.createLoginSession({
+      userId: '550e8400-e29b-41d4-a716-446655440010', sessionTokenHash: 'b'.repeat(64),
+      currentSessionTokenHash: null, sessionExpiresAt: '2030-02-01T00:00:00.000Z', ipHash: 'c'.repeat(64),
+    })).rejects.toMatchObject({ status: 401, errorCode: 'AUTH_REQUIRED', message: 'Invalid username or password' });
+    expect(rpc).toHaveBeenNthCalledWith(1, 'validate_registration_ticket', { p_ticket_token_hash: 'a'.repeat(64) });
   });
 
   it('passes login rotation and recovery confirmation hashes only through controlled RPCs', async () => {

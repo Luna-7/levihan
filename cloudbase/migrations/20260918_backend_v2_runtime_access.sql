@@ -46,6 +46,7 @@ GRANT DELETE ON TABLE public.work_tags TO :"backend_role";
 -- These are the only routines exposed to the runtime role. Their SECURITY
 -- DEFINER bodies validate ownership/state and run with a fixed search_path.
 GRANT EXECUTE ON FUNCTION public.answer_registration_challenge(uuid, boolean, integer, integer, text, timestamptz),
+  public.validate_registration_ticket(text),
   public.consume_registration_ticket(text, text, text, text, timestamptz, text, text),
   public.create_login_session(uuid, text, timestamptz, text, text),
   public.rotate_user_session(text, text, timestamptz, text),

@@ -6,7 +6,10 @@ function registerAuthRoutes(router, service) {
 
   router.post('/auth/challenges', (ctx) => service.createChallenge(ctx), anonymousWrite);
   router.post('/auth/challenges/{id}/answer', (ctx) => service.answerChallenge(ctx), anonymousWrite);
-  router.post('/auth/register', (ctx) => service.register(ctx), { ...anonymousWrite, rateLimit: false });
+  router.post('/auth/register', (ctx) => service.register(ctx), {
+    ...anonymousWrite,
+    rateLimit: [{ bucket: 'registration-attempt-ip', limit: 5, windowSeconds: 60 }],
+  });
   router.post('/auth/login', (ctx) => service.login(ctx), anonymousWrite);
   router.post('/auth/logout', (ctx) => service.logout(ctx), sessionWrite);
   router.post('/auth/recover', (ctx) => service.recover(ctx), anonymousWrite);

@@ -19,6 +19,7 @@ export const REQUIRED_FUNCTIONS = {
   backend_v2_enforce_comment_reply_depth: '',
   backend_v2_validate_submission_asset: '',
   answer_registration_challenge: 'uuid, boolean, integer, integer, text, timestamptz',
+  validate_registration_ticket: 'text',
   consume_registration_ticket: 'text, text, text, text, timestamptz, text, text',
   create_login_session: 'uuid, text, timestamptz, text, text',
   rotate_user_session: 'text, text, timestamptz, text',
@@ -293,6 +294,7 @@ function validateMigration(migration, failures) {
   addFailure(failures, has(appUsers, /username\s*=\s*btrim\s*\(\s*username\s*\)/i), 'username must reject surrounding whitespace');
   addFailure(failures, has(appUsers, /username\s*=\s*lower\s*\(\s*username\s*\)/i), 'username must be stored in canonical lowercase form');
   addFailure(failures, has(appUsers, /username\s*~\s*'\^\[a-z0-9_\]\{3,32\}\$'/i), 'username must enforce the documented ASCII identifier regex');
+  addFailure(failures, has(appUsers, /recovery_confirmed_at\s+timestamptz(?:\s+DEFAULT\s+NULL)?/i), 'app users must track account-level recovery confirmation');
 
   const challenge = functionBody(sql, 'answer_registration_challenge');
   addFailure(failures, Boolean(challenge), 'missing atomic challenge answer function');
@@ -317,10 +319,20 @@ function validateMigration(migration, failures) {
   addFailure(failures, has(ticketConsumer, /v_registration_count\s*>\s*3[\s\S]*?registration_success_rate_limited/i), 'registration success quota must reject the fourth hourly creation');
   addFailure(failures, has(ticketConsumer, /INSERT\s+INTO\s+public\.user_sessions\s*\([^)]*recovery_confirmed_at[^)]*\)[\s\S]*?VALUES\s*\([^)]*NULL\s*\)/i), 'registration session must start recovery-unconfirmed');
 
+  const ticketValidator = functionBody(sql, 'validate_registration_ticket');
+  addFailure(failures, Boolean(ticketValidator), 'missing registration-ticket preflight routine');
+  addFailure(failures, has(ticketValidator, /FROM\s+public\.registration_tickets\s+AS\s+ticket[\s\S]*?JOIN\s+public\.registration_challenges\s+AS\s+challenge/i), 'ticket preflight must bind the ticket to its challenge');
+  addFailure(failures, has(ticketValidator, /p_ticket_token_hash\s*~\s*'\^\[0-9a-f\]\{64\}\$'[\s\S]*?ticket\.token_hash\s*=\s*p_ticket_token_hash/i), 'ticket preflight must validate and match only the hashed token');
+  addFailure(failures, has(ticketValidator, /ticket\.used_at\s+IS\s+NULL/i), 'ticket preflight must reject used tickets');
+  addFailure(failures, has(ticketValidator, /ticket\.expires_at\s*>\s*clock_timestamp\(\)/i), 'ticket preflight must reject expired tickets');
+  addFailure(failures, has(ticketValidator, /challenge\.status\s*=\s*'passed'/i), 'ticket preflight must require a passed challenge');
+  addFailure(failures, !/(?:UPDATE|DELETE\s+FROM|INSERT\s+INTO)\s+public\./i.test(ticketValidator), 'ticket preflight must remain read-only');
+
   const loginSession = functionBody(sql, 'create_login_session');
   addFailure(failures, Boolean(loginSession), 'missing controlled routine: create_login_session');
   addFailure(failures, has(loginSession, /p_expires_at\s+<=\s+clock_timestamp\(\)/i), 'login session must reject expired sessions');
   addFailure(failures, has(loginSession, /public\.app_users[\s\S]*?status\s*=\s*'active'[\s\S]*?FOR\s+KEY\s+SHARE/i), 'login session must require an active app user');
+  addFailure(failures, has(loginSession, /login_user\.recovery_confirmed_at\s+IS\s+NOT\s+NULL/i), 'login session must reject recovery-unconfirmed accounts');
   addFailure(failures, has(loginSession, /INSERT\s+INTO\s+public\.user_sessions/i), 'login session must insert a session');
   addFailure(failures, has(loginSession, /p_current_token_hash[\s\S]*?UPDATE\s+public\.user_sessions[\s\S]*?token_hash\s*=\s*p_current_token_hash[\s\S]*?revoked_at\s+IS\s+NULL/i), 'login session must revoke the optional current browser session');
   addFailure(failures, has(loginSession, /INSERT\s+INTO\s+public\.user_sessions\s*\([^)]*recovery_confirmed_at[^)]*\)[\s\S]*?clock_timestamp\(\)/i), 'ordinary login sessions must be recovery-confirmed');
@@ -328,15 +340,18 @@ function validateMigration(migration, failures) {
   const recoveryConsumer = functionBody(sql, 'consume_recovery_code');
   addFailure(failures, has(recoveryConsumer, /UPDATE\s+public\.recovery_codes[\s\S]*?SET\s+used_at\s*=\s*clock_timestamp\(\)[\s\S]*?used_at\s+IS\s+NULL[\s\S]*?RETURNING/i), 'recovery code must atomically mark used_at');
   addFailure(failures, has(recoveryConsumer, /UPDATE\s+public\.app_users[\s\S]*?password_hash/i), 'recovery code must update the password');
+  addFailure(failures, has(recoveryConsumer, /UPDATE\s+public\.app_users[\s\S]*?recovery_confirmed_at\s*=\s*NULL/i), 'recovery must reset account-level confirmation');
   addFailure(failures, has(recoveryConsumer, /UPDATE\s+public\.user_sessions[\s\S]*?revoked_at\s*=\s*clock_timestamp/i), 'recovery code must revoke existing sessions');
   addFailure(failures, has(recoveryConsumer, /INSERT\s+INTO\s+public\.recovery_codes/i), 'recovery code must insert a replacement recovery code');
   addFailure(failures, has(recoveryConsumer, /INSERT\s+INTO\s+public\.user_sessions/i), 'recovery code must create a replacement session');
   addFailure(failures, has(recoveryConsumer, /INSERT\s+INTO\s+public\.user_sessions\s*\([^)]*recovery_confirmed_at[^)]*\)[\s\S]*?VALUES\s*\([^)]*NULL\s*\)/i), 'recovery session must start recovery-unconfirmed');
 
   const recoveryConfirmation = functionBody(sql, 'confirm_recovery_session');
-  addFailure(failures, has(recoveryConfirmation, /UPDATE\s+public\.user_sessions\s+AS\s+session[\s\S]*?SET\s+recovery_confirmed_at\s*=\s*clock_timestamp\(\)/i), 'recovery confirmation must mark only its session confirmed');
+  addFailure(failures, has(recoveryConfirmation, /UPDATE\s+public\.user_sessions\s+AS\s+session[\s\S]*?SET\s+recovery_confirmed_at\s*=\s*v_now/i), 'recovery confirmation must mark its session confirmed');
   addFailure(failures, has(recoveryConfirmation, /session\.token_hash\s*=\s*p_session_token_hash[\s\S]*?session\.revoked_at\s+IS\s+NULL[\s\S]*?session\.expires_at\s*>\s*clock_timestamp\(\)[\s\S]*?session\.recovery_confirmed_at\s+IS\s+NULL/i), 'recovery confirmation must require an active unconfirmed session');
   addFailure(failures, has(recoveryConfirmation, /recovery\.user_id\s*=\s*session\.user_id[\s\S]*?recovery\.code_hash\s*=\s*p_recovery_code_hash[\s\S]*?recovery\.used_at\s+IS\s+NULL/i), 'recovery confirmation must match an unused code owned by the session user');
+  addFailure(failures, has(recoveryConfirmation, /account\.id\s*=\s*session\.user_id[\s\S]*?account\.status\s*=\s*'active'[\s\S]*?account\.recovery_confirmed_at\s+IS\s+NULL/i), 'recovery confirmation must lock to the active unconfirmed owning account');
+  addFailure(failures, has(recoveryConfirmation, /UPDATE\s+public\.app_users[\s\S]*?SET\s+recovery_confirmed_at\s*=\s*v_now[\s\S]*?WHERE\s+id\s*=\s*v_user_id[\s\S]*?recovery_confirmed_at\s+IS\s+NULL/i), 'recovery confirmation must confirm the owning account in the same routine');
   addFailure(failures, !/UPDATE\s+public\.recovery_codes[\s\S]*?used_at/i.test(recoveryConfirmation), 'recovery confirmation must not consume the recovery code');
   addFailure(failures, has(recoveryConfirmation, /RETURN\s+QUERY[\s\S]*?SELECT\s+app_user\.id\s*,\s*app_user\.username\s*,\s*app_user\.role\s*,\s*app_user\.status/i), 'recovery confirmation must return its safe user profile atomically');
 
@@ -362,6 +377,7 @@ function validateMigration(migration, failures) {
   addFailure(failures, has(sessionResolver, /session\.revoked_at\s+IS\s+NULL/i), 'session resolver must reject revoked sessions');
   addFailure(failures, has(sessionResolver, /session\.expires_at\s*>\s*clock_timestamp\(\)/i), 'session resolver must reject expired sessions');
   addFailure(failures, has(sessionResolver, /session\.recovery_confirmed_at\s+IS\s+NOT\s+NULL/i), 'session resolver must reject recovery-unconfirmed sessions');
+  addFailure(failures, has(sessionResolver, /app_user\.recovery_confirmed_at\s+IS\s+NOT\s+NULL/i), 'session resolver must reject recovery-unconfirmed accounts');
   addFailure(failures, has(sessionResolver, /app_user\.status\s*=\s*'active'/i), 'session resolver must require an active user');
   addFailure(failures, has(sessionResolver, /SELECT\s+session\.user_id\s*,\s*app_user\.role/i), 'session resolver must return only user id and role');
 

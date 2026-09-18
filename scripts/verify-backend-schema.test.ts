@@ -376,4 +376,58 @@ describe('backend v2 PostgreSQL migration', () => {
       expect(failures.some((failure) => /session|recovery|question|registration/i.test(failure)), name).toBe(true);
     }
   });
+
+  it('binds recovery confirmation to the account and keeps ticket preflight separate from atomic consumption', () => {
+    const migration = readFileSync(migrationPath, 'utf8');
+    const rollback = readFileSync(rollbackPath, 'utf8');
+    const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
+    const appUsersStart = migration.indexOf('CREATE TABLE public.app_users');
+    const appUsersEnd = migration.indexOf('CREATE UNIQUE INDEX app_users_username_lower_key', appUsersStart);
+    const appUsers = migration.slice(appUsersStart, appUsersEnd);
+    const loginStart = migration.indexOf('CREATE FUNCTION public.create_login_session');
+    const loginEnd = migration.indexOf('CREATE FUNCTION public.rotate_user_session', loginStart);
+    const login = migration.slice(loginStart, loginEnd);
+    const recoveryStart = migration.indexOf('CREATE FUNCTION public.consume_recovery_code');
+    const recoveryEnd = migration.indexOf('CREATE FUNCTION public.confirm_recovery_session', recoveryStart);
+    const recovery = migration.slice(recoveryStart, recoveryEnd);
+    const confirmationStart = migration.indexOf('CREATE FUNCTION public.confirm_recovery_session');
+    const confirmationEnd = migration.indexOf('CREATE FUNCTION public.promote_app_user', confirmationStart);
+    const confirmation = migration.slice(confirmationStart, confirmationEnd);
+
+    expect(appUsers).toContain('recovery_confirmed_at timestamptz');
+    expect(login).toContain('login_user.recovery_confirmed_at IS NOT NULL');
+    expect(recovery).toContain('recovery_confirmed_at = NULL');
+    expect(confirmation).toContain('UPDATE public.app_users');
+    expect(confirmation).toContain('SET recovery_confirmed_at = v_now');
+    expect(migration).toContain('app_user.recovery_confirmed_at IS NOT NULL');
+    expect(migration).toContain('CREATE FUNCTION public.validate_registration_ticket');
+    expect(runtimeAccess).toContain('public.validate_registration_ticket(text)');
+    expect(rollback).toContain('DROP FUNCTION IF EXISTS public.validate_registration_ticket(text);');
+  });
+
+  it('detects account-confirmation and ticket-preflight security mutations', () => {
+    const migration = readFileSync(migrationPath, 'utf8');
+    const rollback = readFileSync(rollbackPath, 'utf8');
+    const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
+    const mutateRoutine = (sql: string, name: string, nextName: string, mutate: (routine: string) => string) => {
+      const start = sql.indexOf(`CREATE FUNCTION public.${name}`);
+      const end = sql.indexOf(`CREATE FUNCTION public.${nextName}`, start);
+      return `${sql.slice(0, start)}${mutate(sql.slice(start, end))}${sql.slice(end)}`;
+    };
+    const mutations = [
+      ['account resolver gate', (sql: string) => sql.replace('app_user.recovery_confirmed_at IS NOT NULL', 'true')],
+      ['login account gate', (sql: string) => sql.replace('login_user.recovery_confirmed_at IS NOT NULL', 'true')],
+      ['recovery account reset', (sql: string) => sql.replace('recovery_confirmed_at = NULL', 'recovery_confirmed_at = clock_timestamp()')],
+      ['confirmation account update', (sql: string) => mutateRoutine(sql, 'confirm_recovery_session', 'promote_app_user', (routine) => routine.replace('UPDATE public.app_users', 'UPDATE public.missing_app_users'))],
+      ['preflight unused ticket', (sql: string) => mutateRoutine(sql, 'validate_registration_ticket', 'consume_registration_ticket', (routine) => routine.replace('ticket.used_at IS NULL', 'true'))],
+      ['preflight ticket expiry', (sql: string) => mutateRoutine(sql, 'validate_registration_ticket', 'consume_registration_ticket', (routine) => routine.replace('ticket.expires_at > clock_timestamp()', 'true'))],
+      ['preflight passed challenge', (sql: string) => mutateRoutine(sql, 'validate_registration_ticket', 'consume_registration_ticket', (routine) => routine.replace("challenge.status = 'passed'", 'true'))],
+    ] as const;
+
+    for (const [name, mutate] of mutations) {
+      const failures = validateBackendSchema({ migration: mutate(migration), rollback, runtimeAccess });
+      expect(failures.length, name).toBeGreaterThan(0);
+      expect(failures.some((failure) => /session|recovery|login|ticket/i.test(failure)), name).toBe(true);
+    }
+  });
 });

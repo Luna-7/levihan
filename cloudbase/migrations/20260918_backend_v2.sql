@@ -26,6 +26,7 @@ CREATE TABLE public.app_users (
   password_hash text NOT NULL,
   role text NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'admin')),
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'deleted')),
+  recovery_confirmed_at timestamptz DEFAULT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   last_login_at timestamptz
@@ -418,6 +419,7 @@ LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
      AND session.expires_at > clock_timestamp()
      AND session.recovery_confirmed_at IS NOT NULL
      AND app_user.status = 'active'
+     AND app_user.recovery_confirmed_at IS NOT NULL
    LIMIT 1
 $$;
 
@@ -638,6 +640,27 @@ BEGIN
 END;
 $$;
 
+-- Cheap read-only admission check. The caller still has to consume the ticket
+-- atomically because this result can become stale immediately after it returns.
+CREATE FUNCTION public.validate_registration_ticket(p_ticket_token_hash text)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+      FROM public.registration_tickets AS ticket
+      JOIN public.registration_challenges AS challenge
+        ON challenge.id = ticket.challenge_id
+     WHERE p_ticket_token_hash ~ '^[0-9a-f]{64}$'
+       AND ticket.token_hash = p_ticket_token_hash
+       AND ticket.used_at IS NULL
+       AND ticket.expires_at > clock_timestamp()
+       AND challenge.status = 'passed'
+  )
+$$;
+
 -- Atomic ticket consumption: a row lock/update makes concurrent replays fail,
 -- while the user, challenge state, and HttpOnly-cookie token hash are created
 -- in the same transaction.
@@ -718,11 +741,13 @@ BEGIN
   IF p_expires_at <= clock_timestamp() THEN
     RAISE EXCEPTION 'login session expiry must be in the future' USING ERRCODE = '22023';
   END IF;
-  PERFORM 1 FROM public.app_users
-   WHERE id = p_user_id AND status = 'active'
+  PERFORM 1 FROM public.app_users AS login_user
+   WHERE login_user.id = p_user_id
+     AND login_user.status = 'active'
+     AND login_user.recovery_confirmed_at IS NOT NULL
    FOR KEY SHARE;
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'login user is missing or inactive' USING ERRCODE = '23514';
+    RAISE EXCEPTION 'login user is unavailable' USING ERRCODE = '23514';
   END IF;
   IF p_current_token_hash IS NOT NULL THEN
     IF p_current_token_hash !~ '^[0-9a-f]{64}$' THEN
@@ -793,7 +818,10 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'recovery code is invalid or already used' USING ERRCODE = '23514';
   END IF;
-  UPDATE public.app_users SET password_hash = p_new_password_hash WHERE id = v_user_id;
+  UPDATE public.app_users
+     SET password_hash = p_new_password_hash,
+         recovery_confirmed_at = NULL
+   WHERE id = v_user_id;
   UPDATE public.user_sessions SET revoked_at = clock_timestamp()
    WHERE user_id = v_user_id AND revoked_at IS NULL;
   INSERT INTO public.recovery_codes (user_id, code_hash)
@@ -822,18 +850,30 @@ SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_user_id uuid;
+  v_now timestamptz := clock_timestamp();
 BEGIN
   UPDATE public.user_sessions AS session
-     SET recovery_confirmed_at = clock_timestamp()
-    FROM public.recovery_codes AS recovery
+     SET recovery_confirmed_at = v_now
+    FROM public.recovery_codes AS recovery,
+         public.app_users AS account
    WHERE session.token_hash = p_session_token_hash
      AND session.revoked_at IS NULL
      AND session.expires_at > clock_timestamp()
      AND session.recovery_confirmed_at IS NULL
+     AND account.id = session.user_id
+     AND account.status = 'active'
+     AND account.recovery_confirmed_at IS NULL
      AND recovery.user_id = session.user_id
      AND recovery.code_hash = p_recovery_code_hash
      AND recovery.used_at IS NULL
   RETURNING session.user_id INTO v_user_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'recovery confirmation is invalid or already completed' USING ERRCODE = '23514';
+  END IF;
+  UPDATE public.app_users
+     SET recovery_confirmed_at = v_now
+   WHERE id = v_user_id
+     AND recovery_confirmed_at IS NULL;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'recovery confirmation is invalid or already completed' USING ERRCODE = '23514';
   END IF;
@@ -976,6 +1016,7 @@ REVOKE EXECUTE ON FUNCTION public.backend_v2_set_updated_at() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.backend_v2_enforce_comment_reply_depth() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.backend_v2_validate_submission_asset() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.answer_registration_challenge(uuid, boolean, integer, integer, text, timestamptz) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.validate_registration_ticket(text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.consume_registration_ticket(text, text, text, text, timestamptz, text, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.create_login_session(uuid, text, timestamptz, text, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.rotate_user_session(text, text, timestamptz, text) FROM PUBLIC;
