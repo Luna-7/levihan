@@ -48,6 +48,12 @@ describe('content pipeline migration verifier', () => {
     expect(validate({ rollback: rollback.replace('rollback_requires_promotion_drain', 'unsafe_promotion_drop') })).not.toEqual([]);
     const guard = rollback.match(/DO \$\$ BEGIN[\s\S]*?rollback_requires_promotion_drain[\s\S]*?END \$\$;/)?.[0] || '';
     expect(validate({ rollback: rollback.replace(guard, '') + `\n${guard}` })).not.toEqual([]);
+    const promotionLock = 'LOCK TABLE public.upload_files IN SHARE MODE;';
+    expect(validate({ rollback: rollback.replace(promotionLock, '') })).not.toEqual([]);
+    const withoutLock = rollback.replace(promotionLock, '');
+    expect(validate({ rollback: withoutLock.replace(guard, `${guard}\n${promotionLock}`) })).not.toEqual([]);
+    const firstDestructive = 'DROP TRIGGER IF EXISTS work_chapters_set_updated_at ON public.work_chapters;';
+    expect(validate({ rollback: withoutLock.replace(firstDestructive, `${firstDestructive}\n${promotionLock}`) })).not.toEqual([]);
   });
 
   it('rejects mutations removing domain hashes, immutable COS protection, or the deployed timer', () => {

@@ -97,11 +97,12 @@ export function validateContentPipeline({ migration, rollback, access, accessRol
   const cleanupFail = routineDefinition(sql, 'fail_upload_promotion_cleanup');
   add(failures, /status\s*=\s*'cleanup_pending'/i.test(cleanupFail) && /cleanup_token\s*=\s*p_cleanup_token/i.test(cleanupFail) && /asset_id\s+IS\s+NULL/i.test(cleanupFail), 'cleanup failure reporting must be status, asset and token fenced');
   add(failures, /rollback_requires_content_export/i.test(down) && down.indexOf('rollback_requires_content_export') < down.indexOf('DROP FUNCTION'), 'rollback compatibility preflight must run before destructive changes');
+  const promotionLock = down.search(/\bLOCK\s+TABLE\s+public\.upload_files\s+IN\s+SHARE\s+MODE\s*;/i);
   const promotionGuard = down.indexOf('rollback_requires_promotion_drain');
   const destructive = down.search(/\b(?:DROP|ALTER|UPDATE|DELETE|INSERT|CREATE)\b/i);
-  add(failures, promotionGuard >= 0 && destructive >= 0 && promotionGuard < destructive
+  add(failures, promotionLock >= 0 && promotionGuard >= 0 && destructive >= 0 && promotionLock < promotionGuard && promotionGuard < destructive
     && /status\s+IN\s*\(\s*'promoting'\s*,\s*'cleanup_pending'\s*\)/i.test(down.slice(0, destructive))
-    && /promotion_token\s+IS\s+NOT\s+NULL/i.test(down.slice(0, destructive)) && /cleanup_token\s+IS\s+NOT\s+NULL/i.test(down.slice(0, destructive)), 'rollback must drain active fenced promotions before any destructive statement');
+    && /promotion_token\s+IS\s+NOT\s+NULL/i.test(down.slice(0, destructive)) && /cleanup_token\s+IS\s+NOT\s+NULL/i.test(down.slice(0, destructive)), 'rollback must lock uploads and drain active fenced promotions before any destructive statement');
   add(failures, /work\.rating\s*<>\s*'restricted'/i.test(routineDefinition(sql, 'list_public_catalog')), 'restricted works must be excluded from public snapshots');
   add(failures, /asset\.access_level\s*=\s*'public'/i.test(routineDefinition(sql, 'list_public_catalog')), 'private assets must be excluded from public snapshots');
   add(failures, /asset\.storage_zone\s*=\s*'public'/i.test(routineDefinition(sql, 'list_public_catalog')) && /asset\.storage_zone\s*=\s*'public'/i.test(routineDefinition(sql, 'get_public_work')), 'public reads must enforce the public storage zone');

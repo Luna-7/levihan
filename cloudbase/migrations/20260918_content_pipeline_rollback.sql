@@ -1,5 +1,10 @@
 BEGIN;
 
+-- SHARE conflicts with the ROW EXCLUSIVE lock taken by upload INSERT/UPDATE/DELETE.
+-- Hold it until COMMIT so the promotion preflight and destructive rollback are one
+-- serialized critical section.
+LOCK TABLE public.upload_files IN SHARE MODE;
+
 DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM public.upload_files
