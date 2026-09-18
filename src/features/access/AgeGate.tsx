@@ -1,20 +1,27 @@
 import React, { useState } from 'react';
 import { acceptAgeConsent, getRestrictedAccess, type RestrictedAccessResponse } from './api';
 
-type Props = { workId: string; policyVersion: string; warning: string; onGranted: (access: RestrictedAccessResponse) => void };
+type Props = {
+  workId: string;
+  policyVersion: string;
+  warning: string;
+  onGranted: (access: RestrictedAccessResponse) => void;
+  onDenied?: (errorCode: string) => void;
+};
 
 const SAFE_MESSAGES: Record<string, string> = {
   STATE_CONFLICT: '内容规则已更新，请刷新后重新确认', AUTH_REQUIRED: '请先登录', SESSION_EXPIRED: '请先登录',
   AGE_CONSENT_REQUIRED: '需要重新确认年龄声明', ACCESS_DENIED: '当前账号无法访问此内容', NOT_FOUND: '内容已下架或不存在',
 };
 
-export function AgeGate({ workId, policyVersion, warning, onGranted }: Props) {
+export function AgeGate({ workId, policyVersion, warning, onGranted, onDenied }: Props) {
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const proceed = async () => {
     if (!confirmed || busy) return;
     setBusy(true); setMessage('');
+    onDenied?.('PENDING');
     try {
       await acceptAgeConsent(policyVersion);
       const access = await getRestrictedAccess(workId);
@@ -22,6 +29,7 @@ export function AgeGate({ workId, policyVersion, warning, onGranted }: Props) {
       onGranted(access);
     } catch (error) {
       const code = error && typeof error === 'object' && 'errorCode' in error ? String(error.errorCode) : 'INTERNAL_ERROR';
+      onDenied?.(code);
       setMessage(SAFE_MESSAGES[code] || '暂时无法访问，请稍后重试');
     } finally { setBusy(false); }
   };

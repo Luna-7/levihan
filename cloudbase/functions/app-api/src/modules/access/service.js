@@ -11,7 +11,8 @@ function exactObject(value, fields) {
 
 function denied(decision) {
   const code = decision.errorCode || 'ACCESS_DENIED';
-  return new ApiError(code === 'NOT_FOUND' ? 404 : 403, code, code === 'AGE_CONSENT_REQUIRED' ? 'Current adult-content consent is required' : 'Access denied');
+  const status = code === 'NOT_FOUND' ? 404 : code === 'SESSION_EXPIRED' ? 401 : code === 'ASSET_SET_CHANGED' ? 409 : 403;
+  return new ApiError(status, code, code === 'AGE_CONSENT_REQUIRED' ? 'Current adult-content consent is required' : code === 'ASSET_SET_CHANGED' ? 'Content changed; request access again' : 'Access denied');
 }
 
 function createAccessService({ repository, objectStore }) {
@@ -35,7 +36,8 @@ function createAccessService({ repository, objectStore }) {
     async getWorkAccess(ctx) {
       if (!UUID.test(ctx.params.id)) throw new ApiError(400, 'VALIDATION_FAILED', 'Work id is invalid');
       if (ctx.body !== undefined && !exactObject(ctx.body, [])) throw new ApiError(400, 'VALIDATION_FAILED', 'Request body must be empty');
-      const authorized = await repository.authorizeWorkAccess({ userId: ctx.actorId, role: ctx.actorRole, workId: ctx.params.id });
+      if (!UUID.test(ctx.actorSessionId || '')) throw new ApiError(401, 'SESSION_EXPIRED', 'Session expired');
+      const authorized = await repository.authorizeWorkAccess({ userId: ctx.actorId, sessionId: ctx.actorSessionId, workId: ctx.params.id });
       if (!authorized.decision.allowed) throw denied(authorized.decision);
       const assets = await Promise.all(authorized.assets.map(async (asset) => {
         if (!asset.objectKey.startsWith(`protected/works/${ctx.params.id}/`)) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Authorized asset boundary is invalid');
@@ -45,9 +47,14 @@ function createAccessService({ repository, objectStore }) {
       }));
       // URLs are held only in this request's memory. The second database check
       // defines issuance; a concurrent revoke/archive before it discards them.
-      const final = await repository.finalizeWorkAccess({ authorizationId: authorized.authorizationId, userId: ctx.actorId, workId: ctx.params.id });
+      const final = await repository.finalizeWorkAccess({ authorizationId: authorized.authorizationId, userId: ctx.actorId, sessionId: ctx.actorSessionId, workId: ctx.params.id });
       if (!final.allowed) throw denied(final);
       return { statusCode: 200, headers: ACCESS_HEADERS, body: { work: authorized.work, assets } };
+    },
+    async setRestrictedAccess(ctx, action) {
+      if (ctx.actorRole !== 'admin') throw new ApiError(403, 'ACCESS_DENIED', 'Administrator access required');
+      if (!UUID.test(ctx.params.id || '') || !['revoke', 'restore'].includes(action) || !exactObject(ctx.body, ['reason']) || typeof ctx.body.reason !== 'string' || ctx.body.reason.trim().length < 3 || ctx.body.reason.trim().length > 500) throw new ApiError(400, 'VALIDATION_FAILED', 'A valid user and reason are required');
+      return repository.setRestrictedAccess({ adminId: ctx.actorId, userId: ctx.params.id, action, reason: ctx.body.reason.trim(), requestId: ctx.requestId });
     },
   };
 }

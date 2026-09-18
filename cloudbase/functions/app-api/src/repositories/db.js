@@ -96,12 +96,13 @@ function createCloudBaseActorResolver({ rdb, config }) {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43,256}$/.test(token)) return null;
     const tokenHash = domainHash(config.authHashPepper, 'session', token);
     let result;
-    try { result = await rdb.rpc('resolve_user_session', { p_token_hash: tokenHash }); } catch (error) { throw dependencyError(error); }
+    try { result = await rdb.rpc('resolve_content_user_session', { p_token_hash: tokenHash }); } catch (error) { throw dependencyError(error); }
     if (!result || result.error) throw dependencyError(result && result.error);
     const row = Array.isArray(result.data) ? result.data[0] : result.data;
     if (!row) return null;
-    if (typeof row.user_id !== 'string' || !['member', 'admin'].includes(row.role)) throw dependencyError({ name: 'InvalidRpcResultError' });
-    return { actorId: row.user_id, role: row.role };
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuid.test(row.user_id || '') || !uuid.test(row.session_id || '') || !['member', 'admin'].includes(row.role)) throw dependencyError({ name: 'InvalidRpcResultError' });
+    return { actorId: row.user_id, role: row.role, sessionId: row.session_id };
   };
 }
 

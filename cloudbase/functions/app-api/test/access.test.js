@@ -11,6 +11,7 @@ const { createRouter } = require('../src/router');
 
 const userId = '550e8400-e29b-41d4-a716-446655440001';
 const workId = '550e8400-e29b-41d4-a716-446655440002';
+const sessionId = '550e8400-e29b-41d4-a716-446655440005';
 
 describe('table-driven content access policy', () => {
   it('covers every actor/status/work/rating/consent combination without exposing unpublished metadata', () => {
@@ -56,7 +57,7 @@ describe('table-driven content access policy', () => {
 });
 
 describe('age consent and signed access service', () => {
-  const ctx = (overrides = {}) => ({ actorId: userId, actorRole: 'member', requestId: 'req-1', body: {}, params: {}, ...overrides });
+  const ctx = (overrides = {}) => ({ actorId: userId, actorRole: 'member', actorSessionId: sessionId, requestId: 'req-1', body: {}, params: {}, ...overrides });
 
   it('serves the current warning without collecting identity attributes', async () => {
     const repository = { getAgePolicy: vi.fn().mockResolvedValue({ version: '2026-09', warning: '成人内容警告' }) };
@@ -91,9 +92,9 @@ describe('age consent and signed access service', () => {
     const objectStore = { signGet: vi.fn().mockResolvedValue({ url: 'https://private.cos.ap-test.myqcloud.com/protected/x?sign=redacted', expiresAt: '2030-01-01T00:05:00.000Z' }) };
     const service = createAccessService({ repository, objectStore });
     const result = await service.getWorkAccess(ctx({ params: { id: workId } }));
-    expect(repository.authorizeWorkAccess).toHaveBeenCalledWith({ userId, role: 'member', workId });
+    expect(repository.authorizeWorkAccess).toHaveBeenCalledWith({ userId, sessionId, workId });
     expect(objectStore.signGet).toHaveBeenCalledWith({ objectKey: `protected/works/${workId}/p1.webp`, expiresInSeconds: 300 });
-    expect(repository.finalizeWorkAccess).toHaveBeenCalledWith({ authorizationId, userId, workId });
+    expect(repository.finalizeWorkAccess).toHaveBeenCalledWith({ authorizationId, userId, sessionId, workId });
     expect(result.body.assets[0]).toEqual({ id: '550e8400-e29b-41d4-a716-446655440003', kind: 'page', mimeType: 'image/webp', pageNo: 1, chapterPosition: 1, url: 'https://private.cos.ap-test.myqcloud.com/protected/x?sign=redacted', expiresAt: '2030-01-01T00:05:00.000Z' });
     expect(JSON.stringify(result.body)).not.toContain('objectKey');
     expect(result.headers).toMatchObject({ 'cache-control': 'private, no-store, max-age=0', pragma: 'no-cache', 'referrer-policy': 'no-referrer' });
@@ -107,6 +108,22 @@ describe('age consent and signed access service', () => {
     const objectStore = { signGet: vi.fn().mockResolvedValue({ url: 'https://private.cos.test/protected?signature=secret', expiresAt: '2030-01-01T00:05:00.000Z' }) };
     const service = createAccessService({ repository, objectStore });
     await expect(service.getWorkAccess(ctx({ params: { id: workId } }))).rejects.toMatchObject({ status: 403, errorCode: 'AGE_CONSENT_REQUIRED' });
+  });
+
+  it.each(['SESSION_EXPIRED', 'ASSET_SET_CHANGED'])('discards signed URLs when final session/asset validation returns %s', async (errorCode) => {
+    const repository = {
+      authorizeWorkAccess: vi.fn().mockResolvedValue({ authorizationId: userId, decision: { allowed: true }, work: { id: workId }, assets: [{ id: userId, kind: 'body', objectKey: `protected/works/${workId}/body.txt`, mimeType: 'text/plain' }] }),
+      finalizeWorkAccess: vi.fn().mockResolvedValue({ allowed: false, errorCode }),
+    };
+    const service = createAccessService({ repository, objectStore: { signGet: vi.fn().mockResolvedValue({ url: 'https://private.test/signed', expiresAt: '2030-01-01T00:05:00Z' }) } });
+    await expect(service.getWorkAccess(ctx({ params: { id: workId } }))).rejects.toMatchObject({ status: errorCode === 'SESSION_EXPIRED' ? 401 : 409, errorCode });
+  });
+
+  it.each([['revoke', 'blocked'], ['restore', 'allowed']])('lets active admins %s persistent restricted access', async (action, status) => {
+    const repository = { setRestrictedAccess: vi.fn().mockResolvedValue({ id: userId, status }) };
+    const service = createAccessService({ repository, objectStore: {} });
+    await expect(service.setRestrictedAccess(ctx({ actorRole: 'admin', params: { id: userId }, body: { reason: 'moderation decision' } }), action)).resolves.toEqual({ id: userId, status });
+    expect(repository.setRestrictedAccess).toHaveBeenCalledWith({ adminId: userId, userId, action, reason: 'moderation decision', requestId: 'req-1' });
   });
 
   it.each([
@@ -129,18 +146,37 @@ describe('access routes and repository boundary', () => {
     expect(router.resolve('PUT', '/me/age-consent').metadata).toMatchObject({ sessionRequired: true, idempotency: { mode: 'none' } });
     expect(router.resolve('DELETE', '/me/age-consent').metadata).toMatchObject({ sessionRequired: true });
     expect(router.resolve('POST', `/works/${workId}/access`).metadata).toMatchObject({ sessionRequired: true, idempotency: { mode: 'none' } });
+    expect(router.resolve('POST', `/admin/users/${userId}/restricted-access/revoke`).metadata).toMatchObject({ sessionRequired: true, role: 'admin', idempotency: { mode: 'required' } });
+    expect(router.resolve('POST', `/admin/users/${userId}/restricted-access/restore`).metadata).toMatchObject({ sessionRequired: true, role: 'admin', idempotency: { mode: 'required' } });
   });
 
   it('maps atomic authorization RPC output without client-supplied keys', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: [{ allowed: true, work_id: workId, work_type: 'comic', title: 'X', rating: 'restricted', assets: [{ id: userId, kind: 'body', object_key: `protected/works/${workId}/body.txt`, mime_type: 'text/plain' }] }], error: null });
     const repository = createAccessRepository({ rdb: { rpc } });
-    const result = await repository.authorizeWorkAccess({ userId, role: 'member', workId });
-    expect(rpc).toHaveBeenCalledWith('authorize_work_access', { p_user_id: userId, p_work_id: workId, p_role: 'member' });
+    const result = await repository.authorizeWorkAccess({ userId, sessionId, workId });
+    expect(rpc).toHaveBeenCalledWith('authorize_work_access', { p_user_id: userId, p_session_id: sessionId, p_work_id: workId });
     expect(result.assets[0].objectKey).toMatch(/^protected\/works\//);
+  });
+
+  it('binds finalization to the same concrete session and never maps it into output', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [{ allowed: false, error_code: 'SESSION_EXPIRED' }], error: null });
+    const repository = createAccessRepository({ rdb: { rpc } });
+    await expect(repository.finalizeWorkAccess({ authorizationId: userId, userId, sessionId, workId })).resolves.toEqual({ allowed: false, errorCode: 'SESSION_EXPIRED' });
+    expect(rpc).toHaveBeenCalledWith('finalize_work_access', { p_authorization_id: userId, p_user_id: userId, p_session_id: sessionId, p_work_id: workId });
+    expect(JSON.stringify(await repository.finalizeWorkAccess({ authorizationId: userId, userId, sessionId, workId }))).not.toContain(sessionId);
   });
 
   it('maps a concurrent policy rotation to a retryable state conflict', async () => {
     const repository = createAccessRepository({ rdb: { rpc: vi.fn().mockResolvedValue({ data: null, error: { message: 'policy_stale' } }) } });
     await expect(repository.setAgeConsent({ userId, policyVersion: 'old', requestId: 'req' })).rejects.toMatchObject({ status: 409, errorCode: 'STATE_CONFLICT' });
+  });
+
+  it.each([
+    ['not_found', 404, 'NOT_FOUND'],
+    ['invalid_access_control', 400, 'VALIDATION_FAILED'],
+  ])('maps admin restriction storage error %s safely', async (message, status, errorCode) => {
+    const repository = createAccessRepository({ rdb: { rpc: vi.fn().mockResolvedValue({ data: null, error: { message } }) } });
+    await expect(repository.setRestrictedAccess({ adminId: userId, userId: workId, action: 'revoke', reason: 'policy', requestId: 'req' }))
+      .rejects.toMatchObject({ status, errorCode });
   });
 });

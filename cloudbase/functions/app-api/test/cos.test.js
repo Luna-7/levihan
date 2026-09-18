@@ -5,6 +5,16 @@ import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const { createCosObjectStore } = require('../src/infrastructure/cos');
+const SIGN_NOW_SECONDS = 2_000_000_000;
+function signedReadUrl(changes = {}) {
+  const params = new URLSearchParams({
+    'q-sign-algorithm': 'sha1', 'q-ak': 'testpublicid1', 'q-sign-time': `${SIGN_NOW_SECONDS - 5};${SIGN_NOW_SECONDS + 295}`,
+    'q-key-time': `${SIGN_NOW_SECONDS - 5};${SIGN_NOW_SECONDS + 295}`, 'q-signature': 'a'.repeat(40),
+    ...(changes.params || {}),
+  });
+  for (const key of changes.remove || []) params.delete(key);
+  return `${changes.origin || 'https://private-123.cos.ap-test.myqcloud.com'}${changes.path || '/protected/works/w/p.webp'}?${params}${changes.fragment || ''}`;
+}
 
 describe('COS object-store adapter', () => {
   it('uses methods exposed by the installed COS SDK contract', () => {
@@ -23,22 +33,33 @@ describe('COS object-store adapter', () => {
   });
 
   it('signs GET only from the private protected work prefix for exactly five minutes', async () => {
-    const getObjectUrl = vi.fn((_params, callback) => callback(null, { Url: 'https://private-123.cos.ap-test.myqcloud.com/protected/works/w/p.webp?q-sign-algorithm=sha1' }));
-    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: { getObjectUrl } });
+    const getObjectUrl = vi.fn((_params, callback) => callback(null, { Url: signedReadUrl() }));
+    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: { getObjectUrl }, clock: () => SIGN_NOW_SECONDS * 1000 });
     const result = await store.signGet({ objectKey: 'protected/works/w/p.webp', expiresInSeconds: 300 });
     expect(getObjectUrl).toHaveBeenCalledWith(expect.objectContaining({ Bucket: 'private-123', Region: 'ap-test', Key: 'protected/works/w/p.webp', Method: 'GET', Sign: true, Expires: 300 }), expect.any(Function));
     expect(result.url).toContain('private-123.cos.ap-test.myqcloud.com');
+    expect(result.expiresAt).toBe(new Date((SIGN_NOW_SECONDS + 295) * 1000).toISOString());
     await expect(store.signGet({ objectKey: 'media/works/w/p.webp', expiresInSeconds: 300 })).rejects.toMatchObject({ status: 400 });
     await expect(store.signGet({ objectKey: 'protected/works/w/p.webp', expiresInSeconds: 600 })).rejects.toMatchObject({ status: 400 });
   });
 
   it.each([
-    'https://private-123.cos-website.ap-test.myqcloud.com/protected/works/w/p.webp?q-sign-algorithm=sha1',
-    'https://private-123.cos.ap-test.myqcloud.com.evil.test/protected/works/w/p.webp?q-sign-algorithm=sha1',
-    'https://private-123.cos.ap-test.myqcloud.com/protected/works/other/p.webp?q-sign-algorithm=sha1',
-    'https://private-123.cos.ap-test.myqcloud.com/protected/works/w/p.webp',
-  ])('rejects malformed or unsigned COS read URL %s', async (url) => {
-    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: { getObjectUrl: vi.fn((_params, cb) => cb(null, { Url: url })) } });
+    ['website host', signedReadUrl({ origin: 'https://private-123.cos-website.ap-test.myqcloud.com' })],
+    ['suffix host', signedReadUrl({ origin: 'https://private-123.cos.ap-test.myqcloud.com.evil.test' })],
+    ['userinfo', signedReadUrl({ origin: 'https://user@private-123.cos.ap-test.myqcloud.com' })],
+    ['non-default port', signedReadUrl({ origin: 'https://private-123.cos.ap-test.myqcloud.com:444' })],
+    ['wrong path', signedReadUrl({ path: '/protected/works/other/p.webp' })],
+    ['fragment', signedReadUrl({ fragment: '#leak' })],
+    ...['q-sign-algorithm', 'q-ak', 'q-sign-time', 'q-key-time', 'q-signature'].map((field) => [`missing ${field}`, signedReadUrl({ remove: [field] })]),
+    ['algorithm', signedReadUrl({ params: { 'q-sign-algorithm': 'sha256' } })],
+    ['access key', signedReadUrl({ params: { 'q-ak': 'bad!' } })],
+    ['signature', signedReadUrl({ params: { 'q-signature': 'xyz' } })],
+    ['mismatched key time', signedReadUrl({ params: { 'q-key-time': `${SIGN_NOW_SECONDS};${SIGN_NOW_SECONDS + 100}` } })],
+    ['window too long', signedReadUrl({ params: { 'q-sign-time': `${SIGN_NOW_SECONDS};${SIGN_NOW_SECONDS + 301}`, 'q-key-time': `${SIGN_NOW_SECONDS};${SIGN_NOW_SECONDS + 301}` } })],
+    ['future start', signedReadUrl({ params: { 'q-sign-time': `${SIGN_NOW_SECONDS + 61};${SIGN_NOW_SECONDS + 100}`, 'q-key-time': `${SIGN_NOW_SECONDS + 61};${SIGN_NOW_SECONDS + 100}` } })],
+    ['expired', signedReadUrl({ params: { 'q-sign-time': `${SIGN_NOW_SECONDS - 400};${SIGN_NOW_SECONDS - 61}`, 'q-key-time': `${SIGN_NOW_SECONDS - 400};${SIGN_NOW_SECONDS - 61}` } })],
+  ])('rejects malformed COS read URL: %s', async (_name, url) => {
+    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: { getObjectUrl: vi.fn((_params, cb) => cb(null, { Url: url })) }, clock: () => SIGN_NOW_SECONDS * 1000 });
     await expect(store.signGet({ objectKey: 'protected/works/w/p.webp', expiresInSeconds: 300 })).rejects.toMatchObject({ status: 503, errorCode: 'DEPENDENCY_UNAVAILABLE' });
   });
 

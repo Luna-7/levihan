@@ -328,13 +328,13 @@ describe('security boundaries', () => {
   it('resolves an active session actor using only an HMAC token hash', async () => {
     const sessionValue = `test-${'s'.repeat(59)}`;
     const expectedHash = crypto.createHmac('sha256', config.authHashPepper).update(`session\0${sessionValue}`).digest('hex');
-    const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: '00000000-0000-4000-8000-000000000084', role: 'member' }], error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: '00000000-0000-4000-8000-000000000084', role: 'member', session_id: '00000000-0000-4000-8000-000000000085' }], error: null });
     const resolveActor = createCloudBaseActorResolver({ rdb: { rpc }, config });
 
     const actor = await resolveActor({ cookies: { [config.sessionCookieName]: sessionValue } });
 
-    expect(actor).toEqual({ actorId: '00000000-0000-4000-8000-000000000084', role: 'member' });
-    expect(rpc).toHaveBeenCalledWith('resolve_user_session', { p_token_hash: expectedHash });
+    expect(actor).toEqual({ actorId: '00000000-0000-4000-8000-000000000084', role: 'member', sessionId: '00000000-0000-4000-8000-000000000085' });
+    expect(rpc).toHaveBeenCalledWith('resolve_content_user_session', { p_token_hash: expectedHash });
     expect(JSON.stringify(rpc.mock.calls)).not.toContain(sessionValue);
   });
 
@@ -347,6 +347,12 @@ describe('security boundaries', () => {
     expect(rpc).not.toHaveBeenCalled();
     expect(await resolveActor({ cookies: { [config.sessionCookieName]: 'u'.repeat(64) } })).toBeNull();
     expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects malformed user or session identifiers returned by the session resolver', async () => {
+    const resolveActor = createCloudBaseActorResolver({ rdb: { rpc: vi.fn().mockResolvedValue({ data: [{ user_id: 'not-a-uuid', role: 'member', session_id: 'also-invalid' }], error: null }) }, config });
+    await expect(resolveActor({ cookies: { [config.sessionCookieName]: 'u'.repeat(64) } }))
+      .rejects.toMatchObject({ status: 503, errorCode: 'DEPENDENCY_UNAVAILABLE' });
   });
 
   it.each([
@@ -383,7 +389,7 @@ describe('security boundaries', () => {
     const write = vi.fn();
     const runtimeLogger = createLogger({ write, actorPepper: 'a'.repeat(32) });
     const rpc = vi.fn(async (name) => {
-      if (name === 'resolve_user_session') return { data: [{ user_id: '00000000-0000-4000-8000-000000000084', role: 'admin' }], error: null };
+      if (name === 'resolve_content_user_session') return { data: [{ user_id: '00000000-0000-4000-8000-000000000084', role: 'admin', session_id: '00000000-0000-4000-8000-000000000085' }], error: null };
       if (name === 'begin_idempotent_request') return { data: [{ state: 'acquired', response: null }], error: null };
       return { data: true, error: null };
     });
@@ -398,7 +404,7 @@ describe('security boundaries', () => {
         CLOUDBASE_APIKEY: 'test-api-key', COS_PUBLIC_BUCKET: 'public', COS_PRIVATE_BUCKET: 'private', COS_REGION: 'region', DATABASE_SCHEMA: 'public',
       },
     });
-    runtime.router.post('/runtime-write', (ctx) => ({ actorId: ctx.actorId, role: ctx.actorRole }), { csrfExempt: true, idempotency: { mode: 'supported', responsePolicy } });
+    runtime.router.post('/runtime-write', (ctx) => ({ actorId: ctx.actorId, role: ctx.actorRole, hasBoundSession: Boolean(ctx.actorSessionId) }), { csrfExempt: true, idempotency: { mode: 'none' } });
     // Auth/recovery/login/register and signed-access routes must be non-replayable.
     runtime.router.post('/runtime-sensitive', () => ({ recoveryCode: 'test-sensitive-value' }), { csrfExempt: true, idempotency: { mode: 'none' } });
 
@@ -407,11 +413,11 @@ describe('security boundaries', () => {
 
     expect(response.statusCode).toBe(200);
     expect(sensitiveResponse.statusCode).toBe(200);
-    expect(JSON.parse(response.body)).toEqual({ actorId: '00000000-0000-4000-8000-000000000084', role: 'admin' });
-    expect(rpc).toHaveBeenCalledWith('resolve_user_session', { p_token_hash: expect.stringMatching(/^[a-f0-9]{64}$/) });
-    expect(rpc).toHaveBeenCalledWith('begin_idempotent_request', expect.objectContaining({ p_actor_scope_hash: expect.stringMatching(/^[a-f0-9]{64}$/) }));
+    expect(JSON.parse(response.body)).toEqual({ actorId: '00000000-0000-4000-8000-000000000084', role: 'admin', hasBoundSession: true });
+    expect(rpc).toHaveBeenCalledWith('resolve_content_user_session', { p_token_hash: expect.stringMatching(/^[a-f0-9]{64}$/) });
     expect(JSON.stringify(rpc.mock.calls)).not.toContain(sessionValue);
     expect(JSON.stringify(write.mock.calls)).not.toContain(sessionValue);
+    expect(JSON.stringify(write.mock.calls)).not.toContain('00000000-0000-4000-8000-000000000085');
     expect(rpc.mock.calls.map(([name]) => name)).not.toContain('fail_idempotent_request');
     expect(JSON.stringify(write.mock.calls)).not.toContain('test-sensitive-value');
   });

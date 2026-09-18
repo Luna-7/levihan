@@ -142,6 +142,7 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
         actorId = String(typeof resolvedActor === 'object' ? resolvedActor.actorId : resolvedActor);
         context.actorId = actorId;
         if (typeof resolvedActor === 'object' && resolvedActor.role !== undefined) context.actorRole = resolvedActor.role;
+        if (typeof resolvedActor === 'object' && resolvedActor.sessionId !== undefined) context.actorSessionId = String(resolvedActor.sessionId);
       }
       if (route.metadata.sessionRequired && actorId == null) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication required');
       if (route.metadata.role !== undefined && context.actorRole !== route.metadata.role) throw new ApiError(403, 'ACCESS_DENIED', 'Insufficient permissions');

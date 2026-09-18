@@ -34,7 +34,7 @@ function request(path, body = {}, headers = {}) {
 function runtime() {
   const rpc = vi.fn(async (name) => {
     if (name === 'consume_rate_limit_bucket') return { data: [{ accepted: true, retry_after_seconds: 0 }], error: null };
-    if (name === 'resolve_user_session') return { data: [], error: null };
+    if (name === 'resolve_content_user_session') return { data: [], error: null };
     throw new Error(`unexpected rpc ${name}`);
   });
   const rdb = { rpc, from: vi.fn() };
@@ -71,7 +71,7 @@ describe('registration attempt throttling', () => {
   it('rejects a limited registration before invoking the Argon-backed handler', async () => {
     const register = vi.fn();
     const rpc = vi.fn(async (name) => {
-      if (name === 'resolve_user_session') return { data: [], error: null };
+      if (name === 'resolve_content_user_session') return { data: [], error: null };
       if (name === 'consume_rate_limit_bucket') return { data: [{ accepted: false, retry_after_seconds: 30 }], error: null };
       throw new Error(`unexpected rpc ${name}`);
     });

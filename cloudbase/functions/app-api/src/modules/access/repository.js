@@ -7,6 +7,8 @@ function row(result) {
     const message = String(result.error.message || '');
     if (message.includes('policy_stale')) throw new ApiError(409, 'STATE_CONFLICT', 'Age policy has changed');
     if (message.includes('access_denied')) throw new ApiError(403, 'ACCESS_DENIED', 'Access denied');
+    if (message.includes('invalid_access_control')) throw new ApiError(400, 'VALIDATION_FAILED', 'Restricted access control is invalid');
+    if (message.includes('not_found')) throw new ApiError(404, 'NOT_FOUND', 'User not found');
     throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Access storage unavailable');
   }
   if (!result) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Access storage unavailable');
@@ -30,8 +32,8 @@ function createAccessRepository({ rdb }) {
       const value = row(await rdb.rpc('revoke_age_consent', { p_user_id: userId, p_request_id: requestId }));
       return { revoked: Boolean(value && (value.revoked ?? value.revoke_age_consent ?? value)) };
     },
-    async authorizeWorkAccess({ userId, role, workId }) {
-      const value = row(await rdb.rpc('authorize_work_access', { p_user_id: userId, p_work_id: workId, p_role: role }));
+    async authorizeWorkAccess({ userId, sessionId, workId }) {
+      const value = row(await rdb.rpc('authorize_work_access', { p_user_id: userId, p_session_id: sessionId, p_work_id: workId }));
       if (!value) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Access authorization unavailable');
       return {
         authorizationId: value.authorization_id || null,
@@ -44,10 +46,15 @@ function createAccessRepository({ rdb }) {
         })),
       };
     },
-    async finalizeWorkAccess({ authorizationId, userId, workId }) {
-      const value = row(await rdb.rpc('finalize_work_access', { p_authorization_id: authorizationId, p_user_id: userId, p_work_id: workId }));
+    async finalizeWorkAccess({ authorizationId, userId, sessionId, workId }) {
+      const value = row(await rdb.rpc('finalize_work_access', { p_authorization_id: authorizationId, p_user_id: userId, p_session_id: sessionId, p_work_id: workId }));
       if (!value) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Access authorization unavailable');
       return { allowed: value.allowed === true, errorCode: value.error_code || null };
+    },
+    async setRestrictedAccess({ adminId, userId, action, reason, requestId }) {
+      const value = row(await rdb.rpc('set_restricted_access_control', { p_admin_id: adminId, p_user_id: userId, p_action: action, p_reason: reason, p_request_id: requestId }));
+      if (!value || value.id !== userId || !['blocked', 'allowed'].includes(value.status)) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Access control storage unavailable');
+      return { id: value.id, status: value.status };
     },
   };
 }

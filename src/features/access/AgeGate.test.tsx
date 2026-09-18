@@ -32,10 +32,12 @@ describe('AgeGate', () => {
     ['NOT_FOUND', '内容已下架或不存在'],
   ])('shows a safe recovery message for %s', async (errorCode, message) => {
     api.acceptAgeConsent.mockRejectedValue(Object.assign(new Error('unsafe backend detail'), { errorCode }));
-    render(<AgeGate workId="550e8400-e29b-41d4-a716-446655440002" policyVersion="2026-09" warning="警告" onGranted={vi.fn()} />);
+    const onDenied = vi.fn();
+    render(<AgeGate workId="550e8400-e29b-41d4-a716-446655440002" policyVersion="2026-09" warning="警告" onGranted={vi.fn()} onDenied={onDenied} />);
     fireEvent.click(screen.getByLabelText('我已年满18岁并接受当前内容警告'));
     fireEvent.click(screen.getByRole('button', { name: '确认并继续' }));
     expect(await screen.findByText(message)).toBeTruthy();
+    expect(onDenied).toHaveBeenCalledWith(errorCode);
     expect(screen.queryByText('unsafe backend detail')).toBeNull();
   });
 });

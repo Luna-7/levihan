@@ -11,13 +11,19 @@ LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
   FROM public.works AS work WHERE work.slug=p_slug AND work.status='published' AND work.rating <> 'restricted';
 $$;
 
-DROP FUNCTION IF EXISTS public.finalize_work_access(uuid,uuid,uuid);
+DROP FUNCTION IF EXISTS public.set_restricted_access_control(uuid,uuid,text,text,text);
+DROP FUNCTION IF EXISTS public.finalize_work_access(uuid,uuid,uuid,uuid);
 DROP FUNCTION IF EXISTS public.get_public_restricted_access_id(text);
-DROP FUNCTION IF EXISTS public.authorize_work_access(uuid,uuid,text);
+DROP FUNCTION IF EXISTS public.authorize_work_access(uuid,uuid,uuid);
 DROP FUNCTION IF EXISTS public.revoke_age_consent(uuid,text);
 DROP FUNCTION IF EXISTS public.set_age_consent(uuid,text,text);
 DROP FUNCTION IF EXISTS public.get_current_age_policy();
+DROP FUNCTION IF EXISTS public.content_access_constant_time_equal(text,text);
+DROP FUNCTION IF EXISTS public.content_access_asset_hash(jsonb);
+DROP FUNCTION IF EXISTS public.content_access_asset_manifest(uuid);
+DROP FUNCTION IF EXISTS public.resolve_content_user_session(text);
 DROP TABLE IF EXISTS public.content_access_authorizations;
+DROP TABLE IF EXISTS public.restricted_access_controls;
 DELETE FROM public.site_settings WHERE key='adult_content_policy'
   AND EXISTS (SELECT 1 FROM public.content_access_install_state WHERE singleton=true AND seeded_policy=true);
 DROP TABLE IF EXISTS public.content_access_install_state;
