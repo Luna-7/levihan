@@ -321,7 +321,7 @@ describe('security boundaries', () => {
     for (const state of ['in_progress', 'request_hash_conflict']) {
       const store = createCloudBaseIdempotencyStore({ rdb: { rpc: vi.fn().mockResolvedValue({ data: [{ state, response: null }], error: null }) } });
       await expect(store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy, operation: vi.fn() }))
-        .rejects.toMatchObject({ status: 409, errorCode: 'STATE_CONFLICT' });
+        .rejects.toMatchObject({ status: 409, errorCode: 'IDEMPOTENCY_CONFLICT' });
     }
   });
 

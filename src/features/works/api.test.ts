@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   archiveWork, completeAdminUpload, createWork, getAdminWork, getPublicWork, initAdminUpload, listAdminWorks,
-  publishWork, rebuildCatalogSnapshot, reviewWork, uploadToCos, updateWork,
+  publishWork, rebuildCatalogSnapshot, reviewWork, uploadToCos, updateWork, createOperationKey,
 } from './api.ts';
 
 const id = '550e8400-e29b-41d4-a716-446655440000';
@@ -10,6 +10,10 @@ const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringif
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe('typed works API client', () => {
+  it('creates operation keys explicitly so callers can retain one across retries', () => {
+    const first = createOperationKey(); const second = createOperationKey();
+    expect(first).toMatch(/^[A-Za-z0-9_-]{8,128}$/); expect(second).not.toBe(first);
+  });
   it('reads only a validated public work shape', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ work: { slug: 'summer', type: 'comic', title: '夏日', summary: '', rating: 'general', authorName: '作者', publishedAt: '2030-01-01T00:00:00.000Z', chapters: [], assets: [{ kind: 'page', publicPath: 'public/page.webp', pageNo: 1 }] } })));
     expect((await getPublicWork('summer')).work.slug).toBe('summer');
@@ -19,14 +23,15 @@ describe('typed works API client', () => {
   it('sends CSRF-protected admin CRUD and lifecycle requests', async () => {
     vi.stubGlobal('document', { cookie: 'lv_csrf=' + 'c'.repeat(43) });
     const work = { id, slug: 'summer', type: 'comic', title: '夏日', summary: '', rating: 'general', status: 'draft', version: 1, authorName: '作者', publishedAt: null };
-    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({ work }));
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({ id, status: 'draft', version: 1 }));
     vi.stubGlobal('fetch', fetchMock);
-    await createWork({ slug: 'summer', type: 'comic', title: '夏日', summary: '', rating: 'general', authorName: '作者' });
-    await updateWork(id, { version: 1, title: '盛夏' });
-    await reviewWork(id, 1); await publishWork(id, 2); await archiveWork(id, 3);
+    const operationKey = createOperationKey();
+    await createWork({ slug: 'summer', type: 'comic', title: '夏日', summary: '', rating: 'general', authorName: '作者' }, operationKey);
+    await updateWork(id, { version: 1, title: '盛夏' }, operationKey);
+    await reviewWork(id, 1, operationKey); await publishWork(id, 2, operationKey); await archiveWork(id, 3, operationKey);
     for (const [, init] of fetchMock.mock.calls) {
       expect(new Headers(init.headers).get('x-csrf-token')).toBe('c'.repeat(43));
-      expect(new Headers(init.headers).get('idempotency-key')).toMatch(/^[a-zA-Z0-9_-]{8,128}$/);
+      expect(new Headers(init.headers).get('idempotency-key')).toBe(operationKey);
     }
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/admin/works', `/api/v1/admin/works/${id}`, `/api/v1/admin/works/${id}/review`, `/api/v1/admin/works/${id}/publish`, `/api/v1/admin/works/${id}/archive`]);
   });
@@ -43,10 +48,11 @@ describe('typed works API client', () => {
   it('initializes direct upload without reading or serializing file bytes', async () => {
     vi.stubGlobal('document', { cookie: 'lv_csrf=' + 'c'.repeat(43) });
     const ticket = { uploadId: id, fileId: id, objectKey: `staging/admin/${id}/${id}.webp`, method: 'PUT', uploadUrl: 'https://cos.test/key?signature=x', headers: { 'content-type': 'image/webp', 'x-cos-meta-sha256': 'a'.repeat(64) }, expiresAt: '2030-01-01T00:05:00.000Z' };
-    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(ticket)).mockResolvedValueOnce(jsonResponse({ assetId: id, status: 'verified' })).mockResolvedValueOnce(jsonResponse({ version: 3, checksum: 'b'.repeat(64), objectKey: 'snapshots/public/catalog.v3.json' }));
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(ticket)).mockResolvedValueOnce(jsonResponse({ assetId: id, status: 'verified' })).mockResolvedValueOnce(jsonResponse({ version: 3 }));
     vi.stubGlobal('fetch', fetchMock);
-    expect(await initAdminUpload({ workId: id, filename: 'page.webp', mimeType: 'image/webp', sizeBytes: 12, checksum: 'a'.repeat(64), kind: 'page', pageNo: 1, accessLevel: 'public' })).toEqual(ticket);
-    await completeAdminUpload(id); await rebuildCatalogSnapshot();
+    const operationKey = createOperationKey();
+    expect(await initAdminUpload({ workId: id, filename: 'page.webp', mimeType: 'image/webp', sizeBytes: 12, checksum: 'a'.repeat(64), kind: 'page', pageNo: 1, accessLevel: 'public' }, operationKey)).toEqual(ticket);
+    await completeAdminUpload(id, operationKey); await rebuildCatalogSnapshot(operationKey);
     expect(fetchMock.mock.calls[0][1].body).not.toContain('base64');
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/admin/uploads/init', `/api/v1/admin/uploads/${id}/complete`, '/api/v1/admin/snapshots/rebuild']);
   });

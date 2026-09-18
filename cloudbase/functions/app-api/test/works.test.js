@@ -34,7 +34,7 @@ describe('work routes and authorization', () => {
       ['POST', `/admin/works/${workId}/review`], ['POST', `/admin/works/${workId}/publish`],
       ['POST', `/admin/works/${workId}/archive`], ['POST', `/admin/works/${workId}/restore`],
     ]) {
-      expect(router.resolve(method, path).metadata).toMatchObject({ sessionRequired: true, role: 'admin', idempotency: { mode: 'domain' } });
+      expect(router.resolve(method, path).metadata).toMatchObject({ sessionRequired: true, role: 'admin', idempotency: { mode: 'required', responsePolicy: expect.any(Object) } });
     }
   });
 
@@ -76,7 +76,7 @@ describe('work repository transaction boundary', () => {
 
   it.each([
     ['version_conflict', 'VERSION_CONFLICT'], ['state_conflict', 'STATE_CONFLICT'],
-    ['assets_incomplete', 'UPLOAD_NOT_VERIFIED'], ['slug_conflict', 'SLUG_CONFLICT'],
+    ['assets_incomplete', 'UPLOAD_NOT_VERIFIED'], ['page_sequence_invalid', 'UPLOAD_NOT_VERIFIED'], ['asset_policy_invalid', 'UPLOAD_NOT_VERIFIED'], ['slug_conflict', 'SLUG_CONFLICT'],
   ])('maps controlled database error %s', async (message, code) => {
     const repository = createWorksRepository({ rdb: { rpc: vi.fn().mockResolvedValue({ data: null, error: { code: 'P0001', message } }), from: vi.fn() } });
     await expect(repository.transitionWork({ workId, expectedVersion: 1, from: 'review', to: 'published', action: 'publish', actorId, requestId: 'req' }))

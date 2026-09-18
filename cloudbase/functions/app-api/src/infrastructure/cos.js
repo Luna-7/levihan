@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const { ApiError } = require('../errors');
 
 function call(cos, method, params) {
@@ -31,10 +32,22 @@ function createCosObjectStore({ publicBucket, privateBucket, region, cos }) {
       const data = await call(cos, 'getObject', { Bucket: privateBucket, Region: region, Key: objectKey });
       return data.Body;
     },
+    async headFinal({ objectKey, storageZone }) {
+      const bucket = storageZone === 'public' ? publicBucket : storageZone === 'private' ? privateBucket : null;
+      if (!bucket) throw new ApiError(400, 'VALIDATION_FAILED', 'Storage zone is invalid');
+      const data = await call(cos, 'headObject', { Bucket: bucket, Region: region, Key: objectKey });
+      const headers = data.headers || data.Headers || {};
+      return { sizeBytes: Number(headers['content-length'] ?? data.ContentLength), contentType: String(headers['content-type'] ?? data.ContentType ?? '').split(';', 1)[0].trim().toLowerCase(), etag: String(headers.etag ?? data.ETag ?? '').replace(/^"|"$/g, '') };
+    },
+    async readFinal({ objectKey, storageZone }) {
+      const bucket = storageZone === 'public' ? publicBucket : storageZone === 'private' ? privateBucket : null;
+      if (!bucket) throw new ApiError(400, 'VALIDATION_FAILED', 'Storage zone is invalid');
+      return (await call(cos, 'getObject', { Bucket: bucket, Region: region, Key: objectKey })).Body;
+    },
     async promote({ sourceKey, destinationKey, storageZone, contentType }) {
       const destinationBucket = storageZone === 'public' ? publicBucket : storageZone === 'private' ? privateBucket : null;
       if (!destinationBucket || !sourceKey.startsWith('staging/admin/') || !(destinationKey.startsWith('media/works/') || destinationKey.startsWith('protected/works/'))) throw new ApiError(400, 'VALIDATION_FAILED', 'COS promotion constraints are invalid');
-      await call(cos, 'putObjectCopy', { Bucket: destinationBucket, Region: region, Key: destinationKey, CopySource: `${privateBucket}.cos.${region}.myqcloud.com/${sourceKey}`, MetadataDirective: 'Replaced', ContentType: contentType });
+      await call(cos, 'putObjectCopy', { Bucket: destinationBucket, Region: region, Key: destinationKey, CopySource: `${privateBucket}.cos.${region}.myqcloud.com/${sourceKey}`, MetadataDirective: 'Replaced', ContentType: contentType, ...(['application/pdf', 'application/epub+zip'].includes(contentType) ? { ContentDisposition: 'attachment' } : {}) });
     },
     async putBytes(objectKey, bytes, options = {}) {
       if (options.sourceKey) {
@@ -50,13 +63,27 @@ function createCosObjectStore({ publicBucket, privateBucket, region, cos }) {
         Body: bytes, ContentType: 'application/json; charset=utf-8', CacheControl: options.cacheControl,
       });
     },
-    async putManifest(manifest) {
-      await call(cos, 'putObject', { Bucket: publicBucket, Region: region, Key: 'snapshots/public/manifest.json', Body: Buffer.from(JSON.stringify(manifest)), ContentType: 'application/json; charset=utf-8', CacheControl: 'public,max-age=60,must-revalidate' });
+    async putImmutable(objectKey, bytes, { cacheControl, checksum }) {
+      try {
+        await call(cos, 'putObject', { Bucket: publicBucket, Region: region, Key: objectKey, Body: bytes, ContentType: 'application/json; charset=utf-8', CacheControl: cacheControl, IfNoneMatch: '*' });
+      } catch (error) {
+        if (!error || !['PreconditionFailed', '412'].includes(String(error.code || error.statusCode))) throw error;
+        const existing = await call(cos, 'getObject', { Bucket: publicBucket, Region: region, Key: objectKey });
+        if (crypto.createHash('sha256').update(Buffer.from(existing.Body)).digest('hex') !== checksum) throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Immutable snapshot already exists with different content');
+      }
+    },
+    async putManifest(manifest, condition = {}) {
+      try {
+        await call(cos, 'putObject', { Bucket: publicBucket, Region: region, Key: 'snapshots/public/manifest.json', Body: Buffer.from(JSON.stringify(manifest)), ContentType: 'application/json; charset=utf-8', CacheControl: 'public,max-age=60,must-revalidate', ...(condition.etag ? { IfMatch: condition.etag } : { IfNoneMatch: '*' }) });
+      } catch (error) {
+        if (error && ['PreconditionFailed', '412'].includes(String(error.code || error.statusCode))) throw new ApiError(409, 'SNAPSHOT_CAS_CONFLICT', 'Snapshot manifest changed');
+        throw error;
+      }
     },
     async getManifest() {
       try {
         const data = await call(cos, 'getObject', { Bucket: publicBucket, Region: region, Key: 'snapshots/public/manifest.json' });
-        return JSON.parse(Buffer.from(data.Body).toString('utf8'));
+        return { manifest: JSON.parse(Buffer.from(data.Body).toString('utf8')), etag: String(data.ETag || data.headers && data.headers.etag || '').replace(/^"|"$/g, '') };
       } catch (error) {
         if (error && ['NoSuchKey', 'NotFound'].includes(error.code)) return null;
         throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Snapshot manifest unavailable');

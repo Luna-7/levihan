@@ -80,6 +80,7 @@ function createUploadsService({ repository, objectStore, now = () => new Date(),
   return {
     async initAdmin(ctx) {
       requireAdmin(ctx);
+      if (!CHECKSUM.test(ctx.idempotencyRequestHash || '')) throw new ApiError(400, 'VALIDATION_FAILED', 'Upload operation hash is invalid');
       const item = validateDeclaration(ctx.body);
       const uploadId = randomUUID();
       const fileId = randomUUID();
@@ -89,10 +90,11 @@ function createUploadsService({ repository, objectStore, now = () => new Date(),
         uploadId, fileId, ownerId: ctx.actorId, workId: item.workId, chapterId: item.chapterId || null,
         purpose: 'work_asset', objectKey, expectedSize: item.sizeBytes, mimeType: item.mimeType,
         checksum: item.checksum, kind: item.kind, pageNo: item.pageNo || null, accessLevel: item.accessLevel,
-        expiresAt, requestId: ctx.requestId, idempotencyKey: ctx.idempotencyKey,
+        expiresAt, requestId: ctx.requestId, idempotencyKey: ctx.idempotencyKey, requestHash: ctx.idempotencyRequestHash,
       });
       const actualUploadId = created.uploadId;
       const actualFileId = created.fileId;
+      if (created.state === 'bound' && created.assetId) return { uploadId: actualUploadId, fileId: actualFileId, assetId: created.assetId, status: 'verified' };
       const actualKey = created.objectKey || `staging/admin/${actualUploadId}/${actualFileId}.${item.extension}`;
       const ticket = await objectStore.signPut({ objectKey: actualKey, contentType: item.mimeType, contentLength: item.sizeBytes, checksum: item.checksum, expiresInSeconds: 300 });
       return { uploadId: actualUploadId, fileId: actualFileId, objectKey: actualKey, method: 'PUT', uploadUrl: ticket.url, headers: ticket.headers, expiresAt: created.expiresAt || expiresAt };
@@ -104,22 +106,30 @@ function createUploadsService({ repository, objectStore, now = () => new Date(),
       strictBody(ctx.body || {}, []);
       const upload = await repository.getUploadForCompletion({ uploadId: ctx.params.id, ownerId: ctx.actorId });
       if (upload && upload.ownerId === ctx.actorId && upload.status === 'bound' && upload.assetId) return { assetId: upload.assetId, status: 'verified' };
-      if (!upload || upload.ownerId !== ctx.actorId || upload.status !== 'declared' || upload.purpose && upload.purpose !== 'work_asset' || new Date(upload.expiresAt) <= now()) throw new ApiError(409, 'STATE_CONFLICT', 'Upload is unavailable');
+      if (!upload || upload.ownerId !== ctx.actorId || !['declared', 'promoting'].includes(upload.status) || upload.purpose && upload.purpose !== 'work_asset' || (upload.status === 'declared' && new Date(upload.expiresAt) <= now())) throw new ApiError(409, 'STATE_CONFLICT', 'Upload is unavailable');
       if (!upload.objectKey.startsWith(`staging/admin/${upload.uploadId}/${upload.fileId}.`)) throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Upload object key is invalid');
-      let metadata;
-      try { metadata = await objectStore.head({ objectKey: upload.objectKey }); } catch { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Object storage unavailable'); }
-      if (!metadata || metadata.sizeBytes !== upload.expectedSize || String(metadata.contentType || '').toLowerCase() !== upload.mimeType) {
-        throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Uploaded object does not match its declaration');
-      }
-      let inspected;
-      try { inspected = await inspectStream(await objectStore.read({ objectKey: upload.objectKey }), upload.expectedSize, upload.mimeType); } catch { throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Uploaded object could not be verified'); }
-      const checksum = inspected.checksum;
-      if (inspected.size !== upload.expectedSize || checksum !== upload.checksum || !matchesFormat(upload.mimeType, inspected.sample, inspected.unsafeText)) throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Uploaded object does not match its declaration');
       const extension = upload.objectKey.split('.').pop();
       const storageZone = upload.accessLevel === 'public' ? 'public' : 'private';
       const objectKey = `${storageZone === 'public' ? 'media' : 'protected'}/works/${upload.workId}/${upload.fileId}.${extension}`;
-      try { await objectStore.promote({ sourceKey: upload.objectKey, destinationKey: objectKey, storageZone, contentType: upload.mimeType }); } catch { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Object storage unavailable'); }
-      const result = await repository.completeAndBind({ uploadId: upload.uploadId, fileId: upload.fileId, workId: upload.workId, chapterId: upload.chapterId || null, actorId: ctx.actorId, requestId: ctx.requestId, stagingObjectKey: upload.objectKey, objectKey, storageZone, sizeBytes: metadata.sizeBytes, mimeType: metadata.contentType, checksum, etag: metadata.etag || null, kind: upload.kind, pageNo: upload.pageNo || null, accessLevel: upload.accessLevel });
+      let promotion = upload.status === 'promoting' ? { promotionToken: upload.promotionToken, objectKey: upload.finalObjectKey, storageZone: upload.storageZone, state: 'promoting' } : null;
+      if (!promotion) {
+        let metadata; let inspected;
+        try { metadata = await objectStore.head({ objectKey: upload.objectKey }); } catch { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Object storage unavailable'); }
+        if (!metadata || metadata.sizeBytes !== upload.expectedSize || String(metadata.contentType || '').toLowerCase() !== upload.mimeType) throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Uploaded object does not match its declaration');
+        try { inspected = await inspectStream(await objectStore.read({ objectKey: upload.objectKey }), upload.expectedSize, upload.mimeType); } catch { throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Uploaded object could not be verified'); }
+        if (inspected.size !== upload.expectedSize || inspected.checksum !== upload.checksum || !matchesFormat(upload.mimeType, inspected.sample, inspected.unsafeText)) throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Uploaded object does not match its declaration');
+        promotion = await repository.beginPromotion({ uploadId: upload.uploadId, fileId: upload.fileId, actorId: ctx.actorId, promotionToken: randomUUID(), objectKey, storageZone, sizeBytes: metadata.sizeBytes, mimeType: metadata.contentType, checksum: inspected.checksum, etag: metadata.etag || null, contentDisposition: ['application/pdf', 'application/epub+zip'].includes(upload.mimeType) ? 'attachment' : null });
+      }
+      try { await objectStore.promote({ sourceKey: upload.objectKey, destinationKey: promotion.objectKey, storageZone: promotion.storageZone, contentType: upload.mimeType }); } catch {
+        try { await objectStore.headFinal({ objectKey: promotion.objectKey, storageZone: promotion.storageZone }); } catch { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Object storage unavailable'); }
+      }
+      let finalMetadata; let finalInspected;
+      try {
+        finalMetadata = await objectStore.headFinal({ objectKey: promotion.objectKey, storageZone: promotion.storageZone });
+        finalInspected = await inspectStream(await objectStore.readFinal({ objectKey: promotion.objectKey, storageZone: promotion.storageZone }), upload.expectedSize, upload.mimeType);
+      } catch { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Promoted object unavailable'); }
+      if (finalMetadata.sizeBytes !== upload.expectedSize || finalInspected.checksum !== upload.checksum || !matchesFormat(upload.mimeType, finalInspected.sample, finalInspected.unsafeText)) throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Promoted object does not match its declaration');
+      const result = await repository.completeAndBind({ uploadId: upload.uploadId, fileId: upload.fileId, workId: upload.workId, chapterId: upload.chapterId || null, actorId: ctx.actorId, requestId: ctx.requestId, promotionToken: promotion.promotionToken, objectKey: promotion.objectKey, storageZone: promotion.storageZone, sizeBytes: finalMetadata.sizeBytes, mimeType: upload.mimeType, checksum: finalInspected.checksum, etag: finalMetadata.etag || null, kind: upload.kind, pageNo: upload.pageNo || null, accessLevel: upload.accessLevel });
       try { await objectStore.delete(upload.objectKey); } catch { /* private staging lifecycle is the fallback */ }
       return result;
     },

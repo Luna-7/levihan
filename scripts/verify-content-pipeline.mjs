@@ -8,12 +8,13 @@ const ROUTINES = [
   ['create_work_draft', 'text,text,text,text,text,text,uuid,text,text'],
   ['update_work_draft', 'uuid,bigint,jsonb,jsonb,uuid,text,text'],
   ['transition_work_state', 'uuid,bigint,text,text,text,uuid,text,text'],
-  ['create_work_upload', 'uuid,uuid,uuid,uuid,uuid,text,bigint,text,text,text,integer,text,timestamptz,text,text'],
+  ['create_work_upload', 'uuid,uuid,uuid,uuid,uuid,text,bigint,text,text,text,integer,text,timestamptz,text,text,text'],
   ['get_work_upload_for_completion', 'uuid,uuid'],
-  ['complete_work_upload', 'uuid,uuid,uuid,uuid,uuid,text,text,text,bigint,text,text,text,text,integer,text,text'],
+  ['begin_work_upload_promotion', 'uuid,uuid,uuid,uuid,text,text,bigint,text,text,text,text'],
+  ['complete_work_upload', 'uuid,uuid,uuid,uuid,uuid,uuid,text,text,bigint,text,text,text,text,integer,text,text'],
   ['begin_snapshot_build', 'text,uuid,text,text'], ['list_public_catalog', ''],
-  ['prepare_snapshot_version', 'uuid,text,bigint,text,text'], ['complete_snapshot_build', 'uuid,uuid,text'],
-  ['fail_snapshot_build', 'uuid,text'], ['get_admin_work', 'uuid'], ['get_public_work', 'text'],
+  ['prepare_snapshot_version', 'uuid,uuid,text,bigint,text,text'], ['authorize_snapshot_manifest', 'uuid,uuid'], ['complete_snapshot_build', 'uuid,uuid,uuid,text'],
+  ['fail_snapshot_build', 'uuid,uuid,text'], ['get_admin_work', 'uuid'], ['get_public_work', 'text'],
   ['list_admin_works', 'integer,text,text'],
 ];
 
@@ -25,7 +26,7 @@ function routineDefinition(sql, name) {
   return sql.match(new RegExp(`CREATE\\s+FUNCTION\\s+public\\.${name}\\s*\\([\\s\\S]*?\\$\\$;`, 'i'))?.[0] || '';
 }
 
-export function validateContentPipeline({ migration, rollback, access, accessRollback = '' }) {
+export function validateContentPipeline({ migration, rollback, access, accessRollback = '', cosSource = '', cloudbaseConfig = '' }) {
   const failures = [];
   const sql = stripSqlComments(migration);
   const down = stripSqlComments(rollback);
@@ -42,6 +43,7 @@ export function validateContentPipeline({ migration, rollback, access, accessRol
   add(failures, has(sql, /expected_checksum\s+text/i) && has(sql, /upload_files_expected_checksum_format/i), 'upload checksum declaration is required');
   add(failures, has(sql, /ADD\s+COLUMN\s+storage_zone\s+text/i) && has(sql, /work_assets_zone_key/i), 'physical storage zone binding is required');
   add(failures, has(sql, /work_assets_root_cover_key/i) && has(sql, /work_assets_chapter_body_key/i) && has(sql, /work_assets_chapter_page_key/i), 'nullable asset slots need targeted unique indexes');
+  add(failures, (sql.match(/CREATE\s+UNIQUE\s+INDEX\s+work_assets_(?:root|chapter)_[\s\S]*?;/gi) || []).every((definition) => /status\s*<>\s*'deleted'/i.test(definition)), 'deleted assets must not reserve unique content slots');
   add(failures, has(sql, /snapshot_jobs_one_active_type[\s\S]*?status\s+IN\s*\(\s*'running'\s*,\s*'prepared'\s*\)/i), 'snapshot type needs one active job');
 
   for (const [name, signature] of ROUTINES) {
@@ -57,6 +59,7 @@ export function validateContentPipeline({ migration, rollback, access, accessRol
   const transition = routineDefinition(sql, 'transition_work_state');
   const uploadCreate = routineDefinition(sql, 'create_work_upload');
   const uploadComplete = routineDefinition(sql, 'complete_work_upload');
+  const uploadPromote = routineDefinition(sql, 'begin_work_upload_promotion');
   const snapshotBegin = routineDefinition(sql, 'begin_snapshot_build');
   const snapshotPrepare = routineDefinition(sql, 'prepare_snapshot_version');
   add(failures, /actor\.role\s*<>\s*'admin'/i.test(createWork) && /actor\.role\s*<>\s*'admin'/i.test(transition) && /actor\.role\s*<>\s*'admin'/i.test(uploadComplete), 'admin authorization must be enforced in database routines');
@@ -66,11 +69,19 @@ export function validateContentPipeline({ migration, rollback, access, accessRol
   add(failures, /asset\.status\s*<>\s*'verified'/i.test(transition) && /assets_incomplete/i.test(transition), 'publishing must reject incomplete assets');
   add(failures, /session\.owner_id\s*<>\s*p_actor_id/i.test(uploadComplete), 'upload completion must validate ownership');
   add(failures, /session\.purpose\s*<>\s*'work_asset'/i.test(uploadComplete), 'upload completion must validate purpose');
-  add(failures, /session\.expires_at\s*<=\s*clock_timestamp\(\)/i.test(uploadComplete), 'upload completion must validate expiry');
+  add(failures, /session\.expires_at\s*<=\s*clock_timestamp\(\)/i.test(uploadPromote), 'upload promotion must validate expiry');
   add(failures, /file\.expected_size\s*<>\s*p_actual_size/i.test(uploadComplete) && /file\.expected_checksum\s*<>\s*p_checksum/i.test(uploadComplete), 'upload completion must validate metadata');
+  add(failures, /status\s*=\s*'promoting'/i.test(uploadPromote) && /promotion_token\s*=\s*p_promotion_token/i.test(uploadPromote) && /upload_files_promotion_cleanup_idx/i.test(sql), 'upload copy must have a durable fenced promotion record');
+  add(failures, /prior_session\.request_hash\s*<>\s*p_request_hash/i.test(uploadCreate) && /ON\s+CONFLICT\s*\(\s*owner_id\s*,\s*purpose\s*,\s*idempotency_key\s*\)/i.test(uploadCreate), 'upload domain idempotency must atomically acquire and compare request hashes');
+  add(failures, /work\.rating\s*=\s*'restricted'[\s\S]*?asset_policy_invalid/i.test(transition), 'restricted publication must enforce private original assets');
   add(failures, /p_object_key\s*<>\s*'staging\/admin\/'\s*\|\|\s*p_upload_id/i.test(uploadCreate), 'server staging prefix must be enforced');
   add(failures, /pg_advisory_xact_lock\s*\(\s*hashtext\s*\(\s*'snapshot:'\s*\|\|\s*p_snapshot_type\s*\)\s*\)/i.test(snapshotBegin), 'snapshot versions must be serialized');
   add(failures, /lease_expires_at\s*>\s*clock_timestamp\(\)/i.test(snapshotBegin) && /delivery_version/i.test(snapshotBegin), 'snapshot jobs must use renewable delivery leases');
+  add(failures, /lease_token\s*=\s*gen_random_uuid\(\)/i.test(snapshotBegin) && /lease_epoch\s*=\s*lease_epoch\s*\+\s*1/i.test(snapshotBegin), 'snapshot claims must rotate a fencing token and epoch');
+  add(failures, /job\.lease_token\s*<>\s*p_lease_token/i.test(snapshotPrepare)
+    && /lease_token\s*=\s*p_lease_token/i.test(routineDefinition(sql, 'authorize_snapshot_manifest'))
+    && /job\.lease_token\s*<>\s*p_lease_token/i.test(routineDefinition(sql, 'complete_snapshot_build'))
+    && /lease_token\s*=\s*p_lease_token/i.test(routineDefinition(sql, 'fail_snapshot_build')), 'all snapshot writes must enforce the fencing token');
   add(failures, /INSERT\s+INTO\s+public\.snapshot_versions/i.test(snapshotPrepare), 'snapshot versions must be retained before pointer switch');
   add(failures, /UPDATE\s+public\.snapshot_jobs\s+SET\s+status\s*=\s*'prepared'/i.test(snapshotPrepare), 'snapshot build must persist a prepared state before switching current');
   add(failures, /job\.status\s*<>\s*'prepared'/i.test(routineDefinition(sql, 'complete_snapshot_build')), 'snapshot completion must require a prepared immutable version');
@@ -83,6 +94,7 @@ export function validateContentPipeline({ migration, rollback, access, accessRol
   for (const [name, signature] of [...ROUTINES].reverse()) add(failures, compact(down).toLowerCase().includes(compact(`DROP FUNCTION IF EXISTS public.${name}(${signature});`).toLowerCase()), `rollback must drop ${name}`);
   add(failures, /DROP\s+TABLE\s+IF\s+EXISTS\s+public\.work_chapters/i.test(down), 'rollback must drop work_chapters');
   add(failures, /DROP\s+COLUMN\s+IF\s+EXISTS\s+delivery_version/i.test(down) && /DROP\s+COLUMN\s+IF\s+EXISTS\s+idempotency_key/i.test(down), 'rollback must remove snapshot and idempotency additions');
+  add(failures, /DROP\s+COLUMN\s+IF\s+EXISTS\s+lease_token/i.test(down) && /DROP\s+COLUMN\s+IF\s+EXISTS\s+promotion_token/i.test(down) && /DROP\s+COLUMN\s+IF\s+EXISTS\s+request_hash/i.test(down), 'rollback must remove fencing and domain acquire fields');
   add(failures, /REVOKE\s+INSERT\s*,\s*UPDATE\s*,\s*DELETE\s+ON\s+TABLE\s+public\.works/i.test(grants), 'direct content writes must be revoked');
   add(failures, !/GRANT\s+ALL/i.test(grants), 'runtime grants must not use ALL');
   add(failures, /GRANT\s+SELECT\s+ON\s+TABLE\s+public\.work_chapters/i.test(grants), 'chapter runtime select grant is required');
@@ -92,6 +104,13 @@ export function validateContentPipeline({ migration, rollback, access, accessRol
   add(failures, /REVOKE\s+EXECUTE\s+ON\s+FUNCTION[\s\S]*?public\.create_work_draft/i.test(grantRollback), 'runtime rollback must remove content routine execution');
   add(failures, /GRANT\s+INSERT\s+ON\s+TABLE\s+public\.works[\s\S]*?public\.audit_logs\s+TO\s+:"backend_role"/i.test(grantRollback), 'runtime rollback must restore base INSERT grants');
   add(failures, /GRANT\s+UPDATE\s+ON\s+TABLE\s+public\.works[\s\S]*?public\.snapshot_jobs\s+TO\s+:"backend_role"/i.test(grantRollback), 'runtime rollback must restore base UPDATE grants');
+  if (cosSource) {
+    add(failures, (cosSource.match(/IfNoneMatch:\s*'\*'/gi) || []).length >= 2, 'immutable snapshots and new manifests need conditional create');
+    add(failures, /IfMatch:\s*condition\.etag/i.test(cosSource), 'manifest replacement needs ETag CAS');
+  }
+  if (cloudbaseConfig) {
+    add(failures, /"name"\s*:\s*"snapshot-worker"[\s\S]*?"type"\s*:\s*"Event"[\s\S]*?"dir"\s*:\s*"app-api"[\s\S]*?"triggers"[\s\S]*?0 \*\/5 \* \* \* \* \*/i.test(cloudbaseConfig), 'snapshot worker needs a five-minute private Event trigger');
+  }
   return failures;
 }
 
@@ -101,6 +120,8 @@ export function verifyContentPipelineFromFiles() {
     rollback: readFileSync(resolve(root, 'cloudbase/migrations/20260918_content_pipeline_rollback.sql'), 'utf8'),
     access: readFileSync(resolve(root, 'cloudbase/migrations/20260918_content_pipeline_runtime_access.sql'), 'utf8'),
     accessRollback: readFileSync(resolve(root, 'cloudbase/migrations/20260918_content_pipeline_runtime_access_rollback.sql'), 'utf8'),
+    cosSource: readFileSync(resolve(root, 'cloudbase/functions/app-api/src/infrastructure/cos.js'), 'utf8'),
+    cloudbaseConfig: readFileSync(resolve(root, 'cloudbase/cloudbaserc.json'), 'utf8'),
   });
 }
 

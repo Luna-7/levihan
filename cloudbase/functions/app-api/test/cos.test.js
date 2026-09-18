@@ -39,4 +39,13 @@ describe('COS object-store adapter', () => {
     await store.read({ objectKey: 'staging/admin/u/f.webp' });
     expect(cos.getObject).toHaveBeenCalledWith(expect.objectContaining({ Bucket: 'private-123' }), expect.any(Function));
   });
+
+  it('uses conditional immutable creation and ETag CAS for snapshot pointers', async () => {
+    const cos = { putObject: vi.fn((_params, cb) => cb(null, {})) };
+    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos });
+    await store.putImmutable('snapshots/public/catalog.v1.json', Buffer.from('{}'), { checksum: 'a'.repeat(64), cacheControl: 'immutable' });
+    await store.putManifest({ schemaVersion: 1, catalog: { version: 1 } }, { etag: 'old-etag' });
+    expect(cos.putObject).toHaveBeenNthCalledWith(1, expect.objectContaining({ IfNoneMatch: '*' }), expect.any(Function));
+    expect(cos.putObject).toHaveBeenNthCalledWith(2, expect.objectContaining({ IfMatch: 'old-etag' }), expect.any(Function));
+  });
 });

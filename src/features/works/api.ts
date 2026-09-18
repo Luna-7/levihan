@@ -30,6 +30,7 @@ const AdminWork = z.object({
   chapters: z.array(AdminChapter).optional(), assets: z.array(AdminAsset).optional(),
 }).strict();
 const AdminWorkResponse = z.object({ work: AdminWork }).strict();
+const WorkMutationResponse = z.object({ id: Id, status: z.enum(['draft', 'review', 'published', 'archived']), version: z.number().int().positive() }).strict();
 const AdminWorkListResponse = z.object({ items: z.array(AdminWork), nextCursor: z.string().nullable() }).strict();
 const UploadTicket = z.object({
   uploadId: Id, fileId: Id, objectKey: z.string().regex(/^staging\/admin\//), method: z.literal('PUT'),
@@ -37,7 +38,8 @@ const UploadTicket = z.object({
 }).strict();
 export type UploadTicket = z.infer<typeof UploadTicket>;
 const AssetResponse = z.object({ assetId: Id, status: z.literal('verified') }).strict();
-const SnapshotResponse = z.object({ version: z.number().int().positive(), checksum: z.string().regex(/^[a-f0-9]{64}$/), objectKey: z.string().regex(/^snapshots\/public\/catalog\.v\d+\.json$/) }).strict();
+const InitUploadResponse = z.union([UploadTicket, z.object({ uploadId: Id, fileId: Id, assetId: Id, status: z.literal('verified') }).strict()]);
+const SnapshotResponse = z.object({ version: z.number().int().positive() }).strict();
 
 export type CreateWorkInput = { slug: string; type: z.infer<typeof WorkType>; title: string; summary: string; rating: z.infer<typeof Rating>; authorName: string };
 export type UpdateWorkInput = { version: number; slug?: string; title?: string; summary?: string; rating?: z.infer<typeof Rating>; authorName?: string; chapters?: z.infer<typeof Chapter>[] };
@@ -69,8 +71,9 @@ async function request(path: string, options: { method?: string; body?: unknown;
   return payload;
 }
 
-const makeIdempotencyKey = () => globalThis.crypto.randomUUID().replaceAll('-', '');
-const write = (path: string, body: unknown, method = 'POST', idempotencyKey = makeIdempotencyKey()) => request(path, { method, body, csrf: true, idempotencyKey });
+export const createOperationKey = () => globalThis.crypto.randomUUID().replaceAll('-', '');
+function operationKey(value: string) { if (!/^[A-Za-z0-9_-]{8,128}$/.test(value)) throw new WorksApiError('VALIDATION_FAILED', 'Operation key is invalid'); return value; }
+const write = (path: string, body: unknown, method: string, idempotencyKey: string) => request(path, { method, body, csrf: true, idempotencyKey: operationKey(idempotencyKey) });
 
 export async function getPublicWork(slug: string) {
   if (!/^[a-z0-9][a-z0-9-]{0,127}$/.test(slug)) throw new WorksApiError('VALIDATION_FAILED', '作品地址无效');
@@ -84,14 +87,14 @@ export async function listAdminWorks(options: { status?: 'draft' | 'review' | 'p
   return AdminWorkListResponse.parse(await request(`/admin/works${query.size ? `?${query}` : ''}`));
 }
 export async function getAdminWork(id: string) { Id.parse(id); return AdminWorkResponse.parse(await request(`/admin/works/${id}`)); }
-export async function createWork(input: CreateWorkInput) { return AdminWorkResponse.parse(await write('/admin/works', input)); }
-export async function updateWork(id: string, input: UpdateWorkInput) { Id.parse(id); return AdminWorkResponse.parse(await write(`/admin/works/${id}`, input, 'PATCH')); }
-async function transition(id: string, action: 'review' | 'publish' | 'archive' | 'restore', version: number) { Id.parse(id); return AdminWorkResponse.parse(await write(`/admin/works/${id}/${action}`, { version })); }
-export const reviewWork = (id: string, version: number) => transition(id, 'review', version);
-export const publishWork = (id: string, version: number) => transition(id, 'publish', version);
-export const archiveWork = (id: string, version: number) => transition(id, 'archive', version);
-export const restoreWork = (id: string, version: number) => transition(id, 'restore', version);
-export async function initAdminUpload(input: InitUploadInput) { return UploadTicket.parse(await write('/admin/uploads/init', input)); }
+export async function createWork(input: CreateWorkInput, key: string) { return WorkMutationResponse.parse(await write('/admin/works', input, 'POST', key)); }
+export async function updateWork(id: string, input: UpdateWorkInput, key: string) { Id.parse(id); return WorkMutationResponse.parse(await write(`/admin/works/${id}`, input, 'PATCH', key)); }
+async function transition(id: string, action: 'review' | 'publish' | 'archive' | 'restore', version: number, key: string) { Id.parse(id); return WorkMutationResponse.parse(await write(`/admin/works/${id}/${action}`, { version }, 'POST', key)); }
+export const reviewWork = (id: string, version: number, key: string) => transition(id, 'review', version, key);
+export const publishWork = (id: string, version: number, key: string) => transition(id, 'publish', version, key);
+export const archiveWork = (id: string, version: number, key: string) => transition(id, 'archive', version, key);
+export const restoreWork = (id: string, version: number, key: string) => transition(id, 'restore', version, key);
+export async function initAdminUpload(input: InitUploadInput, key: string) { return InitUploadResponse.parse(await write('/admin/uploads/init', input, 'POST', key)); }
 export async function uploadToCos(ticket: UploadTicket, blob: Blob) {
   const validated = UploadTicket.parse(ticket);
   if (validated.headers['content-type'] !== blob.type) throw new WorksApiError('VALIDATION_FAILED', '文件与上传票据不匹配');
@@ -99,5 +102,5 @@ export async function uploadToCos(ticket: UploadTicket, blob: Blob) {
   const response = await fetch(validated.uploadUrl, { method: 'PUT', headers: validated.headers, body: blob });
   if (!response.ok) throw new WorksApiError('DEPENDENCY_UNAVAILABLE', '文件上传失败');
 }
-export async function completeAdminUpload(uploadId: string) { Id.parse(uploadId); return AssetResponse.parse(await write(`/admin/uploads/${uploadId}/complete`, {})); }
-export async function rebuildCatalogSnapshot() { return SnapshotResponse.parse(await write('/admin/snapshots/rebuild', {})); }
+export async function completeAdminUpload(uploadId: string, key: string) { Id.parse(uploadId); return AssetResponse.parse(await write(`/admin/uploads/${uploadId}/complete`, {}, 'POST', key)); }
+export async function rebuildCatalogSnapshot(key: string) { return SnapshotResponse.parse(await write('/admin/snapshots/rebuild', {}, 'POST', key)); }

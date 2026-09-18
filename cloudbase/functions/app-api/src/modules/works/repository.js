@@ -6,7 +6,7 @@ function first(data) { return Array.isArray(data) ? data[0] : data; }
 
 function controlledError(error) {
   const message = String(error && error.message || '');
-  for (const [needle, code] of [['version_conflict', 'VERSION_CONFLICT'], ['state_conflict', 'STATE_CONFLICT'], ['assets_incomplete', 'UPLOAD_NOT_VERIFIED'], ['slug_conflict', 'SLUG_CONFLICT'], ['not_found', 'NOT_FOUND']]) {
+  for (const [needle, code] of [['version_conflict', 'VERSION_CONFLICT'], ['state_conflict', 'STATE_CONFLICT'], ['assets_incomplete', 'UPLOAD_NOT_VERIFIED'], ['page_sequence_invalid', 'UPLOAD_NOT_VERIFIED'], ['asset_policy_invalid', 'UPLOAD_NOT_VERIFIED'], ['slug_conflict', 'SLUG_CONFLICT'], ['not_found', 'NOT_FOUND']]) {
     if (message.includes(needle)) return Object.assign(new Error(needle), { code });
   }
   return new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Content storage unavailable');

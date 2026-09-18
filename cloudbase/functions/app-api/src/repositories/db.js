@@ -117,7 +117,7 @@ function createCloudBaseIdempotencyStore({ rdb, reportSecurityEvent = () => {} }
     const row = Array.isArray(begin.data) ? begin.data[0] : begin.data;
     if (!row || typeof row.state !== 'string') throw dependencyError({ name: 'InvalidRpcResultError' });
     if (row.state === 'completed') return row.response;
-    if (row.state === 'in_progress' || row.state === 'request_hash_conflict') throw new ApiError(409, 'STATE_CONFLICT', 'Idempotency key is already in use');
+    if (row.state === 'in_progress' || row.state === 'request_hash_conflict') throw new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'Idempotency key is already in use');
     if (row.state !== 'acquired') throw dependencyError({ name: 'InvalidRpcResultError' });
     let response;
     try {

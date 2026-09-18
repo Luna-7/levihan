@@ -35,6 +35,8 @@ function parseConfig(env = process.env) {
   if (environment === 'production' && cosPublicBucket === cosPrivateBucket) throw new Error('COS_PUBLIC_BUCKET and COS_PRIVATE_BUCKET must be distinct in production');
   const cosRegion = required(env, 'COS_REGION');
   const databaseSchema = required(env, 'DATABASE_SCHEMA');
+  const snapshotSystemActorId = env.SNAPSHOT_SYSTEM_ACTOR_ID && String(env.SNAPSHOT_SYSTEM_ACTOR_ID).trim();
+  if (snapshotSystemActorId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(snapshotSystemActorId)) throw new Error('Invalid SNAPSHOT_SYSTEM_ACTOR_ID');
   const sessionCookieDomain = env.SESSION_COOKIE_DOMAIN && String(env.SESSION_COOKIE_DOMAIN).trim();
   if (environment === 'production' && !sessionCookieDomain) {
     throw new Error('Missing required configuration: SESSION_COOKIE_DOMAIN');
@@ -60,6 +62,7 @@ function parseConfig(env = process.env) {
     cosPrivateBucket,
     cosRegion,
     databaseSchema,
+    snapshotSystemActorId,
     sessionCookieDomain: sessionCookieDomain || undefined,
     sessionHashPepper,
     authHashPepper,
