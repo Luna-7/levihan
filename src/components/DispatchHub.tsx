@@ -488,6 +488,9 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col justify-between gap-2.5 sm:gap-3 font-retro-jp text-[#203429] p-0.5">
+      <button className="self-end rounded border border-[#1E4334] bg-[#FFFDF9] px-3 py-1 text-xs font-bold" onClick={() => { window.location.hash = '#/submissions'; }}>
+        登录用户投稿中心
+      </button>
       {/* ====================================================
           卡片 1：复古花纹信封 (Vintage Envelope Dispatch Form)
          ==================================================== */}

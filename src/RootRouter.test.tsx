@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./App', () => ({ default: () => <div>public app</div> }));
 vi.mock('./features/access/RestrictedWorkPage', () => ({ RestrictedWorkPage: ({ slug }: { slug: string }) => <div>restricted:{slug}</div> }));
-import { RootRouter, restrictedSlugFromHash } from './RootRouter';
+vi.mock('./features/submissions/SubmissionForm', () => ({ SubmissionForm: () => <div>submission workflow</div> }));
+import { RootRouter, restrictedSlugFromHash, submissionsFromHash } from './RootRouter';
 
 afterEach(() => { cleanup(); window.location.hash = ''; });
 
@@ -16,5 +17,12 @@ describe('RootRouter', () => {
     window.location.hash = '#/restricted/restricted-story';
     render(<RootRouter />);
     expect(screen.getByText('restricted:restricted-story')).toBeTruthy();
+  });
+
+  it('makes the submission workflow reachable from the real root', () => {
+    expect(submissionsFromHash('#/submissions')).toBe(true);
+    window.location.hash = '#/submissions';
+    render(<RootRouter />);
+    expect(screen.getByText('submission workflow')).toBeTruthy();
   });
 });

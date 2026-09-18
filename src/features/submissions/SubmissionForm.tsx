@@ -1,0 +1,31 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { completeSubmissionUpload, createSubmission, createSubmissionOperationKey, getMySubmission, initSubmissionUpload, listMySubmissions, sha256File, submitSubmission, updateSubmission, uploadSubmissionFile, withdrawSubmission, type Submission, type SubmissionType, type UploadTicket } from './api';
+
+export function SubmissionForm({ onClose }: { onClose: () => void }) {
+  const [type, setType] = useState<SubmissionType>('novel'); const [title, setTitle] = useState(''); const [summary, setSummary] = useState(''); const [description, setDescription] = useState(''); const [rating, setRating] = useState<'general' | 'mature' | 'restricted'>('general');
+  const [current, setCurrent] = useState<Submission | null>(null); const [items, setItems] = useState<Submission[]>([]); const [message, setMessage] = useState('失败时可使用同一操作编号重试；签名上传地址只保存在当前页面内存中。'); const [progress, setProgress] = useState<number | null>(null); const operationRef = useRef(createSubmissionOperationKey());
+  const reload = () => listMySubmissions().then((value) => setItems(value.items)).catch(() => setMessage('无法读取投稿状态，请确认已登录后重试。'));
+  useEffect(() => { void reload(); }, []);
+  const save = async () => { try { const item = current?.status === 'draft' ? await updateSubmission(current.id, { version: current.version, title, summary, description, rating }, operationRef.current) : await createSubmission({ type, title, summary, description, rating }, operationRef.current); setCurrent(item); setMessage(`草稿已保存（操作编号 ${operationRef.current}）`); operationRef.current = createSubmissionOperationKey(); await reload(); } catch { setMessage('草稿保存失败，请保留页面并使用同一操作编号重试。'); } };
+  const send = async () => { if (!current) return setMessage('请先保存草稿。'); if (['comic', 'novel'].includes(current.type) && current.assetCount < 1) return setMessage('缺少已验证素材，请先上传并完成校验。'); try { const item = await submitSubmission(current.id, current.version, operationRef.current); setCurrent(item); setMessage('投稿已提交审核；每日成功提交配额已计入。'); operationRef.current = createSubmissionOperationKey(); await reload(); } catch { setMessage('提交失败；若票据过期请重新获取，其他错误可用同一操作编号重试。'); } };
+  const upload = async (file: File) => { if (!current) return setMessage('请先保存草稿再上传素材。'); try { const checksum = await sha256File(file); const kind = current.type === 'novel' ? 'body' : current.type === 'comic' ? 'page' : 'attachment'; const initialized = await initSubmissionUpload(current.id, { submissionType: current.type, filename: file.name.toLowerCase(), mimeType: file.type, sizeBytes: file.size, checksum, kind, ...(kind === 'page' ? { pageNo: current.assetCount + 1 } : {}) }, operationRef.current); if ('status' in initialized && initialized.status === 'verified') { setMessage('素材已经验证。'); return; } if (!('status' in initialized)) { const ticket: UploadTicket = initialized; await uploadSubmissionFile(ticket, file, setProgress); } await completeSubmissionUpload(current.id, initialized.uploadId, operationRef.current); setCurrent({ ...current, assetCount: current.assetCount + 1 }); setMessage('素材已私有上传并验证。'); setProgress(null); operationRef.current = createSubmissionOperationKey(); } catch { setMessage('素材上传失败或票据过期，请使用同一操作编号重试初始化或完成校验。'); setProgress(null); } };
+  const restore = async (item: Submission) => { try { const detail = await getMySubmission(item.id); setCurrent(detail); setType(detail.type); setTitle(detail.title); setSummary(detail.summary); setDescription(detail.payload.description); setRating(detail.payload.rating); operationRef.current = createSubmissionOperationKey(); setMessage('草稿已恢复，可继续编辑和上传。'); } catch { setMessage('草稿恢复失败，请刷新后重试。'); } };
+  const withdraw = async (item: Submission) => { try { await withdrawSubmission(item.id, item.version, createSubmissionOperationKey()); setMessage('投稿已撤回，私有素材已进入清理队列。'); await reload(); } catch { setMessage('撤回失败，请刷新状态后重试。'); } };
+  return <main className="min-h-screen bg-[#f6eed9] p-4 text-[#203429]" aria-label="投稿中心">
+    <div className="mx-auto max-w-2xl rounded border-2 border-[#1e4334] bg-white/80 p-4">
+      <div className="flex items-center justify-between"><h1 className="text-xl font-bold">作品投稿中心</h1><button onClick={onClose}>返回</button></div>
+      <p className="my-2 text-sm" role="status">{message}</p>
+      <p className="text-xs">失败时可使用同一操作编号重试；刷新页面后签名上传地址会被清除。</p>
+      <label className="block">投稿类型<select aria-label="投稿类型" value={type} onChange={(event) => setType(event.target.value as SubmissionType)}><option value="novel">小说</option><option value="comic">漫画</option><option value="recommendation">推荐</option><option value="other">其他</option></select></label>
+      <label className="block">作品标题<input aria-label="作品标题" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} /></label>
+      <label className="block">摘要<textarea aria-label="摘要" value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={2000} /></label>
+      <label className="block">说明<textarea aria-label="说明" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={10000} /></label>
+      <label className="block">分级<select aria-label="分级" value={rating} onChange={(event) => setRating(event.target.value as typeof rating)}><option value="general">全年龄</option><option value="mature">成熟内容</option><option value="restricted">R18/受限</option></select></label>
+      <div className="my-3 flex gap-2"><button onClick={() => void save()}>保存草稿</button><button onClick={() => void send()} disabled={!current || current.status !== 'draft'}>提交审核</button></div>
+      <label className="block">私有素材<input aria-label="私有素材" type="file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} /></label>
+      {progress !== null && <progress aria-label="上传进度" value={progress} max={100}>{progress}%</progress>}
+      <h2 className="mt-6 font-bold">我的投稿</h2>
+      <ul>{items.map((item) => <li key={item.id}>{item.title} · {item.status}{item.rejectionReason ? ` · ${item.rejectionReason}` : ''}{item.status === 'draft' && <button onClick={() => void restore(item)}>继续编辑</button>}{['draft', 'submitted'].includes(item.status) && <button onClick={() => void withdraw(item)}>撤回</button>}</li>)}</ul>
+    </div>
+  </main>;
+}

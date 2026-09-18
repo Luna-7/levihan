@@ -5,6 +5,9 @@ const { ApiError } = require('../errors');
 const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
 const WORK_TYPES = new Set(['comic', 'novel', 'art', 'resource']);
 const ASSET_KINDS = new Set(['cover', 'page', 'body', 'attachment', 'preview']);
+const UUID_PART = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+const SUBMISSION_STAGING_RE = new RegExp(`^staging/submissions/(${UUID_PART})/(${UUID_PART})/(${UUID_PART})/(${UUID_PART})\\.([a-z0-9]{1,12})$`);
+const ADMIN_STAGING_RE = /^staging\/admin\/[A-Za-z0-9._/-]{1,900}$/;
 
 function call(cos, method, params) {
   return new Promise((resolve, reject) => cos[method](params, (error, data) => error ? reject(error) : resolve(data || {})));
@@ -130,7 +133,7 @@ function validateSignedReadUrl(url, { expectedHost, expectedPath, nowSeconds }) 
   return { url: parsed.toString(), expiresAt: new Date(end * 1000).toISOString() };
 }
 
-function createCosObjectStore({ publicBucket, privateBucket, region, cos, clock = () => Date.now() }) {
+function createCosObjectStore({ publicBucket, privateBucket, region, cos, clock = () => Date.now(), credentials }) {
   if (!publicBucket || !privateBucket || !region || !cos) throw new Error('COS public/private buckets, region and client are required');
   return {
     async signGet({ objectKey, expiresInSeconds }) {
@@ -145,12 +148,47 @@ function createCosObjectStore({ publicBucket, privateBucket, region, cos, clock 
       });
     },
     async signPut({ objectKey, contentType, contentLength, checksum, expiresInSeconds }) {
-      if (expiresInSeconds !== 300 || !objectKey.startsWith('staging/admin/')) throw new ApiError(400, 'VALIDATION_FAILED', 'Upload signing constraints are invalid');
+      if (expiresInSeconds !== 300 || !ADMIN_STAGING_RE.test(objectKey) || objectKey.includes('..') || objectKey.includes('//')) throw new ApiError(400, 'VALIDATION_FAILED', 'Upload signing constraints are invalid');
       const headers = { 'Content-Type': contentType, 'x-cos-meta-sha256': checksum };
       const data = await call(cos, 'getObjectUrl', { Bucket: privateBucket, Region: region, Key: objectKey, Method: 'PUT', Sign: true, Expires: expiresInSeconds, Headers: headers });
       const url = typeof data === 'string' ? data : data.Url;
       if (typeof url !== 'string' || !url.startsWith('https://')) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'COS signing failed');
       return { url, headers: { 'content-type': contentType, 'x-cos-meta-sha256': checksum } };
+    },
+    async signPost({ objectKey, contentType, contentLength, checksum, expiresInSeconds }) {
+      if (expiresInSeconds !== 300 || !SUBMISSION_STAGING_RE.test(objectKey) || !Number.isSafeInteger(contentLength) || contentLength < 1
+        || !/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(contentType || '') || !/^[a-f0-9]{64}$/.test(checksum || '')) {
+        throw new ApiError(400, 'VALIDATION_FAILED', 'Submission upload signing constraints are invalid');
+      }
+      const secretId = credentials?.secretId;
+      const secretKey = credentials?.secretKey;
+      const securityToken = credentials?.securityToken;
+      if (!secretId || !secretKey) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'COS signing credentials are unavailable');
+      const start = Math.floor(clock() / 1000);
+      const end = start + expiresInSeconds;
+      const keyTime = `${start};${end}`;
+      const conditions = [
+        { bucket: privateBucket },
+        ['eq', '$key', objectKey],
+        ['content-length-range', 1, contentLength],
+        ['eq', '$Content-Type', contentType],
+        ['eq', '$x-cos-meta-sha256', checksum],
+        { 'q-sign-algorithm': 'sha1' },
+        { 'q-ak': secretId },
+        { 'q-sign-time': keyTime },
+      ];
+      if (securityToken) conditions.push(['eq', '$x-cos-security-token', securityToken]);
+      const policy = Buffer.from(JSON.stringify({ expiration: new Date(end * 1000).toISOString(), conditions })).toString('base64');
+      const signKey = crypto.createHmac('sha1', secretKey).update(keyTime).digest('hex');
+      const signature = crypto.createHmac('sha1', signKey).update(crypto.createHash('sha1').update(policy).digest('hex')).digest('hex');
+      return {
+        url: `https://${privateBucket}.cos.${region}.myqcloud.com/`,
+        fields: {
+          key: objectKey, 'Content-Type': contentType, 'x-cos-meta-sha256': checksum,
+          'q-sign-algorithm': 'sha1', 'q-ak': secretId, 'q-key-time': keyTime, 'q-signature': signature, policy,
+          ...(securityToken ? { 'x-cos-security-token': securityToken } : {}),
+        },
+      };
     },
     async head({ objectKey }) {
       const data = await call(cos, 'headObject', { Bucket: privateBucket, Region: region, Key: objectKey });
@@ -180,7 +218,10 @@ function createCosObjectStore({ publicBucket, privateBucket, region, cos, clock 
     },
     async promote({ sourceKey, destinationKey, storageZone, contentType }) {
       const destinationBucket = storageZone === 'public' ? publicBucket : storageZone === 'private' ? privateBucket : null;
-      if (!destinationBucket || !sourceKey.startsWith('staging/admin/') || !(destinationKey.startsWith('media/works/') || destinationKey.startsWith('protected/works/'))) throw new ApiError(400, 'VALIDATION_FAILED', 'COS promotion constraints are invalid');
+      const submission = sourceKey.match(SUBMISSION_STAGING_RE);
+      const validAdmin = ADMIN_STAGING_RE.test(sourceKey) && !sourceKey.includes('..') && !sourceKey.includes('//') && (destinationKey.startsWith('media/works/') || destinationKey.startsWith('protected/works/'));
+      const validSubmission = submission && storageZone === 'private' && destinationKey === `protected/works/${submission[2]}/${submission[4]}.${submission[5]}`;
+      if (!destinationBucket || !(validAdmin || validSubmission)) throw new ApiError(400, 'VALIDATION_FAILED', 'COS promotion constraints are invalid');
       await call(cos, 'putObjectCopy', { Bucket: destinationBucket, Region: region, Key: destinationKey, CopySource: `${privateBucket}.cos.${region}.myqcloud.com/${sourceKey}`, MetadataDirective: 'Replaced', ContentType: contentType, ...(['application/pdf', 'application/epub+zip'].includes(contentType) ? { ContentDisposition: 'attachment' } : {}) });
     },
     async putImmutable(objectKey, bytes, { cacheControl, version, schemaVersion }) {
@@ -221,7 +262,10 @@ function createRuntimeCosObjectStore({ config, env = process.env, COS }) {
     SecurityToken: env.TENCENTCLOUD_SESSIONTOKEN,
     Protocol: 'https:',
   });
-  return createCosObjectStore({ publicBucket: config.cosPublicBucket, privateBucket: config.cosPrivateBucket, region: config.cosRegion, cos });
+  return createCosObjectStore({
+    publicBucket: config.cosPublicBucket, privateBucket: config.cosPrivateBucket, region: config.cosRegion, cos,
+    credentials: { secretId: env.TENCENTCLOUD_SECRETID, secretKey: env.TENCENTCLOUD_SECRETKEY, securityToken: env.TENCENTCLOUD_SESSIONTOKEN },
+  });
 }
 
 module.exports = { createCosObjectStore, createRuntimeCosObjectStore, validatePublicCatalogDocument };

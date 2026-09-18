@@ -19,7 +19,7 @@
     "lint": "tsc --noEmit",
     "verify:secrets": "node scripts/verify-no-secrets.mjs",
     "verify:levels": "node scripts/verify-save-hange-levels.ts",
-    "verify:backend-schema": "node scripts/verify-backend-schema.mjs && node scripts/verify-content-pipeline.mjs && node scripts/verify-content-access.mjs && node scripts/verify-interactions.mjs",
+    "verify:backend-schema": "node scripts/verify-backend-schema.mjs && node scripts/verify-content-pipeline.mjs && node scripts/verify-content-access.mjs && node scripts/verify-interactions.mjs && node scripts/verify-submissions.mjs",
     "prebuild": "node scripts/generate-admin-pixiv.mjs"
   },
   "allowScripts": {

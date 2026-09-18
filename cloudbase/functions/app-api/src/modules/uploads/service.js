@@ -162,4 +162,4 @@ function createUploadsService({ repository, objectStore, now = () => new Date(),
   };
 }
 
-module.exports = { createUploadsService, validateDeclaration, matchesFormat, DECLARATIONS };
+module.exports = { createUploadsService, validateDeclaration, inspectStream, matchesFormat, DECLARATIONS };

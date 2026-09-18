@@ -24,8 +24,11 @@ const { registerAccessRoutes } = require('./src/modules/access/routes');
 const { createInteractionsService } = require('./src/modules/interactions/service');
 const { createInteractionsRepository } = require('./src/modules/interactions/repository');
 const { registerInteractionRoutes } = require('./src/modules/interactions/routes');
+const { createSubmissionsService } = require('./src/modules/submissions/service');
+const { createSubmissionsRepository } = require('./src/modules/submissions/repository');
+const { registerSubmissionRoutes } = require('./src/modules/submissions/routes');
 
-function createRuntime({ env = process.env, cloudbase, actorResolver, logger, authService, worksService, uploadsService, snapshotService, accessService, interactionsService, objectStore } = {}) {
+function createRuntime({ env = process.env, cloudbase, actorResolver, logger, authService, worksService, uploadsService, snapshotService, accessService, interactionsService, submissionsService, objectStore } = {}) {
   const config = parseConfig(env);
   const sdk = cloudbase || require('@cloudbase/node-sdk');
   const app = sdk.init({ env: sdk.SYMBOL_CURRENT_ENV, accessKey: config.cloudbaseApiKey });
@@ -46,6 +49,7 @@ function createRuntime({ env = process.env, cloudbase, actorResolver, logger, au
   registerSnapshotRoutes(api.router, snapshotService || createSnapshotHttpService(createSnapshotService({ repository: createSnapshotRepository({ rdb }), objectStore: runtimeObjectStore })));
   registerAccessRoutes(api.router, accessService || createAccessService({ repository: createAccessRepository({ rdb }), objectStore: runtimeObjectStore }));
   registerInteractionRoutes(api.router, interactionsService || createInteractionsService({ repository: createInteractionsRepository({ rdb }) }));
+  registerSubmissionRoutes(api.router, submissionsService || createSubmissionsService({ repository: createSubmissionsRepository({ rdb }), objectStore: runtimeObjectStore }));
   return api;
 }
 

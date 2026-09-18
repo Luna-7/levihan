@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { createCosObjectStore } = require('../src/infrastructure/cos');
+const { createCosObjectStore, createRuntimeCosObjectStore } = require('../src/infrastructure/cos');
 const SIGN_NOW_SECONDS = 2_000_000_000;
 function signedReadUrl(changes = {}) {
   const params = new URLSearchParams({
@@ -32,6 +32,57 @@ describe('COS object-store adapter', () => {
     const result = await store.signPut({ objectKey: 'staging/admin/u/f.webp', contentType: 'image/webp', contentLength: 123, checksum: 'a'.repeat(64), expiresInSeconds: 300 });
     expect(getObjectUrl).toHaveBeenCalledWith(expect.objectContaining({ Bucket: 'private-123', Region: 'ap-test', Key: 'staging/admin/u/f.webp', Method: 'PUT', Sign: true, Expires: 300, Headers: { 'Content-Type': 'image/webp', 'x-cos-meta-sha256': 'a'.repeat(64) } }), expect.any(Function));
     expect(result).toEqual({ url: 'https://bucket.cos.test/key?q-sign-algorithm=sha1', headers: { 'content-type': 'image/webp', 'x-cos-meta-sha256': 'a'.repeat(64) } });
+  });
+
+  it('keeps submission staging out of header-signed PUT tickets', async () => {
+    const getObjectUrl = vi.fn((_params, callback) => callback(null, { Url: 'https://bucket.cos.test/key?q-sign-algorithm=sha1' }));
+    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: { getObjectUrl } });
+    const userId = '11111111-1111-4111-8111-111111111111';
+    const submissionId = '22222222-2222-4222-8222-222222222222';
+    const uploadId = '33333333-3333-4333-8333-333333333333';
+    const fileId = '44444444-4444-4444-8444-444444444444';
+    const objectKey = `staging/submissions/${userId}/${submissionId}/${uploadId}/${fileId}.webp`;
+    for (const invalid of [objectKey,
+      `staging/submissions/${userId}/${submissionId}/${uploadId}/../${fileId}.webp`,
+      `staging/submissions/${userId}/${submissionId}/not-an-upload/${fileId}.webp`,
+      `staging/submissions/${userId}/${submissionId}/${uploadId}/${fileId}.webp/extra`,
+    ]) await expect(store.signPut({ objectKey: invalid, contentType: 'image/webp', contentLength: 123, checksum: 'a'.repeat(64), expiresInSeconds: 300 })).rejects.toMatchObject({ status: 400 });
+    expect(getObjectUrl).not.toHaveBeenCalled();
+  });
+
+  it('creates a five-minute browser POST policy bound to key, size, MIME and checksum', async () => {
+    const store = createCosObjectStore({
+      publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: {}, clock: () => SIGN_NOW_SECONDS * 1000,
+      credentials: { secretId: 'testpublicid1', secretKey: 'test-secret-key', securityToken: 'test-token' },
+    });
+    const key = 'staging/submissions/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222/33333333-3333-4333-8333-333333333333/44444444-4444-4444-8444-444444444444.webp';
+    const ticket = await store.signPost({ objectKey: key, contentType: 'image/webp', contentLength: 123, checksum: 'a'.repeat(64), expiresInSeconds: 300 });
+    expect(ticket.url).toBe('https://private-123.cos.ap-test.myqcloud.com/');
+    expect(ticket.fields).toMatchObject({ key, 'Content-Type': 'image/webp', 'x-cos-meta-sha256': 'a'.repeat(64), 'q-sign-algorithm': 'sha1', 'q-ak': 'testpublicid1', 'x-cos-security-token': 'test-token' });
+    expect(ticket.fields['q-signature']).toMatch(/^[a-f0-9]{40}$/);
+    const policy = JSON.parse(Buffer.from(ticket.fields.policy, 'base64').toString('utf8'));
+    expect(policy).toEqual({ expiration: new Date((SIGN_NOW_SECONDS + 300) * 1000).toISOString(), conditions: [
+      { bucket: 'private-123' }, ['eq', '$key', key], ['content-length-range', 1, 123], ['eq', '$Content-Type', 'image/webp'], ['eq', '$x-cos-meta-sha256', 'a'.repeat(64)],
+      { 'q-sign-algorithm': 'sha1' }, { 'q-ak': 'testpublicid1' }, { 'q-sign-time': `${SIGN_NOW_SECONDS};${SIGN_NOW_SECONDS + 300}` }, ['eq', '$x-cos-security-token', 'test-token'],
+    ] });
+  });
+
+  it('builds browser POST policies from the same temporary credentials used by the runtime SDK client', async () => {
+    const clients = [];
+    class FakeCOS { constructor(options) { this.options = options; clients.push(this); } }
+    const store = createRuntimeCosObjectStore({ config: { cosPublicBucket: 'public-123', cosPrivateBucket: 'private-123', cosRegion: 'ap-test' }, env: { TENCENTCLOUD_SECRETID: 'runtimepublicid', TENCENTCLOUD_SECRETKEY: 'fixture-secret-key', TENCENTCLOUD_SESSIONTOKEN: 'fixture-token' }, COS: FakeCOS });
+    const key = 'staging/submissions/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222/33333333-3333-4333-8333-333333333333/44444444-4444-4444-8444-444444444444.webp';
+    const ticket = await store.signPost({ objectKey: key, contentType: 'image/webp', contentLength: 5, checksum: 'a'.repeat(64), expiresInSeconds: 300 });
+    expect(clients[0].options).toMatchObject({ SecretId: 'runtimepublicid', SecretKey: 'fixture-secret-key', SecurityToken: 'fixture-token', Protocol: 'https:' });
+    expect(ticket.fields).toMatchObject({ 'q-ak': 'runtimepublicid', 'x-cos-security-token': 'fixture-token' });
+  });
+
+  it('rejects malformed submission POST requests and missing signing credentials', async () => {
+    const key = 'staging/submissions/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222/33333333-3333-4333-8333-333333333333/44444444-4444-4444-8444-444444444444.webp';
+    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: {}, credentials: { secretId: 'id', secretKey: 'fixture-secret-key' } });
+    await expect(store.signPost({ objectKey: key.replace('staging/submissions/', 'staging/admin/'), contentType: 'image/webp', contentLength: 123, checksum: 'a'.repeat(64), expiresInSeconds: 300 })).rejects.toMatchObject({ status: 400 });
+    await expect(store.signPost({ objectKey: key, contentType: 'image/webp', contentLength: 0, checksum: 'a'.repeat(64), expiresInSeconds: 300 })).rejects.toMatchObject({ status: 400 });
+    await expect(createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: {} }).signPost({ objectKey: key, contentType: 'image/webp', contentLength: 123, checksum: 'a'.repeat(64), expiresInSeconds: 300 })).rejects.toMatchObject({ status: 503 });
   });
 
   it('signs GET only from the private protected work prefix for exactly five minutes', async () => {
@@ -111,6 +162,23 @@ describe('COS object-store adapter', () => {
     expect(cos.putObjectCopy).toHaveBeenCalledWith(expect.objectContaining({ Bucket: 'public-123', CopySource: 'private-123.cos.ap-test.myqcloud.com/staging/admin/u/f.webp', Key: 'media/works/w/f.webp' }), expect.any(Function));
     await store.read({ objectKey: 'staging/admin/u/f.webp' });
     expect(cos.getObject).toHaveBeenCalledWith(expect.objectContaining({ Bucket: 'private-123' }), expect.any(Function));
+  });
+
+  it('promotes submission staging only to its same private work and file key', async () => {
+    const cos = { putObjectCopy: vi.fn((_params, cb) => cb(null, {})) };
+    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos });
+    const userId = '11111111-1111-4111-8111-111111111111';
+    const submissionId = '22222222-2222-4222-8222-222222222222';
+    const uploadId = '33333333-3333-4333-8333-333333333333';
+    const fileId = '44444444-4444-4444-8444-444444444444';
+    const sourceKey = `staging/submissions/${userId}/${submissionId}/${uploadId}/${fileId}.webp`;
+    const destinationKey = `protected/works/${submissionId}/${fileId}.webp`;
+    await expect(store.promote({ sourceKey, destinationKey, storageZone: 'private', contentType: 'image/webp' })).resolves.toBeUndefined();
+    for (const invalid of [
+      { destinationKey: `media/works/${submissionId}/${fileId}.webp`, storageZone: 'public' },
+      { destinationKey: `protected/works/55555555-5555-4555-8555-555555555555/${fileId}.webp`, storageZone: 'private' },
+      { destinationKey: `protected/works/${submissionId}/66666666-6666-4666-8666-666666666666.webp`, storageZone: 'private' },
+    ]) await expect(store.promote({ sourceKey, contentType: 'image/webp', ...invalid })).rejects.toMatchObject({ status: 400 });
   });
 
   it('uses the COS forbid-overwrite header and parses the installed SDK versioning result shape', async () => {
