@@ -54,3 +54,32 @@ The new runtime tests first failed for missing multi-cookie output, short produc
 ## Fix round 2
 
 Added method-scoped default rate limits with explicit metadata opt-out, corrected `app-api`-only deployment configuration, validated an explicit rate-limit pepper, and bound the CloudBase database handle to the configured schema. Added an idempotency-record table and a CloudBase RPC-backed store injection point for runtime deployment.
+
+### Atomic idempotency completion
+
+#### RED
+
+- Function/repository/schema tests initially failed in eight places: default-write replay executed twice, body changes did not conflict, invalid supported keys were ignored, actor scope was not passed to RPC, conflicts were not mapped to the public 409 envelope, sensitive responses were persisted verbatim, and the schema verifier accepted missing idempotency tables/RPC transitions.
+- A second RED cycle proved the verifier also accepted a direct runtime table grant and a begin transition that inserted `completed` instead of `processing`.
+- The full suite then exposed one secret-scanner failure caused by a non-placeholder API-key test fixture; changing it to an explicit `test-` placeholder resolved the fixture issue.
+
+#### Implementation
+
+- Reworked the three SECURITY DEFINER routines with a pinned search path. Begin now atomically inserts or reacquires only expired rows and distinguishes `acquired`, `completed`, `in_progress`, and `request_hash_conflict`; complete/fail require the exact processing identity and request hash.
+- Added idempotency table constraints, RLS, PUBLIC revokes, exact runtime function grants, and matching rollback signature verification. The verifier now checks each transition's critical insert/update/delete/hash/expiry semantics and rejects direct table grants; mutation tests cover each branch.
+- Added CloudBase RPC result validation and safe persisted response envelopes. Only status code, recursively filtered business body, and an explicit safe response-header allowlist are stored; cookie, authorization, token, and unsafe header fields are removed.
+- Added pre-handler actor resolution and HMAC actor/IP scoping. Write routes support idempotency by default when a key is present, `required` forces it, and `none` bypasses it. Canonical method, actual path, route parameters/template, sorted query, actor scope, and body hashing prevent cross-actor/path/query replay while preserving body-change conflicts.
+- Added fake-store/RPC coverage for replay, actor/path/query isolation, retry after failure, missing trusted identity, key validation, safe persistence, and runtime dependency injection.
+
+#### Verification
+
+- Function tests: `npm test -- --run cloudbase/functions/app-api/test` — 2 files, 40 tests passed.
+- Schema verifier: `npm run verify:backend-schema` — passed.
+- Full suite: `npm test -- --run` — 6 files, 73 tests passed.
+- Type check: `npm run lint` — passed.
+- Secret scan: `npm run verify:secrets` — no findings.
+- Whitespace check: `git diff --check` — passed.
+
+#### Remaining deployment check
+
+The SQL behavior is covered by static semantic and mutation verification; a staging PostgreSQL apply/concurrency run remains a deployment checkpoint because no database service is available in this worktree.

@@ -2,7 +2,8 @@ const { createApi } = require('../src/http');
 const { parseConfig } = require('../src/config');
 const { createLogger } = require('../src/logger');
 const { serializeCookie, setSessionCookies, clearSessionCookies } = require('../src/security');
-const { createRateLimitRepository } = require('../src/repositories/db');
+const { createRateLimitRepository, createCloudBaseIdempotencyStore } = require('../src/repositories/db');
+const { createRuntime } = require('../index');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 
@@ -92,6 +93,22 @@ describe('security boundaries', () => {
     expect(JSON.stringify(write.mock.calls[0][0])).not.toContain('member-42');
   });
 
+  it('resolves an actor before idempotency and logs the resolved actor only as a hash', async () => {
+    const write = vi.fn();
+    const execute = vi.fn(async ({ operation }) => operation());
+    const actorResolver = vi.fn(async () => 'member-84');
+    const server = createApi({ config, idempotencyStore: { execute }, actorResolver, requestId: () => 'resolved-actor', logger: createLogger({ write, actorPepper: 'pepper' }) });
+    server.router.post('/write', (ctx) => ({ actor: ctx.actorId }), { csrfExempt: true });
+
+    const response = await server.handle(request({ headers: { 'idempotency-key': 'actor-key-01' }, requestContext: { identity: { sourceIp: '203.0.113.8' } } }));
+
+    expect(response.statusCode).toBe(200);
+    expect(actorResolver).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(write.mock.calls[0][0].actorIdHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(write.mock.calls[0][0])).not.toContain('member-84');
+  });
+
   it('registers a public versioned CloudBase HTTP gateway', () => {
     const cloudbase = JSON.parse(readFileSync(resolve(__dirname, '../../../cloudbaserc.json'), 'utf8'));
     const apiFunction = cloudbase.functions.find((item) => item.name === 'app-api');
@@ -106,5 +123,89 @@ describe('security boundaries', () => {
     const result = await repository.consume({ subjectHash: 'hash', bucket: 'login-ip', windowSeconds: 60, limit: 2, now: new Date('2030-01-01T00:00:10.000Z') });
     expect(rpc).toHaveBeenCalledWith('consume_rate_limit_bucket', expect.objectContaining({ p_subject_hash: 'hash', p_bucket: 'login-ip' }));
     expect(result).toEqual({ accepted: true, retryAfterSeconds: 0 });
+  });
+
+  it('persists only a safe idempotent response envelope through CloudBase RPC', async () => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
+      .mockResolvedValueOnce({ data: true, error: null });
+    const store = createCloudBaseIdempotencyStore({ rdb: { rpc } });
+    const response = {
+      statusCode: 201,
+      headers: {
+        location: '/api/v1/works/1',
+        etag: 'safe-etag',
+        'set-cookie': 'lv_session=secret',
+        authorization: 'Bearer secret',
+        'x-unsafe': 'secret',
+      },
+      body: {
+        work: { id: '1', title: 'safe' },
+        accessToken: 'secret-token',
+        nested: { cookie: 'secret-cookie', authorization: 'secret-auth' },
+      },
+    };
+
+    expect(await store.execute({ scope: 'scope-hash', key: 'key-12345', requestHash: 'request-hash', actorScopeHash: 'actor-hash', operation: async () => response })).toBe(response);
+    expect(rpc).toHaveBeenNthCalledWith(1, 'begin_idempotent_request', {
+      p_scope: 'scope-hash', p_actor_scope_hash: 'actor-hash', p_idempotency_key: 'key-12345', p_request_hash: 'request-hash',
+    });
+    const persisted = rpc.mock.calls[1][1].p_response;
+    expect(persisted).toEqual({
+      statusCode: 201,
+      headers: { location: '/api/v1/works/1', etag: 'safe-etag' },
+      body: { work: { id: '1', title: 'safe' }, nested: {} },
+    });
+    expect(JSON.stringify(persisted).toLowerCase()).not.toMatch(/set-cookie|authorization|token|cookie|secret/);
+  });
+
+  it('replays completed responses and releases only failed operations', async () => {
+    const completed = { statusCode: 200, headers: {}, body: { ok: true } };
+    const replayRpc = vi.fn().mockResolvedValue({ data: [{ state: 'completed', response: completed }], error: null });
+    const replayOperation = vi.fn();
+    const replayStore = createCloudBaseIdempotencyStore({ rdb: { rpc: replayRpc } });
+    expect(await replayStore.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: replayOperation })).toEqual(completed);
+    expect(replayOperation).not.toHaveBeenCalled();
+
+    const failedRpc = vi.fn()
+      .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
+      .mockResolvedValueOnce({ data: true, error: null });
+    const failedStore = createCloudBaseIdempotencyStore({ rdb: { rpc: failedRpc } });
+    const failure = new Error('operation failed');
+    await expect(failedStore.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: async () => { throw failure; } })).rejects.toBe(failure);
+    expect(failedRpc).toHaveBeenNthCalledWith(2, 'fail_idempotent_request', expect.objectContaining({ p_actor_scope_hash: 'actor', p_request_hash: 'hash' }));
+  });
+
+  it('maps in-progress and request-hash conflicts to safe 409 errors', async () => {
+    for (const state of ['in_progress', 'request_hash_conflict']) {
+      const store = createCloudBaseIdempotencyStore({ rdb: { rpc: vi.fn().mockResolvedValue({ data: [{ state, response: null }], error: null }) } });
+      await expect(store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: vi.fn() }))
+        .rejects.toMatchObject({ status: 409, errorCode: 'STATE_CONFLICT' });
+    }
+  });
+
+  it('injects the CloudBase idempotency store and actor resolver in the runtime', async () => {
+    const rpc = vi.fn(async (name) => name === 'begin_idempotent_request'
+      ? { data: [{ state: 'acquired', response: null }], error: null }
+      : { data: true, error: null });
+    const rdb = { rpc };
+    const cloudbase = { SYMBOL_CURRENT_ENV: 'current', init: vi.fn(() => ({ rdb: vi.fn(() => rdb) })) };
+    const actorResolver = vi.fn(async () => 'runtime-member');
+    const runtime = createRuntime({
+      cloudbase,
+      actorResolver,
+      env: {
+        NODE_ENV: 'test', API_ALLOWED_ORIGINS: 'https://app.example.test',
+        SESSION_HASH_PEPPER: 'a'.repeat(32), RATE_LIMIT_PEPPER: 'b'.repeat(32),
+        CLOUDBASE_APIKEY: 'test-api-key', COS_BUCKET: 'bucket', COS_REGION: 'region', DATABASE_SCHEMA: 'public',
+      },
+    });
+    runtime.router.post('/runtime-write', () => ({ ok: true }), { csrfExempt: true });
+
+    const response = await runtime.handle({ httpMethod: 'POST', path: '/api/v1/runtime-write', headers: { 'idempotency-key': 'runtime-key-01' }, requestContext: {} });
+
+    expect(response.statusCode).toBe(200);
+    expect(actorResolver).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('begin_idempotent_request', expect.objectContaining({ p_actor_scope_hash: expect.stringMatching(/^[a-f0-9]{64}$/) }));
   });
 });

@@ -11,7 +11,7 @@ export const REQUIRED_TABLES = [
   'favorites', 'comments', 'reading_progress', 'reports', 'upload_sessions',
   'upload_files', 'submissions', 'submission_assets', 'snapshot_jobs',
   'snapshot_versions', 'moderation_actions', 'audit_logs', 'site_settings',
-  'blocked_subjects', 'rate_limit_buckets',
+  'blocked_subjects', 'rate_limit_buckets', 'idempotency_records',
 ];
 
 export const REQUIRED_FUNCTIONS = {
@@ -28,6 +28,9 @@ export const REQUIRED_FUNCTIONS = {
   set_favorite: 'uuid, uuid, boolean',
   sync_reading_progress: 'uuid, uuid, bigint, numeric, bigint, timestamptz',
   consume_rate_limit_bucket: 'text, text, integer, integer, timestamptz',
+  begin_idempotent_request: 'text, text, text, text',
+  complete_idempotent_request: 'text, text, text, text, jsonb',
+  fail_idempotent_request: 'text, text, text, text',
 };
 
 const UPDATED_AT_TABLES = [
@@ -334,6 +337,32 @@ function validateMigration(migration, failures) {
   addFailure(failures, has(rateLimit, /INSERT\s+INTO\s+public\.rate_limit_buckets[\s\S]*?ON\s+CONFLICT[\s\S]*?hit_count\s*=\s*rate_limit_buckets\.hit_count\s*\+\s*1/i), 'rate-limit consumer must use an atomic upsert');
   addFailure(failures, has(rateLimit, /accepted[\s\S]*?retry_after_seconds/i), 'rate-limit consumer must return accepted and retry_after_seconds');
 
+  const idempotencyTable = tableBody(sql, 'idempotency_records');
+  addFailure(failures, has(idempotencyTable, /PRIMARY\s+KEY\s*\(\s*scope\s*,\s*actor_scope_hash\s*,\s*idempotency_key\s*\)/i), 'idempotency records must be unique by scope, actor, and key');
+  addFailure(failures, has(idempotencyTable, /response\s+jsonb/i), 'idempotency response must use jsonb');
+  addFailure(failures, has(idempotencyTable, /status\s+text\s+NOT\s+NULL[\s\S]*?status\s+IN\s*\(\s*'processing'\s*,\s*'completed'\s*\)/i), 'idempotency status must be constrained');
+  addFailure(failures, has(idempotencyTable, /status\s*=\s*'processing'\s+AND\s+response\s+IS\s+NULL[\s\S]*?status\s*=\s*'completed'\s+AND\s+response\s+IS\s+NOT\s+NULL/i), 'idempotency response must match record status');
+
+  const beginIdempotency = functionBody(sql, 'begin_idempotent_request');
+  addFailure(failures, has(beginIdempotency, /INSERT\s+INTO\s+public\.idempotency_records/i), 'idempotency begin must insert a processing record');
+  addFailure(failures, has(beginIdempotency, /INSERT\s+INTO\s+public\.idempotency_records\s*\(\s*scope\s*,\s*actor_scope_hash\s*,\s*idempotency_key\s*,\s*request_hash\s*,\s*status\s*,\s*response\s*,\s*expires_at\s*\)[\s\S]*?VALUES\s*\(\s*p_scope\s*,\s*p_actor_scope_hash\s*,\s*p_idempotency_key\s*,\s*p_request_hash\s*,\s*'processing'\s*,\s*NULL\s*,\s*v_now\s*\+\s*interval\s*'24 hours'\s*\)/i), 'idempotency begin must insert the exact processing identity and expiry');
+  addFailure(failures, has(beginIdempotency, /ON\s+CONFLICT\s*\(\s*scope\s*,\s*actor_scope_hash\s*,\s*idempotency_key\s*\)\s+DO\s+UPDATE/i), 'idempotency begin must arbitrate the exact unique key');
+  addFailure(failures, has(beginIdempotency, /DO\s+UPDATE\s+SET[\s\S]*?request_hash\s*=\s*EXCLUDED\.request_hash[\s\S]*?status\s*=\s*'processing'[\s\S]*?response\s*=\s*NULL[\s\S]*?WHERE\s+idempotency_records\.expires_at\s*<=\s*v_now/i), 'idempotency begin must atomically acquire expired records');
+  addFailure(failures, has(beginIdempotency, /request_hash\s*<>\s*p_request_hash\s+THEN\s+'request_hash_conflict'/i), 'idempotency begin must detect request hash conflicts');
+  addFailure(failures, has(beginIdempotency, /status\s*=\s*'completed'\s+THEN\s+'completed'/i), 'idempotency begin must replay completed requests');
+  addFailure(failures, has(beginIdempotency, /ELSE\s+'in_progress'/i), 'idempotency begin must identify in-progress requests');
+  addFailure(failures, has(beginIdempotency, /FOR\s+(?:NO\s+KEY\s+)?UPDATE/i), 'idempotency begin must lock the observed conflicting record');
+
+  const completeIdempotency = functionBody(sql, 'complete_idempotent_request');
+  addFailure(failures, has(completeIdempotency, /UPDATE\s+public\.idempotency_records[\s\S]*?SET\s+status\s*=\s*'completed'\s*,\s*response\s*=\s*p_response/i), 'idempotency complete must persist the response');
+  addFailure(failures, has(completeIdempotency, /request_hash\s*=\s*p_request_hash/i), 'idempotency complete must match the request hash');
+  addFailure(failures, has(completeIdempotency, /status\s*=\s*'processing'/i), 'idempotency complete must only transition processing records');
+
+  const failIdempotency = functionBody(sql, 'fail_idempotent_request');
+  addFailure(failures, has(failIdempotency, /DELETE\s+FROM\s+public\.idempotency_records/i), 'idempotency fail must release the processing record');
+  addFailure(failures, has(failIdempotency, /request_hash\s*=\s*p_request_hash/i), 'idempotency fail must match the request hash');
+  addFailure(failures, has(failIdempotency, /status\s*=\s*'processing'/i), 'idempotency fail must only release processing records');
+
   const comments = functionBody(sql, 'backend_v2_enforce_comment_reply_depth');
   addFailure(failures, has(comments, /FOR\s+KEY\s+SHARE/i), 'comment parent must be locked while validating a reply');
   addFailure(failures, has(comments, /v_parent_work_id\s*<>\s*NEW\.work_id/i), 'comment replies must stay on the same work');
@@ -420,6 +449,14 @@ function validateRuntimeAccess(runtimeAccess, failures) {
     addFailure(failures, actualGrants.size === expectedGrants.size && [...expectedGrants].every((operation) => actualGrants.has(operation)), `runtime role table grant is not least privilege for ${table}`);
     const actualPolicies = policyMap.get(table);
     addFailure(failures, actualPolicies.size === expectedGrants.size && [...expectedGrants].every((operation) => actualPolicies.has(operation)), `runtime RLS policies do not mirror grants for ${table}`);
+  }
+  for (const [table, actualGrants] of tableGrants) {
+    const expectedDefinition = RUNTIME_TABLE_GRANTS[table] ?? [];
+    const expected = new Set(expectedDefinition.filter((item) => item !== 'UPDATE_COLUMNS'));
+    if (expectedDefinition.includes('UPDATE_COLUMNS')) expected.add('UPDATE');
+    for (const operation of actualGrants) {
+      addFailure(failures, expected.has(operation), `runtime table grant exposes an undeclared ${operation} operation on ${table}`);
+    }
   }
   for (const [table, actualPolicies] of policyMap) {
     for (const operation of actualPolicies) {

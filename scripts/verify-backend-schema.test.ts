@@ -42,6 +42,14 @@ describe('backend v2 PostgreSQL migration', () => {
       ['rollback trigger function', 'rollback', (sql: string) => sql.replace('DROP FUNCTION IF EXISTS public.backend_v2_set_updated_at();', '-- DROP FUNCTION IF EXISTS public.backend_v2_set_updated_at();')],
       ['username regex', 'migration', (sql: string) => sql.replace("username ~ '^[A-Za-z0-9_]{3,32}$'", 'false')],
       ['rate limit RPC', 'migration', (sql: string) => sql.replace('CREATE FUNCTION public.consume_rate_limit_bucket(', '-- CREATE FUNCTION public.consume_rate_limit_bucket(')],
+      ['idempotency table', 'migration', (sql: string) => sql.replace('CREATE TABLE public.idempotency_records', '-- CREATE TABLE public.idempotency_records')],
+      ['idempotency unique key', 'migration', (sql: string) => sql.replace('PRIMARY KEY (scope, actor_scope_hash, idempotency_key)', 'PRIMARY KEY (scope, actor_scope_hash, request_hash)')],
+      ['idempotency jsonb response', 'migration', (sql: string) => sql.replace('response jsonb', 'response text')],
+      ['idempotency RLS', 'migration', (sql: string) => sql.replace('ALTER TABLE public.idempotency_records ENABLE ROW LEVEL SECURITY;', '-- ALTER TABLE public.idempotency_records ENABLE ROW LEVEL SECURITY;')],
+      ['idempotency PUBLIC revoke', 'migration', (sql: string) => sql.replace(', public.idempotency_records FROM PUBLIC;', ' FROM PUBLIC;')],
+      ['idempotency runtime grant', 'runtime', (sql: string) => sql.replace('public.begin_idempotent_request(text, text, text, text)', 'public.missing_begin_idempotent_request(text, text, text, text)')],
+      ['idempotency direct table grant', 'runtime', (sql: string) => sql.replace('\nCOMMIT;', '\nGRANT SELECT ON TABLE public.idempotency_records TO :"backend_role";\nCOMMIT;')],
+      ['idempotency rollback', 'rollback', (sql: string) => sql.replace('DROP FUNCTION IF EXISTS public.complete_idempotent_request(text,text,text,text,jsonb);', '-- DROP FUNCTION IF EXISTS public.complete_idempotent_request(text,text,text,text,jsonb);')],
     ] as const;
 
     try {
@@ -65,6 +73,32 @@ describe('backend v2 PostgreSQL migration', () => {
       }
     } finally {
       rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects mutations to every critical idempotency transition condition', () => {
+    const migration = readFileSync(migrationPath, 'utf8');
+    const rollback = readFileSync(rollbackPath, 'utf8');
+    const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
+    const mutations = [
+      ['begin insert', (sql: string) => sql.replace('INSERT INTO public.idempotency_records', 'INSERT INTO public.missing_idempotency_records')],
+      ['begin processing insert', (sql: string) => sql.replace("p_request_hash, 'processing', NULL, v_now + interval '24 hours'", "p_request_hash, 'completed', NULL, v_now + interval '24 hours'")],
+      ['begin conflict target', (sql: string) => sql.replace('ON CONFLICT(scope,actor_scope_hash,idempotency_key)', 'ON CONFLICT(scope,actor_scope_hash,request_hash)')],
+      ['begin expiry takeover', (sql: string) => sql.replace('WHERE idempotency_records.expires_at <= v_now', 'WHERE false')],
+      ['begin hash conflict', (sql: string) => sql.replace("request_hash <> p_request_hash THEN 'request_hash_conflict'", "false THEN 'request_hash_conflict'")],
+      ['begin completed replay', (sql: string) => sql.replace("status = 'completed' THEN 'completed'", "false THEN 'completed'")],
+      ['complete update', (sql: string) => sql.replace('UPDATE public.idempotency_records', 'UPDATE public.missing_idempotency_records')],
+      ['complete request hash', (sql: string) => sql.replace('AND request_hash = p_request_hash', 'AND true')],
+      ['complete processing state', (sql: string) => sql.replace("AND status = 'processing'", 'AND true')],
+      ['fail delete', (sql: string) => sql.replace('DELETE FROM public.idempotency_records', 'DELETE FROM public.missing_idempotency_records')],
+      ['fail request hash', (sql: string) => sql.replaceAll('AND request_hash = p_request_hash', 'AND true')],
+      ['fail processing state', (sql: string) => sql.replaceAll("AND status = 'processing'", 'AND true')],
+    ] as const;
+
+    for (const [name, mutate] of mutations) {
+      const failures = validateBackendSchema({ migration: mutate(migration), rollback, runtimeAccess });
+      expect(failures.length, name).toBeGreaterThan(0);
+      expect(failures.some((failure) => failure.toLowerCase().includes('idempoten')), name).toBe(true);
     }
   });
 

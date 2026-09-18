@@ -383,13 +383,76 @@ CREATE TABLE public.rate_limit_buckets (
   CHECK (expires_at > window_started_at)
 );
 CREATE INDEX rate_limit_buckets_expiry_idx ON public.rate_limit_buckets (expires_at);
-CREATE TABLE public.idempotency_records (scope text NOT NULL, actor_scope_hash text NOT NULL, idempotency_key text NOT NULL, request_hash text NOT NULL, status text NOT NULL CHECK (status IN ('processing','completed')), response jsonb, expires_at timestamptz NOT NULL, PRIMARY KEY (scope, actor_scope_hash, idempotency_key));
+CREATE TABLE public.idempotency_records (
+  scope text NOT NULL CHECK (scope <> ''),
+  actor_scope_hash text NOT NULL CHECK (actor_scope_hash ~ '^[0-9a-f]{64}$'),
+  idempotency_key text NOT NULL CHECK (idempotency_key ~ '^[A-Za-z0-9_-]{8,128}$'),
+  request_hash text NOT NULL CHECK (request_hash ~ '^[0-9a-f]{64}$'),
+  status text NOT NULL CHECK (status IN ('processing', 'completed')),
+  response jsonb,
+  expires_at timestamptz NOT NULL,
+  PRIMARY KEY (scope, actor_scope_hash, idempotency_key),
+  CHECK ((status = 'processing' AND response IS NULL) OR (status = 'completed' AND response IS NOT NULL))
+);
 CREATE INDEX idempotency_records_expiry_idx ON public.idempotency_records (expires_at);
-CREATE FUNCTION public.begin_idempotent_request(p_scope text,p_actor_scope_hash text,p_idempotency_key text,p_request_hash text) RETURNS TABLE(state text,response jsonb) LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$ DECLARE inserted integer; BEGIN
-  INSERT INTO public.idempotency_records(scope,actor_scope_hash,idempotency_key,request_hash,status,expires_at) VALUES(p_scope,p_actor_scope_hash,p_idempotency_key,p_request_hash,'processing',clock_timestamp()+interval '24 hours') ON CONFLICT(scope,actor_scope_hash,idempotency_key) DO NOTHING;
-  GET DIAGNOSTICS inserted=ROW_COUNT; IF inserted=1 THEN state:='acquired'; response:=NULL; ELSE SELECT CASE WHEN request_hash<>p_request_hash THEN 'request_hash_conflict' WHEN status='completed' THEN 'completed' ELSE 'in_progress' END,response INTO state,response FROM public.idempotency_records WHERE scope=p_scope AND actor_scope_hash=p_actor_scope_hash AND idempotency_key=p_idempotency_key; END IF; RETURN NEXT; END; $$;
-CREATE FUNCTION public.complete_idempotent_request(p_scope text,p_actor_scope_hash text,p_idempotency_key text,p_request_hash text,p_response jsonb) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public AS $$ UPDATE public.idempotency_records SET status='completed',response=p_response WHERE scope=p_scope AND actor_scope_hash=p_actor_scope_hash AND idempotency_key=p_idempotency_key AND request_hash=p_request_hash AND status='processing' RETURNING true $$;
-CREATE FUNCTION public.fail_idempotent_request(p_scope text,p_actor_scope_hash text,p_idempotency_key text,p_request_hash text) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public AS $$ DELETE FROM public.idempotency_records WHERE scope=p_scope AND actor_scope_hash=p_actor_scope_hash AND idempotency_key=p_idempotency_key AND request_hash=p_request_hash AND status='processing' RETURNING true $$;
+CREATE FUNCTION public.begin_idempotent_request(p_scope text, p_actor_scope_hash text, p_idempotency_key text, p_request_hash text)
+RETURNS TABLE (state text, response jsonb)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE v_now timestamptz := clock_timestamp(); v_affected integer;
+BEGIN
+  IF p_scope = '' OR p_actor_scope_hash !~ '^[0-9a-f]{64}$' OR p_idempotency_key !~ '^[A-Za-z0-9_-]{8,128}$' OR p_request_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'invalid idempotency input' USING ERRCODE = '22023';
+  END IF;
+  LOOP
+    v_now := clock_timestamp();
+    INSERT INTO public.idempotency_records (scope, actor_scope_hash, idempotency_key, request_hash, status, response, expires_at)
+    VALUES (p_scope, p_actor_scope_hash, p_idempotency_key, p_request_hash, 'processing', NULL, v_now + interval '24 hours')
+    ON CONFLICT(scope,actor_scope_hash,idempotency_key) DO UPDATE SET
+      request_hash = EXCLUDED.request_hash, status = 'processing', response = NULL, expires_at = EXCLUDED.expires_at
+    WHERE idempotency_records.expires_at <= v_now;
+    GET DIAGNOSTICS v_affected = ROW_COUNT;
+    IF v_affected = 1 THEN state := 'acquired'; response := NULL; RETURN NEXT; RETURN; END IF;
+
+    v_now := clock_timestamp();
+    SELECT CASE WHEN request_hash <> p_request_hash THEN 'request_hash_conflict'
+                WHEN status = 'completed' THEN 'completed'
+                ELSE 'in_progress' END,
+           idempotency_records.response
+      INTO state, response
+      FROM public.idempotency_records
+     WHERE scope = p_scope AND actor_scope_hash = p_actor_scope_hash AND idempotency_key = p_idempotency_key
+       AND expires_at > v_now
+     FOR NO KEY UPDATE;
+    IF FOUND THEN RETURN NEXT; RETURN; END IF;
+  END LOOP;
+END;
+$$;
+
+CREATE FUNCTION public.complete_idempotent_request(p_scope text, p_actor_scope_hash text, p_idempotency_key text, p_request_hash text, p_response jsonb)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE v_affected integer;
+BEGIN
+  IF p_response IS NULL THEN RAISE EXCEPTION 'idempotency response is required' USING ERRCODE = '22023'; END IF;
+  UPDATE public.idempotency_records
+     SET status = 'completed', response = p_response
+   WHERE scope = p_scope AND actor_scope_hash = p_actor_scope_hash AND idempotency_key = p_idempotency_key
+     AND request_hash = p_request_hash AND status = 'processing';
+  GET DIAGNOSTICS v_affected = ROW_COUNT;
+  RETURN v_affected = 1;
+END;
+$$;
+
+CREATE FUNCTION public.fail_idempotent_request(p_scope text, p_actor_scope_hash text, p_idempotency_key text, p_request_hash text)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE v_affected integer;
+BEGIN
+  DELETE FROM public.idempotency_records
+   WHERE scope = p_scope AND actor_scope_hash = p_actor_scope_hash AND idempotency_key = p_idempotency_key
+     AND request_hash = p_request_hash AND status = 'processing';
+  GET DIAGNOSTICS v_affected = ROW_COUNT;
+  RETURN v_affected = 1;
+END;
+$$;
 
 CREATE FUNCTION public.consume_rate_limit_bucket(
   p_subject_hash text, p_bucket text, p_window_seconds integer, p_limit integer, p_now timestamptz
@@ -831,6 +894,7 @@ ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.blocked_subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rate_limit_buckets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.idempotency_records ENABLE ROW LEVEL SECURITY;
 
 CREATE TRIGGER app_users_set_updated_at BEFORE UPDATE ON public.app_users FOR EACH ROW EXECUTE FUNCTION public.backend_v2_set_updated_at();
 CREATE TRIGGER user_sessions_set_updated_at BEFORE UPDATE ON public.user_sessions FOR EACH ROW EXECUTE FUNCTION public.backend_v2_set_updated_at();

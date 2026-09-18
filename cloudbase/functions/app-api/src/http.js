@@ -36,6 +36,34 @@ function queryFromEvent(event) {
   return query;
 }
 
+function canonicalValue(value) {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().filter((key) => value[key] !== undefined).map((key) => [key, canonicalValue(value[key])]));
+  }
+  return value;
+}
+
+function canonicalQuery(query) {
+  return Object.fromEntries(Object.keys(query).sort().map((key) => {
+    const value = query[key];
+    return [key, Array.isArray(value) ? value.map(String).sort() : String(value)];
+  }));
+}
+
+function normalizedActualPath(path) {
+  return path.split('/').map((segment) => encodeURIComponent(decodeURIComponent(segment))).join('/');
+}
+
+function digest(value) {
+  return crypto.createHash('sha256').update(JSON.stringify(canonicalValue(value))).digest('hex');
+}
+
+function actorScopeHash(actorId, ip, pepper) {
+  const subject = actorId == null ? `ip:${ip}` : `actor:${actorId}`;
+  return crypto.createHmac('sha256', pepper).update(subject).digest('hex');
+}
+
 function parseBody(event, headers, limit) {
   if (event.body === undefined || event.body === null || event.body === '') return undefined;
   if (typeof event.body === 'object' && !Buffer.isBuffer(event.body)) throw new ApiError(400, 'VALIDATION_FAILED', 'Request body must be encoded text');
@@ -63,7 +91,7 @@ function trustedIp(event, headers, config) {
   if (config.trustedProxyHeaders) return (headers['x-forwarded-for'] || headers['x-real-ip'] || '').split(',')[0].trim();
   return '';
 }
-function createApi({ config, router = createRouter(), requestId = crypto.randomUUID, logger = { info() {}, error() {} }, rateLimiter, idempotencyStore } = {}) {
+function createApi({ config, router = createRouter(), requestId = crypto.randomUUID, logger = { info() {}, error() {} }, rateLimiter, idempotencyStore, actorResolver = async () => null } = {}) {
   if (!config) throw new Error('API configuration is required');
   async function handle(event = {}) {
     const startedAt = Date.now();
@@ -100,6 +128,19 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
       routePath = route.path;
       const cookies = parseCookies(headers.cookie);
       if (WRITE_METHODS.has(method) && config.csrfRequired && !route.metadata.csrfExempt) requireCsrf(headers, cookies, config);
+      const setCookies = [];
+      const query = queryFromEvent(event);
+      const context = {
+        method, path: relativePath, params: route.params, headers, cookies, body, query, requestId: id,
+        clientTraceId, idempotencyKey: headers['idempotency-key'], config,
+        setCookie: (cookie) => setCookies.push(cookie),
+        setActor: (value) => { actorId = value == null ? undefined : String(value); context.actorId = actorId; },
+      };
+      const resolvedActor = await actorResolver(context);
+      if (resolvedActor != null) {
+        actorId = String(resolvedActor);
+        context.actorId = actorId;
+      }
       const rateLimit = route.metadata.rateLimit ?? defaultRateLimitForRoute(method, route.path);
       if (rateLimit && rateLimiter) {
         const ip = trustedIp(event, headers, config);
@@ -115,15 +156,32 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
           }
         }
       }
-      const setCookies = [];
-      const context = { method, path: relativePath, params: route.params, headers, cookies, body, query: queryFromEvent(event), requestId: id, clientTraceId, idempotencyKey: headers['idempotency-key'], config, setCookie: (cookie) => setCookies.push(cookie), setActor: (value) => { actorId = value; } };
       const operation = () => route.handler(context);
       let data;
-      if (route.metadata.idempotency === 'required') {
-        const key = headers['idempotency-key'];
+      const idempotency = route.metadata.idempotency ?? (WRITE_METHODS.has(method) ? 'supported' : 'none');
+      const key = headers['idempotency-key'];
+      const useIdempotency = idempotency === 'required' || (idempotency !== 'none' && key !== undefined);
+      if (useIdempotency) {
         if (!/^[A-Za-z0-9_-]{8,128}$/.test(key || '')) throw new ApiError(400, 'VALIDATION_FAILED', 'Invalid Idempotency-Key');
         if (!idempotencyStore) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Idempotency storage unavailable');
-        data = await idempotencyStore.execute({ scope: route.path, key, requestHash: crypto.createHash('sha256').update(JSON.stringify(body || null)).digest('hex'), actorId: context.actorId, operation });
+        const ip = trustedIp(event, headers, config);
+        if (actorId == null && !ip) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Trusted client identity is unavailable');
+        const scopeActorHash = actorScopeHash(actorId, ip, config.sessionHashPepper);
+        const requestIdentity = {
+          method,
+          actualPath: normalizedActualPath(relativePath),
+          params: canonicalValue(route.params),
+          query: canonicalQuery(query),
+          routeTemplate: route.path,
+          actorScopeHash: scopeActorHash,
+        };
+        data = await idempotencyStore.execute({
+          scope: digest(requestIdentity),
+          key,
+          requestHash: digest({ ...requestIdentity, body: body === undefined ? null : body }),
+          actorScopeHash: scopeActorHash,
+          operation,
+        });
       } else data = await operation();
       const custom = data && typeof data === 'object' && Object.hasOwn(data, 'statusCode') && Object.hasOwn(data, 'body');
       status = custom ? data.statusCode : 200;
