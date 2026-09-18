@@ -3,9 +3,9 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../features/works/api', () => ({ archiveWork: vi.fn(), completeAdminUpload: vi.fn().mockResolvedValue({ assetId: '550e8400-e29b-41d4-a716-446655440001', status: 'verified' }), createOperationKey: () => 'work-operation', createWork: vi.fn(), getAdminWork: vi.fn(), initAdminUpload: vi.fn(), listAdminWorks: vi.fn().mockResolvedValue({ items: [], nextCursor: null }), publishWork: vi.fn(), rebuildCatalogSnapshot: vi.fn(), restoreWork: vi.fn(), reviewWork: vi.fn(), updateWork: vi.fn(), uploadToCos: vi.fn() }));
-vi.mock('./api', () => ({ adminRequest: vi.fn(), adminWrite: vi.fn(), createQuestion: vi.fn(), listAudit: vi.fn(), listJobs: vi.fn(), listModeration: vi.fn(), listQuestions: vi.fn(), listUsers: vi.fn(), operationKey: () => 'admin-operation', retryJob: vi.fn(), setQuestionStatus: vi.fn(), setUserStatus: vi.fn(), updateQuestion: vi.fn() }));
-import { listQuestions, listUsers, updateQuestion, setUserStatus } from './api';
-import { QuestionsAdmin, UsersAdmin, WorksAdmin, resumeAdminUpload } from './modules';
+vi.mock('./api', () => ({ adminRequest: vi.fn(), adminWrite: vi.fn(), createQuestion: vi.fn(), getHealth: vi.fn(), getSettings: vi.fn(), listAudit: vi.fn(), listJobs: vi.fn(), listModeration: vi.fn(), listQuestions: vi.fn(), listUsers: vi.fn(), operationKey: () => 'admin-operation', promoteUser: vi.fn(), retryJob: vi.fn(), setQuestionStatus: vi.fn(), setUserStatus: vi.fn(), updateQuestion: vi.fn(), updateSetting: vi.fn() }));
+import { getHealth, getSettings, listQuestions, listUsers, updateQuestion, setUserStatus, updateSetting } from './api';
+import { QuestionsAdmin, SettingsAdmin, UsersAdmin, WorksAdmin, resumeAdminUpload } from './modules';
 import { completeAdminUpload, getAdminWork, initAdminUpload, listAdminWorks, uploadToCos } from '../features/works/api';
 const user = { id: '550e8400-e29b-41d4-a716-446655440001', username: 'member', role: 'member' as const, status: 'active' as const, version: 1, createdAt: '2030-01-01T00:00:00Z', lastLoginAt: null, activeSessions: 1 };
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
@@ -60,5 +60,30 @@ describe('admin module interactions', () => {
 
     await waitFor(() => expect(initAdminUpload).toHaveBeenCalledWith(expect.objectContaining({ workId, chapterId: chapterTwo, kind: 'page', pageNo: 1 }), 'work-operation'));
     expect(completeAdminUpload).toHaveBeenCalledWith(user.id, 'work-operation');
+  });
+
+  it('renders and can create every whitelisted setting when a fresh database returns no rows', async () => {
+    vi.mocked(getSettings).mockResolvedValue({ items: [] });
+    vi.mocked(getHealth).mockResolvedValue({ database: { ok: true, databaseVersion: 'v2', snapshot: {}, migration: {}, jobs: {} }, storage: { ok: true, region: 'ap-test', publicBucketConfigured: true, privateBucketConfigured: true, publicCorsConfigured: true, privateCorsConfigured: true } });
+    vi.mocked(updateSetting).mockImplementation(async (setting, value) => ({ setting: { ...setting, value, version: 1, updatedAt: '2030-01-01T00:00:00Z' } }));
+    render(<SettingsAdmin />);
+    const editors = await screen.findAllByRole('textbox');
+    expect(editors).toHaveLength(3);
+    expect(screen.getByLabelText('announcement')).toBeTruthy();
+    expect(screen.getByLabelText('adult_content_policy')).toBeTruthy();
+    expect(screen.getByLabelText('feature_flags')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: '保存设置' })[0]);
+    await waitFor(() => expect(updateSetting).toHaveBeenCalledWith(expect.objectContaining({ key: 'announcement', version: 1 }), expect.any(Object)));
+  });
+
+  it('synchronizes an editor to asynchronously loaded server values before saving', async () => {
+    const serverSetting = { key: 'announcement' as const, value: { enabled: true, text: '线上维护公告' }, version: 7, updatedAt: '2030-01-01T00:00:00Z' };
+    vi.mocked(getSettings).mockResolvedValue({ items: [serverSetting] });
+    vi.mocked(getHealth).mockResolvedValue({ database: { ok: true, databaseVersion: 'v2', snapshot: {}, migration: {}, jobs: {} }, storage: { ok: true, region: 'ap-test', publicBucketConfigured: true, privateBucketConfigured: true, publicCorsConfigured: true, privateCorsConfigured: true } });
+    vi.mocked(updateSetting).mockResolvedValue({ setting: { ...serverSetting, version: 8 } });
+    render(<SettingsAdmin />);
+    await waitFor(() => expect((screen.getByLabelText('announcement') as HTMLTextAreaElement).value).toContain('线上维护公告'));
+    fireEvent.click(screen.getAllByRole('button', { name: '保存设置' })[0]);
+    await waitFor(() => expect(updateSetting).toHaveBeenCalledWith(expect.objectContaining({ key: 'announcement', version: 7 }), { enabled: true, text: '线上维护公告' }));
   });
 });

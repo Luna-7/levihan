@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AuthApiError, beginLegacyMigration, confirmRecoveryCode, installLegacyMigration, prepareLegacyMigration, recover } from './api';
 
 export function LegacyMigrationPage({ onClose }: { onClose: () => void }) {
   const [credential, setCredential] = useState(''); const [password, setPassword] = useState('');
   const [recoveryCode, setRecoveryCode] = useState(''); const [prepareNonce, setPrepareNonce] = useState('');
   const [saved, setSaved] = useState(false); const [busy, setBusy] = useState(false); const [uncertain, setUncertain] = useState(false); const [message, setMessage] = useState('');
+  useEffect(() => {
+    // Remove the one legacy key without reading or rehydrating its sensitive value.
+    try { window.sessionStorage.removeItem('levihan.pendingRecoveryCode'); } catch { /* storage may be blocked */ }
+  }, []);
   const prepare = async (event: React.FormEvent) => { event.preventDefault(); setBusy(true); setMessage(''); try { await beginLegacyMigration(credential.trim()); const result = await prepareLegacyMigration(); setRecoveryCode(result.recoveryCode); setPrepareNonce(result.prepareNonce); setCredential(''); } catch (error) { setMessage(error instanceof Error ? error.message : '迁移凭据无效'); } finally { setBusy(false); } };
   const install = async (event: React.FormEvent) => { event.preventDefault(); setBusy(true); setMessage(''); try { await installLegacyMigration({ newPassword: password, recoveryCode, prepareNonce }); const confirmed = await confirmRecoveryCode(recoveryCode); window.dispatchEvent(new Event('levihan-auth-changed')); setPassword(''); setPrepareNonce(''); setRecoveryCode(''); setMessage(`账号 ${confirmed.user.username} 已迁移`); } catch (error) { if (error instanceof AuthApiError) { setUncertain(false); setMessage(error.message); } else { setUncertain(true); setMessage('安装结果可能已提交。请使用已保存的恢复码完成恢复，避免重复使用迁移凭据。'); } } finally { setBusy(false); } };
   const recoverUnknown = async (event: React.FormEvent) => { event.preventDefault(); setBusy(true); try { const result = await recover({ recoveryCode, newPassword: password }); setRecoveryCode(result.recoveryCode); setUncertain(false); setSaved(false); setMessage('恢复成功。请重新保存页面显示的新恢复码，再登录。'); } catch (error) { setMessage(error instanceof Error ? error.message : '恢复失败'); } finally { setBusy(false); } };

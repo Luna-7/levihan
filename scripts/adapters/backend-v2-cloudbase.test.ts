@@ -58,7 +58,7 @@ describe('deployable backend v2 CloudBase adapter', () => {
     expect(encryptedCredential).toEqual(expect.any(String));
     const envelope = JSON.parse(privateDecrypt(privateKey, Buffer.from(String(encryptedCredential), 'base64')).toString());
     const repository = { beginClaim: vi.fn().mockResolvedValue({ expiresAt: '2030-01-01T00:10:00.000Z' }) };
-    const service = createLegacyUsersService({ repository, passwordHasher: {}, pepper: 'p'.repeat(32), opaqueToken: () => 'c'.repeat(43) });
+    const service = createLegacyUsersService({ repository, passwordHasher: {}, migrationPepper: 'p'.repeat(32), authPepper: 'a'.repeat(32), opaqueToken: () => 'c'.repeat(43) });
     await service.beginClaim({ body: { migrationCredential: envelope.migrationCredential }, clientIp: '203.0.113.1', config: { migrationCookieName: 'lv_migrate', csrfCookieName: 'lv_csrf' }, setCookie: vi.fn() });
     expect(repository.beginClaim.mock.calls[0][0].credentialHash).toBe(payload[0].credentialHash);
     await adapter.collectCheck();

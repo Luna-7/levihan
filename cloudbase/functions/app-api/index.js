@@ -50,7 +50,7 @@ function createRuntime({ env = process.env, cloudbase, actorResolver, logger, au
   }));
   registerLegacyUsersRoute(api.router, legacyUsersService || createLegacyUsersService({
     repository: createLegacyUsersRepository({ rdb }), passwordHasher: createPasswordHasher(),
-    pepper: config.migrationHashPepper, enabled: config.legacyMigrationEnabled,
+    migrationPepper: config.migrationHashPepper, authPepper: config.authHashPepper, enabled: config.legacyMigrationEnabled,
   }));
   const runtimeObjectStore = objectStore || createRuntimeCosObjectStore({ config, env });
   registerWorksRoutes(api.router, worksService || createWorksService({ repository: createWorksRepository({ rdb }) }));
@@ -59,7 +59,7 @@ function createRuntime({ env = process.env, cloudbase, actorResolver, logger, au
   registerAccessRoutes(api.router, accessService || createAccessService({ repository: createAccessRepository({ rdb }), objectStore: runtimeObjectStore }));
   registerInteractionRoutes(api.router, interactionsService || createInteractionsService({ repository: createInteractionsRepository({ rdb }) }));
   registerSubmissionRoutes(api.router, submissionsService || createSubmissionsService({ repository: createSubmissionsRepository({ rdb }), objectStore: runtimeObjectStore }));
-  registerAdminConsoleRoutes(api.router, adminConsoleService || createAdminConsoleService({ repository: createAdminConsoleRepository({ rdb }), answerHasher: (value) => domainHash(config.authHashPepper, 'question-answer', value) }));
+  registerAdminConsoleRoutes(api.router, adminConsoleService || createAdminConsoleService({ repository: createAdminConsoleRepository({ rdb }), answerHasher: (value) => domainHash(config.authHashPepper, 'question-answer', value), passwordHasher: createPasswordHasher(), authPepper: config.authHashPepper, objectStore: runtimeObjectStore }));
   return api;
 }
 

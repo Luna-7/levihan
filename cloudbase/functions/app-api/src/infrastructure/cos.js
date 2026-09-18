@@ -136,6 +136,24 @@ function validateSignedReadUrl(url, { expectedHost, expectedPath, nowSeconds }) 
 function createCosObjectStore({ publicBucket, privateBucket, region, cos, clock = () => Date.now(), credentials }) {
   if (!publicBucket || !privateBucket || !region || !cos) throw new Error('COS public/private buckets, region and client are required');
   return {
+    async health() {
+      try {
+        const [, , publicAcl, privateAcl, publicCors, privateCors] = await Promise.all([
+          call(cos, 'headBucket', { Bucket: publicBucket, Region: region }),
+          call(cos, 'headBucket', { Bucket: privateBucket, Region: region }),
+          call(cos, 'getBucketACL', { Bucket: publicBucket, Region: region }),
+          call(cos, 'getBucketACL', { Bucket: privateBucket, Region: region }),
+          call(cos, 'getBucketCors', { Bucket: publicBucket, Region: region }),
+          call(cos, 'getBucketCors', { Bucket: privateBucket, Region: region }),
+        ]);
+        return {
+          ok: true, region, publicBucketConfigured: Boolean(publicAcl), privateBucketConfigured: Boolean(privateAcl),
+          publicCorsConfigured: Array.isArray(publicCors?.CORSRules), privateCorsConfigured: Array.isArray(privateCors?.CORSRules),
+        };
+      } catch {
+        return { ok: false, region, publicBucketConfigured: false, privateBucketConfigured: false, publicCorsConfigured: false, privateCorsConfigured: false };
+      }
+    },
     async signGet({ objectKey, expiresInSeconds }) {
       if (expiresInSeconds !== 300 || !/^protected\/works\/[A-Za-z0-9._-]+\/[A-Za-z0-9._/-]+$/.test(objectKey) || objectKey.includes('..') || objectKey.includes('//')) throw new ApiError(400, 'VALIDATION_FAILED', 'Private read signing constraints are invalid');
       const data = await call(cos, 'getObjectUrl', { Bucket: privateBucket, Region: region, Key: objectKey, Method: 'GET', Sign: true, Expires: expiresInSeconds });

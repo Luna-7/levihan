@@ -8,8 +8,9 @@ import { LegacyMigrationPage } from './LegacyMigrationPage';
 afterEach(() => { cleanup(); vi.resetAllMocks(); localStorage.clear(); sessionStorage.clear(); });
 describe('legacy account migration page', () => {
   it('runs claim, prepare, explicit save, install and confirm without persisting secrets', async () => {
+    sessionStorage.setItem('levihan.pendingRecoveryCode', 'STALE-LEGACY-SECRET');
     api.beginLegacyMigration.mockResolvedValue({ ready: true, expiresAt: '2030-01-01T00:10:00Z' }); api.prepareLegacyMigration.mockResolvedValue({ recoveryCode: 'ABCD-EFGH-JKLM-NPQR', prepareNonce: 'n'.repeat(43), expiresAt: '2030-01-01T00:10:00Z' }); api.installLegacyMigration.mockResolvedValue({ installed: true, userId: 'u1' }); api.confirmRecoveryCode.mockResolvedValue({ user: { username: 'legacy_user' } });
-    render(<LegacyMigrationPage onClose={vi.fn()} />); fireEvent.change(screen.getByLabelText('一次性迁移凭据'), { target: { value: 'm'.repeat(43) } }); fireEvent.click(screen.getByRole('button', { name: '验证并生成恢复码' }));
+    render(<LegacyMigrationPage onClose={vi.fn()} />); await waitFor(() => expect(sessionStorage.getItem('levihan.pendingRecoveryCode')).toBeNull()); fireEvent.change(screen.getByLabelText('一次性迁移凭据'), { target: { value: 'm'.repeat(43) } }); fireEvent.click(screen.getByRole('button', { name: '验证并生成恢复码' }));
     expect(await screen.findByText('ABCD-EFGH-JKLM-NPQR')).toBeTruthy(); expect(localStorage.length).toBe(0); expect(sessionStorage.length).toBe(0);
     fireEvent.click(screen.getByLabelText('我已安全保存迁移恢复码')); fireEvent.change(screen.getByLabelText('迁移账号新密码'), { target: { value: 'a-secure-password' } }); fireEvent.click(screen.getByRole('button', { name: '安装密码并完成迁移' }));
     await waitFor(() => expect(api.installLegacyMigration).toHaveBeenCalledWith(expect.objectContaining({ recoveryCode: 'ABCD-EFGH-JKLM-NPQR', prepareNonce: 'n'.repeat(43) }))); expect(localStorage.length).toBe(0); expect(sessionStorage.length).toBe(0);
@@ -23,5 +24,10 @@ describe('legacy account migration page', () => {
     api.beginLegacyMigration.mockResolvedValue({ ready: true }); api.prepareLegacyMigration.mockResolvedValue({ recoveryCode: 'ABCD-EFGH-JKLM-NPQR', prepareNonce: 'n'.repeat(43), expiresAt: 'x' }); api.installLegacyMigration.mockRejectedValue(new api.AuthApiError('VALIDATION_FAILED', '密码不符合要求'));
     render(<LegacyMigrationPage onClose={vi.fn()} />); fireEvent.change(screen.getByLabelText('一次性迁移凭据'), { target: { value: 'm'.repeat(43) } }); fireEvent.click(screen.getByRole('button', { name: '验证并生成恢复码' })); await screen.findByText('ABCD-EFGH-JKLM-NPQR'); fireEvent.click(screen.getByLabelText('我已安全保存迁移恢复码')); fireEvent.change(screen.getByLabelText('迁移账号新密码'), { target: { value: 'a-secure-password' } }); fireEvent.click(screen.getByRole('button', { name: '安装密码并完成迁移' }));
     expect(await screen.findByText('密码不符合要求')).toBeTruthy(); expect(screen.queryByRole('button', { name: '使用恢复码安全恢复' })).toBeNull(); expect(screen.getByRole('button', { name: '安装密码并完成迁移' })).toBeTruthy();
+  });
+  it('still mounts when compatibility cleanup is blocked by browser storage policy', () => {
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError'); });
+    expect(() => render(<LegacyMigrationPage onClose={vi.fn()} />)).not.toThrow();
+    expect(screen.getByRole('heading', { name: '迁移旧账号' })).toBeTruthy();
   });
 });

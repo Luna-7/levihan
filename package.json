@@ -25,7 +25,7 @@
     "generate:r18-cutover-manifest": "node scripts/generate-r18-cutover-manifest.mjs",
     "verify:cos-backend-v2": "node scripts/verify-cos-backend-v2.mjs",
     "deploy:cloudbase-v2": "node scripts/deploy-cloudbase-v2.mjs",
-    "verify:backend-schema": "node scripts/verify-backend-schema.mjs && node scripts/verify-content-pipeline.mjs && node scripts/verify-content-access.mjs && node scripts/verify-interactions.mjs && node scripts/verify-submissions.mjs && node scripts/verify-admin-console.mjs && node scripts/verify-backend-cutover.mjs",
+    "verify:backend-schema": "node scripts/verify-backend-schema.mjs && node scripts/verify-content-pipeline.mjs && node scripts/verify-content-access.mjs && node scripts/verify-interactions.mjs && node scripts/verify-submissions.mjs && node scripts/verify-admin-console.mjs && node scripts/verify-backend-cutover.mjs && node scripts/verify-final-hardening.mjs",
     "prebuild": "node scripts/generate-admin-pixiv.mjs"
   },
   "allowScripts": {

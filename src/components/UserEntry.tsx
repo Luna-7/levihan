@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AuthenticatedUser, MeResponse, RegistrationChallengeResponse } from '../shared/contracts/api';
-import { answerRegistrationChallenge, confirmRecoveryCode, createRegistrationChallenge, getMe, login, logout, recover, register } from '../features/auth/api';
+import { answerRegistrationChallenge, confirmRecoveryCode, createRegistrationChallenge, getMe, login, logout, recover, regenerateRecoveryCode, register } from '../features/auth/api';
 import { UiSprite } from './UiSprite';
 
 type View = 'login' | 'quiz' | 'register' | 'recover' | 'recovery-code' | 'account';
@@ -9,31 +9,9 @@ type Props = { onShowToast: (message: string) => void };
 
 const errorMessage = (error: unknown) => error instanceof Error && error.message ? error.message : '操作失败，请稍后重试';
 const accountFromMe = (value: MeResponse): AuthenticatedUser => ({ ...value.user, role: value.role, capabilities: value.capabilities, ageConsent: value.ageConsent });
-const RECOVERY_STORAGE_KEY = 'levihan.pendingRecoveryCode';
-const RECOVERY_CODE = /^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}$/;
-
-function storedRecoveryCode() {
-  if (typeof window === 'undefined') return '';
-  try {
-    const value = window.sessionStorage.getItem(RECOVERY_STORAGE_KEY) || '';
-    return RECOVERY_CODE.test(value) ? value : '';
-  } catch {
-    return '';
-  }
-}
-
-function persistRecoveryCode(value: string) {
-  try { window.sessionStorage.setItem(RECOVERY_STORAGE_KEY, value); } catch { /* session storage may be disabled */ }
-}
-
-function clearPersistedRecoveryCode() {
-  try { window.sessionStorage.removeItem(RECOVERY_STORAGE_KEY); } catch { /* session storage may be disabled */ }
-}
-
 export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
-  const [initialRecoveryCode] = useState(storedRecoveryCode);
-  const [open, setOpen] = useState(Boolean(initialRecoveryCode));
-  const [view, setView] = useState<View>(initialRecoveryCode ? 'recovery-code' : 'login');
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<View>('login');
   const [account, setAccount] = useState<AuthenticatedUser | null>(null);
   const [busy, setBusy] = useState(false);
   const [username, setUsername] = useState('');
@@ -43,20 +21,19 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   const [ticket, setTicket] = useState('');
   const [recoveryInput, setRecoveryInput] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [recoveryCode, setRecoveryCode] = useState(initialRecoveryCode);
+  const [recoveryCode, setRecoveryCode] = useState('');
   const [recoverySaved, setRecoverySaved] = useState(false);
+
+  useEffect(() => {
+    // Compatibility cleanup only: never read or restore recovery secrets from web storage.
+    try { window.sessionStorage.removeItem('levihan.pendingRecoveryCode'); } catch { /* storage may be blocked */ }
+  }, []);
 
   useEffect(() => {
     void getMe().then((value) => {
       setAccount(accountFromMe(value));
-      if (initialRecoveryCode) {
-        clearPersistedRecoveryCode();
-        setRecoveryCode('');
-        setView('account');
-        setOpen(false);
-      }
     }).catch(() => setAccount(null));
-  }, [initialRecoveryCode]);
+  }, []);
 
   const run = async (task: () => Promise<void>) => {
     if (busy) return;
@@ -87,7 +64,6 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     event.preventDefault();
     void run(async () => {
       const result = await register({ registrationTicket: ticket, username, password });
-      persistRecoveryCode(result.recoveryCode);
       setRecoveryCode(result.recoveryCode); setRecoverySaved(false); setPassword(''); setView('recovery-code');
     });
   };
@@ -102,7 +78,6 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     event.preventDefault();
     void run(async () => {
       const result = await recover({ recoveryCode: recoveryInput.trim().toUpperCase(), newPassword });
-      persistRecoveryCode(result.recoveryCode);
       setRecoveryCode(result.recoveryCode); setRecoverySaved(false); setRecoveryInput(''); setNewPassword(''); setView('recovery-code');
     });
   };
@@ -110,7 +85,6 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     if (!recoverySaved || !recoveryCode) return;
     void run(async () => {
       const result = await confirmRecoveryCode(recoveryCode);
-      clearPersistedRecoveryCode();
       setAccount(result.user); setRecoveryCode(''); setRecoverySaved(false); setView('account');
       window.dispatchEvent(new Event('levihan-auth-changed')); onShowToast('恢复码已确认保存');
     });
@@ -131,7 +105,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
 
         {!account && view === 'login' && <>
           <CredentialForm username={username} password={password} busy={busy} onUsername={setUsername} onPassword={setPassword} onSubmit={submitLogin} submitText="登录" />
-          <div className="mt-4 pt-3 border-t border-dashed border-[#B99A72] flex flex-wrap items-center justify-center gap-3 text-xs text-[#73583F]"><button type="button" onClick={beginRegistration} className="underline cursor-pointer">注册账号</button><span>·</span><button type="button" onClick={() => setView('recover')} className="underline cursor-pointer">使用恢复码</button><span>·</span><a href="#/migrate-account" className="underline">迁移旧账号</a></div>
+          <div className="mt-4 pt-3 border-t border-dashed border-[#B99A72] flex flex-wrap items-center justify-center gap-3 text-xs text-[#73583F]"><button type="button" onClick={beginRegistration} className="underline cursor-pointer">注册账号</button><span>·</span><button type="button" onClick={() => setView('recover')} className="underline cursor-pointer">使用恢复码</button><span>·</span><button type="button" disabled={busy || password.length < 12} onClick={() => void run(async () => { const result = await regenerateRecoveryCode(password); setRecoveryCode(result.recoveryCode); setRecoverySaved(false); setPassword(''); setView('recovery-code'); })} className="underline cursor-pointer disabled:opacity-50">重新生成未确认恢复码</button><span>·</span><a href="#/migrate-account" className="underline">迁移旧账号</a></div>
         </>}
 
         {!account && view === 'quiz' && challenge && <form onSubmit={submitAnswer} className="space-y-3">

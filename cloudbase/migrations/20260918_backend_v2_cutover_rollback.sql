@@ -14,7 +14,7 @@ END $$;
 DROP FUNCTION IF EXISTS public.begin_legacy_migration_claim(text,text,text);
 DROP FUNCTION IF EXISTS public.assert_backend_v2_migration_context(text,text);
 DROP FUNCTION IF EXISTS public.prepare_legacy_migration_credential(text,text,text);
-DROP FUNCTION IF EXISTS public.consume_legacy_migration_credential(text,text,text,text,text,timestamptz,text);
+DROP FUNCTION IF EXISTS public.consume_legacy_migration_credential(text,text,text,text,text,text);
 DROP FUNCTION IF EXISTS public.claim_backend_v2_migration_lock(uuid,integer);
 DROP FUNCTION IF EXISTS public.release_backend_v2_migration_lock(uuid);
 DROP FUNCTION IF EXISTS public.begin_backend_v2_migration_run(text,text,text,text,jsonb);

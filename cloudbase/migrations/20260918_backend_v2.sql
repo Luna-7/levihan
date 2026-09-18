@@ -41,6 +41,8 @@ CREATE TABLE public.user_sessions (
   last_seen_at timestamptz NOT NULL DEFAULT now(),
   revoked_at timestamptz,
   recovery_confirmed_at timestamptz,
+  reauthenticated_at timestamptz,
+  reauth_nonce_hash text,
   ip_hash text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -669,10 +671,9 @@ CREATE FUNCTION public.consume_registration_ticket(
   p_username text,
   p_password_hash text,
   p_session_token_hash text,
-  p_session_expires_at timestamptz,
   p_recovery_code_hash text,
   p_ip_hash text DEFAULT NULL
-) RETURNS TABLE (user_id uuid, session_id uuid)
+) RETURNS TABLE (user_id uuid, session_id uuid, expires_at timestamptz)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
@@ -681,6 +682,7 @@ DECLARE
   v_challenge_id uuid;
   v_user_id uuid;
   v_session_id uuid;
+  v_expires_at timestamptz := clock_timestamp() + interval '30 days';
   v_window_started_at timestamptz;
   v_registration_count integer;
 BEGIN
@@ -718,30 +720,28 @@ BEGIN
   VALUES (v_user_id, p_recovery_code_hash);
   UPDATE public.registration_challenges SET status = 'consumed' WHERE id = v_challenge_id;
   INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash, recovery_confirmed_at)
-  VALUES (v_user_id, p_session_token_hash, p_session_expires_at, p_ip_hash, NULL)
+  VALUES (v_user_id, p_session_token_hash, v_expires_at, p_ip_hash, NULL)
   RETURNING id INTO v_session_id;
-  RETURN QUERY SELECT v_user_id, v_session_id;
+  RETURN QUERY SELECT v_user_id, v_session_id, v_expires_at;
 END;
 $$;
 
 CREATE FUNCTION public.create_login_session(
   p_user_id uuid,
   p_token_hash text,
-  p_expires_at timestamptz,
   p_ip_hash text,
   p_current_token_hash text DEFAULT NULL
-) RETURNS uuid
+) RETURNS TABLE (session_id uuid, expires_at timestamptz)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_session_id uuid;
+  v_role text;
+  v_expires_at timestamptz;
 BEGIN
-  IF p_expires_at <= clock_timestamp() THEN
-    RAISE EXCEPTION 'login session expiry must be in the future' USING ERRCODE = '22023';
-  END IF;
-  PERFORM 1 FROM public.app_users AS login_user
+  SELECT login_user.role INTO v_role FROM public.app_users AS login_user
    WHERE login_user.id = p_user_id
      AND login_user.status = 'active'
      AND login_user.recovery_confirmed_at IS NOT NULL
@@ -749,6 +749,7 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'login user is unavailable' USING ERRCODE = '23514';
   END IF;
+  v_expires_at := clock_timestamp() + CASE WHEN v_role = 'admin' THEN interval '8 hours' ELSE interval '30 days' END;
   IF p_current_token_hash IS NOT NULL THEN
     IF p_current_token_hash !~ '^[0-9a-f]{64}$' THEN
       RAISE EXCEPTION 'invalid current session token hash' USING ERRCODE = '22023';
@@ -759,18 +760,17 @@ BEGIN
        AND revoked_at IS NULL;
   END IF;
   INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash, recovery_confirmed_at)
-  VALUES (p_user_id, p_token_hash, p_expires_at, p_ip_hash, clock_timestamp())
+  VALUES (p_user_id, p_token_hash, v_expires_at, p_ip_hash, clock_timestamp())
   RETURNING id INTO v_session_id;
-  RETURN v_session_id;
+  RETURN QUERY SELECT v_session_id, v_expires_at;
 END;
 $$;
 
 CREATE FUNCTION public.rotate_user_session(
   p_current_token_hash text,
   p_new_token_hash text,
-  p_new_expires_at timestamptz,
   p_ip_hash text DEFAULT NULL
-) RETURNS uuid
+) RETURNS TABLE (session_id uuid, expires_at timestamptz)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
@@ -778,6 +778,8 @@ AS $$
 DECLARE
   v_user_id uuid;
   v_session_id uuid;
+  v_role text;
+  v_expires_at timestamptz;
 BEGIN
   UPDATE public.user_sessions
      SET revoked_at = clock_timestamp()
@@ -788,10 +790,13 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'session is invalid, expired, or already rotated' USING ERRCODE = '23514';
   END IF;
+  SELECT role INTO v_role FROM public.app_users WHERE id = v_user_id AND status = 'active' FOR NO KEY UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'session user is unavailable' USING ERRCODE = '23514'; END IF;
+  v_expires_at := clock_timestamp() + CASE WHEN v_role = 'admin' THEN interval '8 hours' ELSE interval '30 days' END;
   INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash, recovery_confirmed_at)
-  VALUES (v_user_id, p_new_token_hash, p_new_expires_at, p_ip_hash, clock_timestamp())
+  VALUES (v_user_id, p_new_token_hash, v_expires_at, p_ip_hash, clock_timestamp())
   RETURNING id INTO v_session_id;
-  RETURN v_session_id;
+  RETURN QUERY SELECT v_session_id, v_expires_at;
 END;
 $$;
 
@@ -800,9 +805,8 @@ CREATE FUNCTION public.consume_recovery_code(
   p_new_password_hash text,
   p_new_recovery_code_hash text,
   p_session_token_hash text,
-  p_session_expires_at timestamptz,
   p_ip_hash text DEFAULT NULL
-) RETURNS TABLE (user_id uuid, session_id uuid)
+) RETURNS TABLE (user_id uuid, session_id uuid, expires_at timestamptz)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
@@ -810,6 +814,8 @@ AS $$
 DECLARE
   v_user_id uuid;
   v_session_id uuid;
+  v_role text;
+  v_expires_at timestamptz;
 BEGIN
   UPDATE public.recovery_codes
      SET used_at = clock_timestamp()
@@ -821,17 +827,50 @@ BEGIN
   UPDATE public.app_users
      SET password_hash = p_new_password_hash,
          recovery_confirmed_at = NULL
-   WHERE id = v_user_id;
+   WHERE id = v_user_id
+   RETURNING role INTO v_role;
+  v_expires_at := clock_timestamp() + CASE WHEN v_role = 'admin' THEN interval '8 hours' ELSE interval '30 days' END;
   UPDATE public.user_sessions SET revoked_at = clock_timestamp()
    WHERE user_id = v_user_id AND revoked_at IS NULL;
   INSERT INTO public.recovery_codes (user_id, code_hash)
   VALUES (v_user_id, p_new_recovery_code_hash);
   INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash, recovery_confirmed_at)
-  VALUES (v_user_id, p_session_token_hash, p_session_expires_at, p_ip_hash, NULL)
+  VALUES (v_user_id, p_session_token_hash, v_expires_at, p_ip_hash, NULL)
   RETURNING id INTO v_session_id;
-  RETURN QUERY SELECT v_user_id, v_session_id;
+  RETURN QUERY SELECT v_user_id, v_session_id, v_expires_at;
 END;
 $$;
+
+CREATE FUNCTION public.get_unconfirmed_recovery_credential(p_session_token_hash text)
+RETURNS TABLE (user_id uuid, password_hash text)
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+  SELECT account.id, account.password_hash
+    FROM public.user_sessions session
+    JOIN public.app_users account ON account.id=session.user_id
+   WHERE session.token_hash=p_session_token_hash AND session.revoked_at IS NULL
+     AND session.expires_at>clock_timestamp() AND session.recovery_confirmed_at IS NULL
+     AND account.status='active' AND account.recovery_confirmed_at IS NULL
+   LIMIT 1
+$$;
+
+CREATE FUNCTION public.regenerate_unconfirmed_recovery_code(
+  p_session_token_hash text,p_expected_password_hash text,p_recovery_code_hash text,p_request_id text
+) RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+DECLARE v_user_id uuid;
+BEGIN
+  SELECT account.id INTO v_user_id FROM public.user_sessions session
+  JOIN public.app_users account ON account.id=session.user_id
+  WHERE session.token_hash=p_session_token_hash AND session.revoked_at IS NULL
+    AND session.expires_at>clock_timestamp() AND session.recovery_confirmed_at IS NULL
+    AND account.status='active' AND account.recovery_confirmed_at IS NULL
+    AND account.password_hash=p_expected_password_hash FOR UPDATE OF session,account;
+  IF NOT FOUND THEN RAISE EXCEPTION 'unconfirmed_recovery_unavailable' USING ERRCODE='23514'; END IF;
+  UPDATE public.recovery_codes SET used_at=clock_timestamp() WHERE user_id=v_user_id AND used_at IS NULL;
+  INSERT INTO public.recovery_codes(user_id,code_hash) VALUES(v_user_id,p_recovery_code_hash);
+  INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,summary,request_id)
+  VALUES(v_user_id,'auth.recovery.regenerate','user',v_user_id,'{}'::jsonb,p_request_id);
+  RETURN true;
+END; $$;
 
 CREATE FUNCTION public.confirm_recovery_session(
   p_session_token_hash text,
@@ -891,43 +930,6 @@ BEGIN
     ) AS consent ON true
    WHERE app_user.id = v_user_id
      AND app_user.status = 'active';
-END;
-$$;
-
-CREATE FUNCTION public.promote_app_user(
-  p_actor_id uuid,
-  p_target_id uuid,
-  p_reauthenticated boolean,
-  p_request_id text
-) RETURNS boolean
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = pg_catalog, public
-AS $$
-DECLARE
-  v_actor public.app_users%ROWTYPE;
-  v_target public.app_users%ROWTYPE;
-BEGIN
-  IF NOT p_reauthenticated OR length(btrim(p_request_id)) = 0 THEN
-    RAISE EXCEPTION 'admin promotion requires reauthentication and request id' USING ERRCODE = '22023';
-  END IF;
-  SELECT * INTO v_actor FROM public.app_users
-   WHERE id = p_actor_id AND status = 'active' AND role = 'admin'
-   FOR KEY SHARE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'promotion actor is not an active admin' USING ERRCODE = '42501';
-  END IF;
-  SELECT * INTO v_target FROM public.app_users
-   WHERE id = p_target_id AND status = 'active'
-   FOR UPDATE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'promotion target is missing or inactive' USING ERRCODE = '23514';
-  END IF;
-  UPDATE public.app_users SET role = 'admin' WHERE id = p_target_id;
-  INSERT INTO public.audit_logs (actor_id, action, target_type, target_id, summary, request_id)
-  VALUES (p_actor_id, 'promote_admin', 'user', p_target_id,
-          jsonb_build_object('role', 'admin'), p_request_id);
-  RETURN true;
 END;
 $$;
 
@@ -1017,12 +1019,13 @@ REVOKE EXECUTE ON FUNCTION public.backend_v2_enforce_comment_reply_depth() FROM 
 REVOKE EXECUTE ON FUNCTION public.backend_v2_validate_submission_asset() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.answer_registration_challenge(uuid, boolean, integer, integer, text, timestamptz) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.validate_registration_ticket(text) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.consume_registration_ticket(text, text, text, text, timestamptz, text, text) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.create_login_session(uuid, text, timestamptz, text, text) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.rotate_user_session(text, text, timestamptz, text) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.consume_recovery_code(text, text, text, text, timestamptz, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.consume_registration_ticket(text, text, text, text, text, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.create_login_session(uuid, text, text, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.rotate_user_session(text, text, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.consume_recovery_code(text, text, text, text, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.get_unconfirmed_recovery_credential(text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.regenerate_unconfirmed_recovery_code(text,text,text,text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.confirm_recovery_session(text, text) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.promote_app_user(uuid, uuid, boolean, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.set_work_like(uuid, uuid, boolean) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.set_favorite(uuid, uuid, boolean) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.sync_reading_progress(uuid, uuid, bigint, numeric, bigint, timestamptz) FROM PUBLIC;

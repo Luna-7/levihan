@@ -62,7 +62,7 @@ function createAuthService({
 } = {}) {
   if (!repository || !passwordHasher) {
     const unavailable = async () => { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Authentication service unavailable'); };
-    return { createChallenge: unavailable, answerChallenge: unavailable, register: unavailable, login: unavailable, logout: unavailable, recover: unavailable, confirmRecovery: unavailable, me: unavailable };
+    return { createChallenge: unavailable, answerChallenge: unavailable, register: unavailable, login: unavailable, logout: unavailable, recover: unavailable, confirmRecovery: unavailable, regenerateRecovery: unavailable, me: unavailable };
   }
   const plus = (milliseconds) => new Date(now().getTime() + milliseconds);
   const hash = (domain, value) => domainHash(pepper, domain, value);
@@ -118,10 +118,9 @@ function createAuthService({
       const passwordHash = await passwordHasher.hash(password);
       const recovery = recoveryCode();
       const secrets = sessionSecrets();
-      const sessionExpiresAt = plus(30 * 24 * 60 * 60 * 1000);
       const result = await repository.consumeRegistrationTicket({
         ticketTokenHash, username, passwordHash,
-        sessionTokenHash: hash('session', secrets.sessionToken), sessionExpiresAt: sessionExpiresAt.toISOString(),
+        sessionTokenHash: hash('session', secrets.sessionToken),
         recoveryCodeHash: hash('recovery-code', recovery), ipHash: hash('ip', requireIp(ctx)),
       });
       setSessionCookies(ctx, secrets.sessionToken, secrets.csrfToken);
@@ -141,18 +140,16 @@ function createAuthService({
       }
       if (!accepted) throw new ApiError(401, 'AUTH_REQUIRED', 'Invalid username or password');
       const secrets = sessionSecrets();
-      const sessionExpiresAt = plus(30 * 24 * 60 * 60 * 1000);
       const currentToken = ctx.cookies && ctx.cookies[ctx.config.sessionCookieName];
-      await repository.createLoginSession({
+      const loginSession = await repository.createLoginSession({
         userId: profile.id,
         sessionTokenHash: hash('session', secrets.sessionToken),
         currentSessionTokenHash: OPAQUE.test(currentToken || '') ? hash('session', currentToken) : null,
-        sessionExpiresAt: sessionExpiresAt.toISOString(),
         ipHash: hash('ip', requireIp(ctx)),
       });
       const current = await repository.getUserProfile(profile.id);
       setSessionCookies(ctx, secrets.sessionToken, secrets.csrfToken);
-      return { user: safeUser(current), session: { expiresAt: sessionExpiresAt.toISOString() } };
+      return { user: safeUser(current), session: { expiresAt: loginSession.expiresAt } };
     },
 
     async logout(ctx) {
@@ -171,15 +168,31 @@ function createAuthService({
       const newPasswordHash = await passwordHasher.hash(validPassword(body.newPassword));
       const replacement = recoveryCode();
       const secrets = sessionSecrets();
-      const sessionExpiresAt = plus(30 * 24 * 60 * 60 * 1000);
       const result = await repository.consumeRecoveryCode({
         recoveryCodeHash: hash('recovery-code', body.recoveryCode), newPasswordHash,
         newRecoveryCodeHash: hash('recovery-code', replacement), sessionTokenHash: hash('session', secrets.sessionToken),
-        sessionExpiresAt: sessionExpiresAt.toISOString(), ipHash: hash('ip', requireIp(ctx)),
+        ipHash: hash('ip', requireIp(ctx)),
       });
       const profile = await repository.getUserProfile(result.userId);
       setSessionCookies(ctx, secrets.sessionToken, secrets.csrfToken);
-      return { user: safeUser(profile), session: { expiresAt: sessionExpiresAt.toISOString() }, recoveryCode: replacement };
+      return { user: safeUser(profile), session: { expiresAt: result.expiresAt }, recoveryCode: replacement };
+    },
+
+    async regenerateRecovery(ctx) {
+      const body = strictBody(ctx.body, ['password']);
+      const token = ctx.cookies && ctx.cookies[ctx.config.sessionCookieName];
+      if (!OPAQUE.test(token || '')) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication required');
+      const sessionTokenHash = hash('session', token);
+      const credential = await repository.getUnconfirmedRecoveryCredential(sessionTokenHash);
+      let accepted = false;
+      try { accepted = credential && await passwordHasher.verify(credential.passwordHash, validPassword(body.password)); } catch { accepted = false; }
+      if (!accepted) throw new ApiError(401, 'AUTH_REQUIRED', 'Invalid password');
+      const replacement = recoveryCode();
+      await repository.regenerateUnconfirmedRecoveryCode({
+        sessionTokenHash, expectedPasswordHash: credential.passwordHash,
+        recoveryCodeHash: hash('recovery-code', replacement), requestId: ctx.requestId,
+      });
+      return { recoveryCode: replacement };
     },
 
     async confirmRecovery(ctx) {

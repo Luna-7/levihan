@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   logout: vi.fn(),
   recover: vi.fn(),
   confirmRecoveryCode: vi.fn(),
+  regenerateRecoveryCode: vi.fn(),
   getMe: vi.fn(),
 }));
 
@@ -98,11 +99,25 @@ describe('quiz-only user entry', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
-  it('restores an unconfirmed one-time recovery code after refresh', async () => {
+  it('never restores a recovery code from storage and can reauthenticate to regenerate it', async () => {
     sessionStorage.setItem('levihan.pendingRecoveryCode', 'ABCD-EFGH-JKLM-NPQR');
     api.getMe.mockRejectedValue(new Error('unconfirmed session'));
+    api.regenerateRecoveryCode.mockResolvedValue({ recoveryCode: 'WXYZ-2345-6789-ABCD' });
     render(<UserEntry onShowToast={vi.fn()} />);
-    expect(await screen.findByText('ABCD-EFGH-JKLM-NPQR')).toBeTruthy();
-    expect(screen.getByRole('dialog')).toBeTruthy();
+    await waitFor(() => expect(sessionStorage.getItem('levihan.pendingRecoveryCode')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: '打开用户入口' }));
+    expect(screen.queryByText('ABCD-EFGH-JKLM-NPQR')).toBeNull();
+    fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'a-secure-password' } });
+    fireEvent.click(screen.getByRole('button', { name: '重新生成未确认恢复码' }));
+    expect(await screen.findByText('WXYZ-2345-6789-ABCD')).toBeTruthy();
+    expect(api.regenerateRecoveryCode).toHaveBeenCalledWith('a-secure-password');
+    expect(sessionStorage.getItem('levihan.pendingRecoveryCode')).toBeNull();
+  });
+
+  it('still mounts when compatibility cleanup is blocked by browser storage policy', () => {
+    api.getMe.mockRejectedValue(new Error('not authenticated'));
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError'); });
+    expect(() => render(<UserEntry onShowToast={vi.fn()} />)).not.toThrow();
+    expect(screen.getByRole('button', { name: '打开用户入口' })).toBeTruthy();
   });
 });

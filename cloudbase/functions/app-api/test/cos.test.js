@@ -22,9 +22,20 @@ describe('COS object-store adapter', () => {
   it('uses methods exposed by the installed COS SDK contract', () => {
     const COS = require('cos-nodejs-sdk-v5');
     const client = new COS({ SecretId: 'test-id', SecretKey: 'test-key' });
-    for (const method of ['getObjectUrl', 'headObject', 'getObject', 'putObjectCopy', 'putObject', 'deleteObject', 'getBucketVersioning']) expect(client[method]).toBeTypeOf('function');
+    for (const method of ['getObjectUrl', 'headObject', 'getObject', 'putObjectCopy', 'putObject', 'deleteObject', 'getBucketVersioning', 'headBucket', 'getBucketACL', 'getBucketCors']) expect(client[method]).toBeTypeOf('function');
     const types = readFileSync(require.resolve('cos-nodejs-sdk-v5/index.d.ts'), 'utf8');
     expect(types).toMatch(/interface GetBucketVersioningResult[\s\S]*?VersioningConfiguration:\s*VersioningConfiguration/);
+  });
+  it('checks both buckets and their ACL/CORS configuration without returning names or SDK errors', async () => {
+    const method = (data) => vi.fn((_params, callback) => callback(null, data));
+    const cos = { headBucket: method({}), getBucketACL: method({ Grants: [] }), getBucketCors: method({ CORSRules: [] }) };
+    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos });
+    await expect(store.health()).resolves.toEqual({ ok: true, region: 'ap-test', publicBucketConfigured: true, privateBucketConfigured: true, publicCorsConfigured: true, privateCorsConfigured: true });
+    expect(cos.headBucket).toHaveBeenCalledTimes(2); expect(cos.getBucketACL).toHaveBeenCalledTimes(2); expect(cos.getBucketCors).toHaveBeenCalledTimes(2);
+    const failed = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: { headBucket: vi.fn((_params, callback) => callback(new Error('private detail'))) } });
+    const degraded = await failed.health();
+    expect(degraded).toMatchObject({ ok: false, publicBucketConfigured: false, privateBucketConfigured: false });
+    expect(JSON.stringify(degraded)).not.toMatch(/private detail|public-123|private-123/);
   });
   it('signs only a five-minute PUT for the exact staging object and declared headers', async () => {
     const getObjectUrl = vi.fn((_params, callback) => callback(null, { Url: 'https://bucket.cos.test/key?q-sign-algorithm=sha1' }));

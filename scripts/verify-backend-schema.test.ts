@@ -237,9 +237,9 @@ describe('backend v2 PostgreSQL migration', () => {
       runtimeAccess,
     });
     expect(migration).toContain('CREATE FUNCTION public.create_login_session');
-    expect(migration).toContain('CREATE FUNCTION public.promote_app_user');
-    expect(runtimeAccess).toContain('public.create_login_session(uuid, text, timestamptz, text, text)');
-    expect(runtimeAccess).toContain('public.promote_app_user(uuid, uuid, boolean, text)');
+    expect(migration).toContain('CREATE FUNCTION public.regenerate_unconfirmed_recovery_code');
+    expect(runtimeAccess).toContain('public.create_login_session(uuid, text, text, text)');
+    expect(runtimeAccess).toContain('public.regenerate_unconfirmed_recovery_code(text,text,text,text)');
     expect(failures).toEqual([]);
   });
 
@@ -391,7 +391,7 @@ describe('backend v2 PostgreSQL migration', () => {
     const recoveryEnd = migration.indexOf('CREATE FUNCTION public.confirm_recovery_session', recoveryStart);
     const recovery = migration.slice(recoveryStart, recoveryEnd);
     const confirmationStart = migration.indexOf('CREATE FUNCTION public.confirm_recovery_session');
-    const confirmationEnd = migration.indexOf('CREATE FUNCTION public.promote_app_user', confirmationStart);
+    const confirmationEnd = migration.indexOf('CREATE FUNCTION public.set_work_like', confirmationStart);
     const confirmation = migration.slice(confirmationStart, confirmationEnd);
 
     expect(appUsers).toContain('recovery_confirmed_at timestamptz');
@@ -414,7 +414,7 @@ describe('backend v2 PostgreSQL migration', () => {
     const recoveryEnd = migration.indexOf('CREATE FUNCTION public.confirm_recovery_session', recoveryStart);
     const recovery = migration.slice(recoveryStart, recoveryEnd);
 
-    expect(login).toMatch(/PERFORM 1 FROM public\.app_users AS login_user[\s\S]*?FOR NO KEY UPDATE;[\s\S]*?INSERT INTO public\.user_sessions/);
+    expect(login).toMatch(/SELECT login_user\.role INTO v_role FROM public\.app_users AS login_user[\s\S]*?FOR NO KEY UPDATE;[\s\S]*?INSERT INTO public\.user_sessions/);
     expect(recovery).toMatch(/UPDATE public\.app_users[\s\S]*?recovery_confirmed_at = NULL[\s\S]*?UPDATE public\.user_sessions SET revoked_at = clock_timestamp\(\)/);
   });
 
@@ -432,7 +432,7 @@ describe('backend v2 PostgreSQL migration', () => {
       ['login account gate', (sql: string) => sql.replace('login_user.recovery_confirmed_at IS NOT NULL', 'true')],
       ['login/recovery row-lock serialization', (sql: string) => mutateRoutine(sql, 'create_login_session', 'rotate_user_session', (routine) => routine.replace('FOR NO KEY UPDATE', 'FOR KEY SHARE'))],
       ['recovery account reset', (sql: string) => sql.replace('recovery_confirmed_at = NULL', 'recovery_confirmed_at = clock_timestamp()')],
-      ['confirmation account update', (sql: string) => mutateRoutine(sql, 'confirm_recovery_session', 'promote_app_user', (routine) => routine.replace('UPDATE public.app_users', 'UPDATE public.missing_app_users'))],
+      ['confirmation account update', (sql: string) => mutateRoutine(sql, 'confirm_recovery_session', 'set_work_like', (routine) => routine.replace('UPDATE public.app_users', 'UPDATE public.missing_app_users'))],
       ['preflight unused ticket', (sql: string) => mutateRoutine(sql, 'validate_registration_ticket', 'consume_registration_ticket', (routine) => routine.replace('ticket.used_at IS NULL', 'true'))],
       ['preflight ticket expiry', (sql: string) => mutateRoutine(sql, 'validate_registration_ticket', 'consume_registration_ticket', (routine) => routine.replace('ticket.expires_at > clock_timestamp()', 'true'))],
       ['preflight passed challenge', (sql: string) => mutateRoutine(sql, 'validate_registration_ticket', 'consume_registration_ticket', (routine) => routine.replace("challenge.status = 'passed'", 'true'))],

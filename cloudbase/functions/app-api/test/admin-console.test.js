@@ -19,10 +19,10 @@ describe('admin console policy boundary', () => {
   it('registers every route below /admin with an authenticated administrator policy', () => {
     const router = createRouter();
     registerAdminConsoleRoutes(router, new Proxy({}, { get: () => vi.fn() }));
-    for (const path of ['/admin/dashboard', '/admin/moderation/comments', '/admin/moderation/reports', '/admin/users', '/admin/questions', '/admin/jobs', '/admin/audit']) {
+    for (const path of ['/admin/dashboard', '/admin/moderation/comments', '/admin/moderation/reports', '/admin/users', '/admin/questions', '/admin/jobs', '/admin/audit', '/admin/settings', '/admin/health']) {
       expect(router.resolve('GET', path).metadata).toMatchObject({ sessionRequired: true, role: 'admin', idempotency: { mode: 'none' } });
     }
-    for (const [method, path] of [['POST', `/admin/users/${targetId}/status`], ['POST', '/admin/questions'], ['PATCH', `/admin/questions/${targetId}`], ['POST', `/admin/questions/${targetId}/status`], ['POST', `/admin/jobs/${targetId}/retry`]]) {
+    for (const [method, path] of [['POST', `/admin/users/${targetId}/status`], ['POST', `/admin/users/${targetId}/promote`], ['POST', '/admin/questions'], ['PATCH', `/admin/questions/${targetId}`], ['PATCH', '/admin/settings/announcement'], ['POST', `/admin/questions/${targetId}/status`], ['POST', `/admin/jobs/${targetId}/retry`]]) {
       expect(router.resolve(method, path).metadata).toMatchObject({ sessionRequired: true, role: 'admin', idempotency: { mode: 'domain' }, rateLimit: expect.anything() });
     }
   });
@@ -58,6 +58,72 @@ describe('admin console policy boundary', () => {
     await service.updateQuestion(ctx({ params: { id: targetId }, body: { version: 2, normalizationRule: 'trim_lowercase_collapse_whitespace', acceptedAnswers: ['  A   B  '] } }));
     expect(answerHasher).toHaveBeenCalledWith('a b');
     expect(repository.updateQuestion).toHaveBeenCalledWith(expect.objectContaining({ changes: expect.objectContaining({ acceptedAnswerHashes: ['hash:a b'], normalizationRule: 'trim_lowercase_collapse_whitespace' }) }));
+  });
+
+  it('reauthenticates the acting session with the acting administrator password before promotion', async () => {
+    const repository = {
+      getAdminCredential: vi.fn().mockResolvedValue({ passwordHash: 'argon-hash' }),
+      markReauthenticated: vi.fn().mockResolvedValue(true),
+      promoteUser: vi.fn().mockResolvedValue({ id: targetId, username: 'member', role: 'admin', status: 'active', version: 2 }),
+    };
+    const passwordHasher = { verify: vi.fn().mockResolvedValue(true) };
+    const service = createAdminConsoleService({ repository, passwordHasher, authPepper: 'a'.repeat(32), opaqueToken: () => 'n'.repeat(43) });
+    const password = ['actor','password','value'].join('-');
+    const result = await service.promoteUser(ctx({ params: { id: targetId }, body: { version: 1, password } }));
+    expect(passwordHasher.verify).toHaveBeenCalledWith('argon-hash', password);
+    expect(repository.getAdminCredential).toHaveBeenCalledWith({ adminId, adminSessionId: sessionId });
+    expect(repository.markReauthenticated).toHaveBeenCalledWith(expect.objectContaining({ adminId, adminSessionId: sessionId, nonceHash: expect.stringMatching(/^[a-f0-9]{64}$/) }));
+    expect(repository.promoteUser).toHaveBeenCalledWith(expect.objectContaining({ targetId, expectedVersion: 1, adminSessionId: sessionId, nonceHash: expect.stringMatching(/^[a-f0-9]{64}$/) }));
+    expect(result.user.role).toBe('admin');
+  });
+
+  it('maps a consumed concurrent reauthentication nonce to an explicit retryable authentication response', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: 'reauthentication_required' } });
+    const repository = createAdminConsoleRepository({ rdb: { rpc } });
+    await expect(repository.promoteUser({ adminId, adminSessionId: sessionId, targetId, expectedVersion: 1, nonceHash: 'b'.repeat(64), idempotencyKey: operation, requestHash, requestId: 'request-1' }))
+      .rejects.toMatchObject({ status: 401, errorCode: 'AUTH_REQUIRED' });
+  });
+
+  it('does not promote the wrong target when concurrent requests on one session race', async () => {
+    let currentNonce = '';
+    let marked = 0;
+    let releaseMarks;
+    const bothMarked = new Promise((resolve) => { releaseMarks = resolve; });
+    const promoted = [];
+    const repository = {
+      getAdminCredential: vi.fn().mockResolvedValue({ passwordHash: 'argon-hash' }),
+      markReauthenticated: vi.fn(async ({ nonceHash }) => { currentNonce = nonceHash; marked += 1; if (marked === 2) releaseMarks(); await bothMarked; return true; }),
+      promoteUser: vi.fn(async ({ targetId: requestedTarget, nonceHash }) => {
+        if (nonceHash !== currentNonce) throw Object.assign(new Error('Administrator reauthentication is required'), { status: 401, errorCode: 'AUTH_REQUIRED' });
+        currentNonce = ''; promoted.push(requestedTarget);
+        return { id: requestedTarget, username: 'member', role: 'admin', status: 'active', version: 2 };
+      }),
+    };
+    let sequence = 0;
+    const service = createAdminConsoleService({ repository, passwordHasher: { verify: vi.fn().mockResolvedValue(true) }, authPepper: 'a'.repeat(32), opaqueToken: () => `${++sequence}`.padEnd(43, 'n') });
+    const secondTarget = '550e8400-e29b-41d4-a716-446655440004';
+    const password = ['actor', 'password', 'value'].join('-');
+    const first = service.promoteUser(ctx({ params: { id: targetId }, body: { version: 1, password } }));
+    const second = service.promoteUser(ctx({ params: { id: secondTarget }, body: { version: 1, password }, idempotencyKey: 'admin-operation-0002' }));
+    const outcomes = await Promise.allSettled([first, second]);
+    expect(outcomes.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.filter((result) => result.status === 'rejected')[0]).toMatchObject({ reason: { status: 401, errorCode: 'AUTH_REQUIRED' } });
+    expect(promoted).toHaveLength(1);
+    expect([targetId, secondTarget]).toContain(promoted[0]);
+  });
+
+  it('validates setting shapes and returns combined DB/COS health without secret configuration', async () => {
+    const repository = {
+      updateSetting: vi.fn().mockResolvedValue({ key: 'announcement', value: { enabled: true, text: '维护中' }, version: 2 }),
+      health: vi.fn().mockResolvedValue({ ok: true, databaseVersion: 'v2', snapshot: {}, migration: {}, jobs: {} }),
+    };
+    const objectStore = { health: vi.fn().mockResolvedValue({ ok: true, region: 'test-region', publicBucketConfigured: true, privateBucketConfigured: true }) };
+    const service = createAdminConsoleService({ repository, objectStore });
+    await expect(service.updateSetting(ctx({ params: { key: 'announcement' }, body: { version: 1, value: { enabled: true, text: '维护中' } } }))).resolves.toMatchObject({ setting: { version: 2 } });
+    await expect(service.updateSetting(ctx({ params: { key: 'unknown' }, body: { version: 1, value: {} } }))).rejects.toMatchObject({ status: 400 });
+    const health = await service.health(ctx());
+    expect(health).toMatchObject({ database: { ok: true }, storage: { ok: true, publicBucketConfigured: true, privateBucketConfigured: true } });
+    expect(JSON.stringify(health)).not.toMatch(/secret|token|bucketName/i);
   });
   it.each([
     { version: 2, prompt: '' },

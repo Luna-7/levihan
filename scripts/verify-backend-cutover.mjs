@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
-const signature = 'public.consume_legacy_migration_credential(text,text,text,text,text,timestamptz,text)';
+const signature = 'public.consume_legacy_migration_credential(text,text,text,text,text,text)';
 const beginSignature = 'public.begin_legacy_migration_claim(text,text,text)';
 const prepareSignature = 'public.prepare_legacy_migration_credential(text,text,text)';
 const escaped = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -33,7 +33,8 @@ export function validateBackendCutover({ migration, rollback, runtime, runtimeRo
   add(has(migration, /CREATE FUNCTION public\.claim_public_asset_deletion\(p_holder_id uuid/i) && has(migration, /fencing_token=public\.migration_public_asset_deletions\.fencing_token\+1/i) && has(migration, /CREATE FUNCTION public\.finalize_public_asset_deletion\(p_holder_id uuid/i) && (migration.match(/holder_id=p_holder_id AND lease_expires_at>clock_timestamp\(\)/g) || []).length >= 2, 'destructive cutover needs renewable durable fencing');
   add(has(migration, /CREATE FUNCTION public\.assert_backend_v2_migration_context/i) && has(migration, /session_user::text<>context\.allowed_role::text/i) && has(migration, /caller\.rolsuper OR caller\.rolbypassrls OR caller\.rolcreaterole OR caller\.rolcreatedb OR caller\.rolinherit/i) && has(migration, /pg_catalog\.pg_auth_members/i) && has(migration, /FROM pg_catalog\.pg_class object/i) && has(migration, /has_table_privilege\(session_user,format\('%I\.%I',namespace\.nspname,object\.relname\),'INSERT,UPDATE,DELETE,TRUNCATE'\)/i) && has(migration, /FROM pg_catalog\.pg_proc routine/i), 'migration RPC identity must reject inherited, high privilege, ownership, and direct DML on every public object');
   add(has(migration, /app_user\.credential_state <> 'migration_required'/i), 'only migrated accounts may claim');
-  add(has(migration, /VALUES\(app_user\.id,p_session_token_hash,p_session_expires_at,NULL,p_ip_hash\)/i), 'new session must require recovery confirmation');
+  add(has(migration, /VALUES\(app_user\.id,p_session_token_hash,session_expiry,NULL,p_ip_hash\)/i), 'new session must require recovery confirmation');
+  add(has(migration, /session_expiry:=clock_timestamp\(\)\+CASE WHEN app_user\.role='admin' THEN interval '8 hours' ELSE interval '30 days' END/i), 'legacy session expiry must be derived from the locked account role');
   add(has(migration, new RegExp(`REVOKE EXECUTE ON FUNCTION ${escaped(beginSignature)} FROM PUBLIC`, 'i')) && migration.includes(prepareSignature) && migration.includes(signature), 'credential RPCs must be revoked from PUBLIC');
   add(has(runtime, new RegExp(`GRANT EXECUTE ON FUNCTION ${escaped(beginSignature)} TO`, 'i')) && runtime.includes(prepareSignature) && runtime.includes(signature), 'runtime must receive exact credential RPCs');
   add(!/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[\s\S]{0,120}legacy_migration_credentials/i.test(runtime), 'runtime must not receive credential table DML');

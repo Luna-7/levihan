@@ -208,7 +208,7 @@ describe('authentication service', () => {
 
   it('creates a login session and returns only safe profile metadata', async () => {
     const profile = { id: '550e8400-e29b-41d4-a716-446655440020', username: 'reader_01', passwordHash: 'argon-hash', role: 'member', status: 'active', ageConsent: null };
-    const { auth, repository, passwordHasher } = service({ repository: { findUserByUsername: vi.fn().mockResolvedValue(profile), createLoginSession: vi.fn().mockResolvedValue({ sessionId: 's' }), getUserProfile: vi.fn().mockResolvedValue(profile) } });
+    const { auth, repository, passwordHasher } = service({ repository: { findUserByUsername: vi.fn().mockResolvedValue(profile), createLoginSession: vi.fn().mockResolvedValue({ sessionId: 's', expiresAt: '2030-01-01T08:00:00.000Z' }), getUserProfile: vi.fn().mockResolvedValue(profile) } });
     const ctx = context({ body: { username: 'READER_01', password: 'a-secure-password' }, cookies: { lv_session: 'Q'.repeat(43) } });
     const response = await auth.login(ctx);
     expect(passwordHasher.verify).toHaveBeenCalledWith('argon-hash', 'a-secure-password');
@@ -218,7 +218,7 @@ describe('authentication service', () => {
       currentSessionTokenHash: hmac('session', 'Q'.repeat(43)),
     }));
     expect(response.user).toEqual({ id: profile.id, username: 'reader_01', role: 'member', capabilities: ['comment', 'favorite', 'submit'], ageConsent: null });
-    expect(response.session).toEqual({ expiresAt: '2030-01-31T00:00:00.000Z' });
+    expect(response.session).toEqual({ expiresAt: '2030-01-01T08:00:00.000Z' });
   });
 
   it('revokes only the current authenticated session and clears both cookies', async () => {
@@ -232,7 +232,7 @@ describe('authentication service', () => {
 
   it('consumes a recovery code, rotates recovery and session secrets, and returns the new code once', async () => {
     const profile = { id: '550e8400-e29b-41d4-a716-446655440030', username: 'reader_01', role: 'member', status: 'active', ageConsent: null };
-    const { auth, repository } = service({ repository: { consumeRecoveryCode: vi.fn().mockResolvedValue({ userId: profile.id }), getUserProfile: vi.fn().mockResolvedValue(profile) } });
+    const { auth, repository } = service({ repository: { consumeRecoveryCode: vi.fn().mockResolvedValue({ userId: profile.id, expiresAt: '2030-01-31T00:00:00.000Z' }), getUserProfile: vi.fn().mockResolvedValue(profile) } });
     const ctx = context({ body: { recoveryCode: 'WXYZ-2345-6789-ABCD', newPassword: 'a-new-secure-password' } });
     const response = await auth.recover(ctx);
     expect(repository.consumeRecoveryCode).toHaveBeenCalledWith(expect.objectContaining({
@@ -260,6 +260,23 @@ describe('authentication service', () => {
       sessionTokenHash: hmac('session', 'Q'.repeat(43)),
       recoveryCodeHash: hmac('recovery-code', 'ABCD-EFGH-JKLM-NPQR'),
     });
+  });
+
+  it('reauthenticates an unconfirmed session and returns a regenerated recovery code once', async () => {
+    const repository = {
+      getUnconfirmedRecoveryCredential: vi.fn().mockResolvedValue({ userId: 'u', passwordHash: 'argon-hash' }),
+      regenerateUnconfirmedRecoveryCode: vi.fn().mockResolvedValue(true),
+    };
+    const password = ['new','recovery','password'].join('-');
+    const { auth, passwordHasher } = service({ repository, passwordHasher: { verify: vi.fn().mockResolvedValue(true) } });
+    const result = await auth.regenerateRecovery(context({ body: { password }, cookies: { lv_session: 'Q'.repeat(43) }, requestId: 'request-regenerate' }));
+    expect(passwordHasher.verify).toHaveBeenCalledWith('argon-hash', password);
+    expect(repository.getUnconfirmedRecoveryCredential).toHaveBeenCalledWith(hmac('session', 'Q'.repeat(43)));
+    expect(repository.regenerateUnconfirmedRecoveryCode).toHaveBeenCalledWith({
+      sessionTokenHash: hmac('session', 'Q'.repeat(43)), expectedPasswordHash: 'argon-hash',
+      recoveryCodeHash: hmac('recovery-code', 'ABCD-EFGH-JKLM-NPQR'), requestId: 'request-regenerate',
+    });
+    expect(result).toEqual({ recoveryCode: 'ABCD-EFGH-JKLM-NPQR' });
   });
 
   it('returns /me data without password or credential hashes and rejects missing sessions', async () => {
@@ -292,15 +309,15 @@ describe('authentication infrastructure adapters', () => {
 
   it('maps auth RPC rows and never sends raw credentials to the database', async () => {
     const rpc = vi.fn()
-      .mockResolvedValueOnce({ data: [{ user_id: '550e8400-e29b-41d4-a716-446655440010', session_id: '550e8400-e29b-41d4-a716-446655440011' }], error: null })
+      .mockResolvedValueOnce({ data: [{ user_id: '550e8400-e29b-41d4-a716-446655440010', session_id: '550e8400-e29b-41d4-a716-446655440011', expires_at: '2030-02-01T00:00:00.000Z' }], error: null })
       .mockResolvedValueOnce({ data: true, error: null });
     const repository = createAuthRepository({ rdb: { rpc, from: vi.fn() } });
-    expect(await repository.consumeRegistrationTicket({ ticketTokenHash: 'a'.repeat(64), username: 'reader_01', passwordHash: 'argon-hash', sessionTokenHash: 'b'.repeat(64), sessionExpiresAt: '2030-02-01T00:00:00.000Z', recoveryCodeHash: 'c'.repeat(64), ipHash: 'd'.repeat(64) }))
-      .toEqual({ userId: '550e8400-e29b-41d4-a716-446655440010', sessionId: '550e8400-e29b-41d4-a716-446655440011' });
+    expect(await repository.consumeRegistrationTicket({ ticketTokenHash: 'a'.repeat(64), username: 'reader_01', passwordHash: 'argon-hash', sessionTokenHash: 'b'.repeat(64), recoveryCodeHash: 'c'.repeat(64), ipHash: 'd'.repeat(64) }))
+      .toEqual({ userId: '550e8400-e29b-41d4-a716-446655440010', sessionId: '550e8400-e29b-41d4-a716-446655440011', expiresAt: '2030-02-01T00:00:00.000Z' });
     expect(await repository.revokeSession('b'.repeat(64))).toBe(true);
     expect(rpc).toHaveBeenNthCalledWith(1, 'consume_registration_ticket', {
       p_ticket_token_hash: 'a'.repeat(64), p_username: 'reader_01', p_password_hash: 'argon-hash', p_session_token_hash: 'b'.repeat(64),
-      p_session_expires_at: '2030-02-01T00:00:00.000Z', p_recovery_code_hash: 'c'.repeat(64), p_ip_hash: 'd'.repeat(64),
+      p_recovery_code_hash: 'c'.repeat(64), p_ip_hash: 'd'.repeat(64),
     });
     expect(rpc).toHaveBeenNthCalledWith(2, 'revoke_user_session', { p_token_hash: 'b'.repeat(64) });
   });
@@ -323,14 +340,14 @@ describe('authentication infrastructure adapters', () => {
     await expect(repository.validateRegistrationTicket('a'.repeat(64))).resolves.toBe(true);
     await expect(repository.createLoginSession({
       userId: '550e8400-e29b-41d4-a716-446655440010', sessionTokenHash: 'b'.repeat(64),
-      currentSessionTokenHash: null, sessionExpiresAt: '2030-02-01T00:00:00.000Z', ipHash: 'c'.repeat(64),
+      currentSessionTokenHash: null, ipHash: 'c'.repeat(64),
     })).rejects.toMatchObject({ status: 401, errorCode: 'AUTH_REQUIRED', message: 'Invalid username or password' });
     expect(rpc).toHaveBeenNthCalledWith(1, 'validate_registration_ticket', { p_ticket_token_hash: 'a'.repeat(64) });
   });
 
   it('passes login rotation and recovery confirmation hashes only through controlled RPCs', async () => {
     const rpc = vi.fn()
-      .mockResolvedValueOnce({ data: '550e8400-e29b-41d4-a716-446655440011', error: null })
+      .mockResolvedValueOnce({ data: [{ session_id: '550e8400-e29b-41d4-a716-446655440011', expires_at: '2030-02-01T00:00:00.000Z' }], error: null })
       .mockResolvedValueOnce({ data: [{
         user_id: '550e8400-e29b-41d4-a716-446655440012', username: 'reader_01', role: 'member',
         status: 'active', policy_version: null, accepted_at: null,
@@ -338,14 +355,14 @@ describe('authentication infrastructure adapters', () => {
     const repository = createAuthRepository({ rdb: { from: vi.fn(), rpc } });
     await repository.createLoginSession({
       userId: '550e8400-e29b-41d4-a716-446655440010', sessionTokenHash: 'a'.repeat(64),
-      currentSessionTokenHash: 'b'.repeat(64), sessionExpiresAt: '2030-02-01T00:00:00.000Z', ipHash: 'c'.repeat(64),
+      currentSessionTokenHash: 'b'.repeat(64), ipHash: 'c'.repeat(64),
     });
     await expect(repository.confirmRecoveryCode({ sessionTokenHash: 'd'.repeat(64), recoveryCodeHash: 'e'.repeat(64) })).resolves.toEqual({ profile: {
       id: '550e8400-e29b-41d4-a716-446655440012', username: 'reader_01', role: 'member', status: 'active', ageConsent: null,
     } });
     expect(rpc).toHaveBeenNthCalledWith(1, 'create_login_session', {
       p_user_id: '550e8400-e29b-41d4-a716-446655440010', p_token_hash: 'a'.repeat(64),
-      p_expires_at: '2030-02-01T00:00:00.000Z', p_ip_hash: 'c'.repeat(64), p_current_token_hash: 'b'.repeat(64),
+      p_ip_hash: 'c'.repeat(64), p_current_token_hash: 'b'.repeat(64),
     });
     expect(rpc).toHaveBeenNthCalledWith(2, 'confirm_recovery_session', {
       p_session_token_hash: 'd'.repeat(64), p_recovery_code_hash: 'e'.repeat(64),

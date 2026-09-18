@@ -21,10 +21,11 @@ read-only access to session/security state and append-only access to versions,
 snapshots, moderation actions, and audit logs; state-changing security writes
 (login-session creation, session rotation, registration/recovery consumption,
 likes, favorites, and reading progress) are exposed only through the explicitly
-granted `SECURITY DEFINER` routines. `promote_app_user` is likewise the only
-admin-promotion path: it requires an active admin actor, reauthentication, an
-active target, and an audit request id; there is no database demotion or user
-deletion workflow. Question-bank CRUD is available only to this protected
+granted `SECURITY DEFINER` routines. `admin_promote_user_v2` is the only
+admin-promotion path: it requires a fresh password reauthentication nonce bound
+to the concrete active admin session, an active member target, CAS, session
+revocation, and an audit request id; there is no browser-supplied boolean
+override. Question-bank CRUD is available only to this protected
 service role, with the API enforcing the admin guard. The migration itself must
 be executed by its owner (or an equivalent deployment administrator) before the
 runtime grants are installed.
@@ -68,7 +69,7 @@ runtime grants are installed.
    set `app_users.recovery_confirmed_at = clock_timestamp()` explicitly. Never
    place the plaintext password, recovery code, pepper, or resulting hashes in
    this repository or deployment logs. Any later promotion must use
-   `promote_app_user`.
+   the protected `admin_promote_user_v2` console flow.
 7. Deploy the API only after runtime access is installed, then test
    registration, cookie session rotation, recovery-code replay, idempotent
    interactions, upload confirmation, and snapshot jobs against a
@@ -82,3 +83,6 @@ migration must be rolled back before v2 traffic is enabled, execute
 objects created by this migration and intentionally keeps `pgcrypto`, legacy
 `public.users`, and existing `public.submission_inbox` intact. Restore the
 pre-migration backup rather than using rollback after v2 data has been written.
+The rollback obtains `ACCESS EXCLUSIVE` locks on every base-v2 table and refuses
+to drop anything when any table contains data; never remove this fence to force
+a rollback.

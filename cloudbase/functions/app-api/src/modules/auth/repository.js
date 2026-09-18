@@ -88,11 +88,11 @@ function createAuthRepository({ rdb }) {
     async consumeRegistrationTicket(input) {
       const row = rpcRow(await rdb.rpc('consume_registration_ticket', {
         p_ticket_token_hash: input.ticketTokenHash, p_username: input.username, p_password_hash: input.passwordHash,
-        p_session_token_hash: input.sessionTokenHash, p_session_expires_at: input.sessionExpiresAt,
+        p_session_token_hash: input.sessionTokenHash,
         p_recovery_code_hash: input.recoveryCodeHash, p_ip_hash: input.ipHash,
       }), 'register');
       if (!row || typeof row.user_id !== 'string' || typeof row.session_id !== 'string') throw dependency();
-      return { userId: row.user_id, sessionId: row.session_id };
+      return { userId: row.user_id, sessionId: row.session_id, expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null };
     },
 
     async validateRegistrationTicket(ticketTokenHash) {
@@ -112,12 +112,11 @@ function createAuthRepository({ rdb }) {
 
     async createLoginSession(input) {
       const value = rpcRow(await rdb.rpc('create_login_session', {
-        p_user_id: input.userId, p_token_hash: input.sessionTokenHash, p_expires_at: input.sessionExpiresAt,
+        p_user_id: input.userId, p_token_hash: input.sessionTokenHash,
         p_ip_hash: input.ipHash, p_current_token_hash: input.currentSessionTokenHash || null,
       }), 'login');
-      const sessionId = value && typeof value === 'object' ? Object.values(value)[0] : value;
-      if (typeof sessionId !== 'string') throw dependency();
-      return { sessionId };
+      if (!value || typeof value.session_id !== 'string' || !value.expires_at) throw dependency();
+      return { sessionId: value.session_id, expiresAt: new Date(value.expires_at).toISOString() };
     },
 
     async revokeSession(tokenHash) {
@@ -131,10 +130,26 @@ function createAuthRepository({ rdb }) {
       const row = rpcRow(await rdb.rpc('consume_recovery_code', {
         p_code_hash: input.recoveryCodeHash, p_new_password_hash: input.newPasswordHash,
         p_new_recovery_code_hash: input.newRecoveryCodeHash, p_session_token_hash: input.sessionTokenHash,
-        p_session_expires_at: input.sessionExpiresAt, p_ip_hash: input.ipHash,
+        p_ip_hash: input.ipHash,
       }), 'recover');
       if (!row || typeof row.user_id !== 'string' || typeof row.session_id !== 'string') throw dependency();
-      return { userId: row.user_id, sessionId: row.session_id };
+      return { userId: row.user_id, sessionId: row.session_id, expiresAt: new Date(row.expires_at).toISOString() };
+    },
+
+    async getUnconfirmedRecoveryCredential(sessionTokenHash) {
+      const row = rpcRow(await rdb.rpc('get_unconfirmed_recovery_credential', { p_session_token_hash: sessionTokenHash }), 'recover');
+      if (!row || typeof row.user_id !== 'string' || typeof row.password_hash !== 'string') throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication required');
+      return { userId: row.user_id, passwordHash: row.password_hash };
+    },
+
+    async regenerateUnconfirmedRecoveryCode(input) {
+      const value = rpcRow(await rdb.rpc('regenerate_unconfirmed_recovery_code', {
+        p_session_token_hash: input.sessionTokenHash, p_expected_password_hash: input.expectedPasswordHash,
+        p_recovery_code_hash: input.recoveryCodeHash, p_request_id: input.requestId,
+      }), 'recover');
+      const ok = value && typeof value === 'object' ? Object.values(value)[0] : value;
+      if (ok !== true) throw dependency();
+      return true;
     },
 
     async confirmRecoveryCode(input) {

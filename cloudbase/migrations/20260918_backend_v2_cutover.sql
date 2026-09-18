@@ -366,11 +366,11 @@ END; $$;
 
 CREATE FUNCTION public.consume_legacy_migration_credential(
   p_claim_session_hash text, p_prepare_nonce_hash text, p_new_password_hash text, p_recovery_code_hash text,
-  p_session_token_hash text, p_session_expires_at timestamptz, p_ip_hash text
+  p_session_token_hash text, p_ip_hash text
 )
-RETURNS TABLE(user_id uuid, session_id uuid)
+RETURNS TABLE(user_id uuid, session_id uuid, expires_at timestamptz)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-DECLARE credential public.legacy_migration_credentials%ROWTYPE; app_user public.app_users%ROWTYPE; created_session uuid;
+DECLARE credential public.legacy_migration_credentials%ROWTYPE; app_user public.app_users%ROWTYPE; created_session uuid; session_expiry timestamptz;
 BEGIN
   SELECT * INTO credential FROM public.legacy_migration_credentials
    WHERE claim_session_hash=p_claim_session_hash FOR UPDATE;
@@ -383,20 +383,21 @@ BEGIN
   IF NOT FOUND OR app_user.status <> 'active' OR app_user.credential_state <> 'migration_required' THEN
     RAISE EXCEPTION 'migration_credential_invalid' USING ERRCODE='23514';
   END IF;
-  IF p_new_password_hash !~ '^\$argon2id\$' OR p_session_expires_at <= clock_timestamp() THEN
+  IF p_new_password_hash !~ '^\$argon2id\$' THEN
     RAISE EXCEPTION 'migration_credential_invalid' USING ERRCODE='23514';
   END IF;
   UPDATE public.app_users SET password_hash=p_new_password_hash, credential_state='active', recovery_confirmed_at=NULL, updated_at=clock_timestamp()
    WHERE id=app_user.id;
+  session_expiry:=clock_timestamp()+CASE WHEN app_user.role='admin' THEN interval '8 hours' ELSE interval '30 days' END;
   UPDATE public.legacy_migration_credentials SET status=CASE WHEN id=credential.id THEN 'used' ELSE 'revoked' END,
     used_at=CASE WHEN id=credential.id THEN clock_timestamp() ELSE NULL END
    WHERE user_id=app_user.id AND status='pending';
   INSERT INTO public.recovery_codes(user_id,code_hash) VALUES(app_user.id,p_recovery_code_hash);
   INSERT INTO public.user_sessions(user_id,token_hash,expires_at,recovery_confirmed_at,ip_hash)
-   VALUES(app_user.id,p_session_token_hash,p_session_expires_at,NULL,p_ip_hash) RETURNING id INTO created_session;
+   VALUES(app_user.id,p_session_token_hash,session_expiry,NULL,p_ip_hash) RETURNING id INTO created_session;
   INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,summary,request_id)
    VALUES(app_user.id,'legacy_credential.consumed','user',app_user.id,jsonb_build_object('recoveryConfirmationRequired',true),'legacy-credential:'||credential.id::text);
-  RETURN QUERY SELECT app_user.id, created_session;
+  RETURN QUERY SELECT app_user.id, created_session, session_expiry;
 END;
 $$;
 
@@ -412,6 +413,6 @@ ALTER TABLE public.legacy_game_entries ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.legacy_identity_mappings, public.legacy_migration_credentials, public.backend_v2_migration_runs, public.backend_v2_migration_lock, public.legacy_entity_mappings, public.migration_public_asset_deletions, public.legacy_forum_entries, public.legacy_game_entries FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.assert_backend_v2_migration_context(text,text), public.claim_backend_v2_migration_lock(uuid,integer), public.release_backend_v2_migration_lock(uuid), public.begin_backend_v2_migration_run(text,text,text,text,jsonb), public.validate_migrated_work_publication(uuid,text,boolean), public.apply_backend_v2_migration_batch(uuid,text,text,text,text,jsonb), public.collect_backend_v2_check(uuid), public.collect_backend_v2_snapshot_manifest(), public.export_backend_v2_credential_envelopes(uuid), public.claim_public_asset_deletion(uuid,text,text,text,text,text,text), public.finalize_public_asset_deletion(uuid,text,text,bigint) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.begin_legacy_migration_claim(text,text,text) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.prepare_legacy_migration_credential(text,text,text), public.consume_legacy_migration_credential(text,text,text,text,text,timestamptz,text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.prepare_legacy_migration_credential(text,text,text), public.consume_legacy_migration_credential(text,text,text,text,text,text) FROM PUBLIC;
 
 COMMIT;

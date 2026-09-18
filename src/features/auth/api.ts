@@ -121,6 +121,13 @@ export async function confirmRecoveryCode(recoveryCode: string) {
   return RecoveryConfirmationResponseSchema.parse(await request('/auth/recovery-confirm', { method: 'POST', body: input, csrf: true }));
 }
 
+export async function regenerateRecoveryCode(password: string) {
+  if (typeof password !== 'string' || password.length < 12 || password.length > 128) throw new AuthApiError('VALIDATION_FAILED', '密码长度必须为 12-128 个字符');
+  const payload = object(await request('/auth/recovery-regenerate', { method: 'POST', body: { password }, csrf: true }));
+  if (typeof payload.recoveryCode !== 'string') throw new AuthApiError('INTERNAL_ERROR', '服务器响应无效');
+  return { recoveryCode: payload.recoveryCode };
+}
+
 export async function logout(): Promise<void> {
   await request('/auth/logout', { method: 'POST', body: {}, csrf: true });
 }

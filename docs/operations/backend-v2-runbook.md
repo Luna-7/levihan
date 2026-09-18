@@ -74,7 +74,13 @@ psql "$DATABASE_URL" --set=environment=nonprod --set=migration_role=levihan_migr
 
 迁移完成后先执行 `backend_v2_cutover_migration_access_rollback.sql` 撤 migration RPC，再按逆序撤 cutover runtime → admin → submissions → interactions → content access → content pipeline → base runtime grant；只有数据 fence 为空时才按同一逆序运行结构 rollback。CloudBase 专用 API key 的 RDB binding 必须固定到该登录，adapter 同时要求 `CLOUDBASE_APIKEY`、`DATABASE_SCHEMA` 与 `MIGRATION_EXPECTED_DB_ROLE`，不能通过浏览器或普通 app-api 触发迁移。
 
-回滚先撤 runtime grant，再运行对应 rollback。cutover rollback 带数据 fence：只要存在 identity mapping、迁移凭据、迁移 run/checkpoint 或 `migration_required` 用户就拒绝回滚。此时先导出并验证数据，选择前滚修复；不得通过删 fence 或强制 DROP 绕过。
+回滚先撤 runtime grant，再运行对应 rollback。cutover rollback 带数据 fence：只要存在 identity mapping、迁移凭据、迁移 run/checkpoint 或 `migration_required` 用户就拒绝回滚。基础 rollback 也会先以 `ACCESS EXCLUSIVE` 锁定全部 v2 核心/SSOT/会话/恢复/内容/互动/投稿/审计表；任一表非空即以 `rollback_requires_backend_v2_backup_restore` 停止，必须先完成可验证的备份恢复演练或选择前滚修复，不得删 fence、漏锁表或强制 DROP 绕过。
+
+普通成员会话有效期由数据库固定为 30 天，管理员会话固定为 8 小时；API 请求体不得提供或覆盖 expiry。成员提升为管理员会撤销其既有成员会话，重新登录后才获得 8 小时管理员会话。提升操作要求当前管理员再次提交自己的密码，后端 Argon2 校验后只给当前具体 session 写入 5 分钟、单次 nonce，再由数据库 RPC 校验并消费；不得使用浏览器 boolean 代替重新认证。
+
+注册、恢复和 legacy 安装产生的恢复码只在 React 内存中显示一次，不写入 localStorage/sessionStorage。恢复码尚未确认且页面刷新/丢失时，保留的未确认 HttpOnly session 可通过 `/api/v1/auth/recovery-regenerate` 提交当前密码重新认证：数据库原子作废旧码、写入新码并审计。已确认账号不能使用该入口，必须走正常恢复或后续受控轮换流程。
+
+后台 `/api/v1/admin/settings` 只允许公告、成人内容策略版本和已列出的功能开关，使用 version CAS 并审计；`/api/v1/admin/health` 仅返回数据库、快照、迁移、任务与 COS 公私桶可用性/CORS 配置的安全状态，不返回桶名、凭据、token 或对象 key。
 
 应用前后运行：
 

@@ -5,6 +5,8 @@ export type AdminQuestion = { id: string; prompt: string; options: string[]; nor
 export type AdminJob = { id: string; kind: string; status: string; attempts: number; version: number; updatedAt: string; error: string | null };
 export type AuditItem = { id: string; actorId: string | null; action: string; targetType: string; targetId: string | null; summary: Record<string, unknown>; createdAt: string };
 export type ModerationItem = { id: string; status: string; body?: string; reason?: string; targetType?: string; targetId?: string; version: number; createdAt: string };
+export type AdminSetting = { key: 'announcement' | 'adult_content_policy' | 'feature_flags'; value: Record<string, unknown>; version: number; updatedAt: string };
+export type AdminHealth = { database: { ok: boolean; databaseVersion: string; snapshot: Record<string, unknown>; migration: Record<string, unknown>; jobs: Record<string, unknown> }; storage: { ok: boolean; region: string; publicBucketConfigured: boolean; privateBucketConfigured: boolean; publicCorsConfigured: boolean; privateCorsConfigured: boolean } };
 export class AdminApiError extends Error { constructor(public readonly errorCode: string, message: string, public readonly status: number, public readonly requestId?: string) { super(message); this.name = 'AdminApiError'; } }
 const API_ROOT = '/api/v1';
 function cookie(name: string) { if (typeof document === 'undefined') return ''; const prefix = `${name}=`; const part = document.cookie.split(';').map((v) => v.trim()).find((v) => v.startsWith(prefix)); return part ? decodeURIComponent(part.slice(prefix.length)) : ''; }
@@ -16,6 +18,10 @@ export const operationKey = () => typeof crypto !== 'undefined' && 'randomUUID' 
 export const getDashboard = () => adminRequest<Dashboard>('/admin/dashboard');
 export const listUsers = (input: { status?: string; search?: string; cursor?: string; limit?: number } = {}) => adminRequest<AdminList<AdminUser>>(`/admin/users${query(input)}`);
 export const setUserStatus = (id: string, version: number, status: 'active' | 'suspended', reason: string, key = operationKey()) => adminWrite<{ user: AdminUser }>(`/admin/users/${encodeURIComponent(id)}/status`, { version, status, reason }, key);
+export const promoteUser = (id: string, version: number, password: string, key = operationKey()) => adminWrite<{ user: AdminUser }>(`/admin/users/${encodeURIComponent(id)}/promote`, { version, password }, key);
+export const getSettings = () => adminRequest<{ items: AdminSetting[] }>('/admin/settings');
+export const updateSetting = (setting: AdminSetting, value: Record<string, unknown>, key = operationKey()) => adminWrite<{ setting: AdminSetting }>(`/admin/settings/${encodeURIComponent(setting.key)}`, { version: setting.version, value }, key, 'PATCH');
+export const getHealth = () => adminRequest<AdminHealth>('/admin/health');
 export const listQuestions = (input: { status?: string; cursor?: string; limit?: number } = {}) => adminRequest<AdminList<AdminQuestion>>(`/admin/questions${query(input)}`);
 export const createQuestion = (input: { prompt: string; options: string[]; acceptedAnswers: string[]; normalizationRule: string; samplingWeight: number }, key = operationKey()) => adminWrite<{ question: AdminQuestion }>('/admin/questions', input, key);
 export const updateQuestion = (id: string, input: { version: number; prompt?: string; options?: string[]; acceptedAnswers?: string[]; normalizationRule?: 'trim' | 'trim_lowercase' | 'trim_lowercase_collapse_whitespace'; samplingWeight?: number }, key = operationKey()) => adminWrite<{ question: AdminQuestion }>(`/admin/questions/${encodeURIComponent(id)}`, input, key, 'PATCH');

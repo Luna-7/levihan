@@ -20,12 +20,13 @@ export const REQUIRED_FUNCTIONS = {
   backend_v2_validate_submission_asset: '',
   answer_registration_challenge: 'uuid, boolean, integer, integer, text, timestamptz',
   validate_registration_ticket: 'text',
-  consume_registration_ticket: 'text, text, text, text, timestamptz, text, text',
-  create_login_session: 'uuid, text, timestamptz, text, text',
-  rotate_user_session: 'text, text, timestamptz, text',
-  consume_recovery_code: 'text, text, text, text, timestamptz, text',
+  consume_registration_ticket: 'text, text, text, text, text, text',
+  create_login_session: 'uuid, text, text, text',
+  rotate_user_session: 'text, text, text',
+  consume_recovery_code: 'text, text, text, text, text',
+  get_unconfirmed_recovery_credential: 'text',
+  regenerate_unconfirmed_recovery_code: 'text, text, text, text',
   confirm_recovery_session: 'text, text',
-  promote_app_user: 'uuid, uuid, boolean, text',
   set_work_like: 'uuid, uuid, boolean',
   set_favorite: 'uuid, uuid, boolean',
   sync_reading_progress: 'uuid, uuid, bigint, numeric, bigint, timestamptz',
@@ -318,6 +319,7 @@ function validateMigration(migration, failures) {
   addFailure(failures, has(ticketConsumer, /INSERT\s+INTO\s+public\.rate_limit_buckets\s+AS\s+current_bucket[\s\S]*?'registration-success'[\s\S]*?ON\s+CONFLICT\s*\(\s*subject_hash\s*,\s*bucket\s*,\s*window_started_at\s*\)\s+DO\s+UPDATE[\s\S]*?hit_count\s*=\s*current_bucket\.hit_count\s*\+\s*1/i), 'registration must count successful creations atomically');
   addFailure(failures, has(ticketConsumer, /v_registration_count\s*>\s*3[\s\S]*?registration_success_rate_limited/i), 'registration success quota must reject the fourth hourly creation');
   addFailure(failures, has(ticketConsumer, /INSERT\s+INTO\s+public\.user_sessions\s*\([^)]*recovery_confirmed_at[^)]*\)[\s\S]*?VALUES\s*\([^)]*NULL\s*\)/i), 'registration session must start recovery-unconfirmed');
+  addFailure(failures, /v_expires_at\s+timestamptz\s*:=\s*clock_timestamp\(\)\s*\+\s*interval '30 days'/i.test(ticketConsumer) && !/p_(?:session_)?expires/i.test(ticketConsumer), 'registration session expiry must be fixed by the database');
 
   const ticketValidator = functionBody(sql, 'validate_registration_ticket');
   addFailure(failures, Boolean(ticketValidator), 'missing registration-ticket preflight routine');
@@ -330,7 +332,7 @@ function validateMigration(migration, failures) {
 
   const loginSession = functionBody(sql, 'create_login_session');
   addFailure(failures, Boolean(loginSession), 'missing controlled routine: create_login_session');
-  addFailure(failures, has(loginSession, /p_expires_at\s+<=\s+clock_timestamp\(\)/i), 'login session must reject expired sessions');
+  addFailure(failures, has(loginSession, /v_expires_at\s*:=\s*clock_timestamp\(\)\s*\+\s*CASE\s+WHEN\s+v_role\s*=\s*'admin'\s+THEN\s+interval\s+'8 hours'\s+ELSE\s+interval\s+'30 days'\s+END/i), 'login session expiry must be derived from the locked account role');
   addFailure(failures, has(loginSession, /public\.app_users[\s\S]*?status\s*=\s*'active'[\s\S]*?FOR\s+NO\s+KEY\s+UPDATE/i), 'login session must lock the active app user against concurrent recovery');
   addFailure(failures, has(loginSession, /login_user\.recovery_confirmed_at\s+IS\s+NOT\s+NULL/i), 'login session must reject recovery-unconfirmed accounts');
   addFailure(failures, has(loginSession, /INSERT\s+INTO\s+public\.user_sessions/i), 'login session must insert a session');
@@ -345,6 +347,10 @@ function validateMigration(migration, failures) {
   addFailure(failures, has(recoveryConsumer, /INSERT\s+INTO\s+public\.recovery_codes/i), 'recovery code must insert a replacement recovery code');
   addFailure(failures, has(recoveryConsumer, /INSERT\s+INTO\s+public\.user_sessions/i), 'recovery code must create a replacement session');
   addFailure(failures, has(recoveryConsumer, /INSERT\s+INTO\s+public\.user_sessions\s*\([^)]*recovery_confirmed_at[^)]*\)[\s\S]*?VALUES\s*\([^)]*NULL\s*\)/i), 'recovery session must start recovery-unconfirmed');
+  addFailure(failures, /RETURNING\s+role\s+INTO\s+v_role[\s\S]*CASE\s+WHEN\s+v_role\s*=\s*'admin'\s+THEN\s+interval '8 hours'\s+ELSE\s+interval '30 days'\s+END/i.test(recoveryConsumer) && !/p_(?:session_)?expires/i.test(recoveryConsumer), 'recovery session expiry must be derived from the locked account role');
+
+  const rotatedSession = functionBody(sql, 'rotate_user_session');
+  addFailure(failures, /SELECT\s+role\s+INTO\s+v_role[\s\S]*CASE\s+WHEN\s+v_role\s*=\s*'admin'\s+THEN\s+interval '8 hours'\s+ELSE\s+interval '30 days'\s+END/i.test(rotatedSession) && !/p_new_expires/i.test(rotatedSession), 'rotated session expiry must be derived from the locked account role');
 
   const recoveryConfirmation = functionBody(sql, 'confirm_recovery_session');
   addFailure(failures, has(recoveryConfirmation, /UPDATE\s+public\.user_sessions\s+AS\s+session[\s\S]*?SET\s+recovery_confirmed_at\s*=\s*v_now/i), 'recovery confirmation must mark its session confirmed');
@@ -355,14 +361,10 @@ function validateMigration(migration, failures) {
   addFailure(failures, !/UPDATE\s+public\.recovery_codes[\s\S]*?used_at/i.test(recoveryConfirmation), 'recovery confirmation must not consume the recovery code');
   addFailure(failures, has(recoveryConfirmation, /RETURN\s+QUERY[\s\S]*?SELECT\s+app_user\.id\s*,\s*app_user\.username\s*,\s*app_user\.role\s*,\s*app_user\.status/i), 'recovery confirmation must return its safe user profile atomically');
 
-  const promoter = functionBody(sql, 'promote_app_user');
-  addFailure(failures, Boolean(promoter), 'missing controlled routine: promote_app_user');
-  addFailure(failures, has(promoter, /NOT\s+p_reauthenticated/i), 'admin promotion must require reauthentication');
-  addFailure(failures, has(promoter, /public\.app_users[\s\S]*?status\s*=\s*'active'[\s\S]*?role\s*=\s*'admin'[\s\S]*?FOR\s+KEY\s+SHARE/i), 'admin promotion must require an active admin actor');
-  addFailure(failures, has(promoter, /p_target_id[\s\S]*?status\s*=\s*'active'[\s\S]*?FOR\s+UPDATE/i), 'admin promotion must require an active target');
-  addFailure(failures, has(promoter, /UPDATE\s+public\.app_users\s+SET\s+role\s*=\s*'admin'/i), 'admin promotion must set the target role to admin');
-  addFailure(failures, !/SET\s+role\s*=\s*'member'|DELETE\s+FROM\s+public\.app_users/i.test(promoter), 'admin promotion must not demote or delete users');
-  addFailure(failures, has(promoter, /INSERT\s+INTO\s+public\.audit_logs[\s\S]*?p_actor_id[\s\S]*?p_request_id/i), 'admin promotion must write an audit log with request id');
+  const regeneration = functionBody(sql, 'regenerate_unconfirmed_recovery_code');
+  addFailure(failures, /session\.recovery_confirmed_at\s+IS\s+NULL[\s\S]*account\.recovery_confirmed_at\s+IS\s+NULL/i.test(regeneration), 'recovery regeneration must only allow unconfirmed session/account pairs');
+  addFailure(failures, /UPDATE\s+public\.recovery_codes\s+SET\s+used_at=clock_timestamp\(\)[\s\S]*INSERT\s+INTO\s+public\.recovery_codes/i.test(regeneration), 'recovery regeneration must atomically invalidate old codes before inserting the replacement');
+  addFailure(failures, /auth\.recovery\.regenerate/i.test(regeneration), 'recovery regeneration must be audited');
 
   addFailure(failures, has(functionBody(sql, 'set_work_like'), /ON\s+CONFLICT\s*\(\s*user_id\s*,\s*work_id\s*\)\s+DO\s+NOTHING/i), 'like upsert must be idempotent');
   addFailure(failures, has(functionBody(sql, 'set_favorite'), /ON\s+CONFLICT\s*\(\s*user_id\s*,\s*work_id\s*\)\s+DO\s+NOTHING/i), 'favorite upsert must be idempotent');
@@ -540,6 +542,14 @@ function validateRollback(rollback, failures) {
   addFailure(failures, /COMMIT;\s*$/i.test(trimmed), 'rollback must end with COMMIT;');
   addFailure(failures, !/DROP\s+EXTENSION\s+(?:IF\s+EXISTS\s+)?pgcrypto/i.test(sql), 'rollback must not remove a possibly pre-existing pgcrypto extension');
   addFailure(failures, !/\bDROP\s+TABLE\b[^;]*\bpublic\.users\b/i.test(sql), 'rollback must not drop legacy public.users');
+  const firstDrop = sql.search(/DROP\s+(?:TRIGGER|FUNCTION|TABLE)/i);
+  const lock = sql.match(/LOCK\s+TABLE\s+([\s\S]*?)\s+IN\s+ACCESS\s+EXCLUSIVE\s+MODE\s*;/i);
+  addFailure(failures, Boolean(lock) && (lock.index ?? Number.MAX_SAFE_INTEGER) < firstDrop, 'rollback must lock all v2 tables before destructive operations');
+  for (const table of REQUIRED_TABLES) {
+    addFailure(failures, Boolean(lock) && new RegExp(`public\\.${escapeRegExp(table)}\\b`, 'i').test(lock[1]), `rollback fence lock is missing table ${table}`);
+    addFailure(failures, new RegExp(`EXISTS\\s*\\(\\s*SELECT\\s+1\\s+FROM\\s+public\\.${escapeRegExp(table)}\\s*\\)`, 'i').test(sql.slice(0, firstDrop)), `rollback data fence is missing table ${table}`);
+  }
+  addFailure(failures, /rollback_requires_backend_v2_backup_restore/i.test(sql.slice(0, firstDrop)), 'rollback must fail closed and require backup restore when v2 data exists');
 
   const triggerDrops = [...sql.matchAll(/DROP\s+TRIGGER\s+IF\s+EXISTS\s+[^;]+;/gi)].map((match) => match.index ?? 0);
   const functionDrops = [...sql.matchAll(/DROP\s+FUNCTION\s+IF\s+EXISTS\s+public\.[^;]+;/gi)].map((match) => match.index ?? 0);

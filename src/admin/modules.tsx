@@ -6,9 +6,9 @@ import {
 } from '../features/works/api';
 import {
   adminRequest, adminWrite, createQuestion, listAudit, listJobs, listModeration,
-  listQuestions, listUsers, operationKey, retryJob, setQuestionStatus, setUserStatus,
+  getHealth, getSettings, listQuestions, listUsers, operationKey, promoteUser, retryJob, setQuestionStatus, setUserStatus, updateSetting,
   updateQuestion, type AdminJob, type AdminQuestion, type AdminUser, type AuditItem,
-  type ModerationItem,
+  type AdminHealth, type AdminSetting, type ModerationItem,
 } from './api';
 
 function message(error: unknown) { return error instanceof Error ? error.message : '操作失败'; }
@@ -94,13 +94,23 @@ export function ModerationAdmin() {
 }
 
 export function UsersAdmin() {
-  const [items, setItems] = useState<AdminUser[]>([]); const [cursor, setCursor] = useState<string | null>(null); const [notice, setNotice] = useState(''); const [statusFilter, setStatusFilter] = useState(''); const [search, setSearch] = useState('');
+  const [items, setItems] = useState<AdminUser[]>([]); const [cursor, setCursor] = useState<string | null>(null); const [notice, setNotice] = useState(''); const [statusFilter, setStatusFilter] = useState(''); const [search, setSearch] = useState(''); const [adminPassword,setAdminPassword]=useState('');
   const load = (next?: string) => void listUsers({ status: statusFilter || undefined, search: search || undefined, cursor: next }).then((result) => { setItems((old) => next ? [...old, ...result.items] : result.items); setCursor(result.nextCursor); }).catch((error) => setNotice(message(error)));
   useEffect(() => load(), [statusFilter]);
   async function change(user: AdminUser) { const status = user.status === 'active' ? 'suspended' : 'active'; if (!window.confirm(`确认${status === 'active' ? '恢复' : '停用'} ${user.username}？`)) return; setItems((all) => all.map((item) => item.id === user.id ? { ...item, status } : item)); try { const result = await setUserStatus(user.id, user.version, status, 'admin console'); setItems((all) => all.map((item) => item.id === user.id ? result.user : item)); } catch (error) { setItems((all) => all.map((item) => item.id === user.id ? user : item)); setNotice(message(error)); } }
   async function restricted(user: AdminUser, action: 'revoke' | 'restore') { if (!window.confirm(`确认${action === 'revoke' ? '限制' : '恢复'} ${user.username} 的 R18 访问？`)) return; try { await adminWrite(`/admin/users/${user.id}/restricted-access/${action}`, { reason: 'admin console moderation' }, operationKey()); setNotice(action === 'revoke' ? 'R18 访问已限制' : 'R18 访问已恢复'); } catch (error) { setNotice(message(error)); } }
-  return <><p role="alert">{notice}</p><label>用户名<input value={search} onChange={(event) => setSearch(event.target.value)} /></label><button onClick={() => load()}>搜索</button><label>状态筛选<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">全部</option><option value="active">active</option><option value="suspended">suspended</option></select></label><ul>{items.map((user) => <li key={user.id}>{user.username} · {user.role} · {user.status} · 会话 {user.activeSessions} · 最近登录 {user.lastLoginAt || '无'} <button onClick={() => void change(user)}>{user.status === 'active' ? '停用' : '恢复'}</button><button onClick={() => void restricted(user, 'revoke')}>限制 R18</button><button onClick={() => void restricted(user, 'restore')}>恢复 R18</button></li>)}</ul>{cursor && <button onClick={() => load(cursor)}>下一页</button>}</>;
+  async function promote(user:AdminUser){if(!window.confirm(`确认将 ${user.username} 提升为管理员？`))return;try{const result=await promoteUser(user.id,user.version,adminPassword);setItems((all)=>all.map((item)=>item.id===user.id?result.user:item));setAdminPassword('');}catch(error){setNotice(message(error));}}
+  return <><p role="alert">{notice}</p><label>用户名<input value={search} onChange={(event) => setSearch(event.target.value)} /></label><button onClick={() => load()}>搜索</button><label>当前管理员密码<input aria-label="当前管理员密码" type="password" value={adminPassword} onChange={(event)=>setAdminPassword(event.target.value)} autoComplete="current-password" /></label><label>状态筛选<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">全部</option><option value="active">active</option><option value="suspended">suspended</option></select></label><ul>{items.map((user) => <li key={user.id}>{user.username} · {user.role} · {user.status} · 会话 {user.activeSessions} · 最近登录 {user.lastLoginAt || '无'} <button onClick={() => void change(user)}>{user.status === 'active' ? '停用' : '恢复'}</button>{user.role==='member'&&user.status==='active'&&<button disabled={adminPassword.length<12} onClick={()=>void promote(user)}>提升管理员</button>}<button onClick={() => void restricted(user, 'revoke')}>限制 R18</button><button onClick={() => void restricted(user, 'restore')}>恢复 R18</button></li>)}</ul>{cursor && <button onClick={() => load(cursor)}>下一页</button>}</>;
 }
+
+const SETTING_DEFAULTS: AdminSetting[] = [
+  { key: 'announcement', value: { enabled: false, text: '' }, version: 1, updatedAt: '' },
+  { key: 'adult_content_policy', value: { version: '2026-09', warning: '包含成人向内容。此确认仅为年满18岁的自我声明。' }, version: 1, updatedAt: '' },
+  { key: 'feature_flags', value: { registrationEnabled: true, submissionsEnabled: true, commentsEnabled: true, legacyMigrationEnabled: false }, version: 1, updatedAt: '' },
+];
+function completeSettings(items: AdminSetting[]) { return SETTING_DEFAULTS.map((fallback) => items.find((item) => item.key === fallback.key) || fallback); }
+export function SettingsAdmin(){const[items,setItems]=useState<AdminSetting[]>(SETTING_DEFAULTS);const[health,setHealth]=useState<AdminHealth|null>(null);const[notice,setNotice]=useState('');const load=()=>{void Promise.all([getSettings(),getHealth()]).then(([settings,status])=>{setItems(completeSettings(settings.items));setHealth(status);}).catch((error)=>setNotice(message(error)));};useEffect(load,[]);async function save(setting:AdminSetting,raw:string){try{const value=JSON.parse(raw) as Record<string,unknown>;const result=await updateSetting(setting,value);setItems((all)=>all.map((item)=>item.key===setting.key?result.setting:item));}catch(error){setNotice(message(error));}}return <><p role="alert">{notice}</p><p>数据库 {health?.database.ok?'正常':'未知'} · COS {health?.storage.ok?'正常':'未知'} · 区域 {health?.storage.region||'未知'}</p>{items.map((setting)=><SettingEditor key={setting.key} setting={setting} onSave={save}/>)}</>}
+function SettingEditor({setting,onSave}:{key?:string;setting:AdminSetting;onSave:(setting:AdminSetting,raw:string)=>Promise<void>}){const[raw,setRaw]=useState(()=>JSON.stringify(setting.value,null,2));useEffect(()=>setRaw(JSON.stringify(setting.value,null,2)),[setting.key,setting.value,setting.version]);return <fieldset><legend>{setting.key} · v{setting.version}</legend><textarea aria-label={setting.key} value={raw} onChange={(event)=>setRaw(event.target.value)}/><button onClick={()=>void onSave(setting,raw)}>保存设置</button></fieldset>}
 
 export function QuestionsAdmin() {
   const [items, setItems] = useState<AdminQuestion[]>([]); const [cursor, setCursor] = useState<string | null>(null); const [editing, setEditing] = useState<AdminQuestion | null>(null); const [notice, setNotice] = useState('');

@@ -7,6 +7,10 @@ function registerAdminConsoleRoutes(router, service) {
   router.get('/admin/moderation/reports', (ctx) => service.listReports(ctx), READ);
   router.get('/admin/users', (ctx) => service.listUsers(ctx), READ);
   router.post('/admin/users/{id}/status', (ctx) => service.setUserStatus(ctx), WRITE);
+  router.post('/admin/users/{id}/promote', (ctx) => service.promoteUser(ctx), { ...WRITE, rateLimit: [{ bucket: 'admin-promote', limit: 5, windowSeconds: 3600 }] });
+  router.get('/admin/settings', (ctx) => service.settings(ctx), READ);
+  router.patch('/admin/settings/{key}', (ctx) => service.updateSetting(ctx), WRITE);
+  router.get('/admin/health', (ctx) => service.health(ctx), READ);
   router.get('/admin/questions', (ctx) => service.listQuestions(ctx), READ);
   router.post('/admin/questions', (ctx) => service.createQuestion(ctx), WRITE);
   router.patch('/admin/questions/{id}', (ctx) => service.updateQuestion(ctx), WRITE);
