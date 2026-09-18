@@ -32,6 +32,10 @@ function api(overrides = {}) {
   });
 }
 
+function idempotent(mode = 'supported', bodyFields = ['ok']) {
+  return { mode, responsePolicy: { statuses: [200, 201], bodyFields, headers: [] } };
+}
+
 function fakeIdempotencyStore() {
   const records = new Map();
   return {
@@ -188,7 +192,7 @@ describe('HTTP API kernel', () => {
     });
     const server = api({ idempotencyStore: { execute } });
     const operation = vi.fn(() => ({ created: true }));
-    server.router.post('/write', (ctx) => { expect(ctx.idempotencyKey).toBe('test-idempotency-key'); return operation(); }, { csrfExempt: true, idempotency: 'required' });
+    server.router.post('/write', (ctx) => { expect(ctx.idempotencyKey).toBe('test-idempotency-key'); return operation(); }, { csrfExempt: true, idempotency: idempotent('required', ['created']) });
     const response = await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', body: '{"x":1}', headers: { 'content-type': 'application/json', 'idempotency-key': 'test-idempotency-key' } }));
     await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', body: '{"x":1}', headers: { 'content-type': 'application/json', 'idempotency-key': 'test-idempotency-key' } }));
     expect(response.statusCode).toBe(200);
@@ -196,11 +200,11 @@ describe('HTTP API kernel', () => {
     expect(operation).toHaveBeenCalledTimes(1);
   });
 
-  it('uses idempotency by default for writes when a key is present and replays once', async () => {
+  it('uses an explicit positive response policy to replay a supported write once', async () => {
     const operation = vi.fn(() => ({ created: true }));
     const actorResolver = vi.fn(async () => 'member-42');
     const server = api({ idempotencyStore: fakeIdempotencyStore(), actorResolver });
-    server.router.post('/write', operation, { csrfExempt: true });
+    server.router.post('/write', operation, { csrfExempt: true, idempotency: idempotent('supported', ['created']) });
     const keyedRequest = request({ httpMethod: 'POST', path: '/api/v1/write', body: '{"x":1}', headers: { 'content-type': 'application/json', 'idempotency-key': 'default-key-01' } });
 
     const first = await server.handle(keyedRequest);
@@ -216,7 +220,7 @@ describe('HTTP API kernel', () => {
     const operation = vi.fn((ctx) => ({ actor: ctx.actorId, id: ctx.params.id, query: ctx.query }));
     let actor = 'member-a';
     const server = api({ idempotencyStore: fakeIdempotencyStore(), actorResolver: async () => actor });
-    server.router.post('/works/{id}', operation, { csrfExempt: true });
+    server.router.post('/works/{id}', operation, { csrfExempt: true, idempotency: idempotent('supported', ['actor', 'id', 'query']) });
     const keyed = { 'idempotency-key': 'shared-key-01' };
 
     await server.handle(request({ httpMethod: 'POST', path: '/api/v1/works/work-a', headers: keyed, queryStringParameters: { page: '1' } }));
@@ -233,7 +237,7 @@ describe('HTTP API kernel', () => {
     const execute = vi.spyOn(stored, 'execute');
     const operation = vi.fn(() => ({ ok: true }));
     const server = api({ idempotencyStore: stored, actorResolver: async () => 'member-42' });
-    server.router.post('/search', operation, { csrfExempt: true });
+    server.router.post('/search', operation, { csrfExempt: true, idempotency: idempotent('supported', ['ok']) });
     const headers = { 'idempotency-key': 'query-key-01' };
 
     await server.handle(request({ httpMethod: 'POST', path: '/api/v1/search', headers, multiValueQueryStringParameters: { tag: ['b', 'a'] }, queryStringParameters: { page: '1' } }));
@@ -251,7 +255,7 @@ describe('HTTP API kernel', () => {
   it('returns 409 when the same actor, scope, and key are reused with a different body', async () => {
     const operation = vi.fn(() => ({ created: true }));
     const server = api({ idempotencyStore: fakeIdempotencyStore(), actorResolver: async () => 'member-42' });
-    server.router.post('/write', operation, { csrfExempt: true });
+    server.router.post('/write', operation, { csrfExempt: true, idempotency: idempotent('supported', ['created']) });
     const headers = { 'content-type': 'application/json', 'idempotency-key': 'body-key-001' };
 
     await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', body: '{"x":1}', headers }));
@@ -267,7 +271,7 @@ describe('HTTP API kernel', () => {
       .mockRejectedValueOnce(new ApiError(409, 'STATE_CONFLICT', 'Try again'))
       .mockResolvedValueOnce({ created: true });
     const server = api({ idempotencyStore: fakeIdempotencyStore(), actorResolver: async () => 'member-42' });
-    server.router.post('/write', operation, { csrfExempt: true, idempotency: 'required' });
+    server.router.post('/write', operation, { csrfExempt: true, idempotency: idempotent('required', ['created']) });
     const keyedRequest = request({ httpMethod: 'POST', path: '/api/v1/write', headers: { 'idempotency-key': 'retry-key-01' } });
 
     expect((await server.handle(keyedRequest)).statusCode).toBe(409);
@@ -277,12 +281,12 @@ describe('HTTP API kernel', () => {
 
   it('requires a valid key, a store, and a trusted actor or client IP when idempotency is used', async () => {
     const server = api({ actorResolver: async () => null });
-    server.router.post('/write', () => ({ ok: true }), { csrfExempt: true });
+    server.router.post('/write', () => ({ ok: true }), { csrfExempt: true, idempotency: idempotent() });
     expect((await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', headers: { 'idempotency-key': 'short' } }))).statusCode).toBe(400);
     expect((await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', headers: { 'idempotency-key': 'valid-key-01' } }))).statusCode).toBe(503);
 
     const noIp = api({ idempotencyStore: fakeIdempotencyStore(), actorResolver: async () => null });
-    noIp.router.post('/write', () => ({ ok: true }), { csrfExempt: true });
+    noIp.router.post('/write', () => ({ ok: true }), { csrfExempt: true, idempotency: idempotent() });
     const missingIp = await noIp.handle(request({ httpMethod: 'POST', path: '/api/v1/write', requestContext: {}, headers: { 'idempotency-key': 'valid-key-01' } }));
     expect(missingIp.statusCode).toBe(503);
     expect(JSON.parse(missingIp.body).message).toBe('Service temporarily unavailable');
@@ -291,7 +295,7 @@ describe('HTTP API kernel', () => {
   it('ignores idempotency keys only for routes explicitly marked none', async () => {
     const operation = vi.fn(() => ({ ok: true }));
     const server = api({ actorResolver: async () => null });
-    server.router.post('/write', operation, { csrfExempt: true, idempotency: 'none' });
+    server.router.post('/write', operation, { csrfExempt: true, idempotency: { mode: 'none' } });
     const response = await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', requestContext: {}, headers: { 'idempotency-key': 'ignored-key-01' } }));
     expect(response.statusCode).toBe(200);
     expect(operation).toHaveBeenCalledTimes(1);
@@ -303,7 +307,7 @@ describe('HTTP API kernel', () => {
     const dependencyError = new ApiError(503, 'DEPENDENCY_UNAVAILABLE', secretMarker);
     dependencyError.name = 'DependencyUnavailableError';
     const server = createApi({ config, requestId: () => 'dependency-request', logger, actorResolver: async () => 'member-42', idempotencyStore: { execute: async () => { throw dependencyError; } } });
-    server.router.post('/write', () => ({ ok: true }), { csrfExempt: true });
+    server.router.post('/write', () => ({ ok: true }), { csrfExempt: true, idempotency: idempotent() });
 
     const response = await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', headers: { 'idempotency-key': 'failure-key-01' } }));
 
@@ -313,16 +317,20 @@ describe('HTTP API kernel', () => {
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain(secretMarker);
   });
 
-  it('documents credential and signed-access routes by bypassing idempotency with metadata none', async () => {
+  it('documents auth registration/login/recovery and signed-access routes as non-replayable', async () => {
     const operation = vi.fn(() => ({ recoveryCode: 'test-sensitive-value' }));
     const execute = vi.fn();
     const server = api({ idempotencyStore: { execute }, actorResolver: async () => 'member-42' });
-    server.router.post('/auth/recovery', operation, { csrfExempt: true, idempotency: 'none' });
+    for (const path of ['/auth/register', '/auth/login', '/auth/recovery', '/signed-access']) {
+      server.router.post(path, operation, { csrfExempt: true, idempotency: { mode: 'none' } });
+    }
 
-    const response = await server.handle(request({ httpMethod: 'POST', path: '/api/v1/auth/recovery', headers: { 'idempotency-key': 'ignored-key-02' } }));
+    const responses = await Promise.all(['/auth/register', '/auth/login', '/auth/recovery', '/signed-access'].map((path) => (
+      server.handle(request({ httpMethod: 'POST', path: `/api/v1${path}`, headers: { 'idempotency-key': 'ignored-key-02' } }))
+    )));
 
-    expect(response.statusCode).toBe(200);
-    expect(operation).toHaveBeenCalledTimes(1);
+    expect(responses.map((response) => response.statusCode)).toEqual([200, 200, 200, 200]);
+    expect(operation).toHaveBeenCalledTimes(4);
     expect(execute).not.toHaveBeenCalled();
   });
 
@@ -332,6 +340,45 @@ describe('HTTP API kernel', () => {
     const response = await server.handle(request({ path: '/api/v1/works/%E0%A4' }));
     expect(response.statusCode).toBe(400);
     expect(JSON.parse(response.body).errorCode).toBe('VALIDATION_FAILED');
+  });
+
+  it('rejects a keyed route with no response policy before its operation runs', async () => {
+    const operation = vi.fn(() => ({ ok: true }));
+    const execute = vi.fn();
+    const server = api({ idempotencyStore: { execute }, actorResolver: async () => 'member-42' });
+    // Legacy string metadata is readable, but cannot activate a keyed operation
+    // unless it is migrated to the object form with a responsePolicy.
+    server.router.post('/unconfigured', operation, { csrfExempt: true, idempotency: 'supported' });
+
+    const response = await server.handle(request({ httpMethod: 'POST', path: '/api/v1/unconfigured', headers: { 'idempotency-key': 'no-policy-key-01' } }));
+
+    expect(response.statusCode).toBe(500);
+    expect(operation).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it.each(['recoveryCode', 'signedUrl', 'value.url', 'location', 'token'])('rejects unsafe idempotency allowlist field %s at route registration', (field) => {
+    const server = api();
+    expect(() => server.router.post('/invalid-policy', () => ({ id: '1' }), {
+      csrfExempt: true,
+      idempotency: { mode: 'required', responsePolicy: { statuses: [200], bodyFields: [field], headers: [] } },
+    })).toThrow(/idempotency response policy/i);
+  });
+
+  it('rejects callback-like response policy configuration at route registration', () => {
+    const server = api();
+    expect(() => server.router.post('/invalid-policy', () => ({ id: '1' }), {
+      csrfExempt: true,
+      idempotency: { mode: 'required', responsePolicy: { statuses: [200], bodyFields: ['id'], project: () => ({}) } },
+    })).toThrow(/idempotency response policy/i);
+  });
+
+  it('rejects Location even when a policy tries to allow it as a header', () => {
+    const server = api();
+    expect(() => server.router.post('/invalid-header-policy', () => ({ id: '1' }), {
+      csrfExempt: true,
+      idempotency: { mode: 'required', responsePolicy: { statuses: [200], bodyFields: ['id'], headers: ['location'] } },
+    })).toThrow(/idempotency response policy/i);
   });
 
   it('continues a request when the rate bucket accepts it', async () => {

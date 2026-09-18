@@ -159,13 +159,14 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
       }
       const operation = () => route.handler(context);
       let data;
-      // Task 4 auth recovery/login/register and Task 6 signed-access routes
-      // return non-replayable credentials and must declare `idempotency: 'none'`.
-      const idempotency = route.metadata.idempotency ?? (WRITE_METHODS.has(method) ? 'supported' : 'none');
+      // Auth recovery/login/register and signed-access routes return non-replayable
+      // credentials and must register `{ idempotency: { mode: 'none' } }`.
+      const idempotency = route.metadata.idempotency;
       context.idempotencyPolicy = idempotency;
       const key = headers['idempotency-key'];
-      const useIdempotency = idempotency === 'required' || (idempotency !== 'none' && key !== undefined);
+      const useIdempotency = idempotency.mode === 'required' || (idempotency.mode === 'supported' && key !== undefined);
       if (useIdempotency) {
+        if (!idempotency.responsePolicy) throw new ApiError(500, 'INTERNAL_ERROR', 'Idempotency response policy is required');
         if (!/^[A-Za-z0-9_-]{8,128}$/.test(key || '')) throw new ApiError(400, 'VALIDATION_FAILED', 'Invalid Idempotency-Key');
         if (!idempotencyStore) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Idempotency storage unavailable');
         const ip = trustedIp(event, headers, config);
@@ -184,6 +185,7 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
           key,
           requestHash: digest({ ...requestIdentity, body: body === undefined ? null : body }),
           actorScopeHash: scopeActorHash,
+          responsePolicy: idempotency.responsePolicy,
           operation,
         });
       } else data = await operation();

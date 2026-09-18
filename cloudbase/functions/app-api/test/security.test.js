@@ -8,6 +8,8 @@ const crypto = require('node:crypto');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 
+const responsePolicy = { statuses: [200, 201], bodyFields: ['id', 'status', 'version', 'ok', 'actor', 'actorId', 'role'], headers: ['etag'] };
+
 const config = {
   environment: 'test', allowedOrigins: [], sessionCookieName: 'lv_session', csrfCookieName: 'lv_csrf',
   bodyLimitBytes: 1024, csrfRequired: true, sessionHashPepper: 'test-pepper', rateLimitPepper: 'test-rate-pepper',
@@ -99,7 +101,7 @@ describe('security boundaries', () => {
     const execute = vi.fn(async ({ operation }) => operation());
     const actorResolver = vi.fn(async () => 'member-84');
     const server = createApi({ config, idempotencyStore: { execute }, actorResolver, requestId: () => 'resolved-actor', logger: createLogger({ write, actorPepper: 'pepper' }) });
-    server.router.post('/write', (ctx) => ({ actor: ctx.actorId }), { csrfExempt: true });
+    server.router.post('/write', (ctx) => ({ actor: ctx.actorId }), { csrfExempt: true, idempotency: { mode: 'supported', responsePolicy } });
 
     const response = await server.handle(request({ headers: { 'idempotency-key': 'actor-key-01' }, requestContext: { identity: { sourceIp: '203.0.113.8' } } }));
 
@@ -126,7 +128,7 @@ describe('security boundaries', () => {
     expect(result).toEqual({ accepted: true, retryAfterSeconds: 0 });
   });
 
-  it('persists only the safe idempotent response header allowlist', async () => {
+  it('persists only the explicitly projected idempotent fields and headers', async () => {
     const rpc = vi.fn()
       .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
       .mockResolvedValueOnce({ data: true, error: null });
@@ -134,26 +136,77 @@ describe('security boundaries', () => {
     const response = {
       statusCode: 201,
       headers: {
-        'content-type': 'application/json',
-        'cache-control': 'private, max-age=30',
         etag: 'safe-etag',
-        location: '/api/v1/works/1',
-        'x-unsafe': 'discard-me',
       },
-      body: { work: { id: '1', title: 'safe' } },
+      body: { id: '1', status: 'created', version: 2 },
     };
 
-    expect(await store.execute({ scope: 'scope-hash', key: 'key-12345', requestHash: 'request-hash', actorScopeHash: 'actor-hash', operation: async () => response })).toBe(response);
+    expect(await store.execute({ scope: 'scope-hash', key: 'key-12345', requestHash: 'request-hash', actorScopeHash: 'actor-hash', responsePolicy, operation: async () => response })).toBe(response);
     expect(rpc).toHaveBeenNthCalledWith(1, 'begin_idempotent_request', {
       p_scope: 'scope-hash', p_actor_scope_hash: 'actor-hash', p_idempotency_key: 'key-12345', p_request_hash: 'request-hash',
     });
     const persisted = rpc.mock.calls[1][1].p_response;
     expect(persisted).toEqual({
       statusCode: 201,
-      headers: { 'content-type': 'application/json', 'cache-control': 'private, max-age=30', etag: 'safe-etag' },
-      body: { work: { id: '1', title: 'safe' } },
+      headers: { etag: 'safe-etag' },
+      body: { id: '1', status: 'created', version: 2 },
     });
-    expect(JSON.stringify(persisted).toLowerCase()).not.toMatch(/location|x-unsafe/);
+    expect(Object.keys(persisted.body)).toEqual(['id', 'status', 'version']);
+  });
+
+  it.each([
+    ['an opaque value at an unknown top-level key', { id: 'work-1', status: 'created', opaque: 'test-opaque-token' }],
+    ['an opaque value inside an unknown array', { id: 'work-1', status: 'created', items: ['test-opaque-token'] }],
+    ['an opaque value inside an unknown nested object', { id: 'work-1', status: 'created', value: { opaque: 'test-opaque-token' } }],
+  ])('releases and never completes when a response contains %s', async (_name, body) => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
+      .mockResolvedValueOnce({ data: true, error: null });
+    const store = createCloudBaseIdempotencyStore({ rdb: { rpc } });
+    const policy = { statuses: [200], bodyFields: ['id', 'status'], headers: [] };
+    const response = { statusCode: 200, body };
+
+    expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy: policy, operation: async () => response })).toBe(response);
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(['begin_idempotent_request', 'fail_idempotent_request']);
+    expect(JSON.stringify(rpc.mock.calls)).not.toContain('test-opaque-token');
+  });
+
+  it.each([
+    ['ordinary Location', '/api/v1/works/1'],
+    ['signed Location', 'https://objects.example.test/file?X-Amz-Signature=test-signed-value'],
+  ])('releases and never completes a response with %s', async (_name, location) => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
+      .mockResolvedValueOnce({ data: true, error: null });
+    const store = createCloudBaseIdempotencyStore({ rdb: { rpc } });
+    const response = { statusCode: 200, headers: { location }, body: { id: 'work-1', status: 'created' } };
+
+    expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy: { statuses: [200], bodyFields: ['id', 'status'], headers: [] }, operation: async () => response })).toBe(response);
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(['begin_idempotent_request', 'fail_idempotent_request']);
+  });
+
+  it('replays only the projected confirmation after one operation execution', async () => {
+    const policy = { statuses: [201], bodyFields: ['id', 'status'], headers: ['etag'] };
+    const full = { statusCode: 201, headers: { etag: 'v1' }, body: { id: 'work-1', status: 'created' } };
+    const projected = { statusCode: 201, headers: { etag: 'v1' }, body: { id: 'work-1', status: 'created' } };
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
+      .mockResolvedValueOnce({ data: true, error: null })
+      .mockResolvedValueOnce({ data: [{ state: 'completed', response: projected }], error: null });
+    const operation = vi.fn(async () => full);
+    const store = createCloudBaseIdempotencyStore({ rdb: { rpc } });
+
+    expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy: policy, operation })).toBe(full);
+    expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy: policy, operation })).toEqual(projected);
+    expect(operation).toHaveBeenCalledTimes(1);
+    expect(rpc.mock.calls[1][1].p_response).toEqual(projected);
+  });
+
+  it('requires a response policy before the store begins an operation', async () => {
+    const rpc = vi.fn();
+    const store = createCloudBaseIdempotencyStore({ rdb: { rpc } });
+    await expect(store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: vi.fn() })).rejects.toThrow(/response policy/i);
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -175,10 +228,10 @@ describe('security boundaries', () => {
       .mockResolvedValueOnce({ data: true, error: null });
     const store = createCloudBaseIdempotencyStore({ rdb: { rpc }, reportSecurityEvent });
 
-    expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: async () => response })).toBe(response);
+    expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy, operation: async () => response })).toBe(response);
     expect(rpc.mock.calls.map(([name]) => name)).toEqual(['begin_idempotent_request', 'fail_idempotent_request']);
     expect(JSON.stringify(rpc.mock.calls)).not.toContain('test-sensitive-value');
-    expect(reportSecurityEvent).toHaveBeenCalledWith({ errorCode: 'IDEMPOTENCY_RESPONSE_REJECTED', errorType: 'SensitiveIdempotencyResponseError' });
+    expect(reportSecurityEvent).toHaveBeenCalledWith({ errorCode: 'IDEMPOTENCY_RESPONSE_REJECTED', errorType: 'IdempotencyResponsePolicyError' });
     expect(JSON.stringify(reportSecurityEvent.mock.calls)).not.toContain('test-sensitive-value');
   });
 
@@ -187,7 +240,7 @@ describe('security boundaries', () => {
     const replayRpc = vi.fn().mockResolvedValue({ data: [{ state: 'completed', response: completed }], error: null });
     const replayOperation = vi.fn();
     const replayStore = createCloudBaseIdempotencyStore({ rdb: { rpc: replayRpc } });
-    expect(await replayStore.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: replayOperation })).toEqual(completed);
+    expect(await replayStore.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy, operation: replayOperation })).toEqual(completed);
     expect(replayOperation).not.toHaveBeenCalled();
 
     const failedRpc = vi.fn()
@@ -195,14 +248,14 @@ describe('security boundaries', () => {
       .mockResolvedValueOnce({ data: true, error: null });
     const failedStore = createCloudBaseIdempotencyStore({ rdb: { rpc: failedRpc } });
     const failure = new Error('operation failed');
-    await expect(failedStore.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: async () => { throw failure; } })).rejects.toBe(failure);
+    await expect(failedStore.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy, operation: async () => { throw failure; } })).rejects.toBe(failure);
     expect(failedRpc).toHaveBeenNthCalledWith(2, 'fail_idempotent_request', expect.objectContaining({ p_actor_scope_hash: 'actor', p_request_hash: 'hash' }));
   });
 
   it('maps in-progress and request-hash conflicts to safe 409 errors', async () => {
     for (const state of ['in_progress', 'request_hash_conflict']) {
       const store = createCloudBaseIdempotencyStore({ rdb: { rpc: vi.fn().mockResolvedValue({ data: [{ state, response: null }], error: null }) } });
-      await expect(store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: vi.fn() }))
+      await expect(store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy, operation: vi.fn() }))
         .rejects.toMatchObject({ status: 409, errorCode: 'STATE_CONFLICT' });
     }
   });
@@ -242,7 +295,7 @@ describe('security boundaries', () => {
 
     let caught;
     try {
-      await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: async () => { throw new Error('test-sensitive-value'); } });
+      await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy, operation: async () => { throw new Error('test-sensitive-value'); } });
     } catch (error) {
       caught = error;
     }
@@ -256,7 +309,7 @@ describe('security boundaries', () => {
   ])('maps a %s from begin RPC to a safe dependency error', async (_name, beginResult) => {
     const store = createCloudBaseIdempotencyStore({ rdb: { rpc: vi.fn().mockResolvedValue(beginResult) } });
 
-    await expect(store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: vi.fn() }))
+    await expect(store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy, operation: vi.fn() }))
       .rejects.toMatchObject({ name: 'DependencyUnavailableError', status: 503, errorCode: 'DEPENDENCY_UNAVAILABLE', cause: { name: 'InvalidRpcResultError' } });
   });
 
@@ -280,8 +333,9 @@ describe('security boundaries', () => {
         CLOUDBASE_APIKEY: 'test-api-key', COS_BUCKET: 'bucket', COS_REGION: 'region', DATABASE_SCHEMA: 'public',
       },
     });
-    runtime.router.post('/runtime-write', (ctx) => ({ actorId: ctx.actorId, role: ctx.actorRole }), { csrfExempt: true });
-    runtime.router.post('/runtime-sensitive', () => ({ recoveryCode: 'test-sensitive-value' }), { csrfExempt: true });
+    runtime.router.post('/runtime-write', (ctx) => ({ actorId: ctx.actorId, role: ctx.actorRole }), { csrfExempt: true, idempotency: { mode: 'supported', responsePolicy } });
+    // Auth/recovery/login/register and signed-access routes must be non-replayable.
+    runtime.router.post('/runtime-sensitive', () => ({ recoveryCode: 'test-sensitive-value' }), { csrfExempt: true, idempotency: { mode: 'none' } });
 
     const response = await runtime.handle({ httpMethod: 'POST', path: '/api/v1/runtime-write', headers: { cookie: `lv_session=${sessionValue}`, 'idempotency-key': 'runtime-key-01' }, requestContext: {} });
     const sensitiveResponse = await runtime.handle({ httpMethod: 'POST', path: '/api/v1/runtime-sensitive', headers: { cookie: `lv_session=${sessionValue}`, 'idempotency-key': 'runtime-key-02' }, requestContext: {} });
@@ -293,8 +347,7 @@ describe('security boundaries', () => {
     expect(rpc).toHaveBeenCalledWith('begin_idempotent_request', expect.objectContaining({ p_actor_scope_hash: expect.stringMatching(/^[a-f0-9]{64}$/) }));
     expect(JSON.stringify(rpc.mock.calls)).not.toContain(sessionValue);
     expect(JSON.stringify(write.mock.calls)).not.toContain(sessionValue);
-    expect(rpc.mock.calls.map(([name]) => name)).toContain('fail_idempotent_request');
-    expect(write).toHaveBeenCalledWith(expect.objectContaining({ errorCode: 'IDEMPOTENCY_RESPONSE_REJECTED', errorType: 'SensitiveIdempotencyResponseError' }));
+    expect(rpc.mock.calls.map(([name]) => name)).not.toContain('fail_idempotent_request');
     expect(JSON.stringify(write.mock.calls)).not.toContain('test-sensitive-value');
   });
 });

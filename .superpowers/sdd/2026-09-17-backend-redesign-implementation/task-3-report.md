@@ -116,3 +116,30 @@ The SQL behavior is covered by static semantic and mutation verification; a stag
 ### Remaining deployment check
 
 Static SQL semantics and mutation tests cover the reviewed paths; staging PostgreSQL apply and concurrent lease/reacquisition testing remain deployment checkpoints because no database service is available in this worktree.
+
+## Fix round 4 — positive idempotency response policies
+
+### RED
+
+- Object-form `idempotency` metadata was treated as a legacy string, so `{ mode: 'none' }` still entered the store and a keyed legacy supported route without an explicit response contract could execute its handler.
+- The repository recursively scanned and sanitized arbitrary responses after execution. Unknown opaque values, nested values, arrays, and `Location` responses could still be sent to `complete_idempotent_request` or silently have fields discarded.
+
+### Implementation
+
+- Normalized route metadata to `{ mode: 'none'|'supported'|'required', responsePolicy? }`. New supported/required route definitions require a validated pure-data response policy; legacy strings remain readable but cannot activate keyed replay without one. No metadata defaults to `none`.
+- Added registration-time policy validation: only 2xx statuses, strict safe top-level field names, and the single safe replay header `etag` are allowed. Callback-like properties, paths, duplicate fields, and sensitive semantics (including token, recovery, signed, URL, credential, authorization, and location) are rejected.
+- Replaced recursive response cleaning with a positive projector. It requires a plain-object body containing only declared scalar top-level fields and declared headers, rejects primitive/array/nested responses and every unapproved header, and releases the operation without completion on projection failure. `Location` and `Set-Cookie` therefore always release rather than persist.
+- The repository validates its policy before `begin_idempotent_request`, persists only its projected response, returns the full original response to the first caller, and returns only the projected confirmation on replay. Auth registration/login/recovery and signed-access examples explicitly use `{ mode: 'none' }`.
+
+### Verification
+
+- Function tests: `npm test -- --run cloudbase/functions/app-api/test` — 2 files, 74 tests passed.
+- Schema verifier: `npm run verify:backend-schema` — passed.
+- Full suite: `npm test -- --run` — 6 files, 110 tests passed.
+- Type check: `npm run lint` — passed.
+- Secret scan: `npm run verify:secrets` — no findings.
+- Whitespace check: `git diff --check` — passed.
+
+### Remaining deployment check
+
+Static SQL semantics and mutation tests cover the reviewed paths; staging PostgreSQL apply and concurrent lease/reacquisition testing remain deployment checkpoints because no database service is available in this worktree.

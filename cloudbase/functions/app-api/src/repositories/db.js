@@ -2,10 +2,8 @@
 
 const crypto = require('crypto');
 const { ApiError } = require('../errors');
+const { validateResponsePolicy } = require('../router');
 
-const SAFE_RESPONSE_HEADERS = new Set(['cache-control', 'content-type', 'etag']);
-const SENSITIVE_FIELD = /recoverycode|signedurl|token|cookie|authorization|password|secret/i;
-const SENSITIVE_STRING = /\bbearer\s+[A-Za-z0-9._~+/=-]+|[?&](?:x-amz-(?:signature|credential|security-token)|x-cos-(?:signature|security-token)|q-(?:signature|sign-algorithm|ak|key-time|sign-time)|signature|sig|sign|token)=/i;
 
 class DependencyUnavailableError extends ApiError {
   constructor(cause) {
@@ -20,50 +18,32 @@ function dependencyError(cause) {
   return cause instanceof DependencyUnavailableError ? cause : new DependencyUnavailableError(cause);
 }
 
-function sensitiveFieldName(key) {
-  return SENSITIVE_FIELD.test(String(key).replace(/[^A-Za-z0-9]/g, '').toLowerCase());
+function isPlainObject(value) {
+  return Boolean(value) && Object.getPrototypeOf(value) === Object.prototype;
 }
 
-function containsSensitiveValue(value, seen = new WeakSet()) {
-  if (typeof value === 'string') return SENSITIVE_STRING.test(value);
-  if (!value || typeof value !== 'object') return false;
-  if (seen.has(value)) return true;
-  seen.add(value);
-  const sensitive = Array.isArray(value)
-    ? value.some((item) => containsSensitiveValue(item, seen))
-    : Object.entries(value).some(([key, item]) => sensitiveFieldName(key) || containsSensitiveValue(item, seen));
-  seen.delete(value);
-  return sensitive;
+function scalar(value) {
+  return value === null || typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value));
 }
 
-function sanitizeBody(value, seen = new WeakSet()) {
-  if (Array.isArray(value)) return value.map((item) => sanitizeBody(item, seen));
-  if (!value || typeof value !== 'object') return value;
-  if (seen.has(value)) return null;
-  seen.add(value);
-  const result = {};
-  for (const [key, item] of Object.entries(value)) {
-    result[key] = sanitizeBody(item, seen);
-  }
-  seen.delete(value);
-  return result;
-}
-
-function persistedResponse(response) {
-  const custom = response && typeof response === 'object' && Object.hasOwn(response, 'statusCode') && Object.hasOwn(response, 'body');
-  const body = custom ? response.body : (response === undefined ? null : response);
-  const responseHeaders = custom && response.headers && typeof response.headers === 'object' ? response.headers : {};
-  const unsafeHeader = Object.entries(responseHeaders).some(([key, value]) => sensitiveFieldName(key) || containsSensitiveValue(value));
-  if (typeof body === 'string' || unsafeHeader || containsSensitiveValue(body)) return null;
-  const headers = custom && response.headers && typeof response.headers === 'object'
-    ? Object.fromEntries(Object.entries(response.headers)
-      .map(([key, value]) => [key.toLowerCase(), value])
-      .filter(([key]) => SAFE_RESPONSE_HEADERS.has(key)))
-    : {};
+// This is a positive projector, not a response scrubber: all response keys and
+// headers must be declared by the route policy before an idempotency record exists.
+function projectIdempotencyResponse(response, responsePolicy) {
+  const policy = validateResponsePolicy(responsePolicy);
+  const custom = isPlainObject(response) && Object.hasOwn(response, 'statusCode') && Object.hasOwn(response, 'body');
+  const statusCode = custom ? response.statusCode : 200;
+  const body = custom ? response.body : response;
+  const responseHeaders = custom && response.headers !== undefined ? response.headers : {};
+  if (!policy.statuses.includes(statusCode) || !isPlainObject(body) || !isPlainObject(responseHeaders)) return null;
+  const headerEntries = Object.entries(responseHeaders).map(([key, value]) => [key.toLowerCase(), value]);
+  if (new Set(headerEntries.map(([key]) => key)).size !== headerEntries.length
+    || headerEntries.some(([key, value]) => !policy.headers.includes(key) || !scalar(value))) return null;
+  const bodyEntries = Object.entries(body);
+  if (bodyEntries.some(([key, value]) => !policy.bodyFields.includes(key) || !scalar(value))) return null;
   return {
-    statusCode: custom && Number.isInteger(response.statusCode) && response.statusCode >= 100 && response.statusCode <= 599 ? response.statusCode : 200,
-    headers,
-    body: sanitizeBody(body),
+    statusCode,
+    headers: Object.fromEntries(headerEntries.filter(([key]) => policy.headers.includes(key))),
+    body: Object.fromEntries(policy.bodyFields.filter((key) => Object.hasOwn(body, key)).map((key) => [key, body[key]])),
   };
 }
 
@@ -113,7 +93,9 @@ function createCloudBaseActorResolver({ rdb, config }) {
 
 function createCloudBaseIdempotencyStore({ rdb, reportSecurityEvent = () => {} }) {
   if (!rdb || typeof rdb.rpc !== 'function') throw new Error('CloudBase rdb().rpc(name, params) is required for idempotency');
-  return { async execute({ scope, key, requestHash, actorScopeHash, operation }) {
+  return { async execute({ scope, key, requestHash, actorScopeHash, responsePolicy, operation }) {
+    // Validate before begin so a misconfigured caller can never acquire a lease or run a handler.
+    const policy = validateResponsePolicy(responsePolicy);
     const params = { p_scope: scope, p_actor_scope_hash: actorScopeHash, p_idempotency_key: key, p_request_hash: requestHash };
     let begin;
     try { begin = await rdb.rpc('begin_idempotent_request', params); } catch (error) { throw dependencyError(error); }
@@ -132,19 +114,19 @@ function createCloudBaseIdempotencyStore({ rdb, reportSecurityEvent = () => {} }
       rpcBoolean(failed, 'Idempotency fail');
       throw error;
     }
-    const safeResponse = persistedResponse(response);
-    if (!safeResponse) {
+    const projectedResponse = projectIdempotencyResponse(response, policy);
+    if (!projectedResponse) {
       let failed;
       try { failed = await rdb.rpc('fail_idempotent_request', params); } catch (cause) { throw dependencyError(cause); }
       rpcBoolean(failed, 'Idempotency fail');
-      try { reportSecurityEvent({ errorCode: 'IDEMPOTENCY_RESPONSE_REJECTED', errorType: 'SensitiveIdempotencyResponseError' }); } catch {}
+      try { reportSecurityEvent({ errorCode: 'IDEMPOTENCY_RESPONSE_REJECTED', errorType: 'IdempotencyResponsePolicyError' }); } catch {}
       return response;
     }
     let complete;
-    try { complete = await rdb.rpc('complete_idempotent_request', { ...params, p_response: safeResponse }); } catch (error) { throw dependencyError(error); }
+    try { complete = await rdb.rpc('complete_idempotent_request', { ...params, p_response: projectedResponse }); } catch (error) { throw dependencyError(error); }
     rpcBoolean(complete, 'Idempotency complete');
     return response;
   } };
 }
 
-module.exports = { createRateLimitRepository, createCloudBaseRateLimitRepository, createCloudBaseActorResolver, createCloudBaseIdempotencyStore, persistedResponse, DependencyUnavailableError };
+module.exports = { createRateLimitRepository, createCloudBaseRateLimitRepository, createCloudBaseActorResolver, createCloudBaseIdempotencyStore, projectIdempotencyResponse, DependencyUnavailableError };
