@@ -27,8 +27,12 @@ const { registerInteractionRoutes } = require('./src/modules/interactions/routes
 const { createSubmissionsService } = require('./src/modules/submissions/service');
 const { createSubmissionsRepository } = require('./src/modules/submissions/repository');
 const { registerSubmissionRoutes } = require('./src/modules/submissions/routes');
+const { createAdminConsoleService } = require('./src/modules/admin-console/service');
+const { createAdminConsoleRepository } = require('./src/modules/admin-console/repository');
+const { registerAdminConsoleRoutes } = require('./src/modules/admin-console/routes');
+const { domainHash } = require('./src/modules/auth/session');
 
-function createRuntime({ env = process.env, cloudbase, actorResolver, logger, authService, worksService, uploadsService, snapshotService, accessService, interactionsService, submissionsService, objectStore } = {}) {
+function createRuntime({ env = process.env, cloudbase, actorResolver, logger, authService, worksService, uploadsService, snapshotService, accessService, interactionsService, submissionsService, adminConsoleService, objectStore } = {}) {
   const config = parseConfig(env);
   const sdk = cloudbase || require('@cloudbase/node-sdk');
   const app = sdk.init({ env: sdk.SYMBOL_CURRENT_ENV, accessKey: config.cloudbaseApiKey });
@@ -50,6 +54,7 @@ function createRuntime({ env = process.env, cloudbase, actorResolver, logger, au
   registerAccessRoutes(api.router, accessService || createAccessService({ repository: createAccessRepository({ rdb }), objectStore: runtimeObjectStore }));
   registerInteractionRoutes(api.router, interactionsService || createInteractionsService({ repository: createInteractionsRepository({ rdb }) }));
   registerSubmissionRoutes(api.router, submissionsService || createSubmissionsService({ repository: createSubmissionsRepository({ rdb }), objectStore: runtimeObjectStore }));
+  registerAdminConsoleRoutes(api.router, adminConsoleService || createAdminConsoleService({ repository: createAdminConsoleRepository({ rdb }), answerHasher: (value) => domainHash(config.authHashPepper, 'question-answer', value) }));
   return api;
 }
 

@@ -28,7 +28,7 @@ describe('typed works API client', () => {
   it('sends CSRF-protected admin CRUD and lifecycle requests', async () => {
     vi.stubGlobal('document', { cookie: 'lv_csrf=' + 'c'.repeat(43) });
     const work = { id, slug: 'summer', type: 'comic', title: '夏日', summary: '', rating: 'general', status: 'draft', version: 1, authorName: '作者', publishedAt: null };
-    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({ id, status: 'draft', version: 1 }));
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({ work }));
     vi.stubGlobal('fetch', fetchMock);
     const operationKey = createOperationKey();
     await createWork({ slug: 'summer', type: 'comic', title: '夏日', summary: '', rating: 'general', authorName: '作者' }, operationKey);
@@ -39,6 +39,13 @@ describe('typed works API client', () => {
       expect(new Headers(init.headers).get('idempotency-key')).toBe(operationKey);
     }
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/admin/works', `/api/v1/admin/works/${id}`, `/api/v1/admin/works/${id}/review`, `/api/v1/admin/works/${id}/publish`, `/api/v1/admin/works/${id}/archive`]);
+  });
+
+  it('parses the real service {work} mutation envelope and returns its positive projection', async () => {
+    vi.stubGlobal('document', { cookie: 'lv_csrf=' + 'c'.repeat(43) });
+    const work = { id, slug: 'summer', type: 'comic', title: '夏日', summary: '', rating: 'general', status: 'draft', version: 1, authorName: '作者', publishedAt: null };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ work })));
+    await expect(createWork({ slug: 'summer', type: 'comic', title: '夏日', summary: '', rating: 'general', authorName: '作者' }, createOperationKey())).resolves.toEqual(work);
   });
 
   it('rejects UUID-shaped slugs in admin create and update before the request', async () => {
@@ -69,6 +76,16 @@ describe('typed works API client', () => {
     await completeAdminUpload(id, operationKey); await rebuildCatalogSnapshot(operationKey);
     expect(fetchMock.mock.calls[0][1].body).not.toContain('base64');
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/admin/uploads/init', `/api/v1/admin/uploads/${id}/complete`, '/api/v1/admin/snapshots/rebuild']);
+  });
+
+  it('carries the selected chapter identity through the upload declaration', async () => {
+    vi.stubGlobal('document', { cookie: 'lv_csrf=' + 'c'.repeat(43) });
+    const chapterId = '550e8400-e29b-41d4-a716-446655440001';
+    const ticket = { uploadId: id, fileId: id, status: 'processing' };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(ticket));
+    vi.stubGlobal('fetch', fetchMock);
+    await initAdminUpload({ workId: id, chapterId, filename: 'page.webp', mimeType: 'image/webp', sizeBytes: 12, checksum: 'a'.repeat(64), kind: 'page', pageNo: 1, accessLevel: 'public' }, createOperationKey());
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ workId: id, chapterId, kind: 'page', pageNo: 1 });
   });
 
   it('accepts the durable processing replay without a staging signature', async () => {

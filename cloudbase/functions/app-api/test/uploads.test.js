@@ -27,6 +27,15 @@ describe('direct COS upload tickets', () => {
     expect(objectStore.signPut).toHaveBeenCalledWith(expect.objectContaining({ contentLength: 1024, contentType: 'image/webp', expiresInSeconds: 300 }));
   });
 
+  it('binds a chapter-targeted page declaration into the transactional upload record', async () => {
+    const chapterId = '550e8400-e29b-41d4-a716-446655440005';
+    const repository = { createUpload: vi.fn().mockResolvedValue({ uploadId, fileId }) };
+    const objectStore = { signPut: vi.fn().mockResolvedValue({ url: 'https://bucket.cos.test/staging', headers: { 'content-type': 'image/webp' } }) };
+    const service = createUploadsService({ repository, objectStore });
+    await service.initAdmin(ctx({ workId, chapterId, filename: 'page.webp', mimeType: 'image/webp', sizeBytes: 12, checksum: 'a'.repeat(64), kind: 'page', pageNo: 1, accessLevel: 'public' }));
+    expect(repository.createUpload).toHaveBeenCalledWith(expect.objectContaining({ workId, chapterId, kind: 'page', pageNo: 1 }));
+  });
+
   it('reuses one domain identity while issuing a fresh signed URL for the same request hash', async () => {
     const repository = { createUpload: vi.fn().mockResolvedValue({ uploadId, fileId, state: 'declared', objectKey: `staging/admin/${uploadId}/${fileId}.webp` }) };
     const objectStore = { signPut: vi.fn().mockResolvedValueOnce({ url: 'https://bucket.cos.test/one', headers: { 'content-type': 'image/webp' } }).mockResolvedValueOnce({ url: 'https://bucket.cos.test/two', headers: { 'content-type': 'image/webp' } }) };

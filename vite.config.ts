@@ -87,7 +87,7 @@ export default defineConfig(({ mode }) => {
         // Only the app shell is installed up front. Games and comics stay on demand.
         globPatterns: ['index.html', 'assets/**/*.{js,css}'],
         navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/^\/daxigua\//, /^\/save-hange\//, /^\/admin\//],
+        navigateFallbackDenylist: [/^\/daxigua\//, /^\/save-hange\//, /^\/admin(?:\.html|\/)/],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
@@ -134,6 +134,7 @@ export default defineConfig(({ mode }) => {
     }),
   ],
   resolve: { alias: { '@': path.resolve(__dirname, '.') } },
+  build: { rollupOptions: { input: { app: path.resolve(__dirname, 'index.html'), admin: path.resolve(__dirname, 'admin.html') } } },
   server: {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
     // Do not modify—file watching is disabled to prevent flickering during agent edits.

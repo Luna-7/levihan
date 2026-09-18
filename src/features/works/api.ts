@@ -36,7 +36,6 @@ const AdminWork = z.object({
   chapters: z.array(AdminChapter).optional(), assets: z.array(AdminAsset).optional(),
 }).strict();
 const AdminWorkResponse = z.object({ work: AdminWork }).strict();
-const WorkMutationResponse = z.object({ id: Id, status: z.enum(['draft', 'review', 'published', 'archived']), version: z.number().int().positive() }).strict();
 const AdminWorkListResponse = z.object({ items: z.array(AdminWork), nextCursor: z.string().nullable() }).strict();
 const UploadTicket = z.object({
   uploadId: Id, fileId: Id, objectKey: z.string().regex(/^staging\/admin\//), method: z.literal('PUT'),
@@ -95,9 +94,9 @@ export async function listAdminWorks(options: { status?: 'draft' | 'review' | 'p
   return AdminWorkListResponse.parse(await request(`/admin/works${query.size ? `?${query}` : ''}`));
 }
 export async function getAdminWork(id: string) { Id.parse(id); return AdminWorkResponse.parse(await request(`/admin/works/${id}`)); }
-export async function createWork(input: CreateWorkInput, key: string) { validateSlug(input.slug); return WorkMutationResponse.parse(await write('/admin/works', input, 'POST', key)); }
-export async function updateWork(id: string, input: UpdateWorkInput, key: string) { Id.parse(id); if (input.slug !== undefined) validateSlug(input.slug); return WorkMutationResponse.parse(await write(`/admin/works/${id}`, input, 'PATCH', key)); }
-async function transition(id: string, action: 'review' | 'publish' | 'archive' | 'restore', version: number, key: string) { Id.parse(id); return WorkMutationResponse.parse(await write(`/admin/works/${id}/${action}`, { version }, 'POST', key)); }
+export async function createWork(input: CreateWorkInput, key: string) { validateSlug(input.slug); return AdminWorkResponse.parse(await write('/admin/works', input, 'POST', key)).work; }
+export async function updateWork(id: string, input: UpdateWorkInput, key: string) { Id.parse(id); if (input.slug !== undefined) validateSlug(input.slug); return AdminWorkResponse.parse(await write(`/admin/works/${id}`, input, 'PATCH', key)).work; }
+async function transition(id: string, action: 'review' | 'publish' | 'archive' | 'restore', version: number, key: string) { Id.parse(id); return AdminWorkResponse.parse(await write(`/admin/works/${id}/${action}`, { version }, 'POST', key)).work; }
 export const reviewWork = (id: string, version: number, key: string) => transition(id, 'review', version, key);
 export const publishWork = (id: string, version: number, key: string) => transition(id, 'publish', version, key);
 export const archiveWork = (id: string, version: number, key: string) => transition(id, 'archive', version, key);
