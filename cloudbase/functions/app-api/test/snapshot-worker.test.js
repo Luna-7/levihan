@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { createSnapshotWorker } = require('../snapshot-worker');
+const { createSnapshotWorker, buildSnapshotWorkerRuntime } = require('../snapshot-worker');
 
 describe('deployed snapshot timer worker', () => {
   it('accepts the Tencent timer shape and invokes the internal processor', async () => {
@@ -18,5 +18,16 @@ describe('deployed snapshot timer worker', () => {
   it('is wired as a private event function with a five-minute trigger', () => {
     const config = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../../cloudbaserc.json'), 'utf8'));
     expect(config.functions).toContainEqual(expect.objectContaining({ name: 'snapshot-worker', type: 'Event', dir: 'app-api', handler: 'snapshot-worker.main', triggers: [expect.objectContaining({ type: 'timer', config: '0 */5 * * * * *' })] }));
+  });
+
+  it('runs stale promotion cleanup before snapshot processing through the deployed runtime', async () => {
+    const events = [];
+    const runtime = buildSnapshotWorkerRuntime({
+      env: { NODE_ENV: 'test', CLOUDBASE_APIKEY: 'test-key', DATABASE_SCHEMA: 'test', COS_PUBLIC_BUCKET: 'public-1', COS_PRIVATE_BUCKET: 'private-1', COS_REGION: 'ap-test', SNAPSHOT_SYSTEM_ACTOR_ID: '550e8400-e29b-41d4-a716-446655440001', SESSION_HASH_PEPPER: 'a'.repeat(32), AUTH_HASH_PEPPER: 'b'.repeat(32), RATE_LIMIT_PEPPER: 'c'.repeat(32), API_ALLOWED_ORIGINS: 'https://example.test' },
+      snapshotService: { rebuildCatalog: vi.fn(async () => { events.push('snapshot'); return { version: 1 }; }) },
+      uploadsService: { cleanupStalePromotions: vi.fn(async () => { events.push('cleanup'); }) },
+    });
+    await runtime.process({ type: 'timer', task: 'catalog-snapshot', scheduledAt: '2030-01-01T00:00:00.000Z' });
+    expect(events).toEqual(['cleanup', 'snapshot']);
   });
 });

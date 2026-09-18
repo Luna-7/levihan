@@ -7,7 +7,8 @@ function unwrap(result) {
   if (result && result.error) {
     const message = String(result.error.message || '');
     if (message.includes('idempotency_conflict')) throw new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'Idempotency key was used for another request');
-    if (message.includes('upload_not_verified') || message.includes('asset_policy_invalid') || message.includes('storage_zone_invalid')) throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Uploaded object violates content policy');
+    if (/upload_unavailable|upload_state_conflict|state_conflict|slot_conflict/.test(message)) throw new ApiError(409, 'STATE_CONFLICT', 'Upload state conflicts with this operation');
+    if (/upload_not_verified|asset_policy_invalid|storage_zone_invalid|restricted_storage_invalid|page_sequence_invalid|body_cardinality_invalid/.test(message)) throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Uploaded object violates content policy');
   }
   if (!result || result.error) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Upload storage unavailable');
   return first(result.data);
@@ -60,6 +61,14 @@ function createUploadsRepository({ rdb }) {
       }));
       if (!row || typeof row.asset_id !== 'string') throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Upload storage unavailable');
       return { assetId: row.asset_id, status: row.status };
+    },
+    async claimStalePromotions({ actorId, limit }) {
+      const rows = unwrap(await rdb.rpc('claim_stale_upload_promotions', { p_actor_id: actorId, p_limit: limit }));
+      return (Array.isArray(rows) ? rows : rows ? [rows] : []).map((row) => ({ uploadId: row.upload_id, fileId: row.file_id, stagingKey: row.staging_key, finalKey: row.final_key, storageZone: row.storage_zone, cleanupToken: row.cleanup_token }));
+    },
+    async finalizePromotionCleanup({ fileId, cleanupToken, actorId }) {
+      const value = unwrap(await rdb.rpc('finalize_upload_promotion_cleanup', { p_file_id: fileId, p_cleanup_token: cleanupToken, p_actor_id: actorId }));
+      if (value !== true && !(value && Object.values(value)[0] === true)) throw new ApiError(409, 'STATE_CONFLICT', 'Promotion cleanup lease is stale');
     },
   };
 }

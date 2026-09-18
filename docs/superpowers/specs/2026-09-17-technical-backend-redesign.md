@@ -277,12 +277,12 @@ tests/
 2. 管理端声明文件名、MIME、大小和用途，请求上传会话。
 3. 服务端生成受限 object key 和短时上传凭证，限定方法、大小、类型和有效期。
 4. 浏览器直接上传至 `staging/admin/{sessionId}/{fileId}`，逐文件显示进度和失败重试。
-5. 客户端调用完成接口；服务端通过 COS HEAD 校验大小、类型、ETag/checksum，并更新 `upload_files`。
-6. 管理员排序漫画页、指定封面或小说正文，并把已验证素材绑定到草稿。
-7. 发布接口校验必填字段、页序、素材状态、内容分级和客户端提交的 `version`。
-8. PostgreSQL 事务更新作品状态、素材引用、版本记录、审计日志和 `snapshot_jobs`。
-9. 普通内容的快照任务生成版本化 JSON；受限内容不写入公开快照。
-10. 发布事务完成后不移动大对象。未绑定 staging 对象超过 24 小时后清理。
+5. 客户端调用完成接口；服务端流式读取 staging 对象，校验真实大小、格式和 SHA-256，并先把 promotion 意图、最终 key、存储区和 fencing token 持久化。
+6. 服务端复制到 public/private 最终区，重新读取验证后以 token 原子绑定素材；staging 删除失败由生命周期清理，超时 promotion 由定时任务 token-fenced 清理。
+7. 管理员排序漫画页、指定封面或小说正文，并把已验证素材绑定到草稿。
+8. 发布接口校验必填字段、页序、素材状态、内容分级和客户端提交的 `version`。
+9. PostgreSQL 事务更新作品状态、素材引用、版本记录、审计日志和 `snapshot_jobs`。
+10. 普通内容的快照任务生成版本化 JSON；受限内容不写入公开快照。
 
 ### 8.4 公共快照
 
@@ -292,11 +292,10 @@ tests/
 snapshots/public/catalog.v{version}.json
 snapshots/public/tags.v{version}.json
 snapshots/public/config.v{version}.json
-snapshots/public/manifest.json
 ```
 
-- 版本文件使用长缓存和不可变 URL。
-- `manifest.json` 只保存当前版本号，使用短缓存。
+- COS 只保存版本文件，使用长缓存和不可变 URL；写入必须启用 `x-cos-forbid-overwrite`，且公开桶不得开启版本控制。
+- 当前版本指针存放在 PostgreSQL `snapshot_current`，由带 lease token 的完成事务单调推进。客户端先读取短缓存的 `GET /snapshots/catalog/current`，再获取 COS 不可变对象；不存在可变 COS manifest。
 - 快照仅包含公开所需最小字段，不包含用户信息、内部 ID、审核字段、私有 object key 或永久签名 URL。
 - 数据库发布成功但快照失败时，不回滚数据库；任务标记失败并自动重试，旧快照继续服务。
 - 管理后台显示数据库版本、线上快照版本和最近错误。

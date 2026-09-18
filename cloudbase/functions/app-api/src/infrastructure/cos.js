@@ -7,6 +7,14 @@ function call(cos, method, params) {
   return new Promise((resolve, reject) => cos[method](params, (error, data) => error ? reject(error) : resolve(data || {})));
 }
 
+async function consumeBytes(body) {
+  const hash = crypto.createHash('sha256');
+  const chunks = [];
+  const source = Buffer.isBuffer(body) || typeof body === 'string' ? [body] : body;
+  for await (const chunk of source) { const bytes = Buffer.from(chunk); chunks.push(bytes); hash.update(bytes); }
+  return { bytes: Buffer.concat(chunks), checksum: hash.digest('hex') };
+}
+
 function createCosObjectStore({ publicBucket, privateBucket, region, cos }) {
   if (!publicBucket || !privateBucket || !region || !cos) throw new Error('COS public/private buckets, region and client are required');
   return {
@@ -63,30 +71,21 @@ function createCosObjectStore({ publicBucket, privateBucket, region, cos }) {
         Body: bytes, ContentType: 'application/json; charset=utf-8', CacheControl: options.cacheControl,
       });
     },
-    async putImmutable(objectKey, bytes, { cacheControl, checksum }) {
+    async putImmutable(objectKey, bytes, { cacheControl, version, schemaVersion }) {
+      const versioning = await call(cos, 'getBucketVersioning', { Bucket: publicBucket, Region: region });
+      if (String(versioning.Status || versioning.status || '').toLowerCase() === 'enabled') throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Public snapshot bucket versioning must be disabled');
       try {
-        await call(cos, 'putObject', { Bucket: publicBucket, Region: region, Key: objectKey, Body: bytes, ContentType: 'application/json; charset=utf-8', CacheControl: cacheControl, IfNoneMatch: '*' });
+        await call(cos, 'putObject', { Bucket: publicBucket, Region: region, Key: objectKey, Body: bytes, ContentType: 'application/json; charset=utf-8', CacheControl: cacheControl, Headers: { 'x-cos-forbid-overwrite': 'true' } });
+        return { bytes: Buffer.from(bytes), checksum: crypto.createHash('sha256').update(bytes).digest('hex'), existed: false };
       } catch (error) {
-        if (!error || !['PreconditionFailed', '412'].includes(String(error.code || error.statusCode))) throw error;
+        if (!error || !['FileAlreadyExists', '409'].includes(String(error.code || error.statusCode))) throw error;
         const existing = await call(cos, 'getObject', { Bucket: publicBucket, Region: region, Key: objectKey });
-        if (crypto.createHash('sha256').update(Buffer.from(existing.Body)).digest('hex') !== checksum) throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Immutable snapshot already exists with different content');
-      }
-    },
-    async putManifest(manifest, condition = {}) {
-      try {
-        await call(cos, 'putObject', { Bucket: publicBucket, Region: region, Key: 'snapshots/public/manifest.json', Body: Buffer.from(JSON.stringify(manifest)), ContentType: 'application/json; charset=utf-8', CacheControl: 'public,max-age=60,must-revalidate', ...(condition.etag ? { IfMatch: condition.etag } : { IfNoneMatch: '*' }) });
-      } catch (error) {
-        if (error && ['PreconditionFailed', '412'].includes(String(error.code || error.statusCode))) throw new ApiError(409, 'SNAPSHOT_CAS_CONFLICT', 'Snapshot manifest changed');
-        throw error;
-      }
-    },
-    async getManifest() {
-      try {
-        const data = await call(cos, 'getObject', { Bucket: publicBucket, Region: region, Key: 'snapshots/public/manifest.json' });
-        return { manifest: JSON.parse(Buffer.from(data.Body).toString('utf8')), etag: String(data.ETag || data.headers && data.headers.etag || '').replace(/^"|"$/g, '') };
-      } catch (error) {
-        if (error && ['NoSuchKey', 'NotFound'].includes(error.code)) return null;
-        throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Snapshot manifest unavailable');
+        const actualResult = await consumeBytes(existing.Body);
+        const actual = actualResult.bytes;
+        let document;
+        try { document = JSON.parse(actual.toString('utf8')); } catch { throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Existing immutable snapshot is invalid'); }
+        if (!document || document.schemaVersion !== schemaVersion || document.version !== version || !Array.isArray(document.works)) throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Existing immutable snapshot has unexpected identity');
+        return { bytes: actual, checksum: actualResult.checksum, existed: true };
       }
     },
     async delete(objectKey) {

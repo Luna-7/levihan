@@ -38,8 +38,9 @@ const UploadTicket = z.object({
 }).strict();
 export type UploadTicket = z.infer<typeof UploadTicket>;
 const AssetResponse = z.object({ assetId: Id, status: z.literal('verified') }).strict();
-const InitUploadResponse = z.union([UploadTicket, z.object({ uploadId: Id, fileId: Id, assetId: Id, status: z.literal('verified') }).strict()]);
+const InitUploadResponse = z.union([UploadTicket, z.object({ uploadId: Id, fileId: Id, status: z.literal('processing') }).strict(), z.object({ uploadId: Id, fileId: Id, assetId: Id, status: z.literal('verified') }).strict()]);
 const SnapshotResponse = z.object({ version: z.number().int().positive() }).strict();
+const CurrentSnapshot = z.object({ version: z.number().int().positive(), objectKey: z.string().regex(/^snapshots\/public\/catalog\.v[1-9][0-9]*\.json$/), checksum: z.string().regex(/^[a-f0-9]{64}$/), updatedAt: Timestamp }).strict();
 
 export type CreateWorkInput = { slug: string; type: z.infer<typeof WorkType>; title: string; summary: string; rating: z.infer<typeof Rating>; authorName: string };
 export type UpdateWorkInput = { version: number; slug?: string; title?: string; summary?: string; rating?: z.infer<typeof Rating>; authorName?: string; chapters?: z.infer<typeof Chapter>[] };
@@ -104,3 +105,4 @@ export async function uploadToCos(ticket: UploadTicket, blob: Blob) {
 }
 export async function completeAdminUpload(uploadId: string, key: string) { Id.parse(uploadId); return AssetResponse.parse(await write(`/admin/uploads/${uploadId}/complete`, {}, 'POST', key)); }
 export async function rebuildCatalogSnapshot(key: string) { return SnapshotResponse.parse(await write('/admin/snapshots/rebuild', {}, 'POST', key)); }
+export async function getCurrentCatalogSnapshot() { return CurrentSnapshot.parse(await request('/snapshots/catalog/current')); }

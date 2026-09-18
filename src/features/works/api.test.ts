@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  archiveWork, completeAdminUpload, createWork, getAdminWork, getPublicWork, initAdminUpload, listAdminWorks,
+  archiveWork, completeAdminUpload, createWork, getAdminWork, getCurrentCatalogSnapshot, getPublicWork, initAdminUpload, listAdminWorks,
   publishWork, rebuildCatalogSnapshot, reviewWork, uploadToCos, updateWork, createOperationKey,
 } from './api.ts';
 
@@ -55,6 +55,19 @@ describe('typed works API client', () => {
     await completeAdminUpload(id, operationKey); await rebuildCatalogSnapshot(operationKey);
     expect(fetchMock.mock.calls[0][1].body).not.toContain('base64');
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/admin/uploads/init', `/api/v1/admin/uploads/${id}/complete`, '/api/v1/admin/snapshots/rebuild']);
+  });
+
+  it('accepts the durable processing replay without a staging signature', async () => {
+    vi.stubGlobal('document', { cookie: 'lv_csrf=' + 'c'.repeat(43) });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ uploadId: id, fileId: id, status: 'processing' })));
+    await expect(initAdminUpload({ workId: id, filename: 'page.webp', mimeType: 'image/webp', sizeBytes: 12, checksum: 'a'.repeat(64), kind: 'page', pageNo: 1, accessLevel: 'public' }, createOperationKey())).resolves.toEqual({ uploadId: id, fileId: id, status: 'processing' });
+  });
+
+  it('reads the PostgreSQL-backed current pointer before immutable COS content', async () => {
+    const pointer = { version: 3, objectKey: 'snapshots/public/catalog.v3.json', checksum: 'a'.repeat(64), updatedAt: '2030-01-01T00:00:00.000Z' };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(pointer)));
+    await expect(getCurrentCatalogSnapshot()).resolves.toEqual(pointer);
+    expect(fetch).toHaveBeenCalledWith('/api/v1/snapshots/catalog/current', expect.objectContaining({ credentials: 'include' }));
   });
 
   it('rejects malformed server responses', async () => {

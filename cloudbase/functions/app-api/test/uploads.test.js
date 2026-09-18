@@ -45,6 +45,14 @@ describe('direct COS upload tickets', () => {
     expect(objectStore.signPut).not.toHaveBeenCalled();
   });
 
+  it('returns durable processing identity without re-signing staging while promotion is active', async () => {
+    const repository = { createUpload: vi.fn().mockResolvedValue({ uploadId, fileId, state: 'promoting' }) };
+    const objectStore = { signPut: vi.fn() };
+    const service = createUploadsService({ repository, objectStore });
+    await expect(service.initAdmin(ctx({ workId, filename: 'page.webp', mimeType: 'image/webp', sizeBytes: 12, checksum: 'a'.repeat(64), kind: 'page', pageNo: 1, accessLevel: 'public' }))).resolves.toEqual({ uploadId, fileId, status: 'processing' });
+    expect(objectStore.signPut).not.toHaveBeenCalled();
+  });
+
   it.each([
     [{ filename: 'x.html', mimeType: 'text/html', sizeBytes: 10 }, 'type'],
     [{ filename: 'x.jpg', mimeType: 'image/png', sizeBytes: 10 }, 'extension'],
@@ -111,6 +119,15 @@ describe('direct COS upload tickets', () => {
     await expect(service.completeAdmin(ctx({}, { id: uploadId }))).resolves.toEqual({ assetId: workId, status: 'verified' });
     expect(repository.completeAndBind).toHaveBeenCalledWith(expect.objectContaining({ promotionToken: uploadId, objectKey: promoting.finalObjectKey }));
   });
+
+  it('deletes both tracked objects then token-finalizes stale promotion cleanup', async () => {
+    const repository = { claimStalePromotions: vi.fn().mockResolvedValue([{ fileId, stagingKey: `staging/admin/${uploadId}/${fileId}.webp`, finalKey: `media/works/${workId}/${fileId}.webp`, cleanupToken: uploadId }]), finalizePromotionCleanup: vi.fn() };
+    const objectStore = { delete: vi.fn() };
+    const service = createUploadsService({ repository, objectStore });
+    await expect(service.cleanupStalePromotions({ actorId, actorRole: 'admin' })).resolves.toEqual({ claimed: 1 });
+    expect(objectStore.delete).toHaveBeenCalledTimes(2);
+    expect(repository.finalizePromotionCleanup).toHaveBeenCalledWith({ fileId, cleanupToken: uploadId, actorId });
+  });
 });
 
 describe('upload repository transaction boundary', () => {
@@ -129,5 +146,13 @@ describe('upload repository transaction boundary', () => {
   it('maps domain idempotency conflicts to 409 instead of dependency 503', async () => {
     const repository = createUploadsRepository({ rdb: { rpc: vi.fn().mockResolvedValue({ data: null, error: { message: 'idempotency_conflict' } }) } });
     await expect(repository.createUpload({})).rejects.toMatchObject({ status: 409, errorCode: 'IDEMPOTENCY_CONFLICT' });
+  });
+
+  it.each([
+    ['upload_unavailable', 409, 'STATE_CONFLICT'], ['upload_state_conflict', 409, 'STATE_CONFLICT'], ['slot_conflict', 409, 'STATE_CONFLICT'],
+    ['restricted_storage_invalid', 422, 'UPLOAD_NOT_VERIFIED'], ['body_cardinality_invalid', 422, 'UPLOAD_NOT_VERIFIED'],
+  ])('maps controlled SQL error %s to %s', async (message, status, errorCode) => {
+    const repository = createUploadsRepository({ rdb: { rpc: vi.fn().mockResolvedValue({ data: null, error: { message } }) } });
+    await expect(repository.createUpload({})).rejects.toMatchObject({ status, errorCode });
   });
 });

@@ -27,47 +27,33 @@ function buildCatalog(rows, version, generatedAt) {
   return { document, bytes, checksum: crypto.createHash('sha256').update(bytes).digest('hex') };
 }
 
-async function switchManifest(repository, job, objectStore, manifest) {
-  await repository.authorizeManifest({ jobId: job.jobId, leaseToken: job.leaseToken });
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const currentState = typeof objectStore.getManifest === 'function' ? await objectStore.getManifest() : null;
-    const current = currentState && currentState.manifest || currentState;
-    const currentCatalog = current && current.catalog;
-    if (currentCatalog && (currentCatalog.version > manifest.catalog.version || (currentCatalog.version === manifest.catalog.version && (currentCatalog.objectKey !== manifest.catalog.objectKey || currentCatalog.checksum !== manifest.catalog.checksum)))) throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Snapshot manifest is newer or conflicts with this build');
-    if (currentCatalog && currentCatalog.version === manifest.catalog.version) return;
-    try { await objectStore.putManifest(manifest, { etag: currentState && currentState.etag || null }); return; }
-    catch (error) { if (!(error instanceof ApiError) || error.errorCode !== 'SNAPSHOT_CAS_CONFLICT' || attempt === 1) throw error; }
-  }
-}
-
 function createSnapshotService({ repository, objectStore, now = () => new Date(), nonce = () => crypto.randomBytes(12).toString('hex') } = {}) {
   if (!repository || !objectStore) throw new Error('Snapshot repository and object store are required');
   return {
+    async getCurrentCatalog() {
+      const pointer = await repository.getCurrentSnapshot({ snapshotType: 'catalog' });
+      if (!pointer) throw new ApiError(404, 'NOT_FOUND', 'Catalog snapshot is not available');
+      return pointer;
+    },
     async rebuildCatalog(ctx) {
       requireAdmin(ctx);
       const job = await repository.beginSnapshot({ snapshotType: 'catalog', actorId: ctx.actorId, requestId: ctx.requestId, idempotencyKey: ctx.idempotencyKey || null });
       try {
         if (job.state === 'prepared' || job.state === 'succeeded') {
-          const manifest = { schemaVersion: 1, catalog: { version: job.version, objectKey: job.objectKey, checksum: job.checksum } };
           if (job.state === 'prepared') {
-            await switchManifest(repository, job, objectStore, manifest);
             await repository.completeSnapshot({ jobId: job.jobId, leaseToken: job.leaseToken, actorId: ctx.actorId, requestId: ctx.requestId });
           }
           return { version: job.version, checksum: job.checksum, objectKey: job.objectKey };
         }
         const rows = await repository.listPublicCatalog();
-        const generatedAt = now().toISOString();
+        const generatedAt = job.generatedAt || now().toISOString();
         const built = buildCatalog(rows, job.version, generatedAt);
-        const temporaryKey = `snapshots/public/.tmp/catalog.v${job.version}.${nonce()}.json`;
         const versionKey = `snapshots/public/catalog.v${job.version}.json`;
-        await objectStore.putBytes(temporaryKey, built.bytes, { cacheControl: 'no-store' });
-        await objectStore.putImmutable(versionKey, built.bytes, { cacheControl: 'public,max-age=31536000,immutable', checksum: built.checksum });
-        await repository.prepareSnapshot({ jobId: job.jobId, leaseToken: job.leaseToken, snapshotType: 'catalog', version: job.version, objectKey: versionKey, checksum: built.checksum });
-        const manifest = { schemaVersion: 1, catalog: { version: job.version, objectKey: versionKey, checksum: built.checksum } };
-        await switchManifest(repository, job, objectStore, manifest);
+        const immutable = await objectStore.putImmutable(versionKey, built.bytes, { cacheControl: 'public,max-age=31536000,immutable', version: job.version, schemaVersion: 1 });
+        const checksum = immutable && immutable.checksum || built.checksum;
+        await repository.prepareSnapshot({ jobId: job.jobId, leaseToken: job.leaseToken, snapshotType: 'catalog', version: job.version, objectKey: versionKey, checksum });
         await repository.completeSnapshot({ jobId: job.jobId, leaseToken: job.leaseToken, actorId: ctx.actorId, requestId: ctx.requestId });
-        try { await objectStore.delete(temporaryKey); } catch { /* lifecycle cleanup is a safe fallback */ }
-        return { version: job.version, checksum: built.checksum, objectKey: versionKey };
+        return { version: job.version, checksum, objectKey: versionKey };
       } catch (error) {
         await repository.failSnapshot(job.jobId, job.leaseToken, error instanceof ApiError ? error.errorCode : 'SNAPSHOT_DELIVERY_FAILED');
         throw error;
@@ -80,6 +66,9 @@ function createSnapshotHttpService(service) {
   return { async rebuild(ctx) {
     if (ctx.body && (Object.getPrototypeOf(ctx.body) !== Object.prototype || Object.keys(ctx.body).length)) throw new ApiError(400, 'VALIDATION_FAILED', 'Request body contains unsupported fields');
     return service.rebuildCatalog(ctx);
+  }, async current() {
+    const pointer = await service.getCurrentCatalog();
+    return { statusCode: 200, headers: { 'cache-control': 'public,max-age=60,must-revalidate' }, body: pointer };
   } };
 }
 

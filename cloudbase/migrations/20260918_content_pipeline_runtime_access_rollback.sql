@@ -17,8 +17,9 @@ REVOKE EXECUTE ON FUNCTION
   public.begin_work_upload_promotion(uuid,uuid,uuid,uuid,text,text,bigint,text,text,text,text),
   public.complete_work_upload(uuid,uuid,uuid,uuid,uuid,uuid,text,text,bigint,text,text,text,text,integer,text,text),
   public.begin_snapshot_build(text,uuid,text,text), public.list_public_catalog(),
-  public.prepare_snapshot_version(uuid,uuid,text,bigint,text,text), public.authorize_snapshot_manifest(uuid,uuid),
+  public.prepare_snapshot_version(uuid,uuid,text,bigint,text,text), public.get_current_snapshot(text),
   public.complete_snapshot_build(uuid,uuid,uuid,text), public.fail_snapshot_build(uuid,uuid,text),
+  public.claim_stale_upload_promotions(uuid,integer), public.finalize_upload_promotion_cleanup(uuid,uuid,uuid),
   public.get_admin_work(uuid), public.get_public_work(text), public.list_admin_works(integer,text,text)
 FROM :"backend_role";
 GRANT INSERT ON TABLE public.works, public.work_assets, public.work_versions,

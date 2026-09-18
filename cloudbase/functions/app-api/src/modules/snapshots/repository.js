@@ -18,7 +18,7 @@ function createSnapshotRepository({ rdb }) {
     async beginSnapshot(input) {
       const row = unwrap(await rdb.rpc('begin_snapshot_build', { p_snapshot_type: input.snapshotType, p_actor_id: input.actorId, p_request_id: input.requestId, p_idempotency_key: input.idempotencyKey || null }));
       if (!row || typeof row.job_id !== 'string') throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Snapshot storage unavailable');
-      return { jobId: row.job_id, version: Number(row.version), state: row.state || 'running', objectKey: row.object_key || null, checksum: row.checksum || null, leaseToken: row.lease_token, leaseEpoch: Number(row.lease_epoch || 0) };
+      return { jobId: row.job_id, version: Number(row.version), state: row.state || 'running', objectKey: row.object_key || null, checksum: row.checksum || null, leaseToken: row.lease_token, leaseEpoch: Number(row.lease_epoch || 0), generatedAt: row.generated_at || null, sourceRevision: Number(row.source_revision || 0) };
     },
     async listPublicCatalog() {
       const row = unwrap(await rdb.rpc('list_public_catalog', {}));
@@ -28,9 +28,10 @@ function createSnapshotRepository({ rdb }) {
       const value = unwrap(await rdb.rpc('prepare_snapshot_version', { p_job_id: input.jobId, p_lease_token: input.leaseToken, p_snapshot_type: input.snapshotType, p_version: input.version, p_object_key: input.objectKey, p_checksum: input.checksum }));
       if (value !== true && !(value && Object.values(value)[0] === true)) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Snapshot storage unavailable');
     },
-    async authorizeManifest(input) {
-      const value = unwrap(await rdb.rpc('authorize_snapshot_manifest', { p_job_id: input.jobId, p_lease_token: input.leaseToken }));
-      if (value !== true && !(value && Object.values(value)[0] === true)) throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Snapshot lease is stale');
+    async getCurrentSnapshot({ snapshotType }) {
+      const row = unwrap(await rdb.rpc('get_current_snapshot', { p_snapshot_type: snapshotType }));
+      if (!row) return null;
+      return { version: Number(row.version), objectKey: row.object_key, checksum: row.checksum, updatedAt: row.updated_at };
     },
     async completeSnapshot(input) {
       const value = unwrap(await rdb.rpc('complete_snapshot_build', { p_job_id: input.jobId, p_lease_token: input.leaseToken, p_actor_id: input.actorId, p_request_id: input.requestId }));

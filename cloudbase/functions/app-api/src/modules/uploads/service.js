@@ -95,6 +95,7 @@ function createUploadsService({ repository, objectStore, now = () => new Date(),
       const actualUploadId = created.uploadId;
       const actualFileId = created.fileId;
       if (created.state === 'bound' && created.assetId) return { uploadId: actualUploadId, fileId: actualFileId, assetId: created.assetId, status: 'verified' };
+      if (created.state === 'promoting') return { uploadId: actualUploadId, fileId: actualFileId, status: 'processing' };
       const actualKey = created.objectKey || `staging/admin/${actualUploadId}/${actualFileId}.${item.extension}`;
       const ticket = await objectStore.signPut({ objectKey: actualKey, contentType: item.mimeType, contentLength: item.sizeBytes, checksum: item.checksum, expiresInSeconds: 300 });
       return { uploadId: actualUploadId, fileId: actualFileId, objectKey: actualKey, method: 'PUT', uploadUrl: ticket.url, headers: ticket.headers, expiresAt: created.expiresAt || expiresAt };
@@ -132,6 +133,18 @@ function createUploadsService({ repository, objectStore, now = () => new Date(),
       const result = await repository.completeAndBind({ uploadId: upload.uploadId, fileId: upload.fileId, workId: upload.workId, chapterId: upload.chapterId || null, actorId: ctx.actorId, requestId: ctx.requestId, promotionToken: promotion.promotionToken, objectKey: promotion.objectKey, storageZone: promotion.storageZone, sizeBytes: finalMetadata.sizeBytes, mimeType: upload.mimeType, checksum: finalInspected.checksum, etag: finalMetadata.etag || null, kind: upload.kind, pageNo: upload.pageNo || null, accessLevel: upload.accessLevel });
       try { await objectStore.delete(upload.objectKey); } catch { /* private staging lifecycle is the fallback */ }
       return result;
+    },
+    async cleanupStalePromotions(ctx, limit = 20) {
+      requireAdmin(ctx);
+      const items = await repository.claimStalePromotions({ actorId: ctx.actorId, limit });
+      for (const item of items) {
+        try {
+          if (item.finalKey) await objectStore.delete(item.finalKey);
+          if (item.stagingKey) await objectStore.delete(item.stagingKey);
+          await repository.finalizePromotionCleanup({ fileId: item.fileId, cleanupToken: item.cleanupToken, actorId: ctx.actorId });
+        } catch { /* token-fenced cleanup is retried by the next timer */ }
+      }
+      return { claimed: items.length };
     },
   };
 }
