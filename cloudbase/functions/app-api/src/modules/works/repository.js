@@ -73,7 +73,16 @@ function createWorksRepository({ rdb }) {
       const result = await rdb.rpc('get_public_work', { p_slug: slug });
       if (result && !result.error && (!result.data || !first(result.data))) return null;
       const row = rpcResult(result);
+      let accessId;
+      if (row.rating === 'restricted') {
+        const accessResult = await rdb.rpc('get_public_restricted_access_id', { p_slug: slug });
+        if (accessResult && accessResult.error) throw controlledError(accessResult.error);
+        const accessRow = first(accessResult && accessResult.data);
+        accessId = accessRow && (accessRow.work_id || Object.values(accessRow)[0]);
+        if (typeof accessId !== 'string') return null;
+      }
       return {
+        ...(accessId ? { accessId } : {}),
         slug: row.slug, type: row.type, title: row.title, summary: row.summary, rating: row.rating,
         authorName: row.author_name, publishedAt: row.published_at,
         chapters: row.chapters || [],

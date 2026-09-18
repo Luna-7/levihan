@@ -8,10 +8,14 @@ const Rating = z.enum(['general', 'mature', 'restricted']);
 const PublicAsset = z.object({ kind: z.enum(['cover', 'page', 'body', 'attachment', 'preview']), publicPath: z.string().min(1).max(1024), pageNo: z.number().int().positive().optional(), chapterPosition: z.number().int().positive().optional() }).strict();
 const PublicChapter = z.object({ title: z.string().min(1).max(200), position: z.number().int().positive() }).strict();
 const PublicWork = z.object({
+  accessId: Id.optional(),
   slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,127}$/), type: WorkType, title: z.string().min(1).max(120),
-  summary: z.string().max(2000), rating: z.enum(['general', 'mature']), authorName: z.string().min(1).max(120),
+  summary: z.string().max(2000), rating: Rating, authorName: z.string().min(1).max(120),
   publishedAt: Timestamp, chapters: z.array(PublicChapter).max(1000).default([]), assets: z.array(PublicAsset).max(5000),
-}).strict();
+}).strict().superRefine((work, context) => {
+  if (work.rating === 'restricted' && !work.accessId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Restricted metadata requires an access id', path: ['accessId'] });
+  if (work.rating !== 'restricted' && work.accessId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Public work must not expose an access id', path: ['accessId'] });
+});
 const Chapter = z.object({ id: Id.nullable(), title: z.string().min(1).max(200), position: z.number().int().positive(), version: z.number().int().positive().nullable() }).strict();
 const AdminChapter = z.object({
   id: Id, workId: Id.optional(), title: z.string(), position: z.number().int().positive(), version: z.number().int().positive(),

@@ -73,6 +73,16 @@ async function consumeBytes(body, maxBytes = MAX_SNAPSHOT_BYTES) {
 function createCosObjectStore({ publicBucket, privateBucket, region, cos }) {
   if (!publicBucket || !privateBucket || !region || !cos) throw new Error('COS public/private buckets, region and client are required');
   return {
+    async signGet({ objectKey, expiresInSeconds }) {
+      if (expiresInSeconds !== 300 || !/^protected\/works\/[A-Za-z0-9._-]+\/[A-Za-z0-9._/-]+$/.test(objectKey) || objectKey.includes('..') || objectKey.includes('//')) throw new ApiError(400, 'VALIDATION_FAILED', 'Private read signing constraints are invalid');
+      const data = await call(cos, 'getObjectUrl', { Bucket: privateBucket, Region: region, Key: objectKey, Method: 'GET', Sign: true, Expires: expiresInSeconds });
+      const url = typeof data === 'string' ? data : data.Url;
+      let parsed;
+      try { parsed = new URL(url); } catch { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'COS signing failed'); }
+      if (parsed.protocol !== 'https:' || parsed.hostname !== `${privateBucket}.cos.${region}.myqcloud.com`
+        || parsed.pathname !== `/${objectKey}` || !parsed.searchParams.has('q-sign-algorithm')) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'COS signing failed');
+      return { url, expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString() };
+    },
     async signPut({ objectKey, contentType, contentLength, checksum, expiresInSeconds }) {
       if (expiresInSeconds !== 300 || !objectKey.startsWith('staging/admin/')) throw new ApiError(400, 'VALIDATION_FAILED', 'Upload signing constraints are invalid');
       const headers = { 'Content-Type': contentType, 'x-cos-meta-sha256': checksum };

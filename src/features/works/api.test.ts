@@ -20,6 +20,11 @@ describe('typed works API client', () => {
     expect(fetch).toHaveBeenCalledWith('/api/v1/works/summer', expect.objectContaining({ credentials: 'include' }));
   });
 
+  it('requires an opaque access id for restricted metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ work: { accessId: id, slug: 'restricted', type: 'comic', title: 'R', summary: '', rating: 'restricted', authorName: '作者', publishedAt: '2030-01-01T00:00:00.000Z', chapters: [], assets: [{ kind: 'preview', publicPath: 'media/works/w/blur.webp' }] } })));
+    await expect(getPublicWork('restricted')).resolves.toMatchObject({ work: { accessId: id, rating: 'restricted' } });
+  });
+
   it('sends CSRF-protected admin CRUD and lifecycle requests', async () => {
     vi.stubGlobal('document', { cookie: 'lv_csrf=' + 'c'.repeat(43) });
     const work = { id, slug: 'summer', type: 'comic', title: '夏日', summary: '', rating: 'general', status: 'draft', version: 1, authorName: '作者', publishedAt: null };

@@ -22,6 +22,26 @@ describe('COS object-store adapter', () => {
     expect(result).toEqual({ url: 'https://bucket.cos.test/key?q-sign-algorithm=sha1', headers: { 'content-type': 'image/webp', 'x-cos-meta-sha256': 'a'.repeat(64) } });
   });
 
+  it('signs GET only from the private protected work prefix for exactly five minutes', async () => {
+    const getObjectUrl = vi.fn((_params, callback) => callback(null, { Url: 'https://private-123.cos.ap-test.myqcloud.com/protected/works/w/p.webp?q-sign-algorithm=sha1' }));
+    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: { getObjectUrl } });
+    const result = await store.signGet({ objectKey: 'protected/works/w/p.webp', expiresInSeconds: 300 });
+    expect(getObjectUrl).toHaveBeenCalledWith(expect.objectContaining({ Bucket: 'private-123', Region: 'ap-test', Key: 'protected/works/w/p.webp', Method: 'GET', Sign: true, Expires: 300 }), expect.any(Function));
+    expect(result.url).toContain('private-123.cos.ap-test.myqcloud.com');
+    await expect(store.signGet({ objectKey: 'media/works/w/p.webp', expiresInSeconds: 300 })).rejects.toMatchObject({ status: 400 });
+    await expect(store.signGet({ objectKey: 'protected/works/w/p.webp', expiresInSeconds: 600 })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it.each([
+    'https://private-123.cos-website.ap-test.myqcloud.com/protected/works/w/p.webp?q-sign-algorithm=sha1',
+    'https://private-123.cos.ap-test.myqcloud.com.evil.test/protected/works/w/p.webp?q-sign-algorithm=sha1',
+    'https://private-123.cos.ap-test.myqcloud.com/protected/works/other/p.webp?q-sign-algorithm=sha1',
+    'https://private-123.cos.ap-test.myqcloud.com/protected/works/w/p.webp',
+  ])('rejects malformed or unsigned COS read URL %s', async (url) => {
+    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: { getObjectUrl: vi.fn((_params, cb) => cb(null, { Url: url })) } });
+    await expect(store.signGet({ objectKey: 'protected/works/w/p.webp', expiresInSeconds: 300 })).rejects.toMatchObject({ status: 503, errorCode: 'DEPENDENCY_UNAVAILABLE' });
+  });
+
   it('normalizes staging HEAD metadata', async () => {
     const cos = {
       headObject: vi.fn((_params, callback) => callback(null, { headers: { 'content-length': '5', 'content-type': 'image/webp', 'x-cos-meta-sha256': 'a'.repeat(64), etag: '"etag"' } })),

@@ -74,6 +74,15 @@ describe('work repository transaction boundary', () => {
     expect(JSON.stringify(work)).not.toMatch(/chapterId|chapter_id/);
   });
 
+  it('resolves an access id only for published restricted metadata', async () => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: [{ slug: 'restricted', type: 'comic', title: 'R', summary: '', rating: 'restricted', author_name: 'A', published_at: '2030-01-01T00:00:00Z', chapters: [], assets: [{ kind: 'preview', object_key: 'media/works/w/blur.webp' }] }], error: null })
+      .mockResolvedValueOnce({ data: [{ work_id: workId }], error: null });
+    const work = await createWorksRepository({ rdb: { rpc } }).getPublicWorkBySlug('restricted');
+    expect(work).toMatchObject({ accessId: workId, rating: 'restricted', chapters: [], assets: [{ kind: 'preview' }] });
+    expect(rpc).toHaveBeenNthCalledWith(2, 'get_public_restricted_access_id', { p_slug: 'restricted' });
+  });
+
   it.each([
     ['version_conflict', 'VERSION_CONFLICT'], ['state_conflict', 'STATE_CONFLICT'],
     ['assets_incomplete', 'UPLOAD_NOT_VERIFIED'], ['page_sequence_invalid', 'UPLOAD_NOT_VERIFIED'], ['asset_policy_invalid', 'UPLOAD_NOT_VERIFIED'], ['slug_conflict', 'SLUG_CONFLICT'],
@@ -130,5 +139,15 @@ describe('work lifecycle', () => {
     const response = await service.getPublic(ctx({ actorId: undefined, actorRole: undefined, params: { slug: 'summer-story' } }));
     expect(response.work.assets).toEqual([{ kind: 'page', publicPath: 'media/page-1.webp', pageNo: 1 }]);
     expect(JSON.stringify(response)).not.toMatch(/objectKey|private|staging/i);
+  });
+
+  it('returns restricted public metadata with preview derivatives only', async () => {
+    const repository = { getPublicWorkBySlug: vi.fn().mockResolvedValue({
+      slug: 'restricted-story', type: 'comic', title: 'Restricted', summary: 'Warning', rating: 'restricted', authorName: '作者',
+      publishedAt: '2030-01-01T00:00:00.000Z', chapters: [], assets: [{ kind: 'preview', publicPath: 'media/works/w/blurred.webp' }],
+    }) };
+    const response = await createWorksService({ repository }).getPublic(ctx({ actorId: undefined, actorRole: undefined, params: { slug: 'restricted-story' } }));
+    expect(response.work).toMatchObject({ rating: 'restricted', chapters: [], assets: [{ kind: 'preview' }] });
+    expect(JSON.stringify(response)).not.toMatch(/page|body|protected|objectKey/i);
   });
 });
