@@ -131,7 +131,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
 
         {!account && view === 'login' && <>
           <CredentialForm username={username} password={password} busy={busy} onUsername={setUsername} onPassword={setPassword} onSubmit={submitLogin} submitText="登录" />
-          <div className="mt-4 pt-3 border-t border-dashed border-[#B99A72] flex items-center justify-center gap-3 text-xs text-[#73583F]"><button type="button" onClick={beginRegistration} className="underline cursor-pointer">注册账号</button><span>·</span><button type="button" onClick={() => setView('recover')} className="underline cursor-pointer">使用恢复码</button></div>
+          <div className="mt-4 pt-3 border-t border-dashed border-[#B99A72] flex flex-wrap items-center justify-center gap-3 text-xs text-[#73583F]"><button type="button" onClick={beginRegistration} className="underline cursor-pointer">注册账号</button><span>·</span><button type="button" onClick={() => setView('recover')} className="underline cursor-pointer">使用恢复码</button><span>·</span><a href="#/migrate-account" className="underline">迁移旧账号</a></div>
         </>}
 
         {!account && view === 'quiz' && challenge && <form onSubmit={submitAnswer} className="space-y-3">

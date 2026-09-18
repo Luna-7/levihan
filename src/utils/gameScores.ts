@@ -6,11 +6,8 @@
  *   - hange   利韩·拯救韩吉（只有「绝境」难度突围成功才记）
  *   - lihan   利韩·利了个韩 —— 暂不参与头号玩家，不参与任何计算
  *
- * 归一化公式必须与云函数保持一致：
- *   cloudbase/functions/submitGameScore/index.js → meritOf()
- * 改任一端都要同步改另一端，否则本地预估值与入库值会对不上。
+ * v2 切流期间仅计算本机成绩；旧 CloudBase 榜单已冻结，不再双写。
  */
-import { cloudbase } from './cloudbase';
 import { FALLBACK_TRACK_SECONDS } from '../save-hange/constants';
 
 export type GameKey = 'daxigua' | 'hange';
@@ -116,17 +113,8 @@ export interface SubmitResult {
   localOnly: boolean;
 }
 
-async function currentUid(): Promise<string | null> {
-  try {
-    const user = await cloudbase.auth().getCurrentUser();
-    return user?.uid || null;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * 提交一次成绩。永远不抛错 —— 打游戏时任何上报失败都不该打断玩家。
+ * 旧排行榜在 v2 切流窗口中冻结为只读；成绩只保存在本机，避免继续写旧事实源。
  */
 export async function submitScore(gameKey: GameKey, raw: GameRaw): Promise<SubmitResult> {
   if (!GAME_KEYS.includes(gameKey)) return { merit: 0, improved: false, localOnly: true };
@@ -135,16 +123,7 @@ export async function submitScore(gameKey: GameKey, raw: GameRaw): Promise<Submi
   if (merit <= 0) return { merit: 0, improved: false, localOnly: true };
 
   const localImproved = writeLocalBest(gameKey, merit);
-  const uid = await currentUid();
-  if (!uid) return { merit, improved: localImproved, localOnly: true };
-
-  try {
-    const response = await cloudbase.callFunction({ name: 'submitGameScore', data: { gameKey, raw } });
-    const result = (response as { result?: { improved?: boolean } })?.result || (response as { improved?: boolean });
-    return { merit, improved: result?.improved === true, localOnly: false };
-  } catch {
-    return { merit, improved: localImproved, localOnly: true };
-  }
+  return { merit, improved: localImproved, localOnly: true };
 }
 
 export interface LeaderboardRow {
@@ -166,17 +145,8 @@ export interface LeaderboardData {
 }
 
 /**
- * 拉取榜单。云函数尚未部署时返回 null，由 UI 显示「尚未开通」而不是报错。
+ * 旧排行榜已冻结，不再读取会继续漂移的 CloudBase 集合。
  */
 export async function fetchLeaderboard(): Promise<LeaderboardData | null> {
-  try {
-    const response = await cloudbase.callFunction({ name: 'getGameLeaderboard', data: {} });
-    // 云函数返回体可能直接是数据，也可能包一层 { result }，两种都兼容
-    const payload = (response as unknown as { result?: unknown } | null)?.result;
-    const result = (payload ?? response) as LeaderboardData | null;
-    if (!result || !Array.isArray(result.total)) return null;
-    return result;
-  } catch {
-    return null;
-  }
+  return null;
 }

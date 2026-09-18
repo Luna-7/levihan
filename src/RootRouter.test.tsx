@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('./App', () => ({ default: () => <div>public app</div> }));
 vi.mock('./features/access/RestrictedWorkPage', () => ({ RestrictedWorkPage: ({ slug }: { slug: string }) => <div>restricted:{slug}</div> }));
 vi.mock('./features/submissions/SubmissionForm', () => ({ SubmissionForm: () => <div>submission workflow</div> }));
-import { RootRouter, restrictedSlugFromHash, submissionsFromHash } from './RootRouter';
+vi.mock('./features/auth/LegacyMigrationPage', () => ({ LegacyMigrationPage: () => <div>legacy migration workflow</div> }));
+import { RootRouter, legacyMigrationFromHash, restrictedSlugFromHash, submissionsFromHash } from './RootRouter';
 
 afterEach(() => { cleanup(); window.location.hash = ''; });
 
@@ -24,5 +25,8 @@ describe('RootRouter', () => {
     window.location.hash = '#/submissions';
     render(<RootRouter />);
     expect(screen.getByText('submission workflow')).toBeTruthy();
+  });
+  it('makes the controlled legacy migration workflow reachable', () => {
+    expect(legacyMigrationFromHash('#/migrate-account')).toBe(true); window.location.hash = '#/migrate-account'; render(<RootRouter />); expect(screen.getByText('legacy migration workflow')).toBeTruthy();
   });
 });

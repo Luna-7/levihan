@@ -1,4 +1,5 @@
 const { createApi } = require('../src/http');
+const crypto = require('crypto');
 const { ApiError } = require('../src/errors');
 
 const config = {
@@ -66,6 +67,24 @@ describe('HTTP API kernel', () => {
     server.router.get('/client-ip', (ctx) => ({ clientIp: ctx.clientIp }));
     const response = await server.handle(request({ path: '/api/v1/client-ip', headers: { 'x-forwarded-for': '198.51.100.99' } }));
     expect(JSON.parse(response.body)).toEqual({ clientIp: '203.0.113.8' });
+  });
+
+  it('accepts only a fresh HMAC-bound proxy client IP and rejects spoofed or stale headers', async () => {
+    const proxySecret = 'p'.repeat(32); const timestamp = Math.floor(Date.now() / 1000); const path = '/api/v1/client-ip'; const clientIp = '203.0.113.9';
+    const signature = crypto.createHmac('sha256', proxySecret).update(`GET\n${path}\n${clientIp}\n${timestamp}`).digest('hex');
+    const server = api({ config: { ...config, trustedProxyHeaders: true, proxyHmacSecret: proxySecret } });
+    server.router.get('/client-ip', (ctx) => ({ clientIp: ctx.clientIp }));
+    const headers = { 'x-lv-client-ip': clientIp, 'x-lv-proxy-timestamp': String(timestamp), 'x-lv-proxy-signature': signature };
+    const accepted = await server.handle(request({ path, headers }));
+    expect(JSON.parse(accepted.body)).toEqual({ clientIp });
+    const missing = await server.handle(request({ path, headers: {} }));
+    expect(missing.statusCode).toBe(403);
+    const spoofed = await server.handle(request({ path, headers: { ...headers, 'x-lv-client-ip': '198.51.100.1' } }));
+    expect(spoofed.statusCode).toBe(403);
+    const staleTime = timestamp - 120;
+    const staleSignature = crypto.createHmac('sha256', proxySecret).update(`GET\n${path}\n${clientIp}\n${staleTime}`).digest('hex');
+    const stale = await server.handle(request({ path, headers: { ...headers, 'x-lv-proxy-timestamp': String(staleTime), 'x-lv-proxy-signature': staleSignature } }));
+    expect(stale.statusCode).toBe(403);
   });
 
   it('parses JSON and serializes a success response with a request ID', async () => {

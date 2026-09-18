@@ -24,8 +24,6 @@ export interface AnnouncementItem {
   link?: string;
 }
 
-const ANNOUNCEMENT_ENDPOINT = 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/admin-upload';
-
 // 公告内容完全由管理员后台提供；云端为空时展示“暂无公告”。
 export const ANNOUNCEMENTS: AnnouncementItem[] = [];
 
@@ -54,7 +52,7 @@ export const PopUpShopBanner: React.FC<Props> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState<AnnouncementItem | null>(null);
-  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(ANNOUNCEMENTS);
+  const [announcements] = useState<AnnouncementItem[]>(ANNOUNCEMENTS);
   const [showProposal, setShowProposal] = useState(false);
   const [proposal, setProposal] = useState({ title: '', time: '', author: '', link: '', description: '' });
   const [proposalBusy, setProposalBusy] = useState(false);
@@ -63,25 +61,6 @@ export const PopUpShopBanner: React.FC<Props> = ({
   const [proposalCrop, setProposalCrop] = useState({ x: 50, y: 50, zoom: 1 });
 
   const currentItem = announcements[currentIndex];
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(ANNOUNCEMENT_ENDPOINT, {
-      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body: JSON.stringify({ action: 'announcementList' }), signal: controller.signal,
-    }).then((response) => response.ok ? response.json() : Promise.reject(new Error('公告读取失败')))
-      .then((data: { items?: Array<{ id:string; tag:string; title:string; time?:string; author:string; link?:string; image?:string; description?:string }> }) => {
-        if (!Array.isArray(data.items)) return;
-        setAnnouncements(data.items.map((item) => ({
-          id: item.id, badge: item.tag, badgeType: 'event', title: item.title,
-          subtitle: '', period: item.time || '', location: item.author,
-          description: item.description || '', tags: [], detailContent: [], author: item.author,
-          image: item.image || '', link: item.link || '', jumpLabel: '立即推门阅览 ➜',
-        })));
-        setCurrentIndex(0);
-      }).catch(() => undefined);
-    return () => controller.abort();
-  }, []);
 
   // 每次打开弹窗换一句韩吉台词
   const hangeLine = useMemo(
@@ -129,15 +108,7 @@ export const PopUpShopBanner: React.FC<Props> = ({
     if (!proposal.title.trim() || !proposal.author.trim() || !proposal.description.trim()) return onShowToast('请填写企划标题、发布人和企划宣传文本');
     setProposalBusy(true);
     try {
-      let image = '';
-      if (proposalImage && proposalPreview) {
-        const cropped = await new Promise<string>((resolve, reject) => {
-          const img = new Image(); img.onload = () => { try { const ratio=16/9; let sw=img.naturalWidth,sh=sw/ratio;if(sh>img.naturalHeight){sh=img.naturalHeight;sw=sh*ratio;}sw/=proposalCrop.zoom;sh/=proposalCrop.zoom;const sx=(img.naturalWidth-sw)*proposalCrop.x/100,sy=(img.naturalHeight-sh)*proposalCrop.y/100;const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=675;canvas.getContext('2d')!.drawImage(img,sx,sy,sw,sh,0,0,1200,675);resolve(canvas.toDataURL('image/webp',.86).split(',')[1]||''); } catch(error){reject(error);} }; img.onerror=reject; img.src=proposalPreview;
-        });
-        const response = await fetch(ANNOUNCEMENT_ENDPOINT,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({action:'announcementImageUpload',imageBase64:cropped})});
-        const result=await response.json(); if(!response.ok||!result.ok)throw new Error(result.error||'图片上传失败'); image=result.url;
-      }
-      await submitToInbox('submitAnnouncement', { ...proposal, image, tag: '利韩企划' });
+      await submitToInbox('submitAnnouncement', { ...proposal, image: '', tag: '利韩企划' });
       if (proposalPreview) URL.revokeObjectURL(proposalPreview);
       setProposal({ title: '', time: '', author: '', link: '', description: '' }); setProposalImage(null); setProposalPreview(''); setProposalCrop({x:50,y:50,zoom:1});
       setShowProposal(false);

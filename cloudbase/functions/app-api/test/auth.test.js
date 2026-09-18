@@ -200,6 +200,12 @@ describe('authentication service', () => {
     ]);
   });
 
+  it('never treats a migrated account without installed credentials as a normal login', async () => {
+    const migrated = service({ repository: { findUserByUsername: vi.fn().mockResolvedValue({ id: 'u', passwordHash: 'migration-required', credentialState: 'migration_required', status: 'active' }) }, passwordHasher: { verify: vi.fn().mockResolvedValue(true) } });
+    await expect(migrated.auth.login(context({ body: { username: 'reader_01', password: 'a-secure-password' } }))).rejects.toMatchObject({ status: 401, errorCode: 'AUTH_REQUIRED' });
+    expect(migrated.passwordHasher.verify).not.toHaveBeenCalled();
+  });
+
   it('creates a login session and returns only safe profile metadata', async () => {
     const profile = { id: '550e8400-e29b-41d4-a716-446655440020', username: 'reader_01', passwordHash: 'argon-hash', role: 'member', status: 'active', ageConsent: null };
     const { auth, repository, passwordHasher } = service({ repository: { findUserByUsername: vi.fn().mockResolvedValue(profile), createLoginSession: vi.fn().mockResolvedValue({ sessionId: 's' }), getUserProfile: vi.fn().mockResolvedValue(profile) } });

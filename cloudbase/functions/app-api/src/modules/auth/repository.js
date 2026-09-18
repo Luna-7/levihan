@@ -105,9 +105,9 @@ function createAuthRepository({ rdb }) {
     },
 
     async findUserByUsername(username) {
-      const result = await rdb.from('app_users').select('id,username,password_hash,role,status').eq('username', username).limit(1);
+      const result = await rdb.from('app_users').select('id,username,password_hash,credential_state,role,status').eq('username', username).limit(1);
       const row = first(unwrap(result));
-      return row ? { id: row.id, username: row.username, passwordHash: row.password_hash, role: row.role, status: row.status } : null;
+      return row ? { id: row.id, username: row.username, passwordHash: row.password_hash, credentialState: row.credential_state || 'active', role: row.role, status: row.status } : null;
     },
 
     async createLoginSession(input) {

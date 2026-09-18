@@ -1,15 +1,7 @@
-const ENDPOINT = 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/admin-upload';
-
 export async function submitToInbox(
   action: 'submitNovel' | 'submitContact' | 'submitAnnouncement' | 'submitRecommend',
   fields: Record<string, unknown>
 ) {
-  const response = await fetch(ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-    body: JSON.stringify({ action, ...fields }),
-  });
-  const result = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; id?: string; status?: 'pending' };
-  if (!response.ok || !result.ok) throw new Error(result.error || '云端收件箱暂时不可用');
-  return result as { ok: true; id: string; status: 'pending' };
+  void action; void fields;
+  throw new Error('旧收件箱已停止写入；请使用“投稿”入口保存草稿并提交审核');
 }

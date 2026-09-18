@@ -134,7 +134,7 @@ function createAuthService({
       const password = validPassword(body.password);
       const profile = await repository.findUserByUsername(username);
       let accepted = false;
-      if (profile && profile.status === 'active') {
+      if (profile && profile.status === 'active' && profile.credentialState !== 'migration_required') {
         try { accepted = await passwordHasher.verify(profile.passwordHash, password); } catch { accepted = false; }
       } else {
         await passwordHasher.hash(password);

@@ -68,6 +68,29 @@ async function request(path: string, { method = 'GET', body, csrf = false }: { m
   return payload;
 }
 
+function object(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AuthApiError('INTERNAL_ERROR', '服务器响应无效');
+  return value as Record<string, unknown>;
+}
+
+export async function beginLegacyMigration(migrationCredential: string) {
+  const payload = object(await request('/auth/legacy-credentials/session', { method: 'POST', body: { migrationCredential } }));
+  if (payload.ready !== true || typeof payload.expiresAt !== 'string') throw new AuthApiError('INTERNAL_ERROR', '服务器响应无效');
+  return { ready: true as const, expiresAt: payload.expiresAt };
+}
+
+export async function prepareLegacyMigration() {
+  const payload = object(await request('/auth/legacy-credentials/prepare', { method: 'POST', body: {}, csrf: true }));
+  if (typeof payload.recoveryCode !== 'string' || typeof payload.prepareNonce !== 'string' || typeof payload.expiresAt !== 'string') throw new AuthApiError('INTERNAL_ERROR', '服务器响应无效');
+  return { recoveryCode: payload.recoveryCode, prepareNonce: payload.prepareNonce, expiresAt: payload.expiresAt };
+}
+
+export async function installLegacyMigration(input: { newPassword: string; recoveryCode: string; prepareNonce: string }) {
+  const payload = object(await request('/auth/legacy-credentials', { method: 'POST', body: input, csrf: true }));
+  if (payload.installed !== true || typeof payload.userId !== 'string') throw new AuthApiError('INTERNAL_ERROR', '服务器响应无效');
+  return { installed: true as const, userId: payload.userId };
+}
+
 export async function createRegistrationChallenge(): Promise<RegistrationChallengeResponse> {
   return RegistrationChallengeResponseSchema.parse(await request('/auth/challenges', { method: 'POST', body: {} }));
 }

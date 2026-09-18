@@ -19,7 +19,13 @@
     "lint": "tsc --noEmit",
     "verify:secrets": "node scripts/verify-no-secrets.mjs",
     "verify:levels": "node scripts/verify-save-hange-levels.ts",
-    "verify:backend-schema": "node scripts/verify-backend-schema.mjs && node scripts/verify-content-pipeline.mjs && node scripts/verify-content-access.mjs && node scripts/verify-interactions.mjs && node scripts/verify-submissions.mjs && node scripts/verify-admin-console.mjs",
+    "migrate:backend-v2": "node scripts/migrate-backend-v2.mjs",
+    "check:backend-v2": "node scripts/check-backend-v2.mjs",
+    "export:backend-v2-credentials": "node scripts/export-backend-v2-credentials.mjs",
+    "generate:r18-cutover-manifest": "node scripts/generate-r18-cutover-manifest.mjs",
+    "verify:cos-backend-v2": "node scripts/verify-cos-backend-v2.mjs",
+    "deploy:cloudbase-v2": "node scripts/deploy-cloudbase-v2.mjs",
+    "verify:backend-schema": "node scripts/verify-backend-schema.mjs && node scripts/verify-content-pipeline.mjs && node scripts/verify-content-access.mjs && node scripts/verify-interactions.mjs && node scripts/verify-submissions.mjs && node scripts/verify-admin-console.mjs && node scripts/verify-backend-cutover.mjs",
     "prebuild": "node scripts/generate-admin-pixiv.mjs"
   },
   "allowScripts": {

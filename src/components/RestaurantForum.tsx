@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MessageCircle, Plus, X } from 'lucide-react';
 import { soundManager } from '../utils/audio';
-import { cloudbase } from '../utils/cloudbase';
 
 type ForumComment = { id: string; author: string; body: string; createdAt: string; potatoes?: number; potatoGiven?: boolean };
 type ForumPost = {
@@ -17,7 +16,6 @@ type ForumPost = {
 };
 
 const STORAGE_KEY = 'levihan_restaurant_forum_v1';
-const FORUM_ENDPOINT = 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/admin-upload';
 const seedPosts: ForumPost[] = [
   {
     id: 'restaurant-welcome',
@@ -61,14 +59,7 @@ export const RestaurantForum: React.FC<Props> = ({ onBack, onShowToast }) => {
   const [nickname, setNickname] = useState('');
   const [publishing, setPublishing] = useState(false);
 
-  const api = async (action: string, fields: Record<string, unknown> = {}) => {
-    const response = await fetch(FORUM_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: JSON.stringify({ action, ...fields }) });
-    const result = await response.json(); if (!response.ok || !result.ok) throw new Error(result.error || '论坛服务暂不可用'); return result;
-  };
-  useEffect(() => {
-    void api('forumList').then((result) => { if (Array.isArray(result.posts)) persist(result.posts); }).catch(() => undefined);
-    void (async () => { try { const user = await cloudbase.auth().getCurrentUser(); if (!user) return; const response = await cloudbase.callFunction({ name: 'getUserAccount', data: {} }); setNickname((response?.result || response)?.profile?.nickname || ''); } catch { setNickname(''); } })();
-  }, []);
+  useEffect(() => { setNickname(''); }, []);
 
   const sortedPosts = useMemo(() => posts, [posts]);
   const persist = (next: ForumPost[]) => {
@@ -87,15 +78,7 @@ export const RestaurantForum: React.FC<Props> = ({ onBack, onShowToast }) => {
 
   const publish = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!nickname) { onShowToast('请先在登录页面设置昵称并登录'); window.dispatchEvent(new Event('levihan-open-login')); return; }
-    if (!title.trim() || (!body.trim() && !image)) return onShowToast('请填写标题，并添加正文或图片');
-    setPublishing(true);
-    try {
-      const result = await api('forumPublish', { author: nickname, title: title.trim(), body: body.trim(), imageBase64: image?.split(',')[1] || '' });
-      persist(result.posts || posts); setTitle(''); setBody(''); setImage(undefined); setShowComposer(false);
-      soundManager.playCoin(); onShowToast('帖子发布成功');
-    } catch (error) { onShowToast(error instanceof Error ? error.message : '发布失败'); }
-    finally { setPublishing(false); }
+    onShowToast('旧论坛已冻结为只读归档；新社区写入将在 v2 入口开放');
   };
 
   const givePotato = (id: string) => {
@@ -108,11 +91,8 @@ export const RestaurantForum: React.FC<Props> = ({ onBack, onShowToast }) => {
   };
 
   const addComment = async (postId: string) => {
-    const text = (commentDrafts[postId] || '').trim();
-    if (!text) return;
-    if (!nickname) { onShowToast('请先登录后评论'); window.dispatchEvent(new Event('levihan-open-login')); return; }
-    try { const result = await api('forumComment', { postId, author: nickname, body: text }); persist(result.posts || posts); setCommentDrafts((drafts) => ({ ...drafts, [postId]: '' })); }
-    catch (error) { onShowToast(error instanceof Error ? error.message : '评论失败'); }
+    void postId;
+    onShowToast('旧论坛已冻结为只读归档');
   };
 
   const giveCommentPotato = (postId: string, commentId: string) => {
@@ -135,14 +115,15 @@ export const RestaurantForum: React.FC<Props> = ({ onBack, onShowToast }) => {
             <button type="button" onClick={onBack} className="text-sm text-[#285A46] font-bold cursor-pointer whitespace-nowrap">← 返回</button>
             <h1 className="font-serif-title text-base sm:text-lg font-black text-[#1E4334] truncate">巨树餐厅论坛</h1>
           </div>
-          <button type="button" onClick={() => setShowComposer(true)} className="px-3 py-1.5 rounded-full bg-[#1E4334] text-white text-xs font-bold cursor-pointer flex items-center gap-1 active:scale-95">
-            <Plus size={14} /> 发布
+          <button type="button" disabled title="旧论坛已冻结为只读归档" className="px-3 py-1.5 rounded-full bg-[#627269] text-white text-xs font-bold flex items-center gap-1 opacity-70">
+            <Plus size={14} /> 只读归档
           </button>
         </div>
       </header>
 
       <main className="flex-1 min-h-0 overflow-y-auto">
         <div className="max-w-3xl mx-auto bg-[#FFFBEF] sm:my-3 sm:border-2 sm:border-[#8C6C47] sm:rounded-xl overflow-hidden shadow-[4px_4px_0_rgba(30,67,52,.18)]">
+          <p className="px-4 py-2 text-xs bg-amber-50 text-amber-900 border-b border-amber-200">迁移切流期间旧论坛仅供阅读，不再写入旧 CloudBase 数据源。</p>
           {sortedPosts.map((post) => (
             <article
               key={post.id}
@@ -156,7 +137,7 @@ export const RestaurantForum: React.FC<Props> = ({ onBack, onShowToast }) => {
               {post.image && <img src={post.image} alt="帖子图片" className="mt-3 max-h-[460px] w-full object-contain rounded-lg bg-[#E8EFEA] border border-[#CAD7CF]" />}
 
               <div className="mt-3 flex items-center gap-2">
-                <button type="button" onClick={(event) => { event.stopPropagation(); givePotato(post.id); }} className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 cursor-pointer ${post.potatoGiven ? 'bg-[#D8EBDD] text-[#1E4334]' : 'bg-[#E8EEEA] text-[#35463C]'}`}>
+                <button type="button" disabled title="只读归档" onClick={(event) => { event.stopPropagation(); givePotato(post.id); }} className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 opacity-70 ${post.potatoGiven ? 'bg-[#D8EBDD] text-[#1E4334]' : 'bg-[#E8EEEA] text-[#35463C]'}`}>
                   <span aria-hidden="true">🥔</span><span>送土豆</span><span>{post.potatoes}</span>
                 </button>
                 <span className="px-3 py-1.5 rounded-full bg-[#E8EEEA] text-[#35463C] text-xs font-bold flex items-center gap-1.5">
@@ -167,8 +148,8 @@ export const RestaurantForum: React.FC<Props> = ({ onBack, onShowToast }) => {
               {openComments === post.id && (
                 <section onClick={(event) => event.stopPropagation()} className="mt-4 pt-3 border-t border-[#DCE5DF] space-y-4 cursor-default">
                   <div className="flex gap-2">
-                    <input value={commentDrafts[post.id] || ''} onChange={(e) => setCommentDrafts((drafts) => ({ ...drafts, [post.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && addComment(post.id)} placeholder="加入评论" className="min-w-0 flex-1 px-3 py-2 rounded-full border border-[#B8C8BE] text-sm outline-none focus:border-[#285A46]" />
-                    <button type="button" onClick={() => addComment(post.id)} className="px-4 py-2 rounded-full bg-[#285A46] text-white text-xs font-bold cursor-pointer">评论</button>
+                    <input disabled value={commentDrafts[post.id] || ''} onChange={(e) => setCommentDrafts((drafts) => ({ ...drafts, [post.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && addComment(post.id)} placeholder="旧论坛已冻结" className="min-w-0 flex-1 px-3 py-2 rounded-full border border-[#B8C8BE] text-sm opacity-70" />
+                    <button type="button" disabled className="px-4 py-2 rounded-full bg-[#627269] text-white text-xs font-bold opacity-70">只读</button>
                   </div>
 
                   <div className="border-l-2 border-[#CAD7CF] ml-1.5 pl-4 space-y-0">
@@ -178,7 +159,7 @@ export const RestaurantForum: React.FC<Props> = ({ onBack, onShowToast }) => {
                       <div className="text-[11px] text-[#627269]"><b className="text-[#285A46]">u/{comment.author}</b><span className="mx-1">·</span>{comment.createdAt}</div>
                       <p className="mt-1.5 text-sm leading-relaxed text-[#35463C] whitespace-pre-wrap">{comment.body}</p>
                       <div className="mt-2 flex items-center gap-4 text-[11px] font-bold text-[#627269]">
-                        <button type="button" onClick={() => giveCommentPotato(post.id, comment.id)} className={`flex items-center gap-1 cursor-pointer ${comment.potatoGiven ? 'text-[#1E4334]' : ''}`}>
+                        <button type="button" disabled title="只读归档" onClick={() => giveCommentPotato(post.id, comment.id)} className={`flex items-center gap-1 opacity-70 ${comment.potatoGiven ? 'text-[#1E4334]' : ''}`}>
                           <span>🥔</span><span>{comment.potatoes || 0}</span>
                         </button>
                         <button type="button" onClick={() => setCommentDrafts((drafts) => ({ ...drafts, [post.id]: `@${comment.author} ` }))} className="flex items-center gap-1 cursor-pointer">

@@ -1,2 +1,9 @@
-const tcb=require('@cloudbase/node-sdk');const app=tcb.init({env:tcb.SYMBOL_CURRENT_ENV});const db=app.database();
-exports.main=async event=>{const{uid}=app.auth().getUserInfo();if(!uid)throw new Error('AUTH_REQUIRED');const code=String(event.code||'').trim().toUpperCase();return db.runTransaction(async tx=>{const row=(await tx.collection('invite_codes').where({code}).limit(1).get()).data[0];if(!row||row.status!=='unused'||new Date(row.expiresAt)<=new Date())throw new Error('INVITE_UNAVAILABLE');await tx.collection('invite_codes').doc(row._id).update({status:'used',usedByUid:uid,usedAt:new Date()});return{ok:true,invitedBy:row.creatorUid,inviterNickname:row.creatorNickname};});};
+'use strict';
+
+// Retained for one backup window so deployments referencing the old function
+// fail closed without reading or mutating the legacy invite collection.
+exports.main = async () => ({
+  ok: false,
+  errorCode: 'GONE',
+  message: 'Invitation registration has been retired',
+});

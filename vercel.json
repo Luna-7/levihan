@@ -3,6 +3,9 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "framework": "vite",
+  "functions": {
+    "api/v1/[...path].ts": { "maxDuration": 30 }
+  },
   "routes": [
     {
       "src": "^/$",

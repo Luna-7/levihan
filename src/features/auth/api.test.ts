@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { answerRegistrationChallenge, confirmRecoveryCode, getMe, login, logout } from './api';
+import { answerRegistrationChallenge, beginLegacyMigration, confirmRecoveryCode, getMe, installLegacyMigration, login, logout, prepareLegacyMigration } from './api';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -59,5 +59,17 @@ describe('auth API client', () => {
       role: 'member', capabilities: ['comment'], ageConsent: null,
     }), { status: 200, headers: { 'content-type': 'application/json' } }));
     await expect(getMe()).rejects.toThrow();
+  });
+
+  it('uses credentialed CSRF-protected prepare/install endpoints after the anonymous claim', async () => {
+    document.cookie = `lv_csrf=${'E'.repeat(43)}; Path=/`;
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ready: true, expiresAt: '2030-01-01T00:10:00Z' })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ recoveryCode: 'ABCD-EFGH-JKLM-NPQR', prepareNonce: 'n'.repeat(43), expiresAt: '2030-01-01T00:10:00Z' })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ installed: true, userId: '550e8400-e29b-41d4-a716-446655440000' })));
+    await beginLegacyMigration('m'.repeat(43)); await prepareLegacyMigration(); await installLegacyMigration({ newPassword: 'a-secure-password', recoveryCode: 'ABCD-EFGH-JKLM-NPQR', prepareNonce: 'n'.repeat(43) });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/auth/legacy-credentials/session','/api/v1/auth/legacy-credentials/prepare','/api/v1/auth/legacy-credentials']);
+    expect(new Headers(fetchMock.mock.calls[1][1]?.headers).get('x-csrf-token')).toBe('E'.repeat(43));
+    expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('x-csrf-token')).toBe('E'.repeat(43));
   });
 });

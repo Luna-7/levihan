@@ -84,12 +84,19 @@ function serialize(statusCode, headers, data, cookies = []) {
   return { statusCode, headers: { ...headers, 'content-type': 'application/json; charset=utf-8' }, ...(cookies.length ? { multiValueHeaders: { 'set-cookie': cookies } } : {}), body: statusCode === 204 ? '' : JSON.stringify(data) };
 }
 
-function trustedIp(event, headers, config) {
+function trustedIp(event, headers, config, method, path, nowSeconds = Math.floor(Date.now() / 1000)) {
+  if (config.trustedProxyHeaders) {
+    const forwarded = headers['x-lv-client-ip'] || '';
+    const timestamp = Number(headers['x-lv-proxy-timestamp']);
+    const signature = headers['x-lv-proxy-signature'] || '';
+    if (!forwarded || !Number.isSafeInteger(timestamp) || Math.abs(nowSeconds - timestamp) > 60 || !/^[a-f0-9]{64}$/.test(signature) || !config.proxyHmacSecret) throw new ApiError(403, 'ACCESS_DENIED', 'Trusted proxy identity is invalid');
+    const expected = crypto.createHmac('sha256', config.proxyHmacSecret).update(`${method}\n${path}\n${forwarded}\n${timestamp}`).digest();
+    const actual = Buffer.from(signature, 'hex');
+    if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) throw new ApiError(403, 'ACCESS_DENIED', 'Trusted proxy identity is invalid');
+    return forwarded;
+  }
   const context = event.requestContext || {};
-  const ip = context.identity && context.identity.sourceIp || context.http && context.http.sourceIp;
-  if (ip) return ip;
-  if (config.trustedProxyHeaders) return (headers['x-forwarded-for'] || headers['x-real-ip'] || '').split(',')[0].trim();
-  return '';
+  return context.identity && context.identity.sourceIp || context.http && context.http.sourceIp || '';
 }
 function createApi({ config, router = createRouter(), requestId = crypto.randomUUID, logger = { info() {}, error() {} }, rateLimiter, idempotencyStore, actorResolver = async () => null } = {}) {
   if (!config) throw new Error('API configuration is required');
@@ -130,7 +137,7 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
       if (WRITE_METHODS.has(method) && config.csrfRequired && !route.metadata.csrfExempt) requireCsrf(headers, cookies, config);
       const setCookies = [];
       const query = queryFromEvent(event);
-      const clientIp = trustedIp(event, headers, config);
+      const clientIp = trustedIp(event, headers, config, method, path);
       const context = {
         method, path: relativePath, params: route.params, headers, cookies, body, query, requestId: id,
         clientTraceId, idempotencyKey: headers['idempotency-key'], config, clientIp,

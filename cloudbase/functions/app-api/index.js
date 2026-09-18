@@ -31,8 +31,9 @@ const { createAdminConsoleService } = require('./src/modules/admin-console/servi
 const { createAdminConsoleRepository } = require('./src/modules/admin-console/repository');
 const { registerAdminConsoleRoutes } = require('./src/modules/admin-console/routes');
 const { domainHash } = require('./src/modules/auth/session');
+const { createLegacyUsersService, createLegacyUsersRepository, registerLegacyUsersRoute } = require('./src/compat/legacy-users');
 
-function createRuntime({ env = process.env, cloudbase, actorResolver, logger, authService, worksService, uploadsService, snapshotService, accessService, interactionsService, submissionsService, adminConsoleService, objectStore } = {}) {
+function createRuntime({ env = process.env, cloudbase, actorResolver, logger, authService, legacyUsersService, worksService, uploadsService, snapshotService, accessService, interactionsService, submissionsService, adminConsoleService, objectStore } = {}) {
   const config = parseConfig(env);
   const sdk = cloudbase || require('@cloudbase/node-sdk');
   const app = sdk.init({ env: sdk.SYMBOL_CURRENT_ENV, accessKey: config.cloudbaseApiKey });
@@ -46,6 +47,10 @@ function createRuntime({ env = process.env, cloudbase, actorResolver, logger, au
     repository: createAuthRepository({ rdb }),
     passwordHasher: createPasswordHasher(),
     pepper: config.authHashPepper,
+  }));
+  registerLegacyUsersRoute(api.router, legacyUsersService || createLegacyUsersService({
+    repository: createLegacyUsersRepository({ rdb }), passwordHasher: createPasswordHasher(),
+    pepper: config.migrationHashPepper, enabled: config.legacyMigrationEnabled,
   }));
   const runtimeObjectStore = objectStore || createRuntimeCosObjectStore({ config, env });
   registerWorksRoutes(api.router, worksService || createWorksService({ repository: createWorksRepository({ rdb }) }));
