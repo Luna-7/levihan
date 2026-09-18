@@ -97,6 +97,26 @@
       "description": "读取头号玩家排行榜（公开可读，游客无需登录）",
       "installDependency": true,
       "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+    },
+    {
+      "name": "app-api",
+      "type": "HTTP",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 30,
+      "memorySize": 256,
+      "description": "利韩土豆仓模块化 API 内核",
+      "installDependency": true,
+      "envVariables": {
+        "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}",
+        "API_ALLOWED_ORIGINS": "{{env.API_ALLOWED_ORIGINS}}",
+        "SESSION_HASH_PEPPER": "{{env.SESSION_HASH_PEPPER}}",
+        "RATE_LIMIT_PEPPER": "{{env.RATE_LIMIT_PEPPER}}",
+        "SESSION_COOKIE_DOMAIN": "{{env.SESSION_COOKIE_DOMAIN}}",
+        "SESSION_COOKIE_NAME": "{{env.SESSION_COOKIE_NAME}}",
+        "CSRF_COOKIE_NAME": "{{env.CSRF_COOKIE_NAME}}",
+        "API_BODY_LIMIT_BYTES": "{{env.API_BODY_LIMIT_BYTES}}"
+      }
     }
   ]
 }
