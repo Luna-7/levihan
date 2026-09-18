@@ -385,6 +385,11 @@ CREATE TABLE public.rate_limit_buckets (
 CREATE INDEX rate_limit_buckets_expiry_idx ON public.rate_limit_buckets (expires_at);
 CREATE TABLE public.idempotency_records (scope text NOT NULL, actor_scope_hash text NOT NULL, idempotency_key text NOT NULL, request_hash text NOT NULL, status text NOT NULL CHECK (status IN ('processing','completed')), response jsonb, expires_at timestamptz NOT NULL, PRIMARY KEY (scope, actor_scope_hash, idempotency_key));
 CREATE INDEX idempotency_records_expiry_idx ON public.idempotency_records (expires_at);
+CREATE FUNCTION public.begin_idempotent_request(p_scope text,p_actor_scope_hash text,p_idempotency_key text,p_request_hash text) RETURNS TABLE(state text,response jsonb) LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$ DECLARE inserted integer; BEGIN
+  INSERT INTO public.idempotency_records(scope,actor_scope_hash,idempotency_key,request_hash,status,expires_at) VALUES(p_scope,p_actor_scope_hash,p_idempotency_key,p_request_hash,'processing',clock_timestamp()+interval '24 hours') ON CONFLICT(scope,actor_scope_hash,idempotency_key) DO NOTHING;
+  GET DIAGNOSTICS inserted=ROW_COUNT; IF inserted=1 THEN state:='acquired'; response:=NULL; ELSE SELECT CASE WHEN request_hash<>p_request_hash THEN 'request_hash_conflict' WHEN status='completed' THEN 'completed' ELSE 'in_progress' END,response INTO state,response FROM public.idempotency_records WHERE scope=p_scope AND actor_scope_hash=p_actor_scope_hash AND idempotency_key=p_idempotency_key; END IF; RETURN NEXT; END; $$;
+CREATE FUNCTION public.complete_idempotent_request(p_scope text,p_actor_scope_hash text,p_idempotency_key text,p_request_hash text,p_response jsonb) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public AS $$ UPDATE public.idempotency_records SET status='completed',response=p_response WHERE scope=p_scope AND actor_scope_hash=p_actor_scope_hash AND idempotency_key=p_idempotency_key AND request_hash=p_request_hash AND status='processing' RETURNING true $$;
+CREATE FUNCTION public.fail_idempotent_request(p_scope text,p_actor_scope_hash text,p_idempotency_key text,p_request_hash text) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public AS $$ DELETE FROM public.idempotency_records WHERE scope=p_scope AND actor_scope_hash=p_actor_scope_hash AND idempotency_key=p_idempotency_key AND request_hash=p_request_hash AND status='processing' RETURNING true $$;
 
 CREATE FUNCTION public.consume_rate_limit_bucket(
   p_subject_hash text, p_bucket text, p_window_seconds integer, p_limit integer, p_now timestamptz
@@ -793,6 +798,9 @@ REVOKE EXECUTE ON FUNCTION public.set_work_like(uuid, uuid, boolean) FROM PUBLIC
 REVOKE EXECUTE ON FUNCTION public.set_favorite(uuid, uuid, boolean) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.sync_reading_progress(uuid, uuid, bigint, numeric, bigint, timestamptz) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.consume_rate_limit_bucket(text, text, integer, integer, timestamptz) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.begin_idempotent_request(text,text,text,text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.complete_idempotent_request(text,text,text,text,jsonb) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.fail_idempotent_request(text,text,text,text) FROM PUBLIC;
 
 ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_sessions ENABLE ROW LEVEL SECURITY;
