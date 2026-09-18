@@ -23,6 +23,12 @@ GRANT SELECT ON TABLE public.app_users, public.user_sessions,
   public.snapshot_jobs, public.snapshot_versions, public.moderation_actions, public.audit_logs,
   public.site_settings, public.blocked_subjects, public.rate_limit_buckets TO :"backend_role";
 
+-- Question-bank CRUD is for the protected admin API; browser/user database
+-- identities never receive this role or these grants.
+GRANT INSERT ON TABLE public.question_bank TO :"backend_role";
+GRANT UPDATE ON TABLE public.question_bank TO :"backend_role";
+GRANT DELETE ON TABLE public.question_bank TO :"backend_role";
+
 GRANT INSERT ON TABLE public.registration_challenges, public.age_consents, public.works,
   public.work_assets, public.tags, public.work_tags, public.work_versions, public.comments, public.reports,
   public.upload_sessions, public.upload_files, public.submissions, public.submission_assets,
@@ -40,9 +46,11 @@ GRANT DELETE ON TABLE public.work_tags TO :"backend_role";
 -- These are the only routines exposed to the runtime role. Their SECURITY
 -- DEFINER bodies validate ownership/state and run with a fixed search_path.
 GRANT EXECUTE ON FUNCTION public.answer_registration_challenge(uuid, boolean, integer, integer, text, timestamptz),
-  public.consume_registration_ticket(text, text, text, text, timestamptz, text),
+  public.consume_registration_ticket(text, text, text, text, timestamptz, text, text),
+  public.create_login_session(uuid, text, timestamptz, text),
   public.rotate_user_session(text, text, timestamptz, text),
-  public.consume_recovery_code(text, text, text, timestamptz, text),
+  public.consume_recovery_code(text, text, text, text, timestamptz, text),
+  public.promote_app_user(uuid, uuid, boolean, text),
   public.set_work_like(uuid, uuid, boolean), public.set_favorite(uuid, uuid, boolean),
   public.sync_reading_progress(uuid, uuid, bigint, numeric, bigint, timestamptz) TO :"backend_role";
 
@@ -54,6 +62,12 @@ DROP POLICY IF EXISTS backend_v2_runtime_select ON public.user_sessions;
 CREATE POLICY backend_v2_runtime_select ON public.user_sessions FOR SELECT TO :"backend_role" USING (true);
 DROP POLICY IF EXISTS backend_v2_runtime_select ON public.question_bank;
 CREATE POLICY backend_v2_runtime_select ON public.question_bank FOR SELECT TO :"backend_role" USING (true);
+DROP POLICY IF EXISTS backend_v2_runtime_insert ON public.question_bank;
+CREATE POLICY backend_v2_runtime_insert ON public.question_bank FOR INSERT TO :"backend_role" WITH CHECK (true);
+DROP POLICY IF EXISTS backend_v2_runtime_update ON public.question_bank;
+CREATE POLICY backend_v2_runtime_update ON public.question_bank FOR UPDATE TO :"backend_role" USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS backend_v2_runtime_delete ON public.question_bank;
+CREATE POLICY backend_v2_runtime_delete ON public.question_bank FOR DELETE TO :"backend_role" USING (true);
 DROP POLICY IF EXISTS backend_v2_runtime_select ON public.registration_challenges;
 CREATE POLICY backend_v2_runtime_select ON public.registration_challenges FOR SELECT TO :"backend_role" USING (true);
 DROP POLICY IF EXISTS backend_v2_runtime_select ON public.registration_attempts;

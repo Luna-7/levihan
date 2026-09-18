@@ -139,4 +139,65 @@ describe('backend v2 PostgreSQL migration', () => {
     });
     expect(failures).toContain('comment parent/work links must be immutable after insert');
   });
+
+  it('requires controlled login, recovery rotation, and admin promotion workflows', () => {
+    const migration = readFileSync(migrationPath, 'utf8');
+    const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
+    const failures = validateBackendSchema({
+      migration,
+      rollback: readFileSync(rollbackPath, 'utf8'),
+      runtimeAccess,
+    });
+    expect(migration).toContain('CREATE FUNCTION public.create_login_session');
+    expect(migration).toContain('CREATE FUNCTION public.promote_app_user');
+    expect(runtimeAccess).toContain('public.create_login_session(uuid, text, timestamptz, text)');
+    expect(runtimeAccess).toContain('public.promote_app_user(uuid, uuid, boolean, text)');
+    expect(failures).toEqual([]);
+  });
+
+  it('rejects a recovery-code consumer mutation that removes used_at', () => {
+    const migration = readFileSync(migrationPath, 'utf8');
+    const start = migration.indexOf('CREATE FUNCTION public.consume_recovery_code');
+    const end = migration.indexOf('CREATE FUNCTION public.set_work_like', start);
+    const mutated = `${migration.slice(0, start)}${migration.slice(start, end).replace('SET used_at = clock_timestamp()', 'SET used_at = NULL')}${migration.slice(end)}`;
+    const failures = validateBackendSchema({
+      migration: mutated,
+      rollback: readFileSync(rollbackPath, 'utf8'),
+      runtimeAccess: readFileSync(runtimeAccessPath, 'utf8'),
+    });
+    expect(failures).toContain('recovery code must atomically mark used_at');
+  });
+
+  it('requires every v2 table in the PUBLIC table revoke set', () => {
+    const migration = readFileSync(migrationPath, 'utf8').replace('public.moderation_actions, public.audit_logs,', 'public.moderation_actions,');
+    const failures = validateBackendSchema({
+      migration,
+      rollback: readFileSync(rollbackPath, 'utf8'),
+      runtimeAccess: readFileSync(runtimeAccessPath, 'utf8'),
+    });
+    expect(failures).toContain('PUBLIC table permissions must be revoked for audit_logs');
+  });
+
+  it('rejects password and role column grants on app_users', () => {
+    const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8').replace(
+      'GRANT UPDATE (username, status, last_login_at)',
+      'GRANT UPDATE (username, status, last_login_at) ON TABLE public.app_users TO :"backend_role";\nGRANT UPDATE (password_hash, role)',
+    );
+    const failures = validateBackendSchema({
+      migration: readFileSync(migrationPath, 'utf8'),
+      rollback: readFileSync(rollbackPath, 'utf8'),
+      runtimeAccess,
+    });
+    expect(failures).toContain('app_users update columns must not include password_hash or role');
+  });
+
+  it('requires direct question-bank CRUD with matching policies', () => {
+    const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
+    expect(runtimeAccess).toContain('GRANT INSERT ON TABLE public.question_bank');
+    expect(runtimeAccess).toContain('GRANT UPDATE ON TABLE public.question_bank');
+    expect(runtimeAccess).toContain('GRANT DELETE ON TABLE public.question_bank');
+    expect(runtimeAccess).toContain('backend_v2_runtime_insert ON public.question_bank');
+    expect(runtimeAccess).toContain('backend_v2_runtime_update ON public.question_bank');
+    expect(runtimeAccess).toContain('backend_v2_runtime_delete ON public.question_bank');
+  });
 });

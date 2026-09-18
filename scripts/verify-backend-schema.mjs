@@ -19,9 +19,11 @@ export const REQUIRED_FUNCTIONS = {
   backend_v2_enforce_comment_reply_depth: '',
   backend_v2_validate_submission_asset: '',
   answer_registration_challenge: 'uuid, boolean, integer, integer, text, timestamptz',
-  consume_registration_ticket: 'text, text, text, text, timestamptz, text',
+  consume_registration_ticket: 'text, text, text, text, timestamptz, text, text',
+  create_login_session: 'uuid, text, timestamptz, text',
   rotate_user_session: 'text, text, timestamptz, text',
-  consume_recovery_code: 'text, text, text, timestamptz, text',
+  consume_recovery_code: 'text, text, text, text, timestamptz, text',
+  promote_app_user: 'uuid, uuid, boolean, text',
   set_work_like: 'uuid, uuid, boolean',
   set_favorite: 'uuid, uuid, boolean',
   sync_reading_progress: 'uuid, uuid, bigint, numeric, bigint, timestamptz',
@@ -37,7 +39,7 @@ const UPDATED_AT_TABLES = [
 const RUNTIME_TABLE_GRANTS = {
   app_users: ['SELECT', 'UPDATE_COLUMNS'],
   user_sessions: ['SELECT'],
-  question_bank: ['SELECT'],
+  question_bank: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
   registration_challenges: ['SELECT', 'INSERT'],
   registration_attempts: ['SELECT'],
   registration_tickets: ['SELECT'],
@@ -284,6 +286,29 @@ function validateMigration(migration, failures) {
   const ticketConsumer = functionBody(sql, 'consume_registration_ticket');
   addFailure(failures, has(ticketConsumer, /UPDATE\s+public\.registration_tickets[\s\S]*?SET\s+used_at\s*=\s*clock_timestamp\(\)[\s\S]*?used_at\s+IS\s+NULL[\s\S]*?RETURNING/i), 'ticket consumer must atomically claim an unused ticket');
   addFailure(failures, has(ticketConsumer, /INSERT\s+INTO\s+public\.app_users[\s\S]*?INSERT\s+INTO\s+public\.user_sessions/i), 'ticket consumer must create user and session in one routine');
+  addFailure(failures, has(ticketConsumer, /INSERT\s+INTO\s+public\.recovery_codes/i), 'registration ticket must insert an initial recovery code');
+
+  const loginSession = functionBody(sql, 'create_login_session');
+  addFailure(failures, Boolean(loginSession), 'missing controlled routine: create_login_session');
+  addFailure(failures, has(loginSession, /p_expires_at\s+<=\s+clock_timestamp\(\)/i), 'login session must reject expired sessions');
+  addFailure(failures, has(loginSession, /public\.app_users[\s\S]*?status\s*=\s*'active'[\s\S]*?FOR\s+KEY\s+SHARE/i), 'login session must require an active app user');
+  addFailure(failures, has(loginSession, /INSERT\s+INTO\s+public\.user_sessions/i), 'login session must insert a session');
+
+  const recoveryConsumer = functionBody(sql, 'consume_recovery_code');
+  addFailure(failures, has(recoveryConsumer, /UPDATE\s+public\.recovery_codes[\s\S]*?SET\s+used_at\s*=\s*clock_timestamp\(\)[\s\S]*?used_at\s+IS\s+NULL[\s\S]*?RETURNING/i), 'recovery code must atomically mark used_at');
+  addFailure(failures, has(recoveryConsumer, /UPDATE\s+public\.app_users[\s\S]*?password_hash/i), 'recovery code must update the password');
+  addFailure(failures, has(recoveryConsumer, /UPDATE\s+public\.user_sessions[\s\S]*?revoked_at\s*=\s*clock_timestamp/i), 'recovery code must revoke existing sessions');
+  addFailure(failures, has(recoveryConsumer, /INSERT\s+INTO\s+public\.recovery_codes/i), 'recovery code must insert a replacement recovery code');
+  addFailure(failures, has(recoveryConsumer, /INSERT\s+INTO\s+public\.user_sessions/i), 'recovery code must create a replacement session');
+
+  const promoter = functionBody(sql, 'promote_app_user');
+  addFailure(failures, Boolean(promoter), 'missing controlled routine: promote_app_user');
+  addFailure(failures, has(promoter, /NOT\s+p_reauthenticated/i), 'admin promotion must require reauthentication');
+  addFailure(failures, has(promoter, /public\.app_users[\s\S]*?status\s*=\s*'active'[\s\S]*?role\s*=\s*'admin'[\s\S]*?FOR\s+KEY\s+SHARE/i), 'admin promotion must require an active admin actor');
+  addFailure(failures, has(promoter, /p_target_id[\s\S]*?status\s*=\s*'active'[\s\S]*?FOR\s+UPDATE/i), 'admin promotion must require an active target');
+  addFailure(failures, has(promoter, /UPDATE\s+public\.app_users\s+SET\s+role\s*=\s*'admin'/i), 'admin promotion must set the target role to admin');
+  addFailure(failures, !/SET\s+role\s*=\s*'member'|DELETE\s+FROM\s+public\.app_users/i.test(promoter), 'admin promotion must not demote or delete users');
+  addFailure(failures, has(promoter, /INSERT\s+INTO\s+public\.audit_logs[\s\S]*?p_actor_id[\s\S]*?p_request_id/i), 'admin promotion must write an audit log with request id');
 
   addFailure(failures, has(functionBody(sql, 'set_work_like'), /ON\s+CONFLICT\s*\(\s*user_id\s*,\s*work_id\s*\)\s+DO\s+NOTHING/i), 'like upsert must be idempotent');
   addFailure(failures, has(functionBody(sql, 'set_favorite'), /ON\s+CONFLICT\s*\(\s*user_id\s*,\s*work_id\s*\)\s+DO\s+NOTHING/i), 'favorite upsert must be idempotent');
@@ -304,7 +329,10 @@ function validateMigration(migration, failures) {
     const revokeExpression = new RegExp(`REVOKE\\s+EXECUTE\\s+ON\\s+FUNCTION\\s+public\\.${escaped}${signaturePattern(signature)}\\s+FROM\\s+PUBLIC\\s*;`, 'i');
     addFailure(failures, has(sql, revokeExpression), `PUBLIC execute privilege must be revoked for ${name}`);
   }
-  addFailure(failures, /REVOKE\s+ALL\s+ON\s+TABLE\s+[^;]*\s+FROM\s+PUBLIC\s*;/i.test(sql), 'PUBLIC table permissions must be revoked');
+  const tableRevokeList = sql.match(/REVOKE\s+ALL\s+ON\s+TABLE\s+([\s\S]*?)\s+FROM\s+PUBLIC\s*;/i)?.[1] ?? '';
+  for (const table of REQUIRED_TABLES) {
+    addFailure(failures, new RegExp(`(?:^|,)\\s*public\\.${escapeRegExp(table)}\\s*(?:,|$)`, 'i').test(tableRevokeList), `PUBLIC table permissions must be revoked for ${table}`);
+  }
 }
 
 function validateRuntimeAccess(runtimeAccess, failures) {
@@ -328,8 +356,12 @@ function validateRuntimeAccess(runtimeAccess, failures) {
       }
     }
   }
-  addFailure(failures, has(sql, /GRANT\s+UPDATE\s*\(\s*username\s*,\s*status\s*,\s*last_login_at\s*\)\s+ON\s+TABLE\s+public\.app_users\s+TO\s+:"backend_role"/i), 'app_users update must be limited to profile/status/last-login columns');
-  if (has(sql, /GRANT\s+UPDATE\s*\(\s*username\s*,\s*status\s*,\s*last_login_at\s*\)\s+ON\s+TABLE\s+public\.app_users\s+TO\s+:"backend_role"/i)) {
+  const appUsersUpdateGrants = [...sql.matchAll(/GRANT\s+UPDATE\s*\(([^)]*)\)\s+ON\s+TABLE\s+public\.app_users\s+TO\s+:"backend_role"\s*;/gi)];
+  const appUsersUpdateColumns = appUsersUpdateGrants.flatMap((match) => match[1].split(',').map((column) => column.trim().toLowerCase()));
+  const safeAppUserColumns = ['username', 'status', 'last_login_at'];
+  addFailure(failures, appUsersUpdateGrants.length === 1 && appUsersUpdateColumns.length === safeAppUserColumns.length && safeAppUserColumns.every((column) => appUsersUpdateColumns.includes(column)), 'app_users update must be limited to profile/status/last-login columns');
+  addFailure(failures, !appUsersUpdateColumns.some((column) => ['password_hash', 'role'].includes(column)), 'app_users update columns must not include password_hash or role');
+  if (appUsersUpdateGrants.length === 1 && appUsersUpdateColumns.length === safeAppUserColumns.length && safeAppUserColumns.every((column) => appUsersUpdateColumns.includes(column))) {
     tableGrants.get('app_users').add('UPDATE');
   }
 

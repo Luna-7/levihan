@@ -509,6 +509,7 @@ CREATE FUNCTION public.consume_registration_ticket(
   p_password_hash text,
   p_session_token_hash text,
   p_session_expires_at timestamptz,
+  p_recovery_code_hash text,
   p_ip_hash text DEFAULT NULL
 ) RETURNS TABLE (user_id uuid, session_id uuid)
 LANGUAGE plpgsql
@@ -537,11 +538,42 @@ BEGIN
   INSERT INTO public.app_users (username, password_hash)
   VALUES (p_username, p_password_hash)
   RETURNING id INTO v_user_id;
+  INSERT INTO public.recovery_codes (user_id, code_hash)
+  VALUES (v_user_id, p_recovery_code_hash);
   UPDATE public.registration_challenges SET status = 'consumed' WHERE id = v_challenge_id;
   INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash)
   VALUES (v_user_id, p_session_token_hash, p_session_expires_at, p_ip_hash)
   RETURNING id INTO v_session_id;
   RETURN QUERY SELECT v_user_id, v_session_id;
+END;
+$$;
+
+CREATE FUNCTION public.create_login_session(
+  p_user_id uuid,
+  p_token_hash text,
+  p_expires_at timestamptz,
+  p_ip_hash text DEFAULT NULL
+) RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_session_id uuid;
+BEGIN
+  IF p_expires_at <= clock_timestamp() THEN
+    RAISE EXCEPTION 'login session expiry must be in the future' USING ERRCODE = '22023';
+  END IF;
+  PERFORM 1 FROM public.app_users
+   WHERE id = p_user_id AND status = 'active'
+   FOR KEY SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'login user is missing or inactive' USING ERRCODE = '23514';
+  END IF;
+  INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash)
+  VALUES (p_user_id, p_token_hash, p_expires_at, p_ip_hash)
+  RETURNING id INTO v_session_id;
+  RETURN v_session_id;
 END;
 $$;
 
@@ -578,6 +610,7 @@ $$;
 CREATE FUNCTION public.consume_recovery_code(
   p_code_hash text,
   p_new_password_hash text,
+  p_new_recovery_code_hash text,
   p_session_token_hash text,
   p_session_expires_at timestamptz,
   p_ip_hash text DEFAULT NULL
@@ -600,10 +633,49 @@ BEGIN
   UPDATE public.app_users SET password_hash = p_new_password_hash WHERE id = v_user_id;
   UPDATE public.user_sessions SET revoked_at = clock_timestamp()
    WHERE user_id = v_user_id AND revoked_at IS NULL;
+  INSERT INTO public.recovery_codes (user_id, code_hash)
+  VALUES (v_user_id, p_new_recovery_code_hash);
   INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash)
   VALUES (v_user_id, p_session_token_hash, p_session_expires_at, p_ip_hash)
   RETURNING id INTO v_session_id;
   RETURN QUERY SELECT v_user_id, v_session_id;
+END;
+$$;
+
+CREATE FUNCTION public.promote_app_user(
+  p_actor_id uuid,
+  p_target_id uuid,
+  p_reauthenticated boolean,
+  p_request_id text
+) RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_actor public.app_users%ROWTYPE;
+  v_target public.app_users%ROWTYPE;
+BEGIN
+  IF NOT p_reauthenticated OR length(btrim(p_request_id)) = 0 THEN
+    RAISE EXCEPTION 'admin promotion requires reauthentication and request id' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_actor FROM public.app_users
+   WHERE id = p_actor_id AND status = 'active' AND role = 'admin'
+   FOR KEY SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'promotion actor is not an active admin' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO v_target FROM public.app_users
+   WHERE id = p_target_id AND status = 'active'
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'promotion target is missing or inactive' USING ERRCODE = '23514';
+  END IF;
+  UPDATE public.app_users SET role = 'admin' WHERE id = p_target_id;
+  INSERT INTO public.audit_logs (actor_id, action, target_type, target_id, summary, request_id)
+  VALUES (p_actor_id, 'promote_admin', 'user', p_target_id,
+          jsonb_build_object('role', 'admin'), p_request_id);
+  RETURN true;
 END;
 $$;
 
@@ -692,9 +764,11 @@ REVOKE EXECUTE ON FUNCTION public.backend_v2_set_updated_at() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.backend_v2_enforce_comment_reply_depth() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.backend_v2_validate_submission_asset() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.answer_registration_challenge(uuid, boolean, integer, integer, text, timestamptz) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.consume_registration_ticket(text, text, text, text, timestamptz, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.consume_registration_ticket(text, text, text, text, timestamptz, text, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.create_login_session(uuid, text, timestamptz, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.rotate_user_session(text, text, timestamptz, text) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.consume_recovery_code(text, text, text, timestamptz, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.consume_recovery_code(text, text, text, text, timestamptz, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.promote_app_user(uuid, uuid, boolean, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.set_work_like(uuid, uuid, boolean) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.set_favorite(uuid, uuid, boolean) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.sync_reading_progress(uuid, uuid, bigint, numeric, bigint, timestamptz) FROM PUBLIC;

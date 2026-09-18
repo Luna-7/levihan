@@ -19,10 +19,15 @@ authorization boundary: the API must authenticate the caller and enforce
 user-level ownership before issuing a query. The runtime script grants
 read-only access to session/security state and append-only access to versions,
 snapshots, moderation actions, and audit logs; state-changing security writes
-(session rotation, registration/recovery consumption, likes, favorites, and
-reading progress) are exposed only through the explicitly granted `SECURITY
-DEFINER` routines. The migration itself must be executed by its owner (or an
-equivalent deployment administrator) before the runtime grants are installed.
+(login-session creation, session rotation, registration/recovery consumption,
+likes, favorites, and reading progress) are exposed only through the explicitly
+granted `SECURITY DEFINER` routines. `promote_app_user` is likewise the only
+admin-promotion path: it requires an active admin actor, reauthentication, an
+active target, and an audit request id; there is no database demotion or user
+deletion workflow. Question-bank CRUD is available only to this protected
+service role, with the API enforcing the admin guard. The migration itself must
+be executed by its owner (or an equivalent deployment administrator) before the
+runtime grants are installed.
 
 ## Production runbook
 

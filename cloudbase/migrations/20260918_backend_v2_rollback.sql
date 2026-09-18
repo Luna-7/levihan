@@ -26,9 +26,11 @@ DROP TRIGGER IF EXISTS rate_limit_buckets_set_updated_at ON public.rate_limit_bu
 DROP FUNCTION IF EXISTS public.sync_reading_progress(uuid, uuid, bigint, numeric, bigint, timestamptz);
 DROP FUNCTION IF EXISTS public.set_favorite(uuid, uuid, boolean);
 DROP FUNCTION IF EXISTS public.set_work_like(uuid, uuid, boolean);
-DROP FUNCTION IF EXISTS public.consume_recovery_code(text, text, text, timestamptz, text);
+DROP FUNCTION IF EXISTS public.promote_app_user(uuid, uuid, boolean, text);
+DROP FUNCTION IF EXISTS public.consume_recovery_code(text, text, text, text, timestamptz, text);
+DROP FUNCTION IF EXISTS public.create_login_session(uuid, text, timestamptz, text);
 DROP FUNCTION IF EXISTS public.rotate_user_session(text, text, timestamptz, text);
-DROP FUNCTION IF EXISTS public.consume_registration_ticket(text, text, text, text, timestamptz, text);
+DROP FUNCTION IF EXISTS public.consume_registration_ticket(text, text, text, text, timestamptz, text, text);
 DROP FUNCTION IF EXISTS public.answer_registration_challenge(uuid, boolean, integer, integer, text, timestamptz);
 DROP FUNCTION IF EXISTS public.backend_v2_validate_submission_asset();
 DROP FUNCTION IF EXISTS public.backend_v2_enforce_comment_reply_depth();
