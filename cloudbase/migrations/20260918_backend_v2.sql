@@ -745,7 +745,7 @@ BEGIN
    WHERE login_user.id = p_user_id
      AND login_user.status = 'active'
      AND login_user.recovery_confirmed_at IS NOT NULL
-   FOR KEY SHARE;
+   FOR NO KEY UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'login user is unavailable' USING ERRCODE = '23514';
   END IF;

@@ -405,6 +405,19 @@ describe('backend v2 PostgreSQL migration', () => {
     expect(rollback).toContain('DROP FUNCTION IF EXISTS public.validate_registration_ticket(text);');
   });
 
+  it('serializes login with recovery so either recovery blocks the old login or revokes its completed session', () => {
+    const migration = readFileSync(migrationPath, 'utf8');
+    const loginStart = migration.indexOf('CREATE FUNCTION public.create_login_session');
+    const loginEnd = migration.indexOf('CREATE FUNCTION public.rotate_user_session', loginStart);
+    const login = migration.slice(loginStart, loginEnd);
+    const recoveryStart = migration.indexOf('CREATE FUNCTION public.consume_recovery_code');
+    const recoveryEnd = migration.indexOf('CREATE FUNCTION public.confirm_recovery_session', recoveryStart);
+    const recovery = migration.slice(recoveryStart, recoveryEnd);
+
+    expect(login).toMatch(/PERFORM 1 FROM public\.app_users AS login_user[\s\S]*?FOR NO KEY UPDATE;[\s\S]*?INSERT INTO public\.user_sessions/);
+    expect(recovery).toMatch(/UPDATE public\.app_users[\s\S]*?recovery_confirmed_at = NULL[\s\S]*?UPDATE public\.user_sessions SET revoked_at = clock_timestamp\(\)/);
+  });
+
   it('detects account-confirmation and ticket-preflight security mutations', () => {
     const migration = readFileSync(migrationPath, 'utf8');
     const rollback = readFileSync(rollbackPath, 'utf8');
@@ -417,6 +430,7 @@ describe('backend v2 PostgreSQL migration', () => {
     const mutations = [
       ['account resolver gate', (sql: string) => sql.replace('app_user.recovery_confirmed_at IS NOT NULL', 'true')],
       ['login account gate', (sql: string) => sql.replace('login_user.recovery_confirmed_at IS NOT NULL', 'true')],
+      ['login/recovery row-lock serialization', (sql: string) => mutateRoutine(sql, 'create_login_session', 'rotate_user_session', (routine) => routine.replace('FOR NO KEY UPDATE', 'FOR KEY SHARE'))],
       ['recovery account reset', (sql: string) => sql.replace('recovery_confirmed_at = NULL', 'recovery_confirmed_at = clock_timestamp()')],
       ['confirmation account update', (sql: string) => mutateRoutine(sql, 'confirm_recovery_session', 'promote_app_user', (routine) => routine.replace('UPDATE public.app_users', 'UPDATE public.missing_app_users'))],
       ['preflight unused ticket', (sql: string) => mutateRoutine(sql, 'validate_registration_ticket', 'consume_registration_ticket', (routine) => routine.replace('ticket.used_at IS NULL', 'true'))],

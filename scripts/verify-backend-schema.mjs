@@ -331,7 +331,7 @@ function validateMigration(migration, failures) {
   const loginSession = functionBody(sql, 'create_login_session');
   addFailure(failures, Boolean(loginSession), 'missing controlled routine: create_login_session');
   addFailure(failures, has(loginSession, /p_expires_at\s+<=\s+clock_timestamp\(\)/i), 'login session must reject expired sessions');
-  addFailure(failures, has(loginSession, /public\.app_users[\s\S]*?status\s*=\s*'active'[\s\S]*?FOR\s+KEY\s+SHARE/i), 'login session must require an active app user');
+  addFailure(failures, has(loginSession, /public\.app_users[\s\S]*?status\s*=\s*'active'[\s\S]*?FOR\s+NO\s+KEY\s+UPDATE/i), 'login session must lock the active app user against concurrent recovery');
   addFailure(failures, has(loginSession, /login_user\.recovery_confirmed_at\s+IS\s+NOT\s+NULL/i), 'login session must reject recovery-unconfirmed accounts');
   addFailure(failures, has(loginSession, /INSERT\s+INTO\s+public\.user_sessions/i), 'login session must insert a session');
   addFailure(failures, has(loginSession, /p_current_token_hash[\s\S]*?UPDATE\s+public\.user_sessions[\s\S]*?token_hash\s*=\s*p_current_token_hash[\s\S]*?revoked_at\s+IS\s+NULL/i), 'login session must revoke the optional current browser session');
