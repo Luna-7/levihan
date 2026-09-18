@@ -345,6 +345,26 @@ function validateRuntimeAccess(runtimeAccess, failures) {
   addFailure(failures, !/GRANT\s+SELECT\s*,\s*INSERT\s*,\s*UPDATE\s*,\s*DELETE\s+ON\s+TABLE/i.test(sql), 'runtime role grants must be least privilege');
   addFailure(failures, !/\bFOR\s+ALL\b/i.test(sql), 'runtime RLS policies must not use FOR ALL');
 
+  const appUsersTableGrantExpression = /GRANT\s+([^;]*?)\s+ON\s+TABLE\s+([^;]*?)\s+TO\s+:"backend_role"\s*;/gi;
+  const prohibitedAppUsersTablePrivileges = ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'];
+  for (const match of sql.matchAll(appUsersTableGrantExpression)) {
+    const includesAppUsers = match[2].split(',').some((tableReference) => tableReference.trim().toLowerCase() === 'public.app_users');
+    if (!includesAppUsers) continue;
+
+    const privilegeList = match[1].toUpperCase();
+    if (/\bALL(?:\s+PRIVILEGES)?\b/.test(privilegeList)) {
+      failures.push('app_users must not receive table-level ALL privileges');
+    }
+    for (const privilege of prohibitedAppUsersTablePrivileges) {
+      const expression = privilege === 'UPDATE'
+        ? /\bUPDATE\b(?!\s*\()/
+        : new RegExp(`\\b${privilege}\\b`);
+      if (expression.test(privilegeList)) {
+        failures.push(`app_users must not receive table-level ${privilege} privileges`);
+      }
+    }
+  }
+
   const tableGrants = new Map(REQUIRED_TABLES.map((table) => [table, new Set()]));
   const tableGrantExpression = /GRANT\s+((?:SELECT|INSERT|UPDATE|DELETE)(?:\s*,\s*(?:SELECT|INSERT|UPDATE|DELETE))*)\s+ON\s+TABLE\s+([\s\S]*?)\s+TO\s+:"backend_role"\s*;/gi;
   for (const match of sql.matchAll(tableGrantExpression)) {

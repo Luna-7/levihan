@@ -191,6 +191,26 @@ describe('backend v2 PostgreSQL migration', () => {
     expect(failures).toContain('app_users update columns must not include password_hash or role');
   });
 
+  it('rejects table-level UPDATE grants on app_users', () => {
+    const failures = validateBackendSchema({
+      migration: readFileSync(migrationPath, 'utf8'),
+      rollback: readFileSync(rollbackPath, 'utf8'),
+      runtimeAccess: `${readFileSync(runtimeAccessPath, 'utf8')}\nGRANT UPDATE ON TABLE public.app_users TO :"backend_role";`,
+    });
+    expect(failures).toContain('app_users must not receive table-level UPDATE privileges');
+  });
+
+  it('rejects ALL and ALL PRIVILEGES grants on app_users', () => {
+    for (const privilege of ['ALL', 'ALL PRIVILEGES']) {
+      const failures = validateBackendSchema({
+        migration: readFileSync(migrationPath, 'utf8'),
+        rollback: readFileSync(rollbackPath, 'utf8'),
+        runtimeAccess: `${readFileSync(runtimeAccessPath, 'utf8')}\nGRANT ${privilege} ON TABLE public.app_users TO :"backend_role";`,
+      });
+      expect(failures, privilege).toContain('app_users must not receive table-level ALL privileges');
+    }
+  });
+
   it('requires direct question-bank CRUD with matching policies', () => {
     const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
     expect(runtimeAccess).toContain('GRANT INSERT ON TABLE public.question_bank');
