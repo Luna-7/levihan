@@ -191,23 +191,42 @@ describe('backend v2 PostgreSQL migration', () => {
     expect(failures).toContain('app_users update columns must not include password_hash or role');
   });
 
-  it('rejects table-level UPDATE grants on app_users', () => {
-    const failures = validateBackendSchema({
-      migration: readFileSync(migrationPath, 'utf8'),
-      rollback: readFileSync(rollbackPath, 'utf8'),
-      runtimeAccess: `${readFileSync(runtimeAccessPath, 'utf8')}\nGRANT UPDATE ON TABLE public.app_users TO :"backend_role";`,
-    });
-    expect(failures).toContain('app_users must not receive table-level UPDATE privileges');
-  });
+  it('rejects every prohibited table-level app_users grant form', () => {
+    const cases = [
+      ['UPDATE', 'ON TABLE', 'public.app_users', 'UPDATE'],
+      ['INSERT', 'ON TABLE', 'public.app_users', 'INSERT'],
+      ['DELETE', 'ON TABLE', 'public.app_users', 'DELETE'],
+      ['TRUNCATE', 'ON TABLE', 'public.app_users', 'TRUNCATE'],
+      ['REFERENCES', 'ON TABLE', 'public.app_users', 'REFERENCES'],
+      ['TRIGGER', 'ON TABLE', 'public.app_users', 'TRIGGER'],
+      ['ALL', 'ON TABLE', 'public.app_users', 'ALL'],
+      ['ALL PRIVILEGES', 'ON TABLE', 'public.app_users', 'ALL'],
+      ['UPDATE', 'ON', 'public.app_users', 'UPDATE'],
+      ['INSERT', 'ON TABLE', 'public."app_users"', 'INSERT'],
+      ['TRIGGER', 'ON TABLE', '"public"."app_users"', 'TRIGGER'],
+    ] as const;
 
-  it('rejects ALL and ALL PRIVILEGES grants on app_users', () => {
-    for (const privilege of ['ALL', 'ALL PRIVILEGES']) {
+    for (const [privilege, onClause, table, expectedPrivilege] of cases) {
       const failures = validateBackendSchema({
         migration: readFileSync(migrationPath, 'utf8'),
         rollback: readFileSync(rollbackPath, 'utf8'),
-        runtimeAccess: `${readFileSync(runtimeAccessPath, 'utf8')}\nGRANT ${privilege} ON TABLE public.app_users TO :"backend_role";`,
+        runtimeAccess: `${readFileSync(runtimeAccessPath, 'utf8')}\nGRANT ${privilege} ${onClause} ${table} TO :"backend_role";`,
       });
-      expect(failures, privilege).toContain('app_users must not receive table-level ALL privileges');
+      expect(failures, `${privilege} ${onClause} ${table}`).toContain(`app_users must not receive table-level ${expectedPrivilege} privileges`);
+    }
+  });
+
+  it('allows app_users SELECT and exact column UPDATE grants with or without TABLE', () => {
+    const migration = readFileSync(migrationPath, 'utf8');
+    const rollback = readFileSync(rollbackPath, 'utf8');
+    const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
+    const variants = [
+      runtimeAccess,
+      runtimeAccess.replace('GRANT SELECT ON TABLE public.app_users, public.user_sessions,', 'GRANT SELECT ON public.app_users, public.user_sessions,'),
+      runtimeAccess.replace('GRANT UPDATE (username, status, last_login_at) ON TABLE public.app_users', 'GRANT UPDATE (username, status, last_login_at) ON public.app_users'),
+    ];
+    for (const variant of variants) {
+      expect(validateBackendSchema({ migration, rollback, runtimeAccess: variant })).toEqual([]);
     }
   });
 

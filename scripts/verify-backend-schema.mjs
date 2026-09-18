@@ -74,6 +74,22 @@ const RUNTIME_FUNCTIONS = Object.fromEntries(
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const SQL_IDENTIFIER = '(?:"(?:""|[^"])*"|[A-Za-z_][A-Za-z0-9_$]*)';
+const qualifiedTableReferenceExpression = new RegExp(`^\\s*(${SQL_IDENTIFIER})\\s*\\.\\s*(${SQL_IDENTIFIER})\\s*$`);
+
+function normalizeIdentifier(identifier) {
+  const trimmed = identifier.trim();
+  return trimmed.startsWith('"')
+    ? trimmed.slice(1, -1).replaceAll('""', '"')
+    : trimmed.toLowerCase();
+}
+
+function publicTableName(tableReference) {
+  const match = tableReference.match(qualifiedTableReferenceExpression);
+  if (!match || normalizeIdentifier(match[1]) !== 'public') return null;
+  return normalizeIdentifier(match[2]);
+}
+
 /** Remove SQL comments without changing quoted strings or dollar-quoted bodies. */
 export function stripSqlComments(source) {
   let result = '';
@@ -345,10 +361,10 @@ function validateRuntimeAccess(runtimeAccess, failures) {
   addFailure(failures, !/GRANT\s+SELECT\s*,\s*INSERT\s*,\s*UPDATE\s*,\s*DELETE\s+ON\s+TABLE/i.test(sql), 'runtime role grants must be least privilege');
   addFailure(failures, !/\bFOR\s+ALL\b/i.test(sql), 'runtime RLS policies must not use FOR ALL');
 
-  const appUsersTableGrantExpression = /GRANT\s+([^;]*?)\s+ON\s+TABLE\s+([^;]*?)\s+TO\s+:"backend_role"\s*;/gi;
+  const appUsersTableGrantExpression = /GRANT\s+([^;]*?)\s+ON(?:\s+TABLE)?\s+([^;]*?)\s+TO\s+:"backend_role"\s*;/gi;
   const prohibitedAppUsersTablePrivileges = ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'];
   for (const match of sql.matchAll(appUsersTableGrantExpression)) {
-    const includesAppUsers = match[2].split(',').some((tableReference) => tableReference.trim().toLowerCase() === 'public.app_users');
+    const includesAppUsers = match[2].split(',').some((tableReference) => publicTableName(tableReference) === 'app_users');
     if (!includesAppUsers) continue;
 
     const privilegeList = match[1].toUpperCase();
@@ -366,17 +382,18 @@ function validateRuntimeAccess(runtimeAccess, failures) {
   }
 
   const tableGrants = new Map(REQUIRED_TABLES.map((table) => [table, new Set()]));
-  const tableGrantExpression = /GRANT\s+((?:SELECT|INSERT|UPDATE|DELETE)(?:\s*,\s*(?:SELECT|INSERT|UPDATE|DELETE))*)\s+ON\s+TABLE\s+([\s\S]*?)\s+TO\s+:"backend_role"\s*;/gi;
+  const tableGrantExpression = /GRANT\s+((?:SELECT|INSERT|UPDATE|DELETE)(?:\s*,\s*(?:SELECT|INSERT|UPDATE|DELETE))*)\s+ON(?:\s+TABLE)?\s+([^;]*?)\s+TO\s+:"backend_role"\s*;/gi;
   for (const match of sql.matchAll(tableGrantExpression)) {
     const operations = match[1].toUpperCase().split(/\s*,\s*/);
     for (const tableReference of match[2].split(',')) {
-      const table = tableReference.trim().match(/^public\.([a-z_][a-z0-9_]*)$/i)?.[1];
+      const table = publicTableName(tableReference);
       if (tableGrants.has(table)) {
         for (const operation of operations) tableGrants.get(table).add(operation);
       }
     }
   }
-  const appUsersUpdateGrants = [...sql.matchAll(/GRANT\s+UPDATE\s*\(([^)]*)\)\s+ON\s+TABLE\s+public\.app_users\s+TO\s+:"backend_role"\s*;/gi)];
+  const appUsersUpdateGrants = [...sql.matchAll(/GRANT\s+UPDATE\s*\(([^)]*)\)\s+ON(?:\s+TABLE)?\s+([^;]*?)\s+TO\s+:"backend_role"\s*;/gi)]
+    .filter((match) => publicTableName(match[2]) === 'app_users');
   const appUsersUpdateColumns = appUsersUpdateGrants.flatMap((match) => match[1].split(',').map((column) => column.trim().toLowerCase()));
   const safeAppUserColumns = ['username', 'status', 'last_login_at'];
   addFailure(failures, appUsersUpdateGrants.length === 1 && appUsersUpdateColumns.length === safeAppUserColumns.length && safeAppUserColumns.every((column) => appUsersUpdateColumns.includes(column)), 'app_users update must be limited to profile/status/last-login columns');
