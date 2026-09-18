@@ -74,6 +74,21 @@ export const RecoveryCodeResponseSchema = z.object({
   recoveryCode: z.string().regex(/^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}$/),
 }).strict();
 
+export const RecoveryConfirmationInputSchema = z.object({
+  recoveryCode: z.string().regex(/^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}$/),
+}).strict();
+export const RecoveryConfirmationResponseSchema = z.object({
+  confirmed: z.literal(true),
+  user: AuthenticatedUserSchema,
+}).strict();
+
+export const MeResponseSchema = z.object({
+  user: AuthenticatedUserSchema.pick({ id: true, username: true }),
+  role: AuthenticatedUserSchema.shape.role,
+  capabilities: AuthenticatedUserSchema.shape.capabilities,
+  ageConsent: AuthenticatedUserSchema.shape.ageConsent,
+}).strict();
+
 export const WorkSummaryInputSchema = z.object({
   title: z.string().trim().min(1).max(120),
   summary: z.string().trim().min(1).max(2_000),

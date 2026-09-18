@@ -99,3 +99,11 @@ CloudBase 数据库服务密钥；云函数只从环境变量 `CLOUDBASE_APIKEY`
 `CLOUDBASE_APIKEY` 仅用于部署且被 Git 忽略。缺少它时，收件箱明确返回 503。
 小说投稿第一期支持直接粘贴正文或单份 1MB 以内的 UTF-8 `.txt` / `.md`；
 PDF、DOCX、EPUB 与图片附件的二进制待审上传需要后续单独审核区。
+
+## app-api CSRF cookie configuration
+
+The browser build's `VITE_CSRF_COOKIE_NAME` must exactly match the deployed
+`app-api` function's `CSRF_COOKIE_NAME`. Both default to `lv_csrf`; changing
+only one side makes protected writes such as logout and recovery confirmation
+fail CSRF validation. The root `jsdom` dependency is test-only and is not
+packaged into the CloudBase function.

@@ -16,12 +16,15 @@ import type {
   ReadingProgressSchema,
   RecoveryCodeInputSchema,
   RecoveryCodeResponseSchema,
+  RecoveryConfirmationInputSchema,
+  RecoveryConfirmationResponseSchema,
   RegistrationChallengeAnswerInputSchema,
   RegistrationChallengeAnswerResponseSchema,
   RegistrationChallengeRequestSchema,
   RegistrationChallengeResponseSchema,
   RegistrationInputSchema,
   RegistrationResponseSchema,
+  MeResponseSchema,
   SubmissionInputSchema,
   SubmissionResponseSchema,
   WorkSummaryInputSchema,
@@ -42,6 +45,9 @@ export type LoginInput = z.infer<typeof LoginInputSchema>;
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 export type RecoveryCodeInput = z.infer<typeof RecoveryCodeInputSchema>;
 export type RecoveryCodeResponse = z.infer<typeof RecoveryCodeResponseSchema>;
+export type RecoveryConfirmationInput = z.infer<typeof RecoveryConfirmationInputSchema>;
+export type RecoveryConfirmationResponse = z.infer<typeof RecoveryConfirmationResponseSchema>;
+export type MeResponse = z.infer<typeof MeResponseSchema>;
 export type WorkSummaryInput = z.infer<typeof WorkSummaryInputSchema>;
 export type WorkSummary = z.infer<typeof WorkSummarySchema>;
 export type CommentInput = z.infer<typeof CommentInputSchema>;

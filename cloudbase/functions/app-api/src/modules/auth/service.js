@@ -62,7 +62,7 @@ function createAuthService({
 } = {}) {
   if (!repository || !passwordHasher) {
     const unavailable = async () => { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Authentication service unavailable'); };
-    return { createChallenge: unavailable, answerChallenge: unavailable, register: unavailable, login: unavailable, logout: unavailable, recover: unavailable, me: unavailable };
+    return { createChallenge: unavailable, answerChallenge: unavailable, register: unavailable, login: unavailable, logout: unavailable, recover: unavailable, confirmRecovery: unavailable, me: unavailable };
   }
   const plus = (milliseconds) => new Date(now().getTime() + milliseconds);
   const hash = (domain, value) => domainHash(pepper, domain, value);
@@ -84,7 +84,8 @@ function createAuthService({
         throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Registration challenge unavailable');
       }
       const expiresAt = plus(5 * 60 * 1000);
-      const created = await repository.createChallenge({ questionIds: [question.id], expiresAt: expiresAt.toISOString(), maxAttempts: 3, ipHash: hash('ip', requireIp(ctx)) });
+      if (!Number.isInteger(question.version) || question.version < 1) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Registration challenge unavailable');
+      const created = await repository.createChallenge({ questionIds: [question.id], questionVersions: [question.version], expiresAt: expiresAt.toISOString(), maxAttempts: 3, ipHash: hash('ip', requireIp(ctx)) });
       return { challengeId: created.id, prompt: question.prompt, options: question.options, expiresAt: expiresAt.toISOString() };
     },
 
@@ -138,7 +139,14 @@ function createAuthService({
       if (!accepted) throw new ApiError(401, 'AUTH_REQUIRED', 'Invalid username or password');
       const secrets = sessionSecrets();
       const sessionExpiresAt = plus(30 * 24 * 60 * 60 * 1000);
-      await repository.createLoginSession({ userId: profile.id, sessionTokenHash: hash('session', secrets.sessionToken), sessionExpiresAt: sessionExpiresAt.toISOString(), ipHash: hash('ip', requireIp(ctx)) });
+      const currentToken = ctx.cookies && ctx.cookies[ctx.config.sessionCookieName];
+      await repository.createLoginSession({
+        userId: profile.id,
+        sessionTokenHash: hash('session', secrets.sessionToken),
+        currentSessionTokenHash: OPAQUE.test(currentToken || '') ? hash('session', currentToken) : null,
+        sessionExpiresAt: sessionExpiresAt.toISOString(),
+        ipHash: hash('ip', requireIp(ctx)),
+      });
       const current = await repository.getUserProfile(profile.id);
       setSessionCookies(ctx, secrets.sessionToken, secrets.csrfToken);
       return { user: safeUser(current), session: { expiresAt: sessionExpiresAt.toISOString() } };
@@ -169,6 +177,20 @@ function createAuthService({
       const profile = await repository.getUserProfile(result.userId);
       setSessionCookies(ctx, secrets.sessionToken, secrets.csrfToken);
       return { user: safeUser(profile), session: { expiresAt: sessionExpiresAt.toISOString() }, recoveryCode: replacement };
+    },
+
+    async confirmRecovery(ctx) {
+      const body = strictBody(ctx.body, ['recoveryCode']);
+      if (!RECOVERY.test(body.recoveryCode || '')) throw new ApiError(400, 'VALIDATION_FAILED', 'Recovery confirmation could not be completed');
+      const token = ctx.cookies && ctx.cookies[ctx.config.sessionCookieName];
+      if (!OPAQUE.test(token || '')) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication required');
+      const result = await repository.confirmRecoveryCode({
+        sessionTokenHash: hash('session', token),
+        recoveryCodeHash: hash('recovery-code', body.recoveryCode),
+      });
+      const profile = result.profile;
+      if (!profile || profile.status !== 'active') throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication required');
+      return { confirmed: true, user: safeUser(profile) };
     },
 
     async me(ctx) {

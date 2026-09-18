@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   login: vi.fn(),
   logout: vi.fn(),
   recover: vi.fn(),
+  confirmRecoveryCode: vi.fn(),
   getMe: vi.fn(),
 }));
 
@@ -18,7 +19,7 @@ vi.mock('./api', () => api);
 
 import { UserEntry } from '../../components/UserEntry';
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.resetAllMocks(); sessionStorage.clear(); });
 
 function prepareChallenge() {
   api.getMe.mockRejectedValue(new Error('not authenticated'));
@@ -53,6 +54,11 @@ describe('quiz-only user entry', () => {
 
   it('requires explicit recovery-code saved confirmation before entering the account UI', async () => {
     prepareChallenge();
+    api.confirmRecoveryCode.mockResolvedValue({
+      confirmed: true,
+      user: { id: '550e8400-e29b-41d4-a716-446655440010', username: 'reader_01', role: 'member', capabilities: ['comment', 'favorite', 'submit'], ageConsent: null },
+    });
+    api.getMe.mockReset().mockRejectedValue(new Error('not authenticated'));
     api.register.mockResolvedValue({ userId: '550e8400-e29b-41d4-a716-446655440010', username: 'reader_01', recoveryCode: 'ABCD-EFGH-JKLM-NPQR' });
     render(<UserEntry onShowToast={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '打开用户入口' }));
@@ -69,6 +75,34 @@ describe('quiz-only user entry', () => {
     fireEvent.click(screen.getByLabelText('我已安全保存恢复码'));
     expect((enter as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(enter);
+    await waitFor(() => expect(api.confirmRecoveryCode).toHaveBeenCalledWith('ABCD-EFGH-JKLM-NPQR'));
     await waitFor(() => expect(screen.getByRole('button', { name: '打开用户入口' }).textContent).toContain('reader_01'));
+    expect(sessionStorage.getItem('levihan.pendingRecoveryCode')).toBeNull();
+  });
+
+  it('cannot close the recovery-code gate before the server confirms it', async () => {
+    prepareChallenge();
+    api.register.mockResolvedValue({ userId: '550e8400-e29b-41d4-a716-446655440010', username: 'reader_01', recoveryCode: 'ABCD-EFGH-JKLM-NPQR' });
+    render(<UserEntry onShowToast={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '打开用户入口' }));
+    fireEvent.click(screen.getByRole('button', { name: '注册账号' }));
+    await screen.findByText('利韩土豆仓的入口题？');
+    fireEvent.click(screen.getByLabelText('夏天'));
+    fireEvent.click(screen.getByRole('button', { name: '提交答案' }));
+    fireEvent.change(await screen.findByLabelText('用户名'), { target: { value: 'reader_01' } });
+    fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'a-secure-password' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建账号' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(screen.queryByRole('button', { name: '×' })).toBeNull();
+    fireEvent.mouseDown(dialog.parentElement as HTMLElement);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('restores an unconfirmed one-time recovery code after refresh', async () => {
+    sessionStorage.setItem('levihan.pendingRecoveryCode', 'ABCD-EFGH-JKLM-NPQR');
+    api.getMe.mockRejectedValue(new Error('unconfirmed session'));
+    render(<UserEntry onShowToast={vi.fn()} />);
+    expect(await screen.findByText('ABCD-EFGH-JKLM-NPQR')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 });

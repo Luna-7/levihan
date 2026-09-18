@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { answerRegistrationChallenge, login, logout } from './api';
+import { answerRegistrationChallenge, confirmRecoveryCode, getMe, login, logout } from './api';
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+  document.cookie = 'lv_csrf=; Max-Age=0; Path=/';
+  document.cookie = 'custom_csrf=; Max-Age=0; Path=/';
+});
 
 describe('auth API client', () => {
   it('uses the formal answer path with credentialed requests', async () => {
@@ -32,5 +37,27 @@ describe('auth API client', () => {
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.credentials).toBe('include');
     expect(new Headers(init.headers).get('x-csrf-token')).toBe('C'.repeat(43));
+  });
+
+  it('uses the configured CSRF cookie name for recovery confirmation', async () => {
+    vi.stubEnv('VITE_CSRF_COOKIE_NAME', 'custom_csrf');
+    document.cookie = `custom_csrf=${'D'.repeat(43)}; Path=/`;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      confirmed: true,
+      user: { id: '550e8400-e29b-41d4-a716-446655440000', username: 'reader_01', role: 'member', capabilities: ['comment'], ageConsent: null },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    await confirmRecoveryCode('ABCD-EFGH-JKLM-NPQR');
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/v1/auth/recovery-confirm');
+    expect(init?.credentials).toBe('include');
+    expect(new Headers(init?.headers).get('x-csrf-token')).toBe('D'.repeat(43));
+  });
+
+  it('validates the complete /me payload instead of accepting a shallow user object', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      user: { id: 'not-a-uuid', username: 'Reader With Spaces' },
+      role: 'member', capabilities: ['comment'], ageConsent: null,
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    await expect(getMe()).rejects.toThrow();
   });
 });

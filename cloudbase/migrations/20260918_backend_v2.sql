@@ -39,6 +39,7 @@ CREATE TABLE public.user_sessions (
   expires_at timestamptz NOT NULL,
   last_seen_at timestamptz NOT NULL DEFAULT now(),
   revoked_at timestamptz,
+  recovery_confirmed_at timestamptz,
   ip_hash text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -68,6 +69,10 @@ CREATE INDEX question_bank_active_idx ON public.question_bank (status, sampling_
 CREATE TABLE public.registration_challenges (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   question_ids uuid[] NOT NULL CHECK (cardinality(question_ids) > 0),
+  question_versions integer[] NOT NULL CHECK (
+    cardinality(question_versions) = cardinality(question_ids)
+    AND 0 < ALL(question_versions)
+  ),
   score integer NOT NULL DEFAULT 0 CHECK (score >= 0),
   status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'passed', 'failed', 'expired', 'consumed')),
   attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
@@ -411,6 +416,7 @@ LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
      AND session.token_hash = p_token_hash
      AND session.revoked_at IS NULL
      AND session.expires_at > clock_timestamp()
+     AND session.recovery_confirmed_at IS NOT NULL
      AND app_user.status = 'active'
    LIMIT 1
 $$;
@@ -567,6 +573,14 @@ BEGIN
   IF NOT FOUND OR v_challenge.attempt_count >= v_challenge.max_attempts THEN
     RAISE EXCEPTION 'challenge is invalid, expired, or exhausted' USING ERRCODE = '23514';
   END IF;
+  IF EXISTS (
+    SELECT 1
+      FROM unnest(v_challenge.question_ids, v_challenge.question_versions) AS selected(question_id, question_version)
+      LEFT JOIN public.question_bank AS question ON question.id = selected.question_id
+     WHERE question.id IS NULL OR question.version <> selected.question_version
+  ) THEN
+    RAISE EXCEPTION 'challenge question version is no longer valid' USING ERRCODE = '23514';
+  END IF;
 
   v_attempt_no := v_challenge.attempt_count + 1;
   v_next_score := v_challenge.score + CASE WHEN p_is_correct THEN p_score_delta ELSE 0 END;
@@ -644,7 +658,12 @@ DECLARE
   v_challenge_id uuid;
   v_user_id uuid;
   v_session_id uuid;
+  v_window_started_at timestamptz;
+  v_registration_count integer;
 BEGIN
+  IF p_ip_hash IS NULL OR p_ip_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'registration IP hash is required' USING ERRCODE = '22023';
+  END IF;
   UPDATE public.registration_tickets AS ticket
      SET used_at = clock_timestamp()
     FROM public.registration_challenges AS challenge
@@ -653,10 +672,20 @@ BEGIN
      AND ticket.expires_at > clock_timestamp()
      AND challenge.id = ticket.challenge_id
      AND challenge.status = 'passed'
-     AND challenge.expires_at > clock_timestamp()
    RETURNING ticket.challenge_id INTO v_challenge_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'registration ticket is invalid, expired, or already used' USING ERRCODE = '23514';
+  END IF;
+
+  v_window_started_at := date_trunc('hour', clock_timestamp());
+  INSERT INTO public.rate_limit_buckets AS current_bucket
+    (subject_hash, bucket, window_started_at, expires_at, hit_count)
+  VALUES (p_ip_hash, 'registration-success', v_window_started_at, v_window_started_at + interval '1 hour', 1)
+  ON CONFLICT (subject_hash, bucket, window_started_at) DO UPDATE
+    SET hit_count = current_bucket.hit_count + 1, updated_at = clock_timestamp()
+  RETURNING hit_count INTO v_registration_count;
+  IF v_registration_count > 3 THEN
+    RAISE EXCEPTION 'registration_success_rate_limited' USING ERRCODE = 'P0001';
   END IF;
 
   INSERT INTO public.app_users (username, password_hash)
@@ -665,8 +694,8 @@ BEGIN
   INSERT INTO public.recovery_codes (user_id, code_hash)
   VALUES (v_user_id, p_recovery_code_hash);
   UPDATE public.registration_challenges SET status = 'consumed' WHERE id = v_challenge_id;
-  INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash)
-  VALUES (v_user_id, p_session_token_hash, p_session_expires_at, p_ip_hash)
+  INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash, recovery_confirmed_at)
+  VALUES (v_user_id, p_session_token_hash, p_session_expires_at, p_ip_hash, NULL)
   RETURNING id INTO v_session_id;
   RETURN QUERY SELECT v_user_id, v_session_id;
 END;
@@ -676,7 +705,8 @@ CREATE FUNCTION public.create_login_session(
   p_user_id uuid,
   p_token_hash text,
   p_expires_at timestamptz,
-  p_ip_hash text DEFAULT NULL
+  p_ip_hash text,
+  p_current_token_hash text DEFAULT NULL
 ) RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -694,8 +724,17 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'login user is missing or inactive' USING ERRCODE = '23514';
   END IF;
-  INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash)
-  VALUES (p_user_id, p_token_hash, p_expires_at, p_ip_hash)
+  IF p_current_token_hash IS NOT NULL THEN
+    IF p_current_token_hash !~ '^[0-9a-f]{64}$' THEN
+      RAISE EXCEPTION 'invalid current session token hash' USING ERRCODE = '22023';
+    END IF;
+    UPDATE public.user_sessions
+       SET revoked_at = clock_timestamp()
+     WHERE token_hash = p_current_token_hash
+       AND revoked_at IS NULL;
+  END IF;
+  INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash, recovery_confirmed_at)
+  VALUES (p_user_id, p_token_hash, p_expires_at, p_ip_hash, clock_timestamp())
   RETURNING id INTO v_session_id;
   RETURN v_session_id;
 END;
@@ -724,8 +763,8 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'session is invalid, expired, or already rotated' USING ERRCODE = '23514';
   END IF;
-  INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash)
-  VALUES (v_user_id, p_new_token_hash, p_new_expires_at, p_ip_hash)
+  INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash, recovery_confirmed_at)
+  VALUES (v_user_id, p_new_token_hash, p_new_expires_at, p_ip_hash, clock_timestamp())
   RETURNING id INTO v_session_id;
   RETURN v_session_id;
 END;
@@ -759,10 +798,59 @@ BEGIN
    WHERE user_id = v_user_id AND revoked_at IS NULL;
   INSERT INTO public.recovery_codes (user_id, code_hash)
   VALUES (v_user_id, p_new_recovery_code_hash);
-  INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash)
-  VALUES (v_user_id, p_session_token_hash, p_session_expires_at, p_ip_hash)
+  INSERT INTO public.user_sessions (user_id, token_hash, expires_at, ip_hash, recovery_confirmed_at)
+  VALUES (v_user_id, p_session_token_hash, p_session_expires_at, p_ip_hash, NULL)
   RETURNING id INTO v_session_id;
   RETURN QUERY SELECT v_user_id, v_session_id;
+END;
+$$;
+
+CREATE FUNCTION public.confirm_recovery_session(
+  p_session_token_hash text,
+  p_recovery_code_hash text
+) RETURNS TABLE (
+  user_id uuid,
+  username text,
+  role text,
+  status text,
+  policy_version text,
+  accepted_at timestamptz
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_user_id uuid;
+BEGIN
+  UPDATE public.user_sessions AS session
+     SET recovery_confirmed_at = clock_timestamp()
+    FROM public.recovery_codes AS recovery
+   WHERE session.token_hash = p_session_token_hash
+     AND session.revoked_at IS NULL
+     AND session.expires_at > clock_timestamp()
+     AND session.recovery_confirmed_at IS NULL
+     AND recovery.user_id = session.user_id
+     AND recovery.code_hash = p_recovery_code_hash
+     AND recovery.used_at IS NULL
+  RETURNING session.user_id INTO v_user_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'recovery confirmation is invalid or already completed' USING ERRCODE = '23514';
+  END IF;
+  RETURN QUERY
+  SELECT app_user.id, app_user.username, app_user.role, app_user.status,
+         consent.policy_version, consent.accepted_at
+    FROM public.app_users AS app_user
+    LEFT JOIN LATERAL (
+      SELECT age_consent.policy_version, age_consent.accepted_at
+        FROM public.age_consents AS age_consent
+       WHERE age_consent.user_id = app_user.id
+         AND age_consent.revoked_at IS NULL
+       ORDER BY age_consent.accepted_at DESC
+       LIMIT 1
+    ) AS consent ON true
+   WHERE app_user.id = v_user_id
+     AND app_user.status = 'active';
 END;
 $$;
 
@@ -889,9 +977,10 @@ REVOKE EXECUTE ON FUNCTION public.backend_v2_enforce_comment_reply_depth() FROM 
 REVOKE EXECUTE ON FUNCTION public.backend_v2_validate_submission_asset() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.answer_registration_challenge(uuid, boolean, integer, integer, text, timestamptz) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.consume_registration_ticket(text, text, text, text, timestamptz, text, text) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.create_login_session(uuid, text, timestamptz, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.create_login_session(uuid, text, timestamptz, text, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.rotate_user_session(text, text, timestamptz, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.consume_recovery_code(text, text, text, text, timestamptz, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.confirm_recovery_session(text, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.promote_app_user(uuid, uuid, boolean, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.set_work_like(uuid, uuid, boolean) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.set_favorite(uuid, uuid, boolean) FROM PUBLIC;

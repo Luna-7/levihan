@@ -238,7 +238,7 @@ describe('backend v2 PostgreSQL migration', () => {
     });
     expect(migration).toContain('CREATE FUNCTION public.create_login_session');
     expect(migration).toContain('CREATE FUNCTION public.promote_app_user');
-    expect(runtimeAccess).toContain('public.create_login_session(uuid, text, timestamptz, text)');
+    expect(runtimeAccess).toContain('public.create_login_session(uuid, text, timestamptz, text, text)');
     expect(runtimeAccess).toContain('public.promote_app_user(uuid, uuid, boolean, text)');
     expect(failures).toEqual([]);
   });
@@ -326,5 +326,54 @@ describe('backend v2 PostgreSQL migration', () => {
     expect(runtimeAccess).toContain('backend_v2_runtime_insert ON public.question_bank');
     expect(runtimeAccess).toContain('backend_v2_runtime_update ON public.question_bank');
     expect(runtimeAccess).toContain('backend_v2_runtime_delete ON public.question_bank');
+  });
+
+  it('enforces the auth lifecycle guarantees in SQL and deployment scripts', () => {
+    const migration = readFileSync(migrationPath, 'utf8');
+    const rollback = readFileSync(rollbackPath, 'utf8');
+    const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
+    const ticketStart = migration.indexOf('CREATE FUNCTION public.consume_registration_ticket');
+    const ticketEnd = migration.indexOf('CREATE FUNCTION public.create_login_session', ticketStart);
+    const ticketConsumer = migration.slice(ticketStart, ticketEnd);
+    const answerStart = migration.indexOf('CREATE FUNCTION public.answer_registration_challenge');
+    const answerEnd = migration.indexOf('CREATE FUNCTION public.backend_v2_validate_submission_asset', answerStart);
+    const challengeAnswer = migration.slice(answerStart, answerEnd);
+
+    expect(ticketConsumer).not.toContain('challenge.expires_at > clock_timestamp()');
+    expect(ticketConsumer).toContain("'registration-success'");
+    expect(ticketConsumer).toContain('ON CONFLICT (subject_hash, bucket, window_started_at) DO UPDATE');
+    expect(ticketConsumer).toContain('registration_success_rate_limited');
+    expect(migration).toContain('recovery_confirmed_at timestamptz');
+    expect(migration).toContain('question_versions integer[] NOT NULL');
+    expect(migration).toContain('cardinality(question_versions) = cardinality(question_ids)');
+    expect(challengeAnswer).toContain('question_versions');
+    expect(challengeAnswer).toContain('public.question_bank');
+    expect(migration).toContain('CREATE FUNCTION public.confirm_recovery_session');
+    expect(migration).toContain('session.recovery_confirmed_at IS NOT NULL');
+    expect(migration.slice(migration.indexOf('CREATE FUNCTION public.create_login_session'), migration.indexOf('CREATE FUNCTION public.rotate_user_session')))
+      .toContain('p_current_token_hash');
+    expect(runtimeAccess).toContain('public.confirm_recovery_session(text, text)');
+    expect(rollback).toContain('DROP FUNCTION IF EXISTS public.confirm_recovery_session(text, text);');
+  });
+
+  it('detects mutations to recovery confirmation, login rotation, question versions, and success-only limits', () => {
+    const migration = readFileSync(migrationPath, 'utf8');
+    const rollback = readFileSync(rollbackPath, 'utf8');
+    const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
+    const mutations = [
+      ['confirmed resolver', (sql: string) => sql.replace('session.recovery_confirmed_at IS NOT NULL', 'true')],
+      ['login current-token revoke', (sql: string) => sql.replace('token_hash = p_current_token_hash', 'false')],
+      ['question version snapshot', (sql: string) => sql.replace('cardinality(question_versions) = cardinality(question_ids)', 'true')],
+      ['question version answer guard', (sql: string) => sql.replace('question.version <> selected.question_version', 'false')],
+      ['registration success bucket', (sql: string) => sql.replace("'registration-success'", "'registration-attempt'")],
+      ['recovery confirmation code ownership', (sql: string) => sql.replace('recovery.user_id = session.user_id', 'true')],
+      ['recovery code remains reusable', (sql: string) => sql.replace('recovery.used_at IS NULL', 'true')],
+    ] as const;
+
+    for (const [name, mutate] of mutations) {
+      const failures = validateBackendSchema({ migration: mutate(migration), rollback, runtimeAccess });
+      expect(failures.length, name).toBeGreaterThan(0);
+      expect(failures.some((failure) => /session|recovery|question|registration/i.test(failure)), name).toBe(true);
+    }
   });
 });

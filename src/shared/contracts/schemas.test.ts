@@ -16,12 +16,15 @@ import {
   ReadingProgressSchema,
   RecoveryCodeInputSchema,
   RecoveryCodeResponseSchema,
+  RecoveryConfirmationInputSchema,
+  RecoveryConfirmationResponseSchema,
   RegistrationChallengeAnswerInputSchema,
   RegistrationChallengeAnswerResponseSchema,
   RegistrationChallengeRequestSchema,
   RegistrationChallengeResponseSchema,
   RegistrationInputSchema,
   RegistrationResponseSchema,
+  MeResponseSchema,
   SubmissionInputSchema,
   SubmissionResponseSchema,
   WorkSummaryInputSchema,
@@ -41,6 +44,7 @@ describe('shared API validation contracts', () => {
       ['registration', RegistrationInputSchema, { registrationTicket: 'A'.repeat(43), username: 'reader_01', password: 'a-secure-password' }],
       ['login', LoginInputSchema, { username: 'reader_01', password: 'a-secure-password' }],
       ['recovery code', RecoveryCodeInputSchema, { recoveryCode: 'ABCD-EFGH-JKLM-NPQR', newPassword: 'a-new-secure-password' }],
+      ['recovery confirmation', RecoveryConfirmationInputSchema, { recoveryCode: 'ABCD-EFGH-JKLM-NPQR' }],
       ['work summary', WorkSummaryInputSchema, { title: '远方的故事', summary: '一段简短摘要。', contentRating: 'general' }],
       ['comment', CommentInputSchema, { workId: id, body: '很喜欢这一章。' }],
       ['reading progress', ReadingProgressInputSchema, { workId: id, position: 42, percent: 20, clientVersion: 2, clientUpdatedAt: timestamp }],
@@ -63,6 +67,7 @@ describe('shared API validation contracts', () => {
       ['registration', RegistrationInputSchema, { registrationTicket: 'A'.repeat(43), username: 'reader_01', password: 'a-secure-password' }],
       ['login', LoginInputSchema, { username: 'reader_01', password: 'a-secure-password' }],
       ['recovery code', RecoveryCodeInputSchema, { recoveryCode: 'ABCD-EFGH-JKLM-NPQR', newPassword: 'a-new-secure-password' }],
+      ['recovery confirmation', RecoveryConfirmationInputSchema, { recoveryCode: 'ABCD-EFGH-JKLM-NPQR' }],
       ['work summary', WorkSummaryInputSchema, { title: '远方的故事', summary: '一段简短摘要。', contentRating: 'general' }],
       ['comment', CommentInputSchema, { workId: id, body: '很喜欢这一章。' }],
       ['reading progress', ReadingProgressInputSchema, { workId: id, position: 42, percent: 20, clientVersion: 2, clientUpdatedAt: timestamp }],
@@ -86,6 +91,8 @@ describe('shared API validation contracts', () => {
       ['authenticated user', AuthenticatedUserSchema, { id, username: 'reader_01', role: 'member', capabilities: ['comment', 'submit'], ageConsent: { policyVersion: '2026-09', acceptedAt: timestamp } }],
       ['login response', LoginResponseSchema, { user: { id, username: 'reader_01', role: 'member', capabilities: ['comment', 'submit'], ageConsent: null }, session: { expiresAt: laterTimestamp } }],
       ['recovery response', RecoveryCodeResponseSchema, { user: { id, username: 'reader_01', role: 'member', capabilities: ['comment', 'submit'], ageConsent: null }, session: { expiresAt: laterTimestamp }, recoveryCode: 'WXYZ-2345-6789-ABCD' }],
+      ['recovery confirmation response', RecoveryConfirmationResponseSchema, { confirmed: true, user: { id, username: 'reader_01', role: 'member', capabilities: ['comment'], ageConsent: null } }],
+      ['me response', MeResponseSchema, { user: { id, username: 'reader_01' }, role: 'member', capabilities: ['comment', 'submit'], ageConsent: null }],
       ['work summary response', WorkSummarySchema, { id, title: '远方的故事', summary: '一段简短摘要。', contentRating: 'general', authorName: 'writer_01', createdAt: timestamp, updatedAt: timestamp }],
       ['comment response', CommentSchema, { id, workId: id, authorName: 'reader_01', body: '很喜欢这一章。', createdAt: timestamp }],
       ['reading progress response', ReadingProgressSchema, { workId: id, position: 42, percent: 20, clientVersion: 2, clientUpdatedAt: timestamp, version: 3, updatedAt: timestamp }],
@@ -136,6 +143,8 @@ describe('shared API validation contracts', () => {
     expect(RegistrationChallengeAnswerInputSchema.safeParse({ challengeId: id, answer: '   ' }).success).toBe(false);
     expect(LoginInputSchema.safeParse({ username: 'a', password: 'a-secure-password' }).success).toBe(false);
     expect(RecoveryCodeInputSchema.safeParse({ recoveryCode: 'ABCD-EFGH-JKLM-NPQR', newPassword: 'short' }).success).toBe(false);
+    expect(RecoveryConfirmationInputSchema.safeParse({ recoveryCode: 'invalid' }).success).toBe(false);
+    expect(MeResponseSchema.safeParse({ user: { id, username: 'reader_01' }, role: 'member', capabilities: 'comment', ageConsent: null }).success).toBe(false);
     expect(WorkSummaryInputSchema.safeParse({ title: 'x'.repeat(121), summary: '摘要', contentRating: 'general' }).success).toBe(false);
     expect(CommentInputSchema.safeParse({ workId: id, body: 'x'.repeat(2_001) }).success).toBe(false);
     expect(ReadingProgressInputSchema.safeParse({ workId: id, position: 42, percent: 101, clientVersion: 2, clientUpdatedAt: timestamp }).success).toBe(false);

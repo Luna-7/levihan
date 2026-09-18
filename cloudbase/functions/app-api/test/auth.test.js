@@ -56,6 +56,10 @@ describe('quiz-only authentication routes', () => {
     for (const path of ['/auth/challenges', '/auth/challenges/{id}/answer', '/auth/register', '/auth/login', '/auth/recover']) {
       expect(api.router.resolve('POST', path).metadata).toMatchObject({ csrfExempt: true, idempotency: { mode: 'none' } });
     }
+    expect(api.router.resolve('POST', '/auth/register').metadata.rateLimit).toBe(false);
+    expect(api.router.resolve('POST', '/auth/recovery-confirm').metadata).toMatchObject({ idempotency: { mode: 'none' } });
+    expect(api.router.resolve('POST', '/auth/recovery-confirm').metadata.csrfExempt).not.toBe(true);
+    expect(api.router.resolve('POST', '/auth/recovery-confirm').metadata.sessionRequired).not.toBe(true);
     expect(api.router.resolve('POST', '/auth/logout').metadata).toMatchObject({ sessionRequired: true, idempotency: { mode: 'none' } });
     expect(api.router.resolve('GET', '/me').metadata).toMatchObject({ sessionRequired: true });
   });
@@ -79,7 +83,7 @@ function service(overrides = {}) {
   const repository = {
     listActiveQuestions: vi.fn(), createChallenge: vi.fn(), getChallengeQuestion: vi.fn(),
     answerChallenge: vi.fn(), consumeRegistrationTicket: vi.fn(), findUserByUsername: vi.fn(),
-    createLoginSession: vi.fn(), revokeSession: vi.fn(), consumeRecoveryCode: vi.fn(), getUserProfile: vi.fn(),
+    createLoginSession: vi.fn(), revokeSession: vi.fn(), consumeRecoveryCode: vi.fn(), confirmRecoveryCode: vi.fn(), getUserProfile: vi.fn(),
     ...overrides.repository,
   };
   const passwordHasher = {
@@ -101,11 +105,11 @@ function service(overrides = {}) {
 
 describe('authentication service', () => {
   it('creates a short-lived random active challenge without returning answer material', async () => {
-    const question = { id: '550e8400-e29b-41d4-a716-446655440000', prompt: 'Which one?', options: ['A', 'B'], acceptedAnswerHashes: ['secret'], normalizationRule: 'trim_lowercase', samplingWeight: 1 };
+    const question = { id: '550e8400-e29b-41d4-a716-446655440000', prompt: 'Which one?', options: ['A', 'B'], acceptedAnswerHashes: ['secret'], normalizationRule: 'trim_lowercase', samplingWeight: 1, version: 7 };
     const { auth, repository } = service({ repository: { listActiveQuestions: vi.fn().mockResolvedValue([question]), createChallenge: vi.fn().mockResolvedValue({ id: '550e8400-e29b-41d4-a716-446655440001' }) } });
     const response = await auth.createChallenge(context());
     expect(response).toEqual({ challengeId: '550e8400-e29b-41d4-a716-446655440001', prompt: 'Which one?', options: ['A', 'B'], expiresAt: '2030-01-01T00:05:00.000Z' });
-    expect(repository.createChallenge).toHaveBeenCalledWith(expect.objectContaining({ questionIds: [question.id], maxAttempts: 3, ipHash: hmac('ip', '203.0.113.10') }));
+    expect(repository.createChallenge).toHaveBeenCalledWith(expect.objectContaining({ questionIds: [question.id], questionVersions: [7], maxAttempts: 3, ipHash: hmac('ip', '203.0.113.10') }));
     expect(JSON.stringify(response)).not.toMatch(/secret|accepted|normalization|questionIds/i);
   });
 
@@ -153,10 +157,14 @@ describe('authentication service', () => {
   it('creates a login session and returns only safe profile metadata', async () => {
     const profile = { id: '550e8400-e29b-41d4-a716-446655440020', username: 'reader_01', passwordHash: 'argon-hash', role: 'member', status: 'active', ageConsent: null };
     const { auth, repository, passwordHasher } = service({ repository: { findUserByUsername: vi.fn().mockResolvedValue(profile), createLoginSession: vi.fn().mockResolvedValue({ sessionId: 's' }), getUserProfile: vi.fn().mockResolvedValue(profile) } });
-    const ctx = context({ body: { username: 'READER_01', password: 'a-secure-password' } });
+    const ctx = context({ body: { username: 'READER_01', password: 'a-secure-password' }, cookies: { lv_session: 'Q'.repeat(43) } });
     const response = await auth.login(ctx);
     expect(passwordHasher.verify).toHaveBeenCalledWith('argon-hash', 'a-secure-password');
-    expect(repository.createLoginSession).toHaveBeenCalledWith(expect.objectContaining({ userId: profile.id, sessionTokenHash: hmac('session', 'T'.repeat(43)) }));
+    expect(repository.createLoginSession).toHaveBeenCalledWith(expect.objectContaining({
+      userId: profile.id,
+      sessionTokenHash: hmac('session', 'T'.repeat(43)),
+      currentSessionTokenHash: hmac('session', 'Q'.repeat(43)),
+    }));
     expect(response.user).toEqual({ id: profile.id, username: 'reader_01', role: 'member', capabilities: ['comment', 'favorite', 'submit'], ageConsent: null });
     expect(response.session).toEqual({ expiresAt: '2030-01-31T00:00:00.000Z' });
   });
@@ -180,6 +188,26 @@ describe('authentication service', () => {
     }));
     expect(response.recoveryCode).toBe('ABCD-EFGH-JKLM-NPQR');
     expect(response.user.username).toBe('reader_01');
+  });
+
+  it('confirms recovery storage against the unconfirmed session cookie without requiring an actor', async () => {
+    const profile = { id: '550e8400-e29b-41d4-a716-446655440030', username: 'reader_01', role: 'member', status: 'active', ageConsent: null };
+    const { auth, repository } = service({ repository: {
+      confirmRecoveryCode: vi.fn().mockResolvedValue({ profile }),
+      getUserProfile: vi.fn().mockRejectedValue(new Error('must not query after confirmation commits')),
+    } });
+    const ctx = context({
+      body: { recoveryCode: 'ABCD-EFGH-JKLM-NPQR' },
+      cookies: { lv_session: 'Q'.repeat(43) },
+      actorId: undefined,
+    });
+    await expect(auth.confirmRecovery(ctx)).resolves.toEqual({ confirmed: true, user: {
+      id: profile.id, username: 'reader_01', role: 'member', capabilities: ['comment', 'favorite', 'submit'], ageConsent: null,
+    } });
+    expect(repository.confirmRecoveryCode).toHaveBeenCalledWith({
+      sessionTokenHash: hmac('session', 'Q'.repeat(43)),
+      recoveryCodeHash: hmac('recovery-code', 'ABCD-EFGH-JKLM-NPQR'),
+    });
   });
 
   it('returns /me data without password or credential hashes and rejects missing sessions', async () => {
@@ -228,5 +256,49 @@ describe('authentication infrastructure adapters', () => {
   it('maps duplicate usernames to a safe 409 without exposing database errors', async () => {
     const repository = createAuthRepository({ rdb: { from: vi.fn(), rpc: vi.fn().mockResolvedValue({ data: null, error: { code: '23505', message: 'app_users_username_lower_key reader_01' } }) } });
     await expect(repository.consumeRegistrationTicket({})).rejects.toMatchObject({ status: 409, errorCode: 'STATE_CONFLICT', message: 'Username is unavailable' });
+  });
+
+  it('maps only the registration-success quota error to a safe 429', async () => {
+    const repository = createAuthRepository({ rdb: { from: vi.fn(), rpc: vi.fn().mockResolvedValue({ data: null, error: { code: 'P0001', message: 'registration_success_rate_limited' } }) } });
+    await expect(repository.consumeRegistrationTicket({})).rejects.toMatchObject({ status: 429, errorCode: 'RATE_LIMITED', message: 'Too many successful registrations' });
+  });
+
+  it('passes login rotation and recovery confirmation hashes only through controlled RPCs', async () => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: '550e8400-e29b-41d4-a716-446655440011', error: null })
+      .mockResolvedValueOnce({ data: [{
+        user_id: '550e8400-e29b-41d4-a716-446655440012', username: 'reader_01', role: 'member',
+        status: 'active', policy_version: null, accepted_at: null,
+      }], error: null });
+    const repository = createAuthRepository({ rdb: { from: vi.fn(), rpc } });
+    await repository.createLoginSession({
+      userId: '550e8400-e29b-41d4-a716-446655440010', sessionTokenHash: 'a'.repeat(64),
+      currentSessionTokenHash: 'b'.repeat(64), sessionExpiresAt: '2030-02-01T00:00:00.000Z', ipHash: 'c'.repeat(64),
+    });
+    await expect(repository.confirmRecoveryCode({ sessionTokenHash: 'd'.repeat(64), recoveryCodeHash: 'e'.repeat(64) })).resolves.toEqual({ profile: {
+      id: '550e8400-e29b-41d4-a716-446655440012', username: 'reader_01', role: 'member', status: 'active', ageConsent: null,
+    } });
+    expect(rpc).toHaveBeenNthCalledWith(1, 'create_login_session', {
+      p_user_id: '550e8400-e29b-41d4-a716-446655440010', p_token_hash: 'a'.repeat(64),
+      p_expires_at: '2030-02-01T00:00:00.000Z', p_ip_hash: 'c'.repeat(64), p_current_token_hash: 'b'.repeat(64),
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, 'confirm_recovery_session', {
+      p_session_token_hash: 'd'.repeat(64), p_recovery_code_hash: 'e'.repeat(64),
+    });
+  });
+
+  it('invalidates a challenge when the current question version differs from its snapshot', async () => {
+    const limit = vi.fn()
+      .mockResolvedValueOnce({ data: [{
+        question_ids: ['550e8400-e29b-41d4-a716-446655440000'], question_versions: [3], status: 'pending',
+        expires_at: '2099-01-01T00:00:00.000Z', attempt_count: 0, max_attempts: 3,
+      }], error: null })
+      .mockResolvedValueOnce({ data: [{
+        id: '550e8400-e29b-41d4-a716-446655440000', prompt: 'changed', options: ['A', 'B'],
+        accepted_answer_hashes: ['hash'], normalization_rule: 'trim', sampling_weight: 1, version: 4,
+      }], error: null });
+    const rdb = { rpc: vi.fn(), from: vi.fn(() => ({ select: vi.fn(() => ({ eq: vi.fn(() => ({ limit })) })) })) };
+    const repository = createAuthRepository({ rdb });
+    await expect(repository.getChallengeQuestion('550e8400-e29b-41d4-a716-446655440001')).resolves.toBeNull();
   });
 });

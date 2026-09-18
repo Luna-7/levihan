@@ -47,9 +47,10 @@ GRANT DELETE ON TABLE public.work_tags TO :"backend_role";
 -- DEFINER bodies validate ownership/state and run with a fixed search_path.
 GRANT EXECUTE ON FUNCTION public.answer_registration_challenge(uuid, boolean, integer, integer, text, timestamptz),
   public.consume_registration_ticket(text, text, text, text, timestamptz, text, text),
-  public.create_login_session(uuid, text, timestamptz, text),
+  public.create_login_session(uuid, text, timestamptz, text, text),
   public.rotate_user_session(text, text, timestamptz, text),
   public.consume_recovery_code(text, text, text, text, timestamptz, text),
+  public.confirm_recovery_session(text, text),
   public.promote_app_user(uuid, uuid, boolean, text),
   public.set_work_like(uuid, uuid, boolean), public.set_favorite(uuid, uuid, boolean),
   public.sync_reading_progress(uuid, uuid, bigint, numeric, bigint, timestamptz),

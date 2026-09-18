@@ -1,7 +1,7 @@
 import type {
-  AuthenticatedUser,
   LoginInput,
   LoginResponse,
+  MeResponse,
   RecoveryCodeInput,
   RecoveryCodeResponse,
   RegistrationChallengeResponse,
@@ -11,8 +11,11 @@ import type {
 import {
   LoginInputSchema,
   LoginResponseSchema,
+  MeResponseSchema,
   RecoveryCodeInputSchema,
   RecoveryCodeResponseSchema,
+  RecoveryConfirmationInputSchema,
+  RecoveryConfirmationResponseSchema,
   RegistrationChallengeAnswerInputSchema,
   RegistrationChallengeAnswerResponseSchema,
   RegistrationChallengeResponseSchema,
@@ -36,11 +39,15 @@ function cookie(name: string) {
   return item ? decodeURIComponent(item.slice(prefix.length)) : '';
 }
 
+function csrfCookieName() {
+  return import.meta.env.VITE_CSRF_COOKIE_NAME || 'lv_csrf';
+}
+
 async function request(path: string, { method = 'GET', body, csrf = false }: { method?: string; body?: unknown; csrf?: boolean } = {}) {
   const headers = new Headers();
   if (body !== undefined) headers.set('content-type', 'application/json');
   if (csrf) {
-    const token = cookie('lv_csrf');
+    const token = cookie(csrfCookieName());
     if (!token) throw new AuthApiError('ACCESS_DENIED', 'CSRF token is unavailable');
     headers.set('x-csrf-token', token);
   }
@@ -86,21 +93,15 @@ export async function recover(input: RecoveryCodeInput): Promise<RecoveryCodeRes
   return RecoveryCodeResponseSchema.parse(await request('/auth/recover', { method: 'POST', body: validated }));
 }
 
+export async function confirmRecoveryCode(recoveryCode: string) {
+  const input = RecoveryConfirmationInputSchema.parse({ recoveryCode });
+  return RecoveryConfirmationResponseSchema.parse(await request('/auth/recovery-confirm', { method: 'POST', body: input, csrf: true }));
+}
+
 export async function logout(): Promise<void> {
   await request('/auth/logout', { method: 'POST', body: {}, csrf: true });
 }
 
-export type MeResponse = {
-  user: Pick<AuthenticatedUser, 'id' | 'username'>;
-  role: AuthenticatedUser['role'];
-  capabilities: string[];
-  ageConsent: AuthenticatedUser['ageConsent'];
-};
-
 export async function getMe(): Promise<MeResponse> {
-  const payload = await request('/me');
-  if (!payload || typeof payload.user !== 'object' || !payload.user || !['member', 'admin'].includes(String(payload.role)) || !Array.isArray(payload.capabilities)) {
-    throw new AuthApiError('INTERNAL_ERROR', '账号信息格式无效');
-  }
-  return payload as MeResponse;
+  return MeResponseSchema.parse(await request('/me'));
 }
