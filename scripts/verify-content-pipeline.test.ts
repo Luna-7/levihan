@@ -10,7 +10,10 @@ const access = readFileSync(resolve(root, 'cloudbase/migrations/20260918_content
 const accessRollback = readFileSync(resolve(root, 'cloudbase/migrations/20260918_content_pipeline_runtime_access_rollback.sql'), 'utf8');
 const cosSource = readFileSync(resolve(root, 'cloudbase/functions/app-api/src/infrastructure/cos.js'), 'utf8');
 const cloudbaseConfig = readFileSync(resolve(root, 'cloudbase/cloudbaserc.json'), 'utf8');
-const validate = (overrides: Record<string, string> = {}) => validateContentPipeline({ migration, rollback, access, accessRollback, cosSource, cloudbaseConfig, ...overrides });
+const snapshotWorkerSource = readFileSync(resolve(root, 'cloudbase/functions/app-api/snapshot-worker.js'), 'utf8');
+const cleanupWorkerSource = readFileSync(resolve(root, 'cloudbase/functions/app-api/upload-cleanup-worker.js'), 'utf8');
+const uploadsRepositorySource = readFileSync(resolve(root, 'cloudbase/functions/app-api/src/modules/uploads/repository.js'), 'utf8');
+const validate = (overrides: Record<string, string> = {}) => validateContentPipeline({ migration, rollback, access, accessRollback, cosSource, cloudbaseConfig, snapshotWorkerSource, cleanupWorkerSource, uploadsRepositorySource, ...overrides });
 
 describe('content pipeline migration verifier', () => {
   it('accepts the reviewed additive migration set', () => {
@@ -49,7 +52,13 @@ describe('content pipeline migration verifier', () => {
     expect(validate({ migration: migration.replaceAll('job.lease_token <> p_lease_token', 'false') })).not.toEqual([]);
     expect(validate({ cosSource: cosSource.replace("'x-cos-forbid-overwrite': 'true'", "'x-cos-forbid-overwrite': 'false'") })).not.toEqual([]);
     expect(validate({ cosSource: cosSource.replace("call(cos, 'getBucketVersioning'", "call(cos, 'headBucket'") })).not.toEqual([]);
+    expect(validate({ cosSource: cosSource.replace('versioning && versioning.VersioningConfiguration', 'versioning') })).not.toEqual([]);
+    expect(validate({ cosSource: cosSource.replace('MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024', 'MAX_SNAPSHOT_BYTES = Infinity') })).not.toEqual([]);
     expect(validate({ migration: migration.replace('public.snapshot_current.version <= EXCLUDED.version', 'true') })).not.toEqual([]);
     expect(validate({ cloudbaseConfig: cloudbaseConfig.replace('0 */5 * * * * *', '0 0 0 1 1 * *') })).not.toEqual([]);
+    expect(validate({ cloudbaseConfig: cloudbaseConfig.replace('0 */10 * * * * *', '0 0 0 1 1 * *') })).not.toEqual([]);
+    expect(validate({ migration: migration.replace('cleanup_attempts=cleanup_attempts+1', 'cleanup_attempts=cleanup_attempts') })).not.toEqual([]);
+    expect(validate({ cleanupWorkerSource: cleanupWorkerSource.replace('cleanupStalePromotions', 'noopCleanup') })).not.toEqual([]);
+    expect(validate({ uploadsRepositorySource: uploadsRepositorySource.replace("unwrapRows(await rdb.rpc('claim_stale_upload_promotions'", "unwrap(await rdb.rpc('claim_stale_upload_promotions'") })).not.toEqual([]);
   });
 });

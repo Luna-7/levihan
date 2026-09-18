@@ -26,6 +26,7 @@ GRANT EXECUTE ON FUNCTION
   public.prepare_snapshot_version(uuid,uuid,text,bigint,text,text), public.get_current_snapshot(text),
   public.complete_snapshot_build(uuid,uuid,uuid,text), public.fail_snapshot_build(uuid,uuid,text),
   public.claim_stale_upload_promotions(uuid,integer), public.finalize_upload_promotion_cleanup(uuid,uuid,uuid),
+  public.fail_upload_promotion_cleanup(uuid,uuid,uuid,text),
   public.get_admin_work(uuid), public.get_public_work(text), public.list_admin_works(integer,text,text)
 TO :"backend_role";
 

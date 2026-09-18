@@ -14,13 +14,13 @@ describe('public catalog snapshots', () => {
     const rows = [
       { id: 'private-id', slug: 'zeta', title: 'Z', summary: 'z', type: 'novel', rating: 'restricted', publishedAt: '2030-01-02T00:00:00.000Z', assets: [] },
       { id: 'internal-a', slug: 'beta', title: 'B', summary: 'b', type: 'comic', rating: 'general', publishedAt: '2030-01-02T00:00:00.000Z', chapters: [{ id: 'secret-2', title: '二', position: 2 }, { id: 'secret-1', title: '一', position: 1 }], assets: [{ kind: 'page', objectKey: 'media/works/beta/c2p1.webp', storageZone: 'public', accessLevel: 'public', pageNo: 1, chapterPosition: 2 }, { kind: 'page', objectKey: 'media/works/beta/c1p2.webp', storageZone: 'public', accessLevel: 'public', pageNo: 2, chapterPosition: 1 }, { kind: 'page', objectKey: 'private/key', storageZone: 'private', accessLevel: 'public', pageNo: 1, chapterPosition: 1 }] },
-      { id: 'internal-b', slug: 'alpha', title: 'A', summary: 'a', type: 'novel', rating: 'mature', publishedAt: '2030-01-01T00:00:00.000Z', assets: [{ kind: 'body', objectKey: 'public/alpha/body.txt', storageZone: 'public', accessLevel: 'public', pageNo: null }] },
+      { id: 'internal-b', slug: 'alpha', title: 'A', summary: 'a', type: 'novel', rating: 'mature', publishedAt: '2030-01-01T00:00:00.000Z', assets: [{ kind: 'body', objectKey: 'media/works/alpha/body.txt', storageZone: 'public', accessLevel: 'public', pageNo: null }] },
     ];
     const first = buildCatalog(rows, 7, '2030-01-03T00:00:00.000Z');
     const second = buildCatalog([...rows].reverse(), 7, '2030-01-03T00:00:00.000Z');
     expect(first).toEqual(second);
     expect(first.document).toEqual({ schemaVersion: 1, version: 7, generatedAt: '2030-01-03T00:00:00.000Z', works: [
-      { slug: 'alpha', type: 'novel', title: 'A', summary: 'a', rating: 'mature', publishedAt: '2030-01-01T00:00:00.000Z', chapters: [], assets: [{ kind: 'body', path: 'public/alpha/body.txt' }] },
+      { slug: 'alpha', type: 'novel', title: 'A', summary: 'a', rating: 'mature', publishedAt: '2030-01-01T00:00:00.000Z', chapters: [], assets: [{ kind: 'body', path: 'media/works/alpha/body.txt' }] },
       { slug: 'beta', type: 'comic', title: 'B', summary: 'b', rating: 'general', publishedAt: '2030-01-02T00:00:00.000Z', chapters: [{ title: '一', position: 1 }, { title: '二', position: 2 }], assets: [{ kind: 'page', path: 'media/works/beta/c1p2.webp', pageNo: 2, chapterPosition: 1 }, { kind: 'page', path: 'media/works/beta/c2p1.webp', pageNo: 1, chapterPosition: 2 }] },
     ] });
     expect(first.checksum).toMatch(/^[a-f0-9]{64}$/);
@@ -30,7 +30,7 @@ describe('public catalog snapshots', () => {
   it('writes one immutable version then advances the PostgreSQL current pointer', async () => {
     const events = [];
     const repository = {
-      beginSnapshot: vi.fn().mockResolvedValue({ jobId: 'job-1', version: 8, leaseToken: 'lease-1', generatedAt: '2030-01-03T00:00:00.000Z', sourceRevision: 11 }),
+      beginSnapshot: vi.fn().mockResolvedValue({ jobId: 'job-1', version: 8, leaseToken: 'lease-1', generatedAt: '2030-01-03T00:00:00.000Z' }),
       listPublicCatalog: vi.fn().mockResolvedValue([]),
       prepareSnapshot: vi.fn(async () => events.push('prepare')),
       completeSnapshot: vi.fn(async () => events.push('complete')),
@@ -94,7 +94,7 @@ describe('public catalog snapshots', () => {
   it('reuses persisted build timestamp and existing immutable bytes after prepare failure', async () => {
     const existing = Buffer.from('{"generatedAt":"2030-01-01T00:00:00.000Z","schemaVersion":1,"version":12,"works":[]}');
     const checksum = (await import('node:crypto')).createHash('sha256').update(existing).digest('hex');
-    const repository = { beginSnapshot: vi.fn().mockResolvedValue({ jobId: 'job-v12', version: 12, leaseToken: 'lease-new', generatedAt: '2030-01-01T00:00:00.000Z', sourceRevision: 9 }), listPublicCatalog: vi.fn().mockResolvedValue([{ slug: 'later', rating: 'general', chapters: [], assets: [] }]), prepareSnapshot: vi.fn(), completeSnapshot: vi.fn(), failSnapshot: vi.fn() };
+    const repository = { beginSnapshot: vi.fn().mockResolvedValue({ jobId: 'job-v12', version: 12, leaseToken: 'lease-new', generatedAt: '2030-01-01T00:00:00.000Z' }), listPublicCatalog: vi.fn().mockResolvedValue([{ slug: 'later', rating: 'general', chapters: [], assets: [] }]), prepareSnapshot: vi.fn(), completeSnapshot: vi.fn(), failSnapshot: vi.fn() };
     const objectStore = { putImmutable: vi.fn().mockResolvedValue({ bytes: existing, checksum, existed: true }) };
     const service = createSnapshotService({ repository, objectStore, now: () => new Date('2040-01-01') });
     await expect(service.rebuildCatalog({ actorId: 'admin', actorRole: 'admin', requestId: 'req' })).resolves.toMatchObject({ version: 12, checksum });

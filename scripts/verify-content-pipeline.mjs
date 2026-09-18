@@ -14,7 +14,7 @@ const ROUTINES = [
   ['complete_work_upload', 'uuid,uuid,uuid,uuid,uuid,uuid,text,text,bigint,text,text,text,text,integer,text,text'],
   ['begin_snapshot_build', 'text,uuid,text,text'], ['list_public_catalog', ''],
   ['prepare_snapshot_version', 'uuid,uuid,text,bigint,text,text'], ['complete_snapshot_build', 'uuid,uuid,uuid,text'],
-  ['fail_snapshot_build', 'uuid,uuid,text'], ['get_current_snapshot', 'text'], ['claim_stale_upload_promotions', 'uuid,integer'], ['finalize_upload_promotion_cleanup', 'uuid,uuid,uuid'], ['get_admin_work', 'uuid'], ['get_public_work', 'text'],
+  ['fail_snapshot_build', 'uuid,uuid,text'], ['get_current_snapshot', 'text'], ['claim_stale_upload_promotions', 'uuid,integer'], ['finalize_upload_promotion_cleanup', 'uuid,uuid,uuid'], ['fail_upload_promotion_cleanup', 'uuid,uuid,uuid,text'], ['get_admin_work', 'uuid'], ['get_public_work', 'text'],
   ['list_admin_works', 'integer,text,text'],
 ];
 
@@ -26,7 +26,7 @@ function routineDefinition(sql, name) {
   return sql.match(new RegExp(`CREATE\\s+FUNCTION\\s+public\\.${name}\\s*\\([\\s\\S]*?\\$\\$;`, 'i'))?.[0] || '';
 }
 
-export function validateContentPipeline({ migration, rollback, access, accessRollback = '', cosSource = '', cloudbaseConfig = '' }) {
+export function validateContentPipeline({ migration, rollback, access, accessRollback = '', cosSource = '', cloudbaseConfig = '', snapshotWorkerSource = '', cleanupWorkerSource = '', uploadsRepositorySource = '' }) {
   const failures = [];
   const sql = stripSqlComments(migration);
   const down = stripSqlComments(rollback);
@@ -92,6 +92,8 @@ export function validateContentPipeline({ migration, rollback, access, accessRol
   add(failures, /INSERT\s+INTO\s+public\.snapshot_current/i.test(routineDefinition(sql, 'complete_snapshot_build')) && /snapshot_current\.version\s*<=\s*EXCLUDED\.version/i.test(routineDefinition(sql, 'complete_snapshot_build')), 'snapshot completion must atomically advance a monotonic PostgreSQL pointer');
   add(failures, /build_generated_at\s*=\s*COALESCE\(build_generated_at/i.test(snapshotBegin) && /source_revision\s+bigint/i.test(snapshotBegin), 'snapshot retries must retain build time and source revision');
   add(failures, /status='cleanup_pending'/i.test(routineDefinition(sql,'claim_stale_upload_promotions')) && /cleanup_token=p_cleanup_token/i.test(routineDefinition(sql,'finalize_upload_promotion_cleanup')), 'promotion cleanup must be claimed and token fenced');
+  add(failures, /cleanup_attempts\s+integer\s+NOT\s+NULL/i.test(sql) && /cleanup_last_error\s+text/i.test(sql) && /cleanup_next_retry_at\s+timestamptz/i.test(sql), 'promotion cleanup retry state must be durable');
+  add(failures, /cleanup_next_retry_at\s*<=\s*clock_timestamp\(\)/i.test(routineDefinition(sql,'claim_stale_upload_promotions')) && /cleanup_attempts\s*=\s*cleanup_attempts\s*\+\s*1/i.test(routineDefinition(sql,'fail_upload_promotion_cleanup')) && /make_interval/i.test(routineDefinition(sql,'fail_upload_promotion_cleanup')), 'cleanup failures need bounded durable backoff');
   add(failures, /rollback_requires_content_export/i.test(down) && down.indexOf('rollback_requires_content_export') < down.indexOf('DROP FUNCTION'), 'rollback compatibility preflight must run before destructive changes');
   add(failures, /work\.rating\s*<>\s*'restricted'/i.test(routineDefinition(sql, 'list_public_catalog')), 'restricted works must be excluded from public snapshots');
   add(failures, /asset\.access_level\s*=\s*'public'/i.test(routineDefinition(sql, 'list_public_catalog')), 'private assets must be excluded from public snapshots');
@@ -114,13 +116,19 @@ export function validateContentPipeline({ migration, rollback, access, accessRol
   add(failures, /GRANT\s+UPDATE\s+ON\s+TABLE\s+public\.works[\s\S]*?public\.snapshot_jobs\s+TO\s+:"backend_role"/i.test(grantRollback), 'runtime rollback must restore base UPDATE grants');
   if (cosSource) {
     add(failures, /x-cos-forbid-overwrite'\s*:\s*'true'/i.test(cosSource), 'immutable snapshots need COS forbid-overwrite');
-    add(failures, /getBucketVersioning/i.test(cosSource) && /Status[\s\S]*enabled/i.test(cosSource), 'immutable snapshot publication must reject bucket versioning');
+    add(failures, /getBucketVersioning/i.test(cosSource) && /versioning\s*&&\s*versioning\.VersioningConfiguration/i.test(cosSource) && /config\.Status\s*===\s*'Enabled'/i.test(cosSource), 'immutable snapshot publication must parse the SDK nested versioning shape and reject Enabled');
     add(failures, /FileAlreadyExists/i.test(cosSource) && /JSON\.parse\(actual\.toString/i.test(cosSource), 'immutable conflicts must read and validate existing bytes');
-    add(failures, !/putManifest|getManifest|IfMatch|IfNoneMatch/i.test(cosSource), 'mutable COS manifests and unsupported conditional headers must be absent');
+    add(failures, /MAX_SNAPSHOT_BYTES\s*=\s*10\s*\*\s*1024\s*\*\s*1024/i.test(cosSource) && /total\s*>\s*maxBytes/i.test(cosSource), 'existing immutable reads must be bounded');
+    add(failures, /validatePublicCatalogDocument/i.test(cosSource) && /canonicalJson\(document\)/i.test(cosSource) && /\['general',\s*'mature'\]/i.test(cosSource) && /media\\\/works/i.test(cosSource), 'immutable catalogs need strict public schema and canonical validation');
+    add(failures, !/putManifest|getManifest|putBytes|IfMatch|IfNoneMatch/i.test(cosSource), 'mutable snapshot writes and unsupported conditional headers must be absent');
   }
   if (cloudbaseConfig) {
     add(failures, /"name"\s*:\s*"snapshot-worker"[\s\S]*?"type"\s*:\s*"Event"[\s\S]*?"dir"\s*:\s*"app-api"[\s\S]*?"triggers"[\s\S]*?0 \*\/5 \* \* \* \* \*/i.test(cloudbaseConfig), 'snapshot worker needs a five-minute private Event trigger');
+    add(failures, /"name"\s*:\s*"upload-cleanup-worker"[\s\S]*?"handler"\s*:\s*"upload-cleanup-worker\.main"[\s\S]*?0 \*\/10 \* \* \* \* \*/i.test(cloudbaseConfig), 'upload cleanup needs an independent ten-minute Event trigger');
   }
+  if (snapshotWorkerSource) add(failures, !/cleanupStalePromotions|createUploadsService/i.test(snapshotWorkerSource), 'snapshot worker must not run upload cleanup');
+  if (cleanupWorkerSource) add(failures, /cleanupStalePromotions/i.test(cleanupWorkerSource) && !/createSnapshotService|rebuildCatalog/i.test(cleanupWorkerSource), 'cleanup worker must invoke only upload cleanup');
+  if (uploadsRepositorySource) add(failures, /const\s+rows\s*=\s*unwrapRows\(await\s+rdb\.rpc\('claim_stale_upload_promotions'/i.test(uploadsRepositorySource), 'cleanup repository must preserve all claimed rows');
   return failures;
 }
 
@@ -132,6 +140,9 @@ export function verifyContentPipelineFromFiles() {
     accessRollback: readFileSync(resolve(root, 'cloudbase/migrations/20260918_content_pipeline_runtime_access_rollback.sql'), 'utf8'),
     cosSource: readFileSync(resolve(root, 'cloudbase/functions/app-api/src/infrastructure/cos.js'), 'utf8'),
     cloudbaseConfig: readFileSync(resolve(root, 'cloudbase/cloudbaserc.json'), 'utf8'),
+    snapshotWorkerSource: readFileSync(resolve(root, 'cloudbase/functions/app-api/snapshot-worker.js'), 'utf8'),
+    cleanupWorkerSource: readFileSync(resolve(root, 'cloudbase/functions/app-api/upload-cleanup-worker.js'), 'utf8'),
+    uploadsRepositorySource: readFileSync(resolve(root, 'cloudbase/functions/app-api/src/modules/uploads/repository.js'), 'utf8'),
   });
 }
 

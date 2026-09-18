@@ -13,6 +13,12 @@ function unwrap(result) {
   if (!result || result.error) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Upload storage unavailable');
   return first(result.data);
 }
+function unwrapRows(result) {
+  if (result && result.error) unwrap(result);
+  if (!result) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Upload storage unavailable');
+  if (result.data == null) return [];
+  return Array.isArray(result.data) ? result.data : [result.data];
+}
 
 function createUploadsRepository({ rdb }) {
   if (!rdb || typeof rdb.rpc !== 'function') throw new Error('CloudBase rdb().rpc adapter is required for uploads');
@@ -63,11 +69,15 @@ function createUploadsRepository({ rdb }) {
       return { assetId: row.asset_id, status: row.status };
     },
     async claimStalePromotions({ actorId, limit }) {
-      const rows = unwrap(await rdb.rpc('claim_stale_upload_promotions', { p_actor_id: actorId, p_limit: limit }));
-      return (Array.isArray(rows) ? rows : rows ? [rows] : []).map((row) => ({ uploadId: row.upload_id, fileId: row.file_id, stagingKey: row.staging_key, finalKey: row.final_key, storageZone: row.storage_zone, cleanupToken: row.cleanup_token }));
+      const rows = unwrapRows(await rdb.rpc('claim_stale_upload_promotions', { p_actor_id: actorId, p_limit: limit }));
+      return rows.map((row) => ({ uploadId: row.upload_id, fileId: row.file_id, stagingKey: row.staging_key, finalKey: row.final_key, storageZone: row.storage_zone, cleanupToken: row.cleanup_token }));
     },
     async finalizePromotionCleanup({ fileId, cleanupToken, actorId }) {
       const value = unwrap(await rdb.rpc('finalize_upload_promotion_cleanup', { p_file_id: fileId, p_cleanup_token: cleanupToken, p_actor_id: actorId }));
+      if (value !== true && !(value && Object.values(value)[0] === true)) throw new ApiError(409, 'STATE_CONFLICT', 'Promotion cleanup lease is stale');
+    },
+    async failPromotionCleanup({ fileId, cleanupToken, actorId, errorCode }) {
+      const value = unwrap(await rdb.rpc('fail_upload_promotion_cleanup', { p_file_id: fileId, p_cleanup_token: cleanupToken, p_actor_id: actorId, p_error_code: errorCode }));
       if (value !== true && !(value && Object.values(value)[0] === true)) throw new ApiError(409, 'STATE_CONFLICT', 'Promotion cleanup lease is stale');
     },
   };

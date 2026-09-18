@@ -154,6 +154,33 @@
         "SESSION_COOKIE_DOMAIN": "{{env.SESSION_COOKIE_DOMAIN}}",
         "SNAPSHOT_SYSTEM_ACTOR_ID": "{{env.SNAPSHOT_SYSTEM_ACTOR_ID}}"
       }
+    },
+    {
+      "name": "upload-cleanup-worker",
+      "type": "Event",
+      "dir": "app-api",
+      "runtime": "Nodejs18.15",
+      "handler": "upload-cleanup-worker.main",
+      "timeout": 60,
+      "memorySize": 256,
+      "description": "Cleans stale fenced upload promotions independently of snapshot delivery",
+      "installDependency": true,
+      "triggers": [
+        { "name": "upload-cleanup-every-10m", "type": "timer", "config": "0 */10 * * * * *" }
+      ],
+      "envVariables": {
+        "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}",
+        "COS_PUBLIC_BUCKET": "{{env.COS_PUBLIC_BUCKET}}",
+        "COS_PRIVATE_BUCKET": "{{env.COS_PRIVATE_BUCKET}}",
+        "COS_REGION": "{{env.COS_REGION}}",
+        "DATABASE_SCHEMA": "{{env.DATABASE_SCHEMA}}",
+        "API_ALLOWED_ORIGINS": "{{env.API_ALLOWED_ORIGINS}}",
+        "SESSION_HASH_PEPPER": "{{env.SESSION_HASH_PEPPER}}",
+        "AUTH_HASH_PEPPER": "{{env.AUTH_HASH_PEPPER}}",
+        "RATE_LIMIT_PEPPER": "{{env.RATE_LIMIT_PEPPER}}",
+        "SESSION_COOKIE_DOMAIN": "{{env.SESSION_COOKIE_DOMAIN}}",
+        "SNAPSHOT_SYSTEM_ACTOR_ID": "{{env.SNAPSHOT_SYSTEM_ACTOR_ID}}"
+      }
     }
   ]
 }

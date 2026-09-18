@@ -142,7 +142,9 @@ function createUploadsService({ repository, objectStore, now = () => new Date(),
           if (item.finalKey) await objectStore.delete(item.finalKey);
           if (item.stagingKey) await objectStore.delete(item.stagingKey);
           await repository.finalizePromotionCleanup({ fileId: item.fileId, cleanupToken: item.cleanupToken, actorId: ctx.actorId });
-        } catch { /* token-fenced cleanup is retried by the next timer */ }
+        } catch {
+          await repository.failPromotionCleanup({ fileId: item.fileId, cleanupToken: item.cleanupToken, actorId: ctx.actorId, errorCode: 'OBJECT_DELETE_FAILED' });
+        }
       }
       return { claimed: items.length };
     },

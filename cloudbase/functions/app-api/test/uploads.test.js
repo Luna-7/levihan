@@ -128,6 +128,15 @@ describe('direct COS upload tickets', () => {
     expect(objectStore.delete).toHaveBeenCalledTimes(2);
     expect(repository.finalizePromotionCleanup).toHaveBeenCalledWith({ fileId, cleanupToken: uploadId, actorId });
   });
+
+  it('persists a safe retry outcome when cleanup fails instead of silently swallowing it', async () => {
+    const repository = { claimStalePromotions: vi.fn().mockResolvedValue([{ fileId, stagingKey: `staging/admin/${uploadId}/${fileId}.webp`, finalKey: `media/works/${workId}/${fileId}.webp`, cleanupToken: uploadId }]), finalizePromotionCleanup: vi.fn(), failPromotionCleanup: vi.fn() };
+    const objectStore = { delete: vi.fn().mockRejectedValue(new Error('SDK secret detail')) };
+    const service = createUploadsService({ repository, objectStore });
+    await expect(service.cleanupStalePromotions({ actorId, actorRole: 'admin' })).resolves.toEqual({ claimed: 1 });
+    expect(repository.failPromotionCleanup).toHaveBeenCalledWith({ fileId, cleanupToken: uploadId, actorId, errorCode: 'OBJECT_DELETE_FAILED' });
+    expect(repository.finalizePromotionCleanup).not.toHaveBeenCalled();
+  });
 });
 
 describe('upload repository transaction boundary', () => {
@@ -154,5 +163,21 @@ describe('upload repository transaction boundary', () => {
   ])('maps controlled SQL error %s to %s', async (message, status, errorCode) => {
     const repository = createUploadsRepository({ rdb: { rpc: vi.fn().mockResolvedValue({ data: null, error: { message } }) } });
     await expect(repository.createUpload({})).rejects.toMatchObject({ status, errorCode });
+  });
+
+  it('preserves every cleanup row returned by the RPC', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [
+      { upload_id: uploadId, file_id: fileId, staging_key: 'staging/admin/a', final_key: 'media/works/a', storage_zone: 'public', cleanup_token: uploadId },
+      { upload_id: workId, file_id: actorId, staging_key: 'staging/admin/b', final_key: 'protected/works/b', storage_zone: 'private', cleanup_token: workId },
+    ], error: null });
+    const repository = createUploadsRepository({ rdb: { rpc } });
+    await expect(repository.claimStalePromotions({ actorId, limit: 20 })).resolves.toHaveLength(2);
+  });
+
+  it('persists cleanup failure using only a safe code and fencing token', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const repository = createUploadsRepository({ rdb: { rpc } });
+    await repository.failPromotionCleanup({ fileId, cleanupToken: uploadId, actorId, errorCode: 'OBJECT_DELETE_FAILED' });
+    expect(rpc).toHaveBeenCalledWith('fail_upload_promotion_cleanup', { p_file_id: fileId, p_cleanup_token: uploadId, p_actor_id: actorId, p_error_code: 'OBJECT_DELETE_FAILED' });
   });
 });

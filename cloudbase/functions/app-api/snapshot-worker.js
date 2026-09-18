@@ -4,10 +4,8 @@ const { parseConfig } = require('./src/config');
 const { createSnapshotService, createSnapshotTimerHandler } = require('./src/modules/snapshots/service');
 const { createSnapshotRepository } = require('./src/modules/snapshots/repository');
 const { createRuntimeCosObjectStore } = require('./src/infrastructure/cos');
-const { createUploadsService } = require('./src/modules/uploads/service');
-const { createUploadsRepository } = require('./src/modules/uploads/repository');
 
-function buildSnapshotWorkerRuntime({ env = process.env, cloudbase, objectStore, snapshotService, uploadsService } = {}) {
+function buildSnapshotWorkerRuntime({ env = process.env, cloudbase, objectStore, snapshotService } = {}) {
   const config = parseConfig(env);
   const sdk = cloudbase || require('@cloudbase/node-sdk');
   const app = sdk.init({ env: sdk.SYMBOL_CURRENT_ENV, accessKey: config.cloudbaseApiKey });
@@ -15,11 +13,7 @@ function buildSnapshotWorkerRuntime({ env = process.env, cloudbase, objectStore,
   const store = objectStore || createRuntimeCosObjectStore({ config, env });
   const service = snapshotService || createSnapshotService({ repository: createSnapshotRepository({ rdb }), objectStore: store });
   const snapshot = createSnapshotTimerHandler({ service, actorId: config.snapshotSystemActorId });
-  const uploads = uploadsService || createUploadsService({ repository: createUploadsRepository({ rdb }), objectStore: store });
-  return { process: async (event) => {
-    await uploads.cleanupStalePromotions({ actorId: config.snapshotSystemActorId, actorRole: 'admin', requestId: `cleanup:${event.scheduledAt}` });
-    return snapshot(event);
-  } };
+  return { process: snapshot };
 }
 
 function createSnapshotWorker({ buildRuntime = buildSnapshotWorkerRuntime } = {}) {

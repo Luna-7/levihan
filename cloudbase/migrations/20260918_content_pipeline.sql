@@ -64,6 +64,10 @@ ALTER TABLE public.upload_files DROP CONSTRAINT upload_files_status_check;
 ALTER TABLE public.upload_files ADD CONSTRAINT upload_files_status_check
   CHECK (status IN ('declared','uploaded','promoting','cleanup_pending','verified','bound','rejected','orphaned','deleted'));
 ALTER TABLE public.upload_files ADD COLUMN cleanup_token uuid;
+ALTER TABLE public.upload_files ADD COLUMN cleanup_attempts integer NOT NULL DEFAULT 0 CHECK (cleanup_attempts >= 0);
+ALTER TABLE public.upload_files ADD COLUMN cleanup_last_error text;
+ALTER TABLE public.upload_files ADD COLUMN cleanup_next_retry_at timestamptz;
+CREATE INDEX upload_files_cleanup_retry_idx ON public.upload_files (cleanup_next_retry_at) WHERE status = 'cleanup_pending';
 
 ALTER TABLE public.upload_sessions ADD COLUMN idempotency_key text;
 ALTER TABLE public.upload_sessions ADD COLUMN request_hash text CHECK (request_hash IS NULL OR request_hash ~ '^[0-9a-f]{64}$');
@@ -559,11 +563,13 @@ BEGIN
   PERFORM 1 FROM public.app_users WHERE id=p_actor_id AND status='active' AND role='admin' FOR KEY SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'access_denied' USING ERRCODE='42501'; END IF;
   RETURN QUERY WITH claimed AS (
-    SELECT f.id FROM public.upload_files f WHERE f.status IN ('promoting','cleanup_pending')
-      AND f.promotion_started_at < clock_timestamp()-interval '30 minutes'
+    SELECT f.id FROM public.upload_files f WHERE (
+      (f.status='promoting' AND f.promotion_started_at < clock_timestamp()-interval '30 minutes')
+      OR (f.status='cleanup_pending' AND (f.cleanup_next_retry_at IS NULL OR f.cleanup_next_retry_at <= clock_timestamp()))
+    ) AND f.asset_id IS NULL
     ORDER BY f.promotion_started_at,f.id LIMIT LEAST(GREATEST(p_limit,1),100) FOR UPDATE SKIP LOCKED
   ), updated AS (
-    UPDATE public.upload_files f SET status='cleanup_pending',cleanup_token=gen_random_uuid()
+    UPDATE public.upload_files f SET status='cleanup_pending',cleanup_token=gen_random_uuid(),cleanup_next_retry_at=clock_timestamp()+interval '5 minutes'
     FROM claimed c WHERE f.id=c.id AND f.status IN ('promoting','cleanup_pending')
     RETURNING f.*
   ) SELECT u.session_id,u.id,u.object_key,u.final_object_key,u.storage_zone,u.cleanup_token FROM updated u;
@@ -575,7 +581,21 @@ RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pub
 BEGIN
   PERFORM 1 FROM public.app_users WHERE id=p_actor_id AND status='active' AND role='admin' FOR KEY SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'access_denied' USING ERRCODE='42501'; END IF;
-  UPDATE public.upload_files SET status='orphaned',cleanup_token=NULL WHERE id=p_file_id AND status='cleanup_pending' AND cleanup_token=p_cleanup_token AND asset_id IS NULL;
+  UPDATE public.upload_files SET status='orphaned',cleanup_token=NULL,cleanup_last_error=NULL,cleanup_next_retry_at=NULL WHERE id=p_file_id AND status='cleanup_pending' AND cleanup_token=p_cleanup_token AND asset_id IS NULL;
+  IF NOT FOUND THEN RAISE EXCEPTION 'upload_state_conflict' USING ERRCODE='P0001'; END IF;
+  RETURN true;
+END;
+$$;
+
+CREATE FUNCTION public.fail_upload_promotion_cleanup(p_file_id uuid,p_cleanup_token uuid,p_actor_id uuid,p_error_code text)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+BEGIN
+  PERFORM 1 FROM public.app_users WHERE id=p_actor_id AND status='active' AND role='admin' FOR KEY SHARE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'access_denied' USING ERRCODE='42501'; END IF;
+  IF p_error_code !~ '^[A-Z_]{3,64}$' THEN RAISE EXCEPTION 'cleanup_error_invalid' USING ERRCODE='22023'; END IF;
+  UPDATE public.upload_files SET cleanup_attempts=cleanup_attempts+1,cleanup_last_error=p_error_code,
+    cleanup_next_retry_at=clock_timestamp()+make_interval(mins=>LEAST(360,power(2,LEAST(cleanup_attempts+1,8))::integer)),cleanup_token=NULL
+  WHERE id=p_file_id AND status='cleanup_pending' AND cleanup_token=p_cleanup_token AND asset_id IS NULL;
   IF NOT FOUND THEN RAISE EXCEPTION 'upload_state_conflict' USING ERRCODE='P0001'; END IF;
   RETURN true;
 END;
@@ -631,6 +651,7 @@ REVOKE EXECUTE ON FUNCTION public.fail_snapshot_build(uuid,uuid,text) FROM PUBLI
 REVOKE EXECUTE ON FUNCTION public.get_current_snapshot(text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.claim_stale_upload_promotions(uuid,integer) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.finalize_upload_promotion_cleanup(uuid,uuid,uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.fail_upload_promotion_cleanup(uuid,uuid,uuid,text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.get_admin_work(uuid) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.get_public_work(text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.list_admin_works(integer,text,text) FROM PUBLIC;

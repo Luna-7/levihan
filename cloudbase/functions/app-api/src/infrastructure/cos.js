@@ -2,16 +2,71 @@
 
 const crypto = require('crypto');
 const { ApiError } = require('../errors');
+const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
+const WORK_TYPES = new Set(['comic', 'novel', 'art', 'resource']);
+const ASSET_KINDS = new Set(['cover', 'page', 'body', 'attachment', 'preview']);
 
 function call(cos, method, params) {
   return new Promise((resolve, reject) => cos[method](params, (error, data) => error ? reject(error) : resolve(data || {})));
 }
 
-async function consumeBytes(body) {
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+
+function exactKeys(value, required, optional = []) {
+  if (!value || Object.getPrototypeOf(value) !== Object.prototype) return false;
+  const keys = Object.keys(value);
+  return required.every((key) => Object.hasOwn(value, key)) && keys.every((key) => required.includes(key) || optional.includes(key));
+}
+
+function validText(value, max, allowEmpty = false) { return typeof value === 'string' && value.length <= max && (allowEmpty || value.length > 0); }
+function validTimestamp(value) { return typeof value === 'string' && value.length <= 40 && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) && !Number.isNaN(Date.parse(value)); }
+
+function validatePublicCatalogDocument(document, bytes, { version, schemaVersion, generatedAt }) {
+  const fail = () => { throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Immutable snapshot document is invalid'); };
+  if (!exactKeys(document, ['schemaVersion', 'version', 'generatedAt', 'works']) || document.schemaVersion !== schemaVersion || document.version !== version || !validTimestamp(document.generatedAt) || (generatedAt !== undefined && document.generatedAt !== generatedAt) || !Array.isArray(document.works) || document.works.length > 10000) fail();
+  let priorSlug = '';
+  for (const work of document.works) {
+    if (!exactKeys(work, ['slug', 'type', 'title', 'summary', 'rating', 'publishedAt', 'chapters', 'assets'])
+      || !/^[a-z0-9][a-z0-9-]{0,127}$/.test(work.slug || '') || work.slug <= priorSlug || !WORK_TYPES.has(work.type)
+      || !validText(work.title, 120) || !validText(work.summary, 2000, true) || !['general', 'mature'].includes(work.rating)
+      || !validTimestamp(work.publishedAt) || !Array.isArray(work.chapters) || work.chapters.length > 1000 || !Array.isArray(work.assets) || work.assets.length > 5000) fail();
+    priorSlug = work.slug;
+    let priorChapter;
+    for (const chapter of work.chapters) {
+      if (!exactKeys(chapter, ['title', 'position']) || !validText(chapter.title, 200) || !Number.isSafeInteger(chapter.position) || chapter.position < 1) fail();
+      if (priorChapter && chapter.position <= priorChapter.position) fail();
+      priorChapter = chapter;
+    }
+    let priorAsset;
+    for (const asset of work.assets) {
+      if (!exactKeys(asset, ['kind', 'path'], ['pageNo', 'chapterPosition']) || !ASSET_KINDS.has(asset.kind) || !/^media\/works\/[A-Za-z0-9._/-]{1,900}$/.test(asset.path || '') || asset.path.includes('..') || asset.path.includes('//')
+        || (asset.pageNo !== undefined && (!Number.isSafeInteger(asset.pageNo) || asset.pageNo < 1))
+        || (asset.chapterPosition !== undefined && (!Number.isSafeInteger(asset.chapterPosition) || asset.chapterPosition < 1)) || (asset.kind === 'page' && asset.pageNo === undefined)) fail();
+      if (priorAsset) {
+        const comparison = (asset.chapterPosition || 0) - (priorAsset.chapterPosition || 0) || (asset.pageNo || 0) - (priorAsset.pageNo || 0) || asset.kind.localeCompare(priorAsset.kind) || asset.path.localeCompare(priorAsset.path);
+        if (comparison < 0) fail();
+      }
+      priorAsset = asset;
+    }
+  }
+  if (!Buffer.from(canonicalJson(document)).equals(bytes)) fail();
+  return document;
+}
+
+async function consumeBytes(body, maxBytes = MAX_SNAPSHOT_BYTES) {
   const hash = crypto.createHash('sha256');
   const chunks = [];
+  let total = 0;
   const source = Buffer.isBuffer(body) || typeof body === 'string' ? [body] : body;
-  for await (const chunk of source) { const bytes = Buffer.from(chunk); chunks.push(bytes); hash.update(bytes); }
+  for await (const chunk of source) {
+    const bytes = Buffer.from(chunk); total += bytes.length;
+    if (total > maxBytes) throw new ApiError(413, 'PAYLOAD_TOO_LARGE', 'Immutable snapshot exceeds the validation limit');
+    chunks.push(bytes); hash.update(bytes);
+  }
   return { bytes: Buffer.concat(chunks), checksum: hash.digest('hex') };
 }
 
@@ -57,26 +112,18 @@ function createCosObjectStore({ publicBucket, privateBucket, region, cos }) {
       if (!destinationBucket || !sourceKey.startsWith('staging/admin/') || !(destinationKey.startsWith('media/works/') || destinationKey.startsWith('protected/works/'))) throw new ApiError(400, 'VALIDATION_FAILED', 'COS promotion constraints are invalid');
       await call(cos, 'putObjectCopy', { Bucket: destinationBucket, Region: region, Key: destinationKey, CopySource: `${privateBucket}.cos.${region}.myqcloud.com/${sourceKey}`, MetadataDirective: 'Replaced', ContentType: contentType, ...(['application/pdf', 'application/epub+zip'].includes(contentType) ? { ContentDisposition: 'attachment' } : {}) });
     },
-    async putBytes(objectKey, bytes, options = {}) {
-      if (options.sourceKey) {
-        await call(cos, 'putObjectCopy', {
-          Bucket: publicBucket, Region: region, Key: objectKey,
-          CopySource: `${publicBucket}.cos.${region}.myqcloud.com/${options.sourceKey}`,
-          MetadataDirective: 'Replaced', ContentType: 'application/json; charset=utf-8', CacheControl: options.cacheControl,
-        });
-        return;
-      }
-      await call(cos, 'putObject', {
-        Bucket: publicBucket, Region: region, Key: objectKey,
-        Body: bytes, ContentType: 'application/json; charset=utf-8', CacheControl: options.cacheControl,
-      });
-    },
     async putImmutable(objectKey, bytes, { cacheControl, version, schemaVersion }) {
       const versioning = await call(cos, 'getBucketVersioning', { Bucket: publicBucket, Region: region });
-      if (String(versioning.Status || versioning.status || '').toLowerCase() === 'enabled') throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Public snapshot bucket versioning must be disabled');
+      const config = versioning && versioning.VersioningConfiguration;
+      if (!config || Object.getPrototypeOf(config) !== Object.prototype || Object.keys(config).some((key) => key !== 'Status') || (config.Status !== undefined && !['Enabled', 'Suspended'].includes(config.Status))) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'COS bucket versioning configuration is unavailable');
+      if (config.Status === 'Enabled') throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Public snapshot bucket versioning must be disabled');
+      const proposed = await consumeBytes(bytes);
+      let proposedDocument;
+      try { proposedDocument = JSON.parse(proposed.bytes.toString('utf8')); } catch { throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Immutable snapshot document is invalid'); }
+      validatePublicCatalogDocument(proposedDocument, proposed.bytes, { version, schemaVersion, generatedAt: proposedDocument.generatedAt });
       try {
-        await call(cos, 'putObject', { Bucket: publicBucket, Region: region, Key: objectKey, Body: bytes, ContentType: 'application/json; charset=utf-8', CacheControl: cacheControl, Headers: { 'x-cos-forbid-overwrite': 'true' } });
-        return { bytes: Buffer.from(bytes), checksum: crypto.createHash('sha256').update(bytes).digest('hex'), existed: false };
+        await call(cos, 'putObject', { Bucket: publicBucket, Region: region, Key: objectKey, Body: proposed.bytes, ContentType: 'application/json; charset=utf-8', CacheControl: cacheControl, Headers: { 'x-cos-forbid-overwrite': 'true' } });
+        return { bytes: proposed.bytes, checksum: proposed.checksum, existed: false };
       } catch (error) {
         if (!error || !['FileAlreadyExists', '409'].includes(String(error.code || error.statusCode))) throw error;
         const existing = await call(cos, 'getObject', { Bucket: publicBucket, Region: region, Key: objectKey });
@@ -84,7 +131,7 @@ function createCosObjectStore({ publicBucket, privateBucket, region, cos }) {
         const actual = actualResult.bytes;
         let document;
         try { document = JSON.parse(actual.toString('utf8')); } catch { throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Existing immutable snapshot is invalid'); }
-        if (!document || document.schemaVersion !== schemaVersion || document.version !== version || !Array.isArray(document.works)) throw new ApiError(409, 'SNAPSHOT_CONFLICT', 'Existing immutable snapshot has unexpected identity');
+        validatePublicCatalogDocument(document, actual, { version, schemaVersion, generatedAt: proposedDocument.generatedAt });
         return { bytes: actual, checksum: actualResult.checksum, existed: true };
       }
     },
@@ -106,4 +153,4 @@ function createRuntimeCosObjectStore({ config, env = process.env, COS }) {
   return createCosObjectStore({ publicBucket: config.cosPublicBucket, privateBucket: config.cosPrivateBucket, region: config.cosRegion, cos });
 }
 
-module.exports = { createCosObjectStore, createRuntimeCosObjectStore };
+module.exports = { createCosObjectStore, createRuntimeCosObjectStore, validatePublicCatalogDocument };

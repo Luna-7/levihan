@@ -296,6 +296,7 @@ snapshots/public/config.v{version}.json
 
 - COS 只保存版本文件，使用长缓存和不可变 URL；写入必须启用 `x-cos-forbid-overwrite`，且公开桶不得开启版本控制。
 - 当前版本指针存放在 PostgreSQL `snapshot_current`，由带 lease token 的完成事务单调推进。客户端先读取短缓存的 `GET /snapshots/catalog/current`，再获取 COS 不可变对象；不存在可变 COS manifest。
+- `source_version` 仅用于任务观测，不代表跨多次查询的数据库一致性快照。目录语义是“任务构建时读取并固化的不可变结果”；构建期间发生的后续发布由下一个 queued job 覆盖。同一 job 重试复用持久化的生成时间和已经写入的版本字节。
 - 快照仅包含公开所需最小字段，不包含用户信息、内部 ID、审核字段、私有 object key 或永久签名 URL。
 - 数据库发布成功但快照失败时，不回滚数据库；任务标记失败并自动重试，旧快照继续服务。
 - 管理后台显示数据库版本、线上快照版本和最近错误。
@@ -489,6 +490,7 @@ snapshots/public/config.v{version}.json
 - 禁止记录密码、恢复码、Cookie、注册票据、COS 签名、投稿正文和评论全文。
 - 公开读取依赖失败时使用最近成功快照；动态写入失败必须明确告知用户并保留本地草稿。
 - 快照、清理和审核任务记录状态、尝试次数和最后错误，不使用静默 catch。
+- 快照生成与上传 promotion 清理由两个独立 Event worker 调度，避免对象删除批次占用快照任务的执行时限。
 - 第一阶段使用 Vercel 与 CloudBase 原生日志和告警，不额外购买日志平台。
 
 建议告警：
