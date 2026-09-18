@@ -31,6 +31,73 @@ COS 桶 levihan-1325571558  →  lh-XXX/image01.webp…
 
 修改口令：编辑 `cloudbase/.env` 中的 `ADMIN_PASSWORD`，然后重新部署云函数即可。
 
+## 账号服务（registerWithPassword / loginWithPassword）
+
+这两个函数也是「事件函数 + HTTP 访问服务」（注册/登录必然发生在拿到登录态之前，
+网关默认不放行匿名 `callFunction`），通过 `cloudbaserc.json` 注入**两个互不相同的**环境变量：
+
+| 变量 | 作用 | 来源 |
+|---|---|---|
+| `CLOUDBASE_APIKEY` | **数据面**：初始化 `tcb.init({ env, accessKey })`，映射 PostgreSQL 的 `service_role`，缺它写 `users` 表会被 RLS 拒绝 | 环境级 API Key |
+| `CUSTOM_LOGIN_CREDENTIALS` | **票据面**：`createTicket()` 用它本地签 RS256 JWT，缺它登录态签不出来 | 控制台「身份认证 → 登录方式 → 自定义登录 → 私钥下载」得到的 JSON，**值需 base64 后再填** |
+
+两者**不能互相替代**：只有 `CLOUDBASE_APIKEY` 时数据能写进 `users` 表，
+但函数会在 `createTicket` 处抛 `Cannot destructure property 'env_id' of 'credentials'`，
+接口返回 503「账号服务异常」——从浏览器看就是**点了注册没反应**。
+
+另外控制台里「自定义登录」这个 provider **必须是启用状态**（登录方式列表里点「去设置」启用），
+否则票据即使签出来也换不到登录态。
+
+### ⚠️ 私钥值必须 base64，不能直接放 JSON
+
+CLI 渲染 `cloudbaserc.json` 时给 `JSON.parse` 挂了一个 reviver（源码注释写着「只解析对象」）：
+
+```js
+config = JSON.parse(configString, (key, value) => {
+  if (typeof value === 'string') {
+    try { const parsed = JSON.parse(value); if (typeof parsed === 'object') ... }
+```
+
+于是 `.env` 里**任何长得像 JSON 的字符串值都会被再解析成对象**，
+部署时报 `Environment.Variables.N.Value` 类型不是 `string`——
+私钥 JSON 正好踩中。base64 不含 `{}` `"` `:`，`JSON.parse` 会失败因而保持字符串，可安全穿过。
+
+生成 base64（拿到下载的私钥文件后执行一次）：
+
+```bash
+python3 -c "import json,base64;print(base64.b64encode(json.dumps(json.load(open('tcb_custom_login_key(...).json')),separators=(',',':')).encode()).decode())"
+```
+
+把输出整行填进 `cloudbase/.env`：
+
+```
+CUSTOM_LOGIN_CREDENTIALS=eyJwcml2YXRlX2tleV9pZCI6...
+```
+
+函数侧 `initAuth()` 会先看是否以 `{` 开头——是则当明文 JSON，否则按 base64 解，
+所以控制台里直接填明文 JSON 也能用。
+
+### 部署与自查
+
+```bash
+# 一次只部署一个更稳：实测传两个函数名时 CLI 只部署了第一个
+tcb fn deploy registerWithPassword --force
+tcb fn deploy loginWithPassword --force
+```
+
+自查线上是否配好（`len` 为 0 即未配置；base64 后约 1360）：
+
+```bash
+tcb fn detail registerWithPassword --json | grep -A2 CUSTOM_LOGIN_CREDENTIALS
+```
+
+冒烟验证：注册一次应返回 `{"ok":true,"ticket":"<keyId>/@@/<jwt>"}`，
+票据的 `<keyId>` 要等于私钥里的 `private_key_id`，
+JWT 载荷含 `env` / `uid` / `exp`。
+
+> 注意：`{{env.X}}` 占位符由 CLI 的模板渲染处理，**不是** i18n 的 `replaceVars`；
+> 若 `.env` 里没有对应键，占位符会原样留在值里，函数侧用 `startsWith('{{env.')` 兜底报「未配置」。
+
 ## 部署 / 更新
 
 ```bash

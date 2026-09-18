@@ -106,16 +106,28 @@ function initDb() {
 /**
  * 票据面：createTicket 不是调接口，而是用「自定义登录私钥」本地签一张 RS256 JWT
  * （返回 private_key_id + '/@@/' + token）。私钥 JSON 结构 { private_key_id, private_key, env_id }，
- * 来自控制台「登录授权 → 自定义登录私钥」，以环境变量 CUSTOM_LOGIN_CREDENTIALS 注入。
+ * 来自控制台「登录授权 → 自定义登录私钥」。
+ *
+ * 为什么默认按 base64 解：CLI 渲染 cloudbaserc 时给 JSON.parse 挂了 reviver
+ * （「只解析对象」——凡长得像 JSON 的字符串值都会再被解析成对象），
+ * 于是 .env 里直接放私钥 JSON 会被解析成对象，部署时报
+ * `Environment.Variables.N.Value` 类型不是 string。base64 不含 {} " : ，
+ * JSON.parse 失败因而保持字符串，可安全穿过该 reviver。
+ * 也兼容控制台里直接填明文 JSON（形如 { 开头）。
  */
+function parseCredentials(raw) {
+  const text = raw.startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8');
+  return JSON.parse(text);
+}
+
 function initAuth() {
   const raw = String(process.env.CUSTOM_LOGIN_CREDENTIALS || '').trim();
   if (!raw || raw.startsWith('{{env.')) throw new Error('CUSTOM_LOGIN_CREDENTIALS 未配置');
   let credentials;
   try {
-    credentials = JSON.parse(raw);
+    credentials = parseCredentials(raw);
   } catch {
-    throw new Error('CUSTOM_LOGIN_CREDENTIALS 不是合法 JSON');
+    throw new Error('CUSTOM_LOGIN_CREDENTIALS 不是合法凭据（应为 base64 或 JSON）');
   }
   return tcb.init({ env: ENV_ID, credentials });
 }
