@@ -1,10 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { soundManager } from '../utils/audio';
-import {
-  MangaComment,
-  getCommentsByBookId,
-  addCommentToBook,
-} from '../data/mangaComments';
+import { createComment, listComments, type CommentItem } from '../features/interactions/api';
 
 interface Props {
   bookId: string;
@@ -19,13 +15,22 @@ export const MangaCommentSection: React.FC<Props> = ({
   onShowToast,
   onCommentCountChange,
 }) => {
-  const [comments, setComments] = useState<MangaComment[]>(() =>
-    getCommentsByBookId(bookId)
-  );
+  const [comments, setComments] = useState<CommentItem[]>([]);
+  const [commentCount, setCommentCount] = useState(0);
   const [commentContent, setCommentContent] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const load = async () => {
+    try {
+      const response = await listComments(bookId);
+      setComments(response.items); setCommentCount(response.count);
+      onCommentCountChange?.(response.count);
+    } catch { onShowToast('评论加载失败，请稍后重试'); }
+  };
+
+  useEffect(() => { void load(); }, [bookId]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentContent.trim()) {
       onShowToast('请输入评论内容 ✍️');
@@ -35,21 +40,13 @@ export const MangaCommentSection: React.FC<Props> = ({
     setIsSubmitting(true);
     soundManager.playScrollOpen();
 
-    setTimeout(() => {
-      const newComment = addCommentToBook(
-        bookId,
-        '匿名调查兵',
-        commentContent
-      );
-      const updatedList = [newComment, ...comments];
-      setComments(updatedList);
+    try {
+      const result = await createComment(bookId, commentContent, globalThis.crypto.randomUUID());
       setCommentContent('');
-      setIsSubmitting(false);
-      onShowToast('🎉 评论发表成功');
-      if (onCommentCountChange) {
-        onCommentCountChange(updatedList.length);
-      }
-    }, 150);
+      if (result.status === 'pending') onShowToast('评论已提交，审核通过后显示');
+      else { onShowToast('🎉 评论发表成功'); await load(); }
+    } catch { onShowToast('评论提交失败，请稍后重试'); }
+    finally { setIsSubmitting(false); }
   };
 
   return (
@@ -57,7 +54,7 @@ export const MangaCommentSection: React.FC<Props> = ({
       {/* 标题 */}
       <div className="border-b border-[#1E4334]/30 pb-2 flex items-center justify-between">
         <h3 className="font-serif-title font-bold text-sm sm:text-base text-[#1E3A2B]">
-          评论 ({comments.length})
+          评论 ({commentCount})
         </h3>
         <span className="text-[11px] font-retro-jp text-[#8C7A68]">
           《{bookTitle}》
@@ -95,14 +92,14 @@ export const MangaCommentSection: React.FC<Props> = ({
           >
             <div className="flex items-center justify-between">
               <span className="font-bold text-xs font-serif-title text-[#1E3A2B]">
-                {item.author}
+                {item.authorName}
               </span>
               <span className="text-[10px] font-mono text-[#8C7A68]">
-                {item.timestamp}
+                {new Date(item.createdAt).toLocaleString()}
               </span>
             </div>
             <p className="text-xs font-retro-jp text-[#3E342B] leading-relaxed whitespace-pre-wrap break-words">
-              {item.content}
+              {item.body}
             </p>
           </div>
         ))}

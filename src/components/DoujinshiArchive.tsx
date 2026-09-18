@@ -10,8 +10,8 @@ import LazyComicPage from './LazyComicPage';
 import { DoujinMaintenanceGate } from './DoujinMaintenanceGate';
 import { AuthorWithLink } from '../utils/authorLink';
 import { MangaCommentSection } from './MangaCommentSection';
-import { getCommentCountByBookId } from '../data/mangaComments';
-import { cloudbase } from '../utils/cloudbase';
+import { useReadingProgress } from '../hooks/useReadingProgress';
+import { getMe } from '../features/auth/api';
 
 interface Props {
   onCopyCode?: (code: string) => void;
@@ -35,6 +35,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
   // 当前正在无缝长图阅读的书籍
   const [readingBook, setReadingBook] = useState<DoujinBookItem | null>(null);
+  const syncedProgress = useReadingProgress(readingBook?.id ?? null);
 
   // 动态探测与检测到的内页总数
   const [detectedPages, setDetectedPages] = useState<number | null>(null);
@@ -63,8 +64,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     let active = true;
     const refreshLogin = async () => {
       try {
-        const user = await cloudbase.auth().getCurrentUser();
-        if (active) setIsMangaUnlocked(previewLoggedIn || Boolean(user));
+        const session = await getMe();
+        if (active) setIsMangaUnlocked(previewLoggedIn || Boolean(session.user.id));
       } catch {
         if (active) setIsMangaUnlocked(previewLoggedIn);
       } finally {
@@ -100,6 +101,10 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   // 点击卡片直接进入查看来源于 COS 的无缝长图
   const handleOpenBookReader = async (book: DoujinBookItem) => {
     soundManager.playPageTurn();
+    if (book.tags.includes('含R18')) {
+      window.location.hash = `#/restricted/${encodeURIComponent(book.id)}`;
+      return;
+    }
     setReadingBook(book);
     setDetectedPages(book.pages || 30);
     onShowToast(`正在开启《${book.titleZh}》无缝长图画廊 📖`);
@@ -126,6 +131,19 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     soundManager.playScrollOpen();
     setReadingBook(null);
     setDetectedPages(null);
+  };
+
+  const handleFinishReader = async () => {
+    if (readingBook) {
+      const total = detectedPages || readingBook.pages || 30;
+      try {
+        const result = await syncedProgress.save({ kind: 'comic', page: total }, 100);
+        if (!result.accepted) { onShowToast('其他设备已有更新进度，请确认后重试'); return; }
+        onShowToast('阅读进度已同步到账号');
+      }
+      catch { onShowToast('阅读已完成，但跨设备进度暂未同步'); }
+    }
+    handleCloseReader();
   };
 
   // 过滤同人本列表
@@ -198,6 +216,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
               <p className="text-[10px] font-retro-jp text-[#7A6958] truncate">
                 作者：<AuthorWithLink author={readingBook.circle} customUrl={readingBook.authorUrl} defaultColorClass="text-[#7A6958]" orangeColorClass="text-[#D35400]" /> · 共 {totalPages} 页
                 {isDetectingPages ? '（动态校准中...）' : ''}
+                {syncedProgress.progress?.position.kind === 'comic' ? ` · 上次第 ${syncedProgress.progress.position.page} 页` : ''}
               </p>
             </div>
           </div>
@@ -224,10 +243,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           <p className="text-xs text-[#5B4636] font-bold">已浏览至末尾（共 {totalPages} 页）</p>
           <div className="flex items-center justify-center gap-3">
             <button
-              onClick={handleCloseReader}
+              onClick={() => void handleFinishReader()}
+              disabled={syncedProgress.saving}
               className="px-3.5 py-1.5 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs rounded-xs hover:bg-[#2B5E4A] cursor-pointer shadow-xs"
             >
-              返回本子列表 📚
+              {syncedProgress.saving ? '同步中...' : '完成并返回 📚'}
             </button>
             <button
               onClick={() => {
@@ -354,8 +374,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         {filteredBooks.map((book) => {
           // 通过 COS 逻辑层动态生成封面 CDN 地址
           const coverUrl = cosService.getCoverUrl(book);
-          const commentCount = getCommentCountByBookId(book.id);
-
           return (
             <div
               key={book.id}
@@ -474,16 +492,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                 </div>
               </div>
 
-              {/* 底部引导栏：如果有评论显示“共？条评论”，否则显示“共？页” */}
+              {/* 底部引导栏 */}
               <div className="pt-2.5 border-t border-dashed border-[#E0D5BE] flex items-center justify-between text-xs font-retro-jp text-[#8C7A68] whitespace-nowrap">
-                {commentCount > 0 ? (
-                  <span className="flex items-center gap-1 text-[#5B4636] font-medium">
-                    <span>💬</span>
-                    <span>共 {commentCount} 条评论</span>
-                  </span>
-                ) : (
-                  <span>共 {book.pages || 30} 页</span>
-                )}
+                <span>共 {book.pages || 30} 页</span>
                 <span className="text-[#1E4334] font-pixel text-xs group-hover:translate-x-0.5 transition-transform flex items-center gap-1 font-bold whitespace-nowrap">
                   <span>进入长图阅读</span>
                   <span>→</span>

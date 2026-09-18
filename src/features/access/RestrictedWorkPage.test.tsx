@@ -5,8 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const access = vi.hoisted(() => ({ acceptAgeConsent: vi.fn(), getAgePolicy: vi.fn(), getRestrictedAccess: vi.fn() }));
 const works = vi.hoisted(() => ({ getPublicWork: vi.fn() }));
+const progress = vi.hoisted(() => ({ save: vi.fn(), hook: vi.fn() }));
 vi.mock('./api', () => access);
 vi.mock('../works/api', () => works);
+vi.mock('../../hooks/useReadingProgress', () => ({ useReadingProgress: progress.hook }));
+vi.mock('../../components/MangaCommentSection', () => ({ MangaCommentSection: ({ bookId }: { bookId: string }) => <div data-testid="comments">comments:{bookId}</div> }));
 import { RestrictedWorkPage } from './RestrictedWorkPage';
 
 const id = '550e8400-e29b-41d4-a716-446655440002';
@@ -17,6 +20,8 @@ afterEach(() => { cleanup(); vi.useRealTimers(); vi.resetAllMocks(); localStorag
 
 describe('RestrictedWorkPage', () => {
   it('loads the reachable age gate and keeps signed URLs only in component memory until close', async () => {
+    progress.hook.mockReturnValue({ save: progress.save, saving: false, progress: null });
+    progress.save.mockResolvedValue({ accepted: true });
     works.getPublicWork.mockResolvedValue(metadata);
     access.getAgePolicy.mockResolvedValue({ policyVersion: '2026-09', warning: '成人内容警告', assurance: 'self_declaration_only' });
     access.acceptAgeConsent.mockResolvedValue({ policyVersion: '2026-09', acceptedAt: '2030-01-01T00:00:00.000Z' });
@@ -28,6 +33,9 @@ describe('RestrictedWorkPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认并继续' }));
     const image = await screen.findByRole('img', { name: 'R 第 1 页' });
     expect(image.getAttribute('src')).toContain('/protected/works/');
+    expect(screen.getByTestId('comments').textContent).toContain('restricted');
+    fireEvent.click(screen.getByRole('button', { name: '完成并同步进度' }));
+    await waitFor(() => expect(progress.save).toHaveBeenCalledWith({ kind: 'comic', page: 1 }, 100));
     fireEvent.click(screen.getByRole('button', { name: '关闭阅读器' }));
     expect(screen.queryByRole('img', { name: 'R 第 1 页' })).toBeNull();
     expect(local).not.toHaveBeenCalled();
@@ -37,6 +45,7 @@ describe('RestrictedWorkPage', () => {
   });
 
   it('clears signed URLs on expiry and on a denied refresh', async () => {
+    progress.hook.mockReturnValue({ save: progress.save, saving: false, progress: null });
     vi.useFakeTimers();
     works.getPublicWork.mockResolvedValue(metadata);
     access.getAgePolicy.mockResolvedValue({ policyVersion: '2026-09', warning: '成人内容警告', assurance: 'self_declaration_only' });

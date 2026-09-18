@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { getPublicWork } from '../works/api';
 import { AgeGate } from './AgeGate';
 import { getAgePolicy, getRestrictedAccess, type RestrictedAccessResponse } from './api';
+import { MangaCommentSection } from '../../components/MangaCommentSection';
+import { useReadingProgress } from '../../hooks/useReadingProgress';
 
 type Metadata = Awaited<ReturnType<typeof getPublicWork>>['work'];
 type Policy = Awaited<ReturnType<typeof getAgePolicy>>;
@@ -11,6 +13,7 @@ export function RestrictedWorkPage({ slug, onClose }: { slug: string; onClose: (
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [access, setAccess] = useState<RestrictedAccessResponse | null>(null);
   const [message, setMessage] = useState('');
+  const syncedProgress = useReadingProgress(access ? slug : null);
 
   useEffect(() => {
     let active = true;
@@ -39,6 +42,17 @@ export function RestrictedWorkPage({ slug, onClose }: { slug: string; onClose: (
     try { setAccess(await getRestrictedAccess(metadata.accessId)); }
     catch { setMessage('登录、年龄声明或内容状态已变化，请重新确认'); }
   };
+  const finish = async () => {
+    if (!access) return;
+    if (!['comic', 'novel'].includes(access.work.type)) { setMessage('此内容类型不支持阅读进度'); return; }
+    const comicPage = Math.max(1, ...access.assets.map((asset) => asset.pageNo || 0));
+    const novelChapter = Math.max(1, ...access.assets.map((asset) => asset.chapterPosition || 0));
+    const position = access.work.type === 'comic' ? { kind: 'comic' as const, page: comicPage } : { kind: 'novel' as const, chapter: novelChapter, offset: 0 };
+    try {
+      const result = await syncedProgress.save(position, 100);
+      setMessage(result.accepted ? '阅读进度已同步到账号' : '其他设备已有更新进度，请确认后重试');
+    } catch { setMessage('跨设备进度暂未同步'); }
+  };
 
   if (message && !metadata) return <main className="p-6"><p role="alert">{message}</p><button type="button" onClick={close}>返回</button></main>;
   if (!metadata || !policy) return <main className="p-6" aria-busy="true">正在加载内容规则…</main>;
@@ -58,5 +72,7 @@ export function RestrictedWorkPage({ slug, onClose }: { slug: string; onClose: (
         ? <img key={asset.id} src={asset.url} alt={`${access.work.title} 第 ${asset.pageNo || index + 1} 页`} referrerPolicy="no-referrer" />
         : <a key={asset.id} href={asset.url} referrerPolicy="no-referrer">读取内容 {index + 1}</a>)}
     </section>
+    {['comic', 'novel'].includes(access.work.type) && <button type="button" disabled={syncedProgress.saving} onClick={() => void finish()}>完成并同步进度</button>}
+    <MangaCommentSection bookId={slug} bookTitle={access.work.title} onShowToast={setMessage} />
   </main>;
 }
