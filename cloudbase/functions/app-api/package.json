@@ -6,6 +6,7 @@
   "type": "commonjs",
   "dependencies": {
     "@cloudbase/node-sdk": "^3.0.1",
-    "@node-rs/argon2": "^2.2.1"
+    "@node-rs/argon2": "^2.2.1",
+    "cos-nodejs-sdk-v5": "^3.0.0"
   }
 }

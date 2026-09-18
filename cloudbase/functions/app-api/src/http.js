@@ -143,6 +143,8 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
         context.actorId = actorId;
         if (typeof resolvedActor === 'object' && resolvedActor.role !== undefined) context.actorRole = resolvedActor.role;
       }
+      if (route.metadata.sessionRequired && actorId == null) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication required');
+      if (route.metadata.role !== undefined && context.actorRole !== route.metadata.role) throw new ApiError(403, 'ACCESS_DENIED', 'Insufficient permissions');
       const rateLimit = route.metadata.rateLimit ?? defaultRateLimitForRoute(method, route.path);
       if (rateLimit && rateLimiter) {
         const ip = clientIp;
