@@ -13,13 +13,46 @@ WITH inserted_policy AS (
   INSERT INTO public.site_settings(key,value,version)
   VALUES('interaction_comment_policy','{"newAccountHours":24,"rapidCommentCount":3,"riskTerms":["spam","telegram","裸聊"]}'::jsonb,1)
   ON CONFLICT(key) DO NOTHING RETURNING 1
-), inserted_work AS (
-  INSERT INTO public.works(slug,type,title,summary,rating,status,author_name,published_at)
-  VALUES('lh-001','comic','春','旧版漫画归档兼容记录；私有资产导入完成后方可发布','restricted','draft','未知',NULL)
-  ON CONFLICT(slug) DO NOTHING RETURNING id
 )
 INSERT INTO public.interaction_install_state(singleton,seeded_policy,seeded_work_id,migrated_progress_count,installed_at)
-SELECT true,EXISTS(SELECT 1 FROM inserted_policy),(SELECT id FROM inserted_work),(SELECT count(*) FROM public.reading_progress),clock_timestamp();
+SELECT true,EXISTS(SELECT 1 FROM inserted_policy),NULL,(SELECT count(*) FROM public.reading_progress),clock_timestamp();
+
+DO $$ BEGIN
+  IF EXISTS(SELECT 1 FROM public.works WHERE slug ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+  THEN RAISE EXCEPTION 'interaction_uuid_shaped_slug'; END IF;
+END $$;
+ALTER TABLE public.works ADD CONSTRAINT works_slug_not_uuid CHECK (slug !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
+
+DO $$ DECLARE legacy public.works%ROWTYPE; inserted_id uuid;
+BEGIN
+  SELECT * INTO legacy FROM public.works WHERE slug='lh-001' FOR NO KEY UPDATE;
+  IF FOUND THEN
+    IF legacy.type<>'comic' OR legacy.rating<>'restricted' OR legacy.status<>'draft' OR legacy.published_at IS NOT NULL
+    THEN RAISE EXCEPTION 'unsafe_legacy_archive_work'; END IF;
+  ELSE
+    INSERT INTO public.works(slug,type,title,summary,rating,status,author_name,published_at)
+    VALUES('lh-001','comic','春','旧版漫画归档兼容记录；私有资产导入完成后方可发布','restricted','draft','未知',NULL)
+    RETURNING id INTO inserted_id;
+    UPDATE public.interaction_install_state SET seeded_work_id=inserted_id WHERE singleton=true;
+    SELECT * INTO legacy FROM public.works WHERE id=inserted_id;
+  END IF;
+  PERFORM 1 FROM public.work_assets asset WHERE asset.work_id=legacy.id ORDER BY asset.id FOR UPDATE;
+  IF EXISTS(SELECT 1 FROM public.work_assets asset WHERE asset.work_id=legacy.id AND (asset.status='active' OR asset.storage_zone<>'private' OR asset.access_level<>'private' OR NOT starts_with(asset.object_key,'protected/works/'||legacy.id::text||'/')))
+  THEN RAISE EXCEPTION 'unsafe_legacy_archive_assets'; END IF;
+END $$;
+
+CREATE TABLE public.comment_idempotency (
+  user_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE RESTRICT,
+  idempotency_key text NOT NULL CHECK (idempotency_key ~ '^[A-Za-z0-9_-]{8,128}$'),
+  payload_hash text NOT NULL CHECK (payload_hash ~ '^[a-f0-9]{64}$'),
+  comment_id uuid NOT NULL REFERENCES public.comments(id) ON DELETE RESTRICT,
+  result_status text NOT NULL CHECK (result_status IN ('pending','published')),
+  result_created_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(user_id,idempotency_key)
+);
+ALTER TABLE public.comment_idempotency ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.comment_idempotency FROM PUBLIC;
 
 ALTER TABLE public.reading_progress
   ADD COLUMN position_data jsonb,
@@ -97,7 +130,11 @@ CREATE FUNCTION public.interaction_assert_work(p_user_id uuid,p_session_id uuid,
 RETURNS public.works LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE work public.works%ROWTYPE; decision record;
 BEGIN
-  SELECT * INTO work FROM public.works WHERE id::text=p_work_ref OR slug=p_work_ref FOR SHARE;
+  IF p_work_ref ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
+    SELECT * INTO work FROM public.works WHERE id=p_work_ref::uuid FOR SHARE;
+  ELSE
+    SELECT * INTO work FROM public.works WHERE slug=p_work_ref FOR SHARE;
+  END IF;
   IF NOT FOUND THEN RAISE EXCEPTION 'not_found'; END IF;
   IF p_user_id IS NULL THEN
     IF NOT p_allow_anonymous OR work.status<>'published' OR work.rating='restricted' THEN RAISE EXCEPTION 'not_found'; END IF;
@@ -151,18 +188,24 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.create_work_comment_v2(p_user_id uuid,p_session_id uuid,p_work_ref text,p_body text,p_parent_id uuid,p_request_id text)
+CREATE FUNCTION public.create_work_comment_v2(p_user_id uuid,p_session_id uuid,p_work_ref text,p_body text,p_parent_id uuid,p_idempotency_key text,p_request_id text)
 RETURNS TABLE(id uuid,status text,created_at timestamptz)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-DECLARE app_user public.app_users%ROWTYPE; work public.works%ROWTYPE; normalized text; policy jsonb; next_status text := 'published'; created public.comments%ROWTYPE; recent_count integer;
+DECLARE app_user public.app_users%ROWTYPE; work public.works%ROWTYPE; normalized text; policy jsonb; next_status text := 'published'; created public.comments%ROWTYPE; replay public.comment_idempotency%ROWTYPE; recent_count integer; request_hash text;
 BEGIN
   work := public.interaction_assert_work(p_user_id,p_session_id,p_work_ref,false);
   normalized := regexp_replace(btrim(p_body),'[[:space:]]+',' ','g');
-  IF length(normalized) NOT BETWEEN 1 AND 500 OR normalized ~ '[[:cntrl:]]' THEN RAISE EXCEPTION 'validation_failed'; END IF;
+  IF length(normalized) NOT BETWEEN 1 AND 500 OR normalized ~ '[[:cntrl:]]' OR p_idempotency_key !~ '^[A-Za-z0-9_-]{8,128}$' THEN RAISE EXCEPTION 'validation_failed'; END IF;
+  request_hash := encode(digest(work.id::text||chr(31)||normalized||chr(31)||COALESCE(p_parent_id::text,''),'sha256'),'hex');
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_user_id::text,20260918));
+  SELECT * INTO replay FROM public.comment_idempotency WHERE user_id=p_user_id AND idempotency_key=p_idempotency_key FOR UPDATE;
+  IF FOUND THEN
+    IF replay.payload_hash<>request_hash THEN RAISE EXCEPTION 'state_conflict'; END IF;
+    RETURN QUERY SELECT replay.comment_id,replay.result_status,replay.result_created_at; RETURN;
+  END IF;
   IF p_parent_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.comments parent WHERE parent.id=p_parent_id AND parent.work_id=work.id AND parent.status='published' AND parent.parent_id IS NULL) THEN RAISE EXCEPTION 'not_found'; END IF;
   SELECT * INTO app_user FROM public.app_users WHERE id=p_user_id;
   SELECT value INTO policy FROM public.site_settings WHERE key='interaction_comment_policy' FOR SHARE;
-  PERFORM pg_advisory_xact_lock(hashtextextended(p_user_id::text,20260918));
   SELECT count(*) INTO recent_count FROM public.comments WHERE user_id=p_user_id AND created_at>clock_timestamp()-interval '1 minute';
   IF app_user.created_at>clock_timestamp()-make_interval(hours=>COALESCE((policy->>'newAccountHours')::integer,24))
     OR recent_count>=COALESCE((policy->>'rapidCommentCount')::integer,3)
@@ -171,6 +214,8 @@ BEGIN
   THEN next_status := 'pending'; END IF;
   INSERT INTO public.comments(work_id,user_id,parent_id,body,status,risk_level)
   VALUES(work.id,p_user_id,p_parent_id,normalized,next_status,CASE next_status WHEN 'pending' THEN 'medium' ELSE 'low' END) RETURNING * INTO created;
+  INSERT INTO public.comment_idempotency(user_id,idempotency_key,payload_hash,comment_id,result_status,result_created_at)
+  VALUES(p_user_id,p_idempotency_key,request_hash,created.id,created.status,created.created_at);
   INSERT INTO public.audit_logs(actor_id,action,target_type,target_id,summary,request_id)
   VALUES(p_user_id,'comment.create','comment',created.id,jsonb_build_object('status',next_status,'workId',work.id),p_request_id);
   RETURN QUERY SELECT created.id,created.status,created.created_at;
@@ -233,6 +278,7 @@ BEGIN
   IF NOT public.interaction_valid_position(p_position) OR p_percent IS NULL OR p_percent<0 OR p_percent>100 OR p_logic_version IS NULL OR p_logic_version<1 OR p_client_version IS NULL OR p_client_version<1 OR p_base_server_version IS NULL OR p_base_server_version<0 OR p_mutation_id IS NULL THEN RAISE EXCEPTION 'validation_failed'; END IF;
   IF (work.type='comic' AND p_position->>'kind'<>'comic') OR (work.type='novel' AND p_position->>'kind'<>'novel') OR work.type NOT IN ('comic','novel') THEN RAISE EXCEPTION 'validation_failed'; END IF;
   scalar_position := CASE p_position->>'kind' WHEN 'comic' THEN (p_position->>'page')::bigint ELSE (p_position->>'offset')::bigint END;
+  PERFORM pg_advisory_xact_lock(hashtextextended(work.id::text||':'||p_user_id::text,20260918));
   SELECT * INTO current_progress FROM public.reading_progress WHERE user_id=p_user_id AND work_id=work.id FOR UPDATE;
   IF NOT FOUND THEN
     IF p_base_server_version<>0 THEN RAISE EXCEPTION 'state_conflict'; END IF;
@@ -314,7 +360,7 @@ REVOKE EXECUTE ON FUNCTION public.interaction_assert_admin(uuid,uuid) FROM PUBLI
 REVOKE EXECUTE ON FUNCTION public.interaction_assert_work(uuid,uuid,text,boolean) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.set_work_reaction_v2(uuid,uuid,text,text,boolean) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.list_work_comments_v2(uuid,uuid,text,integer,timestamptz,uuid) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.create_work_comment_v2(uuid,uuid,text,text,uuid,text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.create_work_comment_v2(uuid,uuid,text,text,uuid,text,text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.delete_work_comment_v2(uuid,uuid,uuid,text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.moderate_work_comment_v2(uuid,uuid,uuid,text,text,text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.get_reading_progress_v2(uuid,uuid,text) FROM PUBLIC;

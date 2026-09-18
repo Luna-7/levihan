@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 const API_ROOT = '/api/v1';
 const Id = z.string().uuid();
+const UUID_SHAPED = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const Slug = z.string().regex(/^[a-z0-9][a-z0-9-]{0,127}$/).refine((value) => !UUID_SHAPED.test(value), 'UUID-shaped slugs are reserved');
 const Timestamp = z.string().datetime({ offset: true });
 const WorkType = z.enum(['comic', 'novel', 'art', 'resource']);
 const Rating = z.enum(['general', 'mature', 'restricted']);
@@ -9,7 +11,7 @@ const PublicAsset = z.object({ kind: z.enum(['cover', 'page', 'body', 'attachmen
 const PublicChapter = z.object({ title: z.string().min(1).max(200), position: z.number().int().positive() }).strict();
 const PublicWork = z.object({
   accessId: Id.optional(),
-  slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,127}$/), type: WorkType, title: z.string().min(1).max(120),
+  slug: Slug, type: WorkType, title: z.string().min(1).max(120),
   summary: z.string().max(2000), rating: Rating, authorName: z.string().min(1).max(120),
   publishedAt: Timestamp, chapters: z.array(PublicChapter).max(1000).default([]), assets: z.array(PublicAsset).max(5000),
 }).strict().superRefine((work, context) => {
@@ -78,11 +80,12 @@ async function request(path: string, options: { method?: string; body?: unknown;
 
 export const createOperationKey = () => globalThis.crypto.randomUUID().replaceAll('-', '');
 function operationKey(value: string) { if (!/^[A-Za-z0-9_-]{8,128}$/.test(value)) throw new WorksApiError('VALIDATION_FAILED', 'Operation key is invalid'); return value; }
+function validateSlug(value: string) { if (!Slug.safeParse(value).success) throw new WorksApiError('VALIDATION_FAILED', '作品地址无效'); return value; }
 const write = (path: string, body: unknown, method: string, idempotencyKey: string) => request(path, { method, body, csrf: true, idempotencyKey: operationKey(idempotencyKey) });
 
 export async function getPublicWork(slug: string) {
-  if (!/^[a-z0-9][a-z0-9-]{0,127}$/.test(slug)) throw new WorksApiError('VALIDATION_FAILED', '作品地址无效');
-  return z.object({ work: PublicWork }).strict().parse(await request(`/works/${encodeURIComponent(slug)}`));
+  const validatedSlug = validateSlug(slug);
+  return z.object({ work: PublicWork }).strict().parse(await request(`/works/${encodeURIComponent(validatedSlug)}`));
 }
 export async function listAdminWorks(options: { status?: 'draft' | 'review' | 'published' | 'archived' | 'deleted'; limit?: number; cursor?: string } = {}) {
   const query = new URLSearchParams();
@@ -92,8 +95,8 @@ export async function listAdminWorks(options: { status?: 'draft' | 'review' | 'p
   return AdminWorkListResponse.parse(await request(`/admin/works${query.size ? `?${query}` : ''}`));
 }
 export async function getAdminWork(id: string) { Id.parse(id); return AdminWorkResponse.parse(await request(`/admin/works/${id}`)); }
-export async function createWork(input: CreateWorkInput, key: string) { return WorkMutationResponse.parse(await write('/admin/works', input, 'POST', key)); }
-export async function updateWork(id: string, input: UpdateWorkInput, key: string) { Id.parse(id); return WorkMutationResponse.parse(await write(`/admin/works/${id}`, input, 'PATCH', key)); }
+export async function createWork(input: CreateWorkInput, key: string) { validateSlug(input.slug); return WorkMutationResponse.parse(await write('/admin/works', input, 'POST', key)); }
+export async function updateWork(id: string, input: UpdateWorkInput, key: string) { Id.parse(id); if (input.slug !== undefined) validateSlug(input.slug); return WorkMutationResponse.parse(await write(`/admin/works/${id}`, input, 'PATCH', key)); }
 async function transition(id: string, action: 'review' | 'publish' | 'archive' | 'restore', version: number, key: string) { Id.parse(id); return WorkMutationResponse.parse(await write(`/admin/works/${id}/${action}`, { version }, 'POST', key)); }
 export const reviewWork = (id: string, version: number, key: string) => transition(id, 'review', version, key);
 export const publishWork = (id: string, version: number, key: string) => transition(id, 'publish', version, key);

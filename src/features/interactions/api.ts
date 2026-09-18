@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const API_ROOT = '/api/v1';
 const Id = z.string().uuid();
-const WorkRef = z.string().regex(/^(?:[0-9a-f-]{36}|[a-z0-9][a-z0-9-]{0,127})$/i);
+const WorkRef = z.union([Id, z.string().regex(/^[a-z0-9][a-z0-9-]{0,127}$/)]);
 const Timestamp = z.string().datetime({ offset: true });
 const Position = z.union([
   z.object({ kind: z.literal('comic'), page: z.number().int().min(1).max(100000) }).strict(),

@@ -37,8 +37,8 @@ function createInteractionsRepository({ rdb }) {
         nextCursor: values.length === limit ? `${iso(values[values.length - 1].created_at)}|${values[values.length - 1].id}` : null,
       };
     },
-    async createComment({ userId, sessionId, workRef, body, parentId, requestId }) {
-      const value = first(await rdb.rpc('create_work_comment_v2', { p_user_id: userId, p_session_id: sessionId, p_work_ref: workRef, p_body: body, p_parent_id: parentId || null, p_request_id: requestId }));
+    async createComment({ userId, sessionId, workRef, body, parentId, idempotencyKey, requestId }) {
+      const value = first(await rdb.rpc('create_work_comment_v2', { p_user_id: userId, p_session_id: sessionId, p_work_ref: workRef, p_body: body, p_parent_id: parentId || null, p_idempotency_key: idempotencyKey, p_request_id: requestId }));
       return { id: value.id, status: value.status, createdAt: iso(value.created_at) };
     },
     async deleteComment({ userId, sessionId, commentId, requestId }) {

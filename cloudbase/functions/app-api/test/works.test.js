@@ -94,6 +94,18 @@ describe('work repository transaction boundary', () => {
 });
 
 describe('work lifecycle', () => {
+  it('rejects UUID-shaped slugs before reaching PostgreSQL', async () => {
+    const repository = { createWork: vi.fn(), updateWork: vi.fn() };
+    const service = createWorksService({ repository });
+    const uuidSlug = '550e8400-e29b-41d4-a716-446655440000';
+    await expect(service.create(ctx({ body: { slug: uuidSlug, type: 'comic', title: '夏日', summary: '', rating: 'general', authorName: '作者' } })))
+      .rejects.toMatchObject({ status: 400, errorCode: 'VALIDATION_FAILED' });
+    await expect(service.update(ctx({ params: { id: workId }, body: { version: 1, slug: uuidSlug } })))
+      .rejects.toMatchObject({ status: 400, errorCode: 'VALIDATION_FAILED' });
+    expect(repository.createWork).not.toHaveBeenCalled();
+    expect(repository.updateWork).not.toHaveBeenCalled();
+  });
+
   it('creates a normalized draft and delegates its audit write to one atomic repository operation', async () => {
     const created = { id: workId, slug: 'summer-story', type: 'comic', title: '夏日', summary: '', rating: 'general', status: 'draft', version: 1 };
     const repository = { createWork: vi.fn().mockResolvedValue(created) };

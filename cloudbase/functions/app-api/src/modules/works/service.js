@@ -3,6 +3,7 @@
 const { ApiError } = require('../../errors');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_SHAPED = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,127}$/;
 const TYPES = new Set(['comic', 'novel', 'art', 'resource']);
 const RATINGS = new Set(['general', 'mature', 'restricted']);
@@ -12,6 +13,7 @@ const TRANSITIONS = Object.freeze({
   archive: { from: 'published', to: 'archived' },
   restore: { from: 'archived', to: 'draft' },
 });
+const validSlug = (value) => SLUG.test(value) && !UUID_SHAPED.test(value);
 
 function strictObject(value, allowed) {
   if (!value || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).some((key) => !allowed.includes(key))) {
@@ -63,7 +65,7 @@ function createWorksService({ repository } = {}) {
         title: text(body.title, 'Title', 120), summary: text(body.summary, 'Summary', 2000, { empty: true }),
         rating: body.rating, authorName: text(body.authorName, 'Author name', 120),
       };
-      if (!SLUG.test(input.slug) || !TYPES.has(input.type) || !RATINGS.has(input.rating)) throw new ApiError(400, 'VALIDATION_FAILED', 'Work declaration is invalid');
+      if (!validSlug(input.slug) || !TYPES.has(input.type) || !RATINGS.has(input.rating)) throw new ApiError(400, 'VALIDATION_FAILED', 'Work declaration is invalid');
       try {
         return { work: await repository.createWork({ ...input, actorId: ctx.actorId, requestId: ctx.requestId, idempotencyKey: ctx.idempotencyKey }) };
       } catch (error) { throw mapRepositoryError(error); }
@@ -88,7 +90,7 @@ function createWorksService({ repository } = {}) {
       id(ctx.params.id, 'Work ID');
       const body = strictObject(ctx.body, ['version', 'slug', 'title', 'summary', 'rating', 'authorName', 'chapters']);
       const changes = {};
-      if (body.slug !== undefined) { changes.slug = text(body.slug, 'Slug', 128).toLowerCase(); if (!SLUG.test(changes.slug)) throw new ApiError(400, 'VALIDATION_FAILED', 'Slug is invalid'); }
+      if (body.slug !== undefined) { changes.slug = text(body.slug, 'Slug', 128).toLowerCase(); if (!validSlug(changes.slug)) throw new ApiError(400, 'VALIDATION_FAILED', 'Slug is invalid'); }
       if (body.title !== undefined) changes.title = text(body.title, 'Title', 120);
       if (body.summary !== undefined) changes.summary = text(body.summary, 'Summary', 2000, { empty: true });
       if (body.rating !== undefined) { if (!RATINGS.has(body.rating)) throw new ApiError(400, 'VALIDATION_FAILED', 'Rating is invalid'); changes.rating = body.rating; }

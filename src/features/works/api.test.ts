@@ -41,6 +41,15 @@ describe('typed works API client', () => {
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/admin/works', `/api/v1/admin/works/${id}`, `/api/v1/admin/works/${id}/review`, `/api/v1/admin/works/${id}/publish`, `/api/v1/admin/works/${id}/archive`]);
   });
 
+  it('rejects UUID-shaped slugs in admin create and update before the request', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const input = { slug: id, type: 'comic' as const, title: '夏日', summary: '', rating: 'general' as const, authorName: '作者' };
+    await expect(createWork(input, createOperationKey())).rejects.toThrow('作品地址无效');
+    await expect(updateWork(id, { version: 1, slug: id }, createOperationKey())).rejects.toThrow('作品地址无效');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('provides validated admin list and detail reads', async () => {
     const work = { id, slug: 'summer', type: 'comic', title: '夏日', summary: '', rating: 'general', status: 'draft', version: 1, authorName: '作者', publishedAt: null };
     const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ items: [work], nextCursor: null })).mockResolvedValueOnce(jsonResponse({ work }));

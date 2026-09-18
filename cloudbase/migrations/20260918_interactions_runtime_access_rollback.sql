@@ -5,7 +5,7 @@
 \endif
 BEGIN;
 REVOKE EXECUTE ON FUNCTION public.set_work_reaction_v2(uuid,uuid,text,text,boolean),
-  public.list_work_comments_v2(uuid,uuid,text,integer,timestamptz,uuid),public.create_work_comment_v2(uuid,uuid,text,text,uuid,text),
+  public.list_work_comments_v2(uuid,uuid,text,integer,timestamptz,uuid),public.create_work_comment_v2(uuid,uuid,text,text,uuid,text,text),
   public.delete_work_comment_v2(uuid,uuid,uuid,text),public.moderate_work_comment_v2(uuid,uuid,uuid,text,text,text),
   public.get_reading_progress_v2(uuid,uuid,text),public.sync_reading_progress_v2(uuid,uuid,text,jsonb,numeric,integer,bigint,bigint,uuid),
   public.create_interaction_report_v2(uuid,uuid,text,uuid,text,text,text),public.moderate_interaction_report_v2(uuid,uuid,uuid,text,text,text)

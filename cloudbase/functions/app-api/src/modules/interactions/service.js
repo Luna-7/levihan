@@ -3,8 +3,9 @@
 const { ApiError } = require('../../errors');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const WORK_REF = /^(?:[0-9a-f-]{36}|[a-z0-9][a-z0-9-]{0,127})$/;
+const WORK_REF = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9][a-z0-9-]{0,127})$/i;
 const REPORT_REASONS = new Set(['illegal', 'copyright', 'harassment', 'spam', 'other']);
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,128}$/;
 function plain(value) { return Boolean(value) && Object.getPrototypeOf(value) === Object.prototype; }
 function exact(value, required, optional = []) { return plain(value) && required.every((key) => Object.hasOwn(value, key)) && Object.keys(value).every((key) => required.includes(key) || optional.includes(key)); }
 function normalizedText(value, max, allowEmpty = false) {
@@ -44,8 +45,8 @@ function createInteractionsService({ repository }) {
       requireActor(ctx);
       if (!exact(ctx.body, ['body'], ['parentId'])) throw new ApiError(400, 'VALIDATION_FAILED', 'Comment input is invalid');
       const body = normalizedText(ctx.body.body, 500);
-      if (!body || (ctx.body.parentId !== undefined && !UUID.test(ctx.body.parentId))) throw new ApiError(400, 'VALIDATION_FAILED', 'Comment input is invalid');
-      return repository.createComment({ userId: ctx.actorId, sessionId: ctx.actorSessionId, workRef: workRef(ctx), body, parentId: ctx.body.parentId, requestId: ctx.requestId });
+      if (!body || !IDEMPOTENCY_KEY.test(ctx.idempotencyKey || '') || (ctx.body.parentId !== undefined && !UUID.test(ctx.body.parentId))) throw new ApiError(400, 'VALIDATION_FAILED', 'Comment input is invalid');
+      return repository.createComment({ userId: ctx.actorId, sessionId: ctx.actorSessionId, workRef: workRef(ctx), body, parentId: ctx.body.parentId, idempotencyKey: ctx.idempotencyKey, requestId: ctx.requestId });
     },
     async deleteComment(ctx) {
       requireActor(ctx);

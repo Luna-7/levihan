@@ -37,7 +37,7 @@ describe('interaction service', () => {
     const repository = { createComment: vi.fn().mockResolvedValue({ id: itemId, status: 'pending', createdAt: now }) };
     const service = createInteractionsService({ repository });
     await expect(service.createComment(ctx({ body: { body: '  hello\n   world  ' } }))).resolves.toEqual({ id: itemId, status: 'pending', createdAt: now });
-    expect(repository.createComment).toHaveBeenCalledWith(expect.objectContaining({ body: 'hello world', userId, sessionId, workRef: workId, requestId: 'req-1' }));
+    expect(repository.createComment).toHaveBeenCalledWith(expect.objectContaining({ body: 'hello world', userId, sessionId, workRef: workId, idempotencyKey: 'mutation-0001', requestId: 'req-1' }));
   });
 
   it.each(['', ' '.repeat(3), 'x'.repeat(501), '<script>alert(1)</script>\u0000'])('rejects invalid comment body %j', async (body) => {
@@ -94,6 +94,13 @@ describe('interaction repository and routes', () => {
     await expect(repository.setReaction({ userId, sessionId, workRef: workId, type: 'like', active: true })).resolves.toEqual({ active: true, count: 2 });
     expect(rpc).toHaveBeenCalledWith('set_work_reaction_v2', { p_user_id: userId, p_session_id: sessionId, p_work_ref: workId, p_reaction_type: 'like', p_active: true });
     await expect(repository.listComments({ workRef: workId, limit: 20 })).rejects.toMatchObject({ status: 403, errorCode: 'AGE_CONSENT_REQUIRED' });
+  });
+
+  it('passes comment idempotency into the same database transaction', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [{ id: itemId, status: 'published', created_at: now }], error: null });
+    const repository = createInteractionsRepository({ rdb: { rpc } });
+    await repository.createComment({ userId, sessionId, workRef: workId, body: 'same body', idempotencyKey: 'comment-key-1', requestId: 'req-1' });
+    expect(rpc).toHaveBeenCalledWith('create_work_comment_v2', expect.objectContaining({ p_idempotency_key: 'comment-key-1', p_body: 'same body' }));
   });
 
   it('registers CSRF-protected session/admin writes, domain progress idempotency and safe replay policies', () => {
