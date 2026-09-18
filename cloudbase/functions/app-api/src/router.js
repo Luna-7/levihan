@@ -1,6 +1,6 @@
 'use strict';
 
-const IDEMPOTENCY_MODES = new Set(['none', 'supported', 'required']);
+const IDEMPOTENCY_MODES = new Set(['none', 'supported', 'required', 'domain']);
 const SAFE_RESPONSE_HEADERS = new Set(['etag']);
 const RESPONSE_TYPES = new Set(['boolean', 'integer', 'number', 'uuid', 'iso-date']);
 const SENSITIVE_ALLOWLIST_SEMANTICS = /token|cookie|password|secret|recovery|signed|url|code|credential|authorization|location|ticket|session|csrf|key|signature|bearer/i;
@@ -54,9 +54,9 @@ function normalizeIdempotency(metadata) {
   }
   if (!idempotency || Object.getPrototypeOf(idempotency) !== Object.prototype || !IDEMPOTENCY_MODES.has(idempotency.mode)) throw policyError();
   if (Object.keys(idempotency).some((key) => !['mode', 'responsePolicy'].includes(key))) throw policyError();
-  if (idempotency.mode === 'none') {
+  if (idempotency.mode === 'none' || idempotency.mode === 'domain') {
     if (idempotency.responsePolicy !== undefined) throw policyError();
-    return Object.freeze({ mode: 'none' });
+    return Object.freeze({ mode: idempotency.mode });
   }
   if (!Object.hasOwn(idempotency, 'responsePolicy')) throw policyError();
   return Object.freeze({ mode: idempotency.mode, responsePolicy: validateResponsePolicy(idempotency.responsePolicy) });

@@ -65,7 +65,7 @@ function createWorksService({ repository } = {}) {
       };
       if (!SLUG.test(input.slug) || !TYPES.has(input.type) || !RATINGS.has(input.rating)) throw new ApiError(400, 'VALIDATION_FAILED', 'Work declaration is invalid');
       try {
-        return { work: await repository.createWork({ ...input, actorId: ctx.actorId, requestId: ctx.requestId }) };
+        return { work: await repository.createWork({ ...input, actorId: ctx.actorId, requestId: ctx.requestId, idempotencyKey: ctx.idempotencyKey }) };
       } catch (error) { throw mapRepositoryError(error); }
     },
 
@@ -103,7 +103,7 @@ function createWorksService({ repository } = {}) {
       }
       if (!Object.keys(changes).length) throw new ApiError(400, 'VALIDATION_FAILED', 'No changes were supplied');
       try {
-        return { work: await repository.updateWork({ workId: ctx.params.id, actorId: ctx.actorId, requestId: ctx.requestId, expectedVersion: version(body.version), changes }) };
+        return { work: await repository.updateWork({ workId: ctx.params.id, actorId: ctx.actorId, requestId: ctx.requestId, idempotencyKey: ctx.idempotencyKey, expectedVersion: version(body.version), changes }) };
       } catch (error) { throw mapRepositoryError(error); }
     },
 
@@ -114,7 +114,7 @@ function createWorksService({ repository } = {}) {
       if (!rule) throw new ApiError(400, 'VALIDATION_FAILED', 'Unknown work transition');
       const body = strictObject(ctx.body, ['version']);
       try {
-        return { work: await repository.transitionWork({ workId: ctx.params.id, actorId: ctx.actorId, requestId: ctx.requestId, expectedVersion: version(body.version), from: rule.from, to: rule.to, action }) };
+        return { work: await repository.transitionWork({ workId: ctx.params.id, actorId: ctx.actorId, requestId: ctx.requestId, idempotencyKey: ctx.idempotencyKey, expectedVersion: version(body.version), from: rule.from, to: rule.to, action }) };
       } catch (error) { throw mapRepositoryError(error); }
     },
 

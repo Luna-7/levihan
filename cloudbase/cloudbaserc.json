@@ -111,7 +111,8 @@
       "installDependency": true,
       "envVariables": {
         "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}",
-        "COS_BUCKET": "{{env.COS_BUCKET}}",
+        "COS_PUBLIC_BUCKET": "{{env.COS_PUBLIC_BUCKET}}",
+        "COS_PRIVATE_BUCKET": "{{env.COS_PRIVATE_BUCKET}}",
         "COS_REGION": "{{env.COS_REGION}}",
         "DATABASE_SCHEMA": "{{env.DATABASE_SCHEMA}}",
         "API_ALLOWED_ORIGINS": "{{env.API_ALLOWED_ORIGINS}}",
@@ -123,7 +124,8 @@
         "CSRF_COOKIE_NAME": "{{env.CSRF_COOKIE_NAME}}",
         "API_BODY_LIMIT_BYTES": "{{env.API_BODY_LIMIT_BYTES}}",
         "CSRF_REQUIRED": "{{env.CSRF_REQUIRED}}",
-        "TRUST_PROXY_HEADERS": "{{env.TRUST_PROXY_HEADERS}}"
+        "TRUST_PROXY_HEADERS": "{{env.TRUST_PROXY_HEADERS}}",
+        "SNAPSHOT_SYSTEM_ACTOR_ID": "{{env.SNAPSHOT_SYSTEM_ACTOR_ID}}"
       }
     }
   ]

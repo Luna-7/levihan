@@ -27,7 +27,12 @@ function parseConfig(env = process.env) {
   const authHashPepper = required(env, 'AUTH_HASH_PEPPER');
   if (authHashPepper.length < 32) throw new Error('AUTH_HASH_PEPPER must be at least 32 characters');
   const cloudbaseApiKey = required(env, 'CLOUDBASE_APIKEY');
-  const cosBucket = required(env, 'COS_BUCKET');
+  const legacyCosBucket = env.COS_BUCKET && String(env.COS_BUCKET).trim();
+  const cosPublicBucket = env.COS_PUBLIC_BUCKET && String(env.COS_PUBLIC_BUCKET).trim() || (environment === 'production' ? '' : legacyCosBucket);
+  const cosPrivateBucket = env.COS_PRIVATE_BUCKET && String(env.COS_PRIVATE_BUCKET).trim() || (environment === 'production' ? '' : legacyCosBucket);
+  if (!cosPublicBucket) throw new Error('Missing required configuration: COS_PUBLIC_BUCKET');
+  if (!cosPrivateBucket) throw new Error('Missing required configuration: COS_PRIVATE_BUCKET');
+  if (environment === 'production' && cosPublicBucket === cosPrivateBucket) throw new Error('COS_PUBLIC_BUCKET and COS_PRIVATE_BUCKET must be distinct in production');
   const cosRegion = required(env, 'COS_REGION');
   const databaseSchema = required(env, 'DATABASE_SCHEMA');
   const sessionCookieDomain = env.SESSION_COOKIE_DOMAIN && String(env.SESSION_COOKIE_DOMAIN).trim();
@@ -51,7 +56,8 @@ function parseConfig(env = process.env) {
     sessionCookieName: env.SESSION_COOKIE_NAME || 'lv_session',
     csrfCookieName: env.CSRF_COOKIE_NAME || 'lv_csrf',
     cloudbaseApiKey,
-    cosBucket,
+    cosPublicBucket,
+    cosPrivateBucket,
     cosRegion,
     databaseSchema,
     sessionCookieDomain: sessionCookieDomain || undefined,

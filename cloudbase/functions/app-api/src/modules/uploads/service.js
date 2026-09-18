@@ -40,9 +40,39 @@ function validateDeclaration(body) {
   return { ...body, filename, extension };
 }
 
-function safeMessage(error) {
-  const message = error && error.message;
-  return typeof message === 'string' ? message.slice(0, 500) : 'Snapshot operation failed';
+async function inspectStream(value, max, mime) {
+  const hash = crypto.createHash('sha256');
+  let total = 0;
+  let sample = Buffer.alloc(0);
+  let unsafeText = false;
+  let textTail = '';
+  const source = Buffer.isBuffer(value) ? [value] : value;
+  for await (const chunk of source) {
+    const bytes = Buffer.from(chunk);
+    total += bytes.length;
+    if (total > max) throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Uploaded object is invalid');
+    hash.update(bytes);
+    if (sample.length < 16) sample = Buffer.concat([sample, bytes.subarray(0, 16 - sample.length)]);
+    if (mime === 'text/plain') {
+      if (bytes.includes(0)) unsafeText = true;
+      const text = (textTail + bytes.toString('utf8')).toLowerCase();
+      if (/<(?:!doctype\s+html|html|script|iframe|svg)\b/.test(text)) unsafeText = true;
+      textTail = text.slice(-64);
+    }
+  }
+  return { size: total, checksum: hash.digest('hex'), sample, unsafeText };
+}
+
+function matchesFormat(mime, bytes, unsafeText = false) {
+  const hex = bytes.subarray(0, 16).toString('hex');
+  if (mime === 'image/jpeg') return hex.startsWith('ffd8ff');
+  if (mime === 'image/png') return hex.startsWith('89504e470d0a1a0a');
+  if (mime === 'image/webp') return bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'WEBP';
+  if (mime === 'image/gif') return ['GIF87a', 'GIF89a'].includes(bytes.subarray(0, 6).toString());
+  if (mime === 'application/pdf') return bytes.subarray(0, 5).toString() === '%PDF-';
+  if (mime === 'application/epub+zip') return hex.startsWith('504b0304');
+  if (mime === 'text/plain') return !unsafeText;
+  return false;
 }
 
 function createUploadsService({ repository, objectStore, now = () => new Date(), randomUUID = crypto.randomUUID } = {}) {
@@ -59,13 +89,13 @@ function createUploadsService({ repository, objectStore, now = () => new Date(),
         uploadId, fileId, ownerId: ctx.actorId, workId: item.workId, chapterId: item.chapterId || null,
         purpose: 'work_asset', objectKey, expectedSize: item.sizeBytes, mimeType: item.mimeType,
         checksum: item.checksum, kind: item.kind, pageNo: item.pageNo || null, accessLevel: item.accessLevel,
-        expiresAt, requestId: ctx.requestId,
+        expiresAt, requestId: ctx.requestId, idempotencyKey: ctx.idempotencyKey,
       });
       const actualUploadId = created.uploadId;
       const actualFileId = created.fileId;
-      const actualKey = `staging/admin/${actualUploadId}/${actualFileId}.${item.extension}`;
+      const actualKey = created.objectKey || `staging/admin/${actualUploadId}/${actualFileId}.${item.extension}`;
       const ticket = await objectStore.signPut({ objectKey: actualKey, contentType: item.mimeType, contentLength: item.sizeBytes, checksum: item.checksum, expiresInSeconds: 300 });
-      return { uploadId: actualUploadId, fileId: actualFileId, objectKey: actualKey, method: 'PUT', uploadUrl: ticket.url, headers: ticket.headers, expiresAt };
+      return { uploadId: actualUploadId, fileId: actualFileId, objectKey: actualKey, method: 'PUT', uploadUrl: ticket.url, headers: ticket.headers, expiresAt: created.expiresAt || expiresAt };
     },
 
     async completeAdmin(ctx) {
@@ -73,16 +103,27 @@ function createUploadsService({ repository, objectStore, now = () => new Date(),
       if (!UUID.test(ctx.params.id || '')) throw new ApiError(400, 'VALIDATION_FAILED', 'Upload ID is invalid');
       strictBody(ctx.body || {}, []);
       const upload = await repository.getUploadForCompletion({ uploadId: ctx.params.id, ownerId: ctx.actorId });
+      if (upload && upload.ownerId === ctx.actorId && upload.status === 'bound' && upload.assetId) return { assetId: upload.assetId, status: 'verified' };
       if (!upload || upload.ownerId !== ctx.actorId || upload.status !== 'declared' || upload.purpose && upload.purpose !== 'work_asset' || new Date(upload.expiresAt) <= now()) throw new ApiError(409, 'STATE_CONFLICT', 'Upload is unavailable');
       if (!upload.objectKey.startsWith(`staging/admin/${upload.uploadId}/${upload.fileId}.`)) throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Upload object key is invalid');
       let metadata;
-      try { metadata = await objectStore.head({ objectKey: upload.objectKey }); } catch (error) { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', safeMessage(error)); }
-      if (!metadata || metadata.sizeBytes !== upload.expectedSize || String(metadata.contentType || '').toLowerCase() !== upload.mimeType || String(metadata.checksum || '').toLowerCase() !== upload.checksum) {
+      try { metadata = await objectStore.head({ objectKey: upload.objectKey }); } catch { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Object storage unavailable'); }
+      if (!metadata || metadata.sizeBytes !== upload.expectedSize || String(metadata.contentType || '').toLowerCase() !== upload.mimeType) {
         throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Uploaded object does not match its declaration');
       }
-      return repository.completeAndBind({ uploadId: upload.uploadId, fileId: upload.fileId, workId: upload.workId, chapterId: upload.chapterId || null, actorId: ctx.actorId, requestId: ctx.requestId, objectKey: upload.objectKey, sizeBytes: metadata.sizeBytes, mimeType: metadata.contentType, checksum: metadata.checksum, etag: metadata.etag || null, kind: upload.kind, pageNo: upload.pageNo || null, accessLevel: upload.accessLevel });
+      let inspected;
+      try { inspected = await inspectStream(await objectStore.read({ objectKey: upload.objectKey }), upload.expectedSize, upload.mimeType); } catch { throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Uploaded object could not be verified'); }
+      const checksum = inspected.checksum;
+      if (inspected.size !== upload.expectedSize || checksum !== upload.checksum || !matchesFormat(upload.mimeType, inspected.sample, inspected.unsafeText)) throw new ApiError(422, 'UPLOAD_NOT_VERIFIED', 'Uploaded object does not match its declaration');
+      const extension = upload.objectKey.split('.').pop();
+      const storageZone = upload.accessLevel === 'public' ? 'public' : 'private';
+      const objectKey = `${storageZone === 'public' ? 'media' : 'protected'}/works/${upload.workId}/${upload.fileId}.${extension}`;
+      try { await objectStore.promote({ sourceKey: upload.objectKey, destinationKey: objectKey, storageZone, contentType: upload.mimeType }); } catch { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Object storage unavailable'); }
+      const result = await repository.completeAndBind({ uploadId: upload.uploadId, fileId: upload.fileId, workId: upload.workId, chapterId: upload.chapterId || null, actorId: ctx.actorId, requestId: ctx.requestId, stagingObjectKey: upload.objectKey, objectKey, storageZone, sizeBytes: metadata.sizeBytes, mimeType: metadata.contentType, checksum, etag: metadata.etag || null, kind: upload.kind, pageNo: upload.pageNo || null, accessLevel: upload.accessLevel });
+      try { await objectStore.delete(upload.objectKey); } catch { /* private staging lifecycle is the fallback */ }
+      return result;
     },
   };
 }
 
-module.exports = { createUploadsService, validateDeclaration, DECLARATIONS };
+module.exports = { createUploadsService, validateDeclaration, matchesFormat, DECLARATIONS };

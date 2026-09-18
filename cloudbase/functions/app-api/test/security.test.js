@@ -77,15 +77,16 @@ describe('security boundaries', () => {
     const apiKey = 'test-api-key';
     expect(() => parseConfig({ NODE_ENV: 'production', API_ALLOWED_ORIGINS: '', SESSION_HASH_PEPPER: '', CLOUDBASE_APIKEY: apiKey }))
       .toThrow(/API_ALLOWED_ORIGINS/);
-    expect(() => parseConfig({ NODE_ENV: 'production', API_ALLOWED_ORIGINS: 'https://app.example.test', SESSION_HASH_PEPPER: 'a'.repeat(32), AUTH_HASH_PEPPER: 'b'.repeat(32), CLOUDBASE_APIKEY: apiKey, COS_BUCKET: 'test-bucket', COS_REGION: 'ap-test-1', DATABASE_SCHEMA: 'public' }))
+    expect(() => parseConfig({ NODE_ENV: 'production', API_ALLOWED_ORIGINS: 'https://app.example.test', SESSION_HASH_PEPPER: 'a'.repeat(32), AUTH_HASH_PEPPER: 'b'.repeat(32), CLOUDBASE_APIKEY: apiKey, COS_PUBLIC_BUCKET: 'public-bucket', COS_PRIVATE_BUCKET: 'private-bucket', COS_REGION: 'ap-test-1', DATABASE_SCHEMA: 'public' }))
       .toThrow(/SESSION_COOKIE_DOMAIN/);
   });
 
   it('rejects short peppers and disabled production CSRF', () => {
-    const base = { NODE_ENV: 'production', API_ALLOWED_ORIGINS: 'https://app.example.test', CLOUDBASE_APIKEY: 'test-api-key', COS_BUCKET: 'test-bucket', COS_REGION: 'ap-test-1', DATABASE_SCHEMA: 'public', SESSION_COOKIE_DOMAIN: 'example.test' };
+    const base = { NODE_ENV: 'production', API_ALLOWED_ORIGINS: 'https://app.example.test', CLOUDBASE_APIKEY: 'test-api-key', COS_PUBLIC_BUCKET: 'public-bucket', COS_PRIVATE_BUCKET: 'private-bucket', COS_REGION: 'ap-test-1', DATABASE_SCHEMA: 'public', SESSION_COOKIE_DOMAIN: 'example.test' };
     expect(() => parseConfig({ ...base, SESSION_HASH_PEPPER: 'short' })).toThrow(/SESSION_HASH_PEPPER/);
     expect(() => parseConfig({ ...base, SESSION_HASH_PEPPER: 'a'.repeat(32), AUTH_HASH_PEPPER: 'short' })).toThrow(/AUTH_HASH_PEPPER/);
     expect(() => parseConfig({ ...base, SESSION_HASH_PEPPER: 'a'.repeat(32), AUTH_HASH_PEPPER: 'b'.repeat(32), CSRF_REQUIRED: 'false' })).toThrow(/CSRF_REQUIRED/);
+    expect(() => parseConfig({ ...base, SESSION_HASH_PEPPER: 'a'.repeat(32), AUTH_HASH_PEPPER: 'b'.repeat(32), COS_PRIVATE_BUCKET: base.COS_PUBLIC_BUCKET })).toThrow(/distinct/);
   });
 
   it('does not log request bodies, cookies, tokens, answers, or passwords', () => {
@@ -130,7 +131,7 @@ describe('security boundaries', () => {
     const cloudbase = JSON.parse(readFileSync(resolve(__dirname, '../../../cloudbaserc.json'), 'utf8'));
     const apiFunction = cloudbase.functions.find((item) => item.name === 'app-api');
     expect(apiFunction).toMatchObject({ type: 'HTTP', public: true, gatewayPath: '/api/v1' });
-    expect(apiFunction.envVariables).toMatchObject({ COS_BUCKET: '{{env.COS_BUCKET}}', COS_REGION: '{{env.COS_REGION}}', DATABASE_SCHEMA: '{{env.DATABASE_SCHEMA}}', AUTH_HASH_PEPPER: '{{env.AUTH_HASH_PEPPER}}', CSRF_REQUIRED: '{{env.CSRF_REQUIRED}}', TRUST_PROXY_HEADERS: '{{env.TRUST_PROXY_HEADERS}}' });
+    expect(apiFunction.envVariables).toMatchObject({ COS_PUBLIC_BUCKET: '{{env.COS_PUBLIC_BUCKET}}', COS_PRIVATE_BUCKET: '{{env.COS_PRIVATE_BUCKET}}', COS_REGION: '{{env.COS_REGION}}', DATABASE_SCHEMA: '{{env.DATABASE_SCHEMA}}', AUTH_HASH_PEPPER: '{{env.AUTH_HASH_PEPPER}}', CSRF_REQUIRED: '{{env.CSRF_REQUIRED}}', TRUST_PROXY_HEADERS: '{{env.TRUST_PROXY_HEADERS}}' });
     expect(cloudbase.functions.find((item) => item.name === 'admin-upload').envVariables.DATABASE_SCHEMA).toBeUndefined();
   });
 
@@ -394,7 +395,7 @@ describe('security boundaries', () => {
       env: {
         NODE_ENV: 'test', API_ALLOWED_ORIGINS: 'https://app.example.test',
         SESSION_HASH_PEPPER: 'a'.repeat(32), AUTH_HASH_PEPPER: 'c'.repeat(32), RATE_LIMIT_PEPPER: 'b'.repeat(32),
-        CLOUDBASE_APIKEY: 'test-api-key', COS_BUCKET: 'bucket', COS_REGION: 'region', DATABASE_SCHEMA: 'public',
+        CLOUDBASE_APIKEY: 'test-api-key', COS_PUBLIC_BUCKET: 'public', COS_PRIVATE_BUCKET: 'private', COS_REGION: 'region', DATABASE_SCHEMA: 'public',
       },
     });
     runtime.router.post('/runtime-write', (ctx) => ({ actorId: ctx.actorId, role: ctx.actorRole }), { csrfExempt: true, idempotency: { mode: 'supported', responsePolicy } });

@@ -41,11 +41,16 @@ describe('direct COS upload tickets', () => {
   it('HEAD-verifies size, MIME and checksum before atomically binding a work asset', async () => {
     const declared = { uploadId, fileId, workId, ownerId: actorId, objectKey: `staging/admin/${uploadId}/${fileId}.webp`, expectedSize: 1024, mimeType: 'image/webp', checksum: 'a'.repeat(64), kind: 'page', pageNo: 1, accessLevel: 'public', expiresAt: '2030-01-01T00:05:00.000Z', status: 'declared' };
     const repository = { getUploadForCompletion: vi.fn().mockResolvedValue(declared), completeAndBind: vi.fn().mockResolvedValue({ assetId: workId, status: 'verified' }) };
-    const objectStore = { head: vi.fn().mockResolvedValue({ sizeBytes: 1024, contentType: 'image/webp', checksum: 'a'.repeat(64), etag: 'etag-1' }) };
+    const bytes = Buffer.concat([Buffer.from('524946460400000057454250', 'hex'), Buffer.alloc(1012)]);
+    const checksum = (await import('node:crypto')).createHash('sha256').update(bytes).digest('hex');
+    declared.checksum = checksum;
+    const objectStore = { head: vi.fn().mockResolvedValue({ sizeBytes: 1024, contentType: 'image/webp', etag: 'etag-1' }), read: vi.fn().mockResolvedValue(bytes), promote: vi.fn().mockResolvedValue(undefined), delete: vi.fn() };
     const service = createUploadsService({ repository, objectStore, now: () => new Date('2030-01-01T00:01:00.000Z') });
     const result = await service.completeAdmin(ctx({}, { id: uploadId }));
     expect(result).toEqual({ assetId: workId, status: 'verified' });
     expect(repository.completeAndBind).toHaveBeenCalledWith(expect.objectContaining({ uploadId, fileId, actorId, requestId: 'req-upload', etag: 'etag-1' }));
+    expect(objectStore.promote).toHaveBeenCalledWith(expect.objectContaining({ storageZone: 'public', destinationKey: expect.stringMatching(/^media\/works\//) }));
+    expect(objectStore.delete).toHaveBeenCalledWith(declared.objectKey);
   });
 
   it.each([
@@ -55,9 +60,27 @@ describe('direct COS upload tickets', () => {
   ])('rejects a mismatched COS object without binding it', async (metadata) => {
     const declared = { uploadId, fileId, workId, ownerId: actorId, objectKey: `staging/admin/${uploadId}/${fileId}.webp`, expectedSize: 1024, mimeType: 'image/webp', checksum: 'a'.repeat(64), kind: 'page', pageNo: 1, accessLevel: 'public', expiresAt: '2030-01-01T00:05:00.000Z', status: 'declared' };
     const repository = { getUploadForCompletion: vi.fn().mockResolvedValue(declared), completeAndBind: vi.fn() };
-    const service = createUploadsService({ repository, objectStore: { head: vi.fn().mockResolvedValue(metadata) }, now: () => new Date('2030-01-01T00:01:00.000Z') });
+    const service = createUploadsService({ repository, objectStore: { head: vi.fn().mockResolvedValue(metadata), read: vi.fn().mockResolvedValue(Buffer.from('bad')), promote: vi.fn() }, now: () => new Date('2030-01-01T00:01:00.000Z') });
     await expect(service.completeAdmin(ctx({}, { id: uploadId }))).rejects.toMatchObject({ status: 422, errorCode: 'UPLOAD_NOT_VERIFIED' });
     expect(repository.completeAndBind).not.toHaveBeenCalled();
+  });
+
+  it('rejects executable text even when HEAD metadata and declared checksum claim text/plain', async () => {
+    const bytes = Buffer.from('<script>alert(1)</script>');
+    const checksum = (await import('node:crypto')).createHash('sha256').update(bytes).digest('hex');
+    const declared = { uploadId, fileId, workId, ownerId: actorId, objectKey: `staging/admin/${uploadId}/${fileId}.txt`, expectedSize: bytes.length, mimeType: 'text/plain', checksum, kind: 'body', pageNo: null, accessLevel: 'public', expiresAt: '2030-01-01T00:05:00.000Z', status: 'declared' };
+    const repository = { getUploadForCompletion: vi.fn().mockResolvedValue(declared), completeAndBind: vi.fn() };
+    const service = createUploadsService({ repository, objectStore: { head: vi.fn().mockResolvedValue({ sizeBytes: bytes.length, contentType: 'text/plain', etag: 'e' }), read: vi.fn().mockResolvedValue(bytes), promote: vi.fn() }, now: () => new Date('2030-01-01T00:01:00.000Z') });
+    await expect(service.completeAdmin(ctx({}, { id: uploadId }))).rejects.toMatchObject({ errorCode: 'UPLOAD_NOT_VERIFIED' });
+    expect(repository.completeAndBind).not.toHaveBeenCalled();
+  });
+
+  it('returns the existing asset for an idempotent completion retry after staging cleanup', async () => {
+    const repository = { getUploadForCompletion: vi.fn().mockResolvedValue({ uploadId, fileId, workId, ownerId: actorId, purpose: 'work_asset', status: 'bound', assetId: workId, finalObjectKey: `media/works/${workId}/${fileId}.webp`, storageZone: 'public' }) };
+    const objectStore = { head: vi.fn(), read: vi.fn(), promote: vi.fn() };
+    const service = createUploadsService({ repository, objectStore });
+    await expect(service.completeAdmin(ctx({}, { id: uploadId }))).resolves.toEqual({ assetId: workId, status: 'verified' });
+    expect(objectStore.head).not.toHaveBeenCalled();
   });
 });
 

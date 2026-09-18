@@ -32,9 +32,9 @@ describe('work routes and authorization', () => {
     for (const [method, path] of [
       ['POST', '/admin/works'], ['PATCH', `/admin/works/${workId}`],
       ['POST', `/admin/works/${workId}/review`], ['POST', `/admin/works/${workId}/publish`],
-      ['POST', `/admin/works/${workId}/archive`],
+      ['POST', `/admin/works/${workId}/archive`], ['POST', `/admin/works/${workId}/restore`],
     ]) {
-      expect(router.resolve(method, path).metadata).toMatchObject({ sessionRequired: true, role: 'admin' });
+      expect(router.resolve(method, path).metadata).toMatchObject({ sessionRequired: true, role: 'admin', idempotency: { mode: 'domain' } });
     }
   });
 

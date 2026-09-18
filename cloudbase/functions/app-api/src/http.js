@@ -167,6 +167,7 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
       const idempotency = route.metadata.idempotency;
       context.idempotencyPolicy = idempotency;
       const key = headers['idempotency-key'];
+      if (idempotency.mode === 'domain' && !/^[A-Za-z0-9_-]{8,128}$/.test(key || '')) throw new ApiError(400, 'VALIDATION_FAILED', 'Valid Idempotency-Key is required');
       const useIdempotency = idempotency.mode === 'required' || (idempotency.mode === 'supported' && key !== undefined);
       if (useIdempotency) {
         if (!idempotency.responsePolicy) throw new ApiError(500, 'INTERNAL_ERROR', 'Idempotency response policy is required');

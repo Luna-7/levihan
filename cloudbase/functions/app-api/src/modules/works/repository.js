@@ -20,12 +20,21 @@ function rpcResult(result) {
 }
 
 function mapWork(row) {
+  const chapters = row.chapters === undefined ? undefined : (row.chapters || []).map((chapter) => ({
+    id: chapter.id, workId: chapter.work_id, title: chapter.title, position: Number(chapter.position), version: Number(chapter.version),
+    status: chapter.status, createdAt: chapter.created_at, updatedAt: chapter.updated_at,
+  }));
+  const assets = row.assets === undefined ? undefined : (row.assets || []).map((asset) => ({
+    id: asset.id, workId: asset.work_id, chapterId: asset.chapter_id, kind: asset.kind, objectKey: asset.object_key,
+    storageZone: asset.storage_zone, accessLevel: asset.access_level, mimeType: asset.mime_type, sizeBytes: Number(asset.size_bytes),
+    checksum: asset.checksum, pageNo: asset.page_no, status: asset.status,
+  }));
   return {
     id: row.id, slug: row.slug, type: row.type, title: row.title, summary: row.summary, rating: row.rating,
     status: row.status, version: Number(row.version), authorName: row.author_name,
     publishedAt: row.published_at || null, createdAt: row.created_at, updatedAt: row.updated_at,
-    ...(row.chapters === undefined ? {} : { chapters: row.chapters }),
-    ...(row.assets === undefined ? {} : { assets: row.assets }),
+    ...(chapters === undefined ? {} : { chapters }),
+    ...(assets === undefined ? {} : { assets }),
   };
 }
 
@@ -35,20 +44,20 @@ function createWorksRepository({ rdb }) {
     async createWork(input) {
       return mapWork(rpcResult(await rdb.rpc('create_work_draft', {
         p_slug: input.slug, p_type: input.type, p_title: input.title, p_summary: input.summary, p_rating: input.rating,
-        p_author_name: input.authorName, p_actor_id: input.actorId, p_request_id: input.requestId,
+        p_author_name: input.authorName, p_actor_id: input.actorId, p_request_id: input.requestId, p_idempotency_key: input.idempotencyKey,
       })));
     },
     async updateWork(input) {
       return mapWork(rpcResult(await rdb.rpc('update_work_draft', {
         p_work_id: input.workId, p_expected_version: input.expectedVersion, p_changes: input.changes,
         p_chapters: input.changes.chapters === undefined ? null : input.changes.chapters,
-        p_actor_id: input.actorId, p_request_id: input.requestId,
+        p_actor_id: input.actorId, p_request_id: input.requestId, p_idempotency_key: input.idempotencyKey,
       })));
     },
     async transitionWork(input) {
       return mapWork(rpcResult(await rdb.rpc('transition_work_state', {
         p_work_id: input.workId, p_expected_version: input.expectedVersion, p_expected_status: input.from,
-        p_target_status: input.to, p_action: input.action, p_actor_id: input.actorId, p_request_id: input.requestId,
+        p_target_status: input.to, p_action: input.action, p_actor_id: input.actorId, p_request_id: input.requestId, p_idempotency_key: input.idempotencyKey,
       })));
     },
     async listAdminWorks({ limit, cursor, status }) {

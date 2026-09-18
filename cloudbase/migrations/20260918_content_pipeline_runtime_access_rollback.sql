@@ -6,15 +6,9 @@
 
 BEGIN;
 
-GRANT SELECT ON TABLE public.work_chapters TO :"backend_role";
-REVOKE INSERT, UPDATE, DELETE ON TABLE public.works, public.work_assets, public.work_chapters,
-  public.work_versions, public.upload_sessions, public.upload_files, public.snapshot_jobs,
-  public.snapshot_versions, public.audit_logs FROM :"backend_role";
-
 DROP POLICY IF EXISTS content_pipeline_runtime_select ON public.work_chapters;
-CREATE POLICY content_pipeline_runtime_select ON public.work_chapters FOR SELECT TO :"backend_role" USING (true);
-
-GRANT EXECUTE ON FUNCTION
+REVOKE SELECT ON TABLE public.work_chapters FROM :"backend_role";
+REVOKE EXECUTE ON FUNCTION
   public.create_work_draft(text,text,text,text,text,text,uuid,text,text),
   public.update_work_draft(uuid,bigint,jsonb,jsonb,uuid,text,text),
   public.transition_work_state(uuid,bigint,text,text,text,uuid,text,text),
@@ -25,6 +19,11 @@ GRANT EXECUTE ON FUNCTION
   public.prepare_snapshot_version(uuid,text,bigint,text,text),
   public.complete_snapshot_build(uuid,uuid,text), public.fail_snapshot_build(uuid,text),
   public.get_admin_work(uuid), public.get_public_work(text), public.list_admin_works(integer,text,text)
-TO :"backend_role";
+FROM :"backend_role";
+GRANT INSERT ON TABLE public.works, public.work_assets, public.work_versions,
+  public.upload_sessions, public.upload_files, public.snapshot_jobs, public.snapshot_versions,
+  public.audit_logs TO :"backend_role";
+GRANT UPDATE ON TABLE public.works, public.work_assets, public.upload_sessions,
+  public.upload_files, public.snapshot_jobs TO :"backend_role";
 
 COMMIT;

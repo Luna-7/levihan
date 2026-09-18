@@ -7,10 +7,11 @@ const root = resolve(import.meta.dirname, '..');
 const migration = readFileSync(resolve(root, 'cloudbase/migrations/20260918_content_pipeline.sql'), 'utf8');
 const rollback = readFileSync(resolve(root, 'cloudbase/migrations/20260918_content_pipeline_rollback.sql'), 'utf8');
 const access = readFileSync(resolve(root, 'cloudbase/migrations/20260918_content_pipeline_runtime_access.sql'), 'utf8');
+const accessRollback = readFileSync(resolve(root, 'cloudbase/migrations/20260918_content_pipeline_runtime_access_rollback.sql'), 'utf8');
 
 describe('content pipeline migration verifier', () => {
   it('accepts the reviewed additive migration set', () => {
-    expect(validateContentPipeline({ migration, rollback, access })).toEqual([]);
+    expect(validateContentPipeline({ migration, rollback, access, accessRollback })).toEqual([]);
   });
 
   it.each([
@@ -20,12 +21,16 @@ describe('content pipeline migration verifier', () => {
     ['upload expiry', (sql: string) => sql.replace('session.expires_at <= clock_timestamp()', 'session.expires_at > clock_timestamp()')],
     ['asset verification', (sql: string) => sql.replace("asset.status <> 'verified'", "asset.status = 'verified'")],
     ['snapshot serialization', (sql: string) => sql.replace("pg_advisory_xact_lock(hashtext('snapshot:' || p_snapshot_type))", 'TRUE')],
+    ['snapshot lease', (sql: string) => sql.replaceAll('job.lease_expires_at > clock_timestamp()', 'job.lease_expires_at IS NULL')],
+    ['public storage zone', (sql: string) => sql.replaceAll("AND asset.storage_zone = 'public'", '')],
   ])('rejects mutation removing %s', (_name, mutate) => {
-    expect(validateContentPipeline({ migration: mutate(migration), rollback, access })).not.toEqual([]);
+    expect(validateContentPipeline({ migration: mutate(migration), rollback, access, accessRollback })).not.toEqual([]);
   });
 
   it('requires rollback and least-privilege runtime grants', () => {
-    expect(validateContentPipeline({ migration, rollback: rollback.replace('DROP TABLE IF EXISTS public.work_chapters;', ''), access })).not.toEqual([]);
-    expect(validateContentPipeline({ migration, rollback, access: access.replace('GRANT SELECT ON TABLE public.work_chapters', 'GRANT ALL ON TABLE public.work_chapters') })).not.toEqual([]);
+    expect(validateContentPipeline({ migration, rollback: rollback.replace('DROP TABLE IF EXISTS public.work_chapters;', ''), access, accessRollback })).not.toEqual([]);
+    expect(validateContentPipeline({ migration, rollback, access: access.replace('GRANT SELECT ON TABLE public.work_chapters', 'GRANT ALL ON TABLE public.work_chapters'), accessRollback })).not.toEqual([]);
+    expect(validateContentPipeline({ migration, rollback, access, accessRollback: accessRollback.replace('REVOKE SELECT ON TABLE public.work_chapters', 'GRANT SELECT ON TABLE public.work_chapters') })).not.toEqual([]);
+    expect(validateContentPipeline({ migration, rollback, access, accessRollback: accessRollback.replace('REVOKE EXECUTE ON FUNCTION', 'GRANT EXECUTE ON FUNCTION') })).not.toEqual([]);
   });
 });
