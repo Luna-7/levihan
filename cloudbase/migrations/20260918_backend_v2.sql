@@ -7,6 +7,8 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE FUNCTION public.backend_v2_set_updated_at()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 BEGIN
   NEW.updated_at := clock_timestamp();
@@ -385,15 +387,16 @@ CREATE INDEX rate_limit_buckets_expiry_idx ON public.rate_limit_buckets (expires
 CREATE FUNCTION public.backend_v2_enforce_comment_reply_depth()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_parent_work_id uuid;
   v_parent_parent_id uuid;
 BEGIN
   IF TG_OP = 'UPDATE'
-     AND (NEW.parent_id IS DISTINCT FROM OLD.parent_id OR NEW.work_id IS DISTINCT FROM OLD.work_id)
-     AND EXISTS (SELECT 1 FROM public.comments AS child_comment WHERE child_comment.parent_id = NEW.id) THEN
-    RAISE EXCEPTION 'a comment with replies cannot be reparented or moved' USING ERRCODE = '23514';
+     AND (NEW.parent_id IS DISTINCT FROM OLD.parent_id OR NEW.work_id IS DISTINCT FROM OLD.work_id) THEN
+    RAISE EXCEPTION 'comment parent and work links are immutable' USING ERRCODE = '23514';
   END IF;
   IF NEW.parent_id IS NOT NULL THEN
     SELECT work_id, parent_id
@@ -418,6 +421,8 @@ CREATE FUNCTION public.answer_registration_challenge(
   p_ticket_expires_at timestamptz
 ) RETURNS uuid
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_challenge public.registration_challenges%ROWTYPE;
@@ -467,6 +472,8 @@ $$;
 CREATE FUNCTION public.backend_v2_validate_submission_asset()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_submission_owner uuid;
@@ -505,6 +512,8 @@ CREATE FUNCTION public.consume_registration_ticket(
   p_ip_hash text DEFAULT NULL
 ) RETURNS TABLE (user_id uuid, session_id uuid)
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_challenge_id uuid;
@@ -543,6 +552,8 @@ CREATE FUNCTION public.rotate_user_session(
   p_ip_hash text DEFAULT NULL
 ) RETURNS uuid
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_user_id uuid;
@@ -572,6 +583,8 @@ CREATE FUNCTION public.consume_recovery_code(
   p_ip_hash text DEFAULT NULL
 ) RETURNS TABLE (user_id uuid, session_id uuid)
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_user_id uuid;
@@ -597,6 +610,8 @@ $$;
 CREATE FUNCTION public.set_work_like(p_user_id uuid, p_work_id uuid, p_liked boolean)
 RETURNS boolean
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 BEGIN
   IF p_liked THEN
@@ -612,6 +627,8 @@ $$;
 CREATE FUNCTION public.set_favorite(p_user_id uuid, p_work_id uuid, p_favorited boolean)
 RETURNS boolean
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 BEGIN
   IF p_favorited THEN
@@ -633,6 +650,8 @@ CREATE FUNCTION public.sync_reading_progress(
   p_client_updated_at timestamptz
 ) RETURNS public.reading_progress
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 DECLARE v_progress public.reading_progress;
 BEGIN

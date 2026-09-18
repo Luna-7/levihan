@@ -14,6 +14,16 @@ privileges and RLS policies required by the CloudBase API. Browser clients must
 never receive that credential. Session tokens, registration tickets, and
 recovery codes are stored only as hashes.
 
+`backend_role` is still a high-trust service/API identity, not a user
+authorization boundary: the API must authenticate the caller and enforce
+user-level ownership before issuing a query. The runtime script grants
+read-only access to session/security state and append-only access to versions,
+snapshots, moderation actions, and audit logs; state-changing security writes
+(session rotation, registration/recovery consumption, likes, favorites, and
+reading progress) are exposed only through the explicitly granted `SECURITY
+DEFINER` routines. The migration itself must be executed by its owner (or an
+equivalent deployment administrator) before the runtime grants are installed.
+
 ## Production runbook
 
 1. Confirm CloudBase automated backups are current, and make an encrypted
