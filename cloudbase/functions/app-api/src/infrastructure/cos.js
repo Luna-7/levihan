@@ -70,10 +70,30 @@ async function consumeBytes(body, maxBytes = MAX_SNAPSHOT_BYTES) {
   return { bytes: Buffer.concat(chunks), checksum: hash.digest('hex') };
 }
 
+const COS_V5_SIGNATURE_FIELDS = new Set(['q-sign-algorithm', 'q-ak', 'q-sign-time', 'q-key-time', 'q-header-list', 'q-url-param-list', 'q-signature']);
+const COS_V5_UNSIGNED_AUTH_FIELDS = new Set(['x-cos-security-token']);
+
+function canonicalCosName(name) {
+  return encodeURIComponent(name).replace(/!/g, '%21').replace(/'/g, '%27').replace(/\(/g, '%28').replace(/\)/g, '%29').replace(/\*/g, '%2A').toLowerCase();
+}
+const COS_V5_RESERVED_CANONICAL_FIELDS = new Set([...COS_V5_SIGNATURE_FIELDS, ...COS_V5_UNSIGNED_AUTH_FIELDS].map(canonicalCosName));
+
+function canonicalNameList(value) {
+  if (value === '') return [];
+  if (typeof value !== 'string') return null;
+  const names = value.split(';');
+  for (let index = 0; index < names.length; index += 1) {
+    let decoded;
+    try { decoded = decodeURIComponent(names[index]); } catch { return null; }
+    if (!decoded || canonicalCosName(decoded) !== names[index] || (index > 0 && names[index - 1] >= names[index])) return null;
+  }
+  return names;
+}
+
 function validateSignedReadUrl(url, { expectedHost, expectedPath, nowSeconds }) {
   let parsed;
   try { parsed = new URL(url); } catch { throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'COS signing failed'); }
-  const required = ['q-sign-algorithm', 'q-ak', 'q-sign-time', 'q-key-time', 'q-signature'];
+  const required = [...COS_V5_SIGNATURE_FIELDS];
   if (parsed.protocol !== 'https:' || parsed.hostname !== expectedHost || parsed.host !== expectedHost
     || parsed.username || parsed.password || parsed.port || parsed.hash || parsed.pathname !== expectedPath
     || required.some((name) => parsed.searchParams.getAll(name).length !== 1)
@@ -87,7 +107,26 @@ function validateSignedReadUrl(url, { expectedHost, expectedPath, nowSeconds }) 
   if (signTime !== keyTime || !/^\d{10};\d{10}$/.test(signTime || '')) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'COS signing failed');
   const [start, end] = signTime.split(';').map(Number);
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end <= start || end - start > 300
-    || start > nowSeconds + 60 || end < nowSeconds - 60) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'COS signing failed');
+    || start > nowSeconds || start < nowSeconds - 60 || end <= nowSeconds || end > nowSeconds + 300) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'COS signing failed');
+  const signedHeaders = canonicalNameList(parsed.searchParams.get('q-header-list'));
+  const signedQueryNames = canonicalNameList(parsed.searchParams.get('q-url-param-list'));
+  const actualQueryNames = [];
+  const seenQueryNames = new Set();
+  for (const [name] of parsed.searchParams) {
+    if (COS_V5_SIGNATURE_FIELDS.has(name)) continue;
+    if (COS_V5_UNSIGNED_AUTH_FIELDS.has(name)) {
+      if (parsed.searchParams.getAll(name).length !== 1 || !parsed.searchParams.get(name)) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'COS signing failed');
+      continue;
+    }
+    const canonical = canonicalCosName(name);
+    if (COS_V5_RESERVED_CANONICAL_FIELDS.has(canonical) || seenQueryNames.has(canonical)) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'COS signing failed');
+    seenQueryNames.add(canonical); actualQueryNames.push(canonical);
+  }
+  actualQueryNames.sort();
+  if (!signedHeaders || signedHeaders.length !== 1 || signedHeaders[0] !== 'host' || !signedQueryNames
+    || signedQueryNames.length !== actualQueryNames.length || signedQueryNames.some((name, index) => name !== actualQueryNames[index])) {
+    throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'COS signing failed');
+  }
   return { url: parsed.toString(), expiresAt: new Date(end * 1000).toISOString() };
 }
 

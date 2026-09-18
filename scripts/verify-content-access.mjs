@@ -71,6 +71,13 @@ export function validateContentAccess({ migration, rollback, access, accessRollb
     && /q-sign-algorithm/.test(cosSource) && /q-sign-time/.test(cosSource) && /q-key-time/.test(cosSource) && /q-signature/.test(cosSource)
     && /\^\[a-f0-9\]\{40\}\$[\s\S]*?parsed\.searchParams\.get\('q-signature'\)/.test(cosSource)
     && /end\s*-\s*start\s*>\s*300/.test(cosSource) && /new\s+Date\(end\s*\*\s*1000\)/.test(cosSource), 'COS signed URL fields, authority, time window and derived expiry must be verified');
+  add(failures, /'q-header-list'\s*,\s*'q-url-param-list'/.test(cosSource) && /getAll\(name\)\.length\s*!==\s*1/.test(cosSource)
+    && /canonicalNameList\(parsed\.searchParams\.get\('q-header-list'\)\)/.test(cosSource)
+    && /signedHeaders\[0\]\s*!==\s*'host'/.test(cosSource)
+    && /COS_V5_RESERVED_CANONICAL_FIELDS\.has\(canonical\)/.test(cosSource)
+    && /signedQueryNames\.some\(\(name,\s*index\)\s*=>\s*name\s*!==\s*actualQueryNames\[index\]\)/.test(cosSource), 'COS V5 header and URL signing lists must be complete, canonical and scope-matched');
+  add(failures, /start\s*>\s*nowSeconds\s*\|\|/.test(cosSource) && /start\s*<\s*nowSeconds\s*-\s*60/.test(cosSource)
+    && /end\s*<=\s*nowSeconds/.test(cosSource) && /end\s*>\s*nowSeconds\s*\+\s*300/.test(cosSource), 'COS V5 validity must not exceed five remaining minutes or start in the future');
   add(failures, /private,\s*no-store,\s*max-age=0/i.test(serviceSource) && /pragma:\s*'no-cache'/i.test(serviceSource) && /'referrer-policy':\s*'no-referrer'/i.test(serviceSource), 'signed response must be non-cacheable');
   add(failures, /finalizeWorkAccess/i.test(serviceSource) && /if\s*\(!final\.allowed\)\s*throw/i.test(serviceSource), 'signed URLs must not return before final authorization');
   add(failures, /urlPattern:\s*isRestrictedRequest[\s\S]*?handler:\s*'NetworkOnly'/i.test(swSource)

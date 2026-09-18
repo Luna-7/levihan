@@ -9,10 +9,12 @@ const SIGN_NOW_SECONDS = 2_000_000_000;
 function signedReadUrl(changes = {}) {
   const params = new URLSearchParams({
     'q-sign-algorithm': 'sha1', 'q-ak': 'testpublicid1', 'q-sign-time': `${SIGN_NOW_SECONDS - 5};${SIGN_NOW_SECONDS + 295}`,
-    'q-key-time': `${SIGN_NOW_SECONDS - 5};${SIGN_NOW_SECONDS + 295}`, 'q-signature': 'a'.repeat(40),
+    'q-key-time': `${SIGN_NOW_SECONDS - 5};${SIGN_NOW_SECONDS + 295}`, 'q-header-list': 'host', 'q-url-param-list': '', 'q-signature': 'a'.repeat(40),
     ...(changes.params || {}),
   });
   for (const key of changes.remove || []) params.delete(key);
+  for (const [key, value] of changes.duplicates || []) params.append(key, value);
+  for (const [key, value] of Object.entries(changes.extraParams || {})) params.append(key, value);
   return `${changes.origin || 'https://private-123.cos.ap-test.myqcloud.com'}${changes.path || '/protected/works/w/p.webp'}?${params}${changes.fragment || ''}`;
 }
 
@@ -43,6 +45,23 @@ describe('COS object-store adapter', () => {
     await expect(store.signGet({ objectKey: 'protected/works/w/p.webp', expiresInSeconds: 600 })).rejects.toMatchObject({ status: 400 });
   });
 
+  it('accepts the installed COS SDK GET signing scope: host header and no signed URL params', async () => {
+    const COS = require('cos-nodejs-sdk-v5');
+    const cos = new COS({ SecretId: 'testpublicid1', SecretKey: 'test-secret-key', SecurityToken: 'test-security-token', Protocol: 'https:' });
+    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos });
+    const result = await store.signGet({ objectKey: 'protected/works/w/p.webp', expiresInSeconds: 300 });
+    const params = new URL(result.url).searchParams;
+    expect(params.get('q-header-list')).toBe('host');
+    expect(params.get('q-url-param-list')).toBe('');
+    expect(params.get('x-cos-security-token')).toBe('test-security-token');
+  });
+
+  it('accepts canonical percent-encoded signed query names only when the actual query scope matches', async () => {
+    const url = signedReadUrl({ params: { 'q-url-param-list': 'a%20b;download' }, extraParams: { 'a b': 'x', download: '1' } });
+    const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: { getObjectUrl: vi.fn((_params, cb) => cb(null, { Url: url })) }, clock: () => SIGN_NOW_SECONDS * 1000 });
+    await expect(store.signGet({ objectKey: 'protected/works/w/p.webp', expiresInSeconds: 300 })).resolves.toMatchObject({ expiresAt: new Date((SIGN_NOW_SECONDS + 295) * 1000).toISOString() });
+  });
+
   it.each([
     ['website host', signedReadUrl({ origin: 'https://private-123.cos-website.ap-test.myqcloud.com' })],
     ['suffix host', signedReadUrl({ origin: 'https://private-123.cos.ap-test.myqcloud.com.evil.test' })],
@@ -50,13 +69,27 @@ describe('COS object-store adapter', () => {
     ['non-default port', signedReadUrl({ origin: 'https://private-123.cos.ap-test.myqcloud.com:444' })],
     ['wrong path', signedReadUrl({ path: '/protected/works/other/p.webp' })],
     ['fragment', signedReadUrl({ fragment: '#leak' })],
-    ...['q-sign-algorithm', 'q-ak', 'q-sign-time', 'q-key-time', 'q-signature'].map((field) => [`missing ${field}`, signedReadUrl({ remove: [field] })]),
+    ...['q-sign-algorithm', 'q-ak', 'q-sign-time', 'q-key-time', 'q-header-list', 'q-url-param-list', 'q-signature'].map((field) => [`missing ${field}`, signedReadUrl({ remove: [field] })]),
+    ...['q-sign-algorithm', 'q-ak', 'q-sign-time', 'q-key-time', 'q-header-list', 'q-url-param-list', 'q-signature'].map((field) => [`duplicate ${field}`, signedReadUrl({ duplicates: [[field, field === 'q-signature' ? 'b'.repeat(40) : 'duplicate']] })]),
     ['algorithm', signedReadUrl({ params: { 'q-sign-algorithm': 'sha256' } })],
     ['access key', signedReadUrl({ params: { 'q-ak': 'bad!' } })],
     ['signature', signedReadUrl({ params: { 'q-signature': 'xyz' } })],
+    ['missing signed host', signedReadUrl({ params: { 'q-header-list': '' } })],
+    ['uppercase header list', signedReadUrl({ params: { 'q-header-list': 'Host' } })],
+    ['duplicate header list', signedReadUrl({ params: { 'q-header-list': 'host;host' } })],
+    ['unexpected signed header', signedReadUrl({ params: { 'q-header-list': 'host;x-cos-meta-test' } })],
+    ['claimed URL param absent', signedReadUrl({ params: { 'q-url-param-list': 'download' } })],
+    ['actual URL param omitted', signedReadUrl({ extraParams: { download: '1' } })],
+    ['duplicate URL list', signedReadUrl({ params: { 'q-url-param-list': 'download;download' }, extraParams: { download: '1' } })],
+    ['unsorted URL list', signedReadUrl({ params: { 'q-url-param-list': 'z;a' }, extraParams: { a: '1', z: '2' } })],
+    ['noncanonical encoded URL list', signedReadUrl({ params: { 'q-url-param-list': '%41' }, extraParams: { A: '1' } })],
+    ['case-shadowed signature field', signedReadUrl({ params: { 'q-url-param-list': 'q-ak' }, extraParams: { 'Q-AK': 'shadow' } })],
     ['mismatched key time', signedReadUrl({ params: { 'q-key-time': `${SIGN_NOW_SECONDS};${SIGN_NOW_SECONDS + 100}` } })],
     ['window too long', signedReadUrl({ params: { 'q-sign-time': `${SIGN_NOW_SECONDS};${SIGN_NOW_SECONDS + 301}`, 'q-key-time': `${SIGN_NOW_SECONDS};${SIGN_NOW_SECONDS + 301}` } })],
     ['future start', signedReadUrl({ params: { 'q-sign-time': `${SIGN_NOW_SECONDS + 61};${SIGN_NOW_SECONDS + 100}`, 'q-key-time': `${SIGN_NOW_SECONDS + 61};${SIGN_NOW_SECONDS + 100}` } })],
+    ['any future start', signedReadUrl({ params: { 'q-sign-time': `${SIGN_NOW_SECONDS + 1};${SIGN_NOW_SECONDS + 100}`, 'q-key-time': `${SIGN_NOW_SECONDS + 1};${SIGN_NOW_SECONDS + 100}` } })],
+    ['end beyond remaining five minutes', signedReadUrl({ params: { 'q-sign-time': `${SIGN_NOW_SECONDS};${SIGN_NOW_SECONDS + 301}`, 'q-key-time': `${SIGN_NOW_SECONDS};${SIGN_NOW_SECONDS + 301}` } })],
+    ['start too old', signedReadUrl({ params: { 'q-sign-time': `${SIGN_NOW_SECONDS - 61};${SIGN_NOW_SECONDS + 100}`, 'q-key-time': `${SIGN_NOW_SECONDS - 61};${SIGN_NOW_SECONDS + 100}` } })],
     ['expired', signedReadUrl({ params: { 'q-sign-time': `${SIGN_NOW_SECONDS - 400};${SIGN_NOW_SECONDS - 61}`, 'q-key-time': `${SIGN_NOW_SECONDS - 400};${SIGN_NOW_SECONDS - 61}` } })],
   ])('rejects malformed COS read URL: %s', async (_name, url) => {
     const store = createCosObjectStore({ publicBucket: 'public-123', privateBucket: 'private-123', region: 'ap-test', cos: { getObjectUrl: vi.fn((_params, cb) => cb(null, { Url: url })) }, clock: () => SIGN_NOW_SECONDS * 1000 });
