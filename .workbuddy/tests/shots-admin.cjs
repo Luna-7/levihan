@@ -1,4 +1,9 @@
 /** 截图：登录页 + 主界面（已填表单 / 已选图片），不写入任何数据 */
+const PASSWORD = process.env.ADMIN_TEST_PASSWORD;
+if (!PASSWORD) {
+  console.error('ERROR: ADMIN_TEST_PASSWORD is required to capture authenticated admin screenshots.');
+  process.exit(1);
+}
 const { chromium } = require('playwright-core');
 const OUT = '/Users/luna/Downloads/levihan/levihan-repo/.workbuddy/screenshots';
 const fs = require('fs');
@@ -21,7 +26,7 @@ const IMGS = ['/tmp/lhtest/p1.png', '/tmp/lhtest/p10.png', '/tmp/lhtest/p2.png']
   await p.screenshot({ path: OUT + '/admin-1-login.png' });
   console.log('✓ admin-1-login.png');
 
-  await p.fill('#pw', 'lh-tudou-dvg9j2bq');
+  await p.fill('#pw', PASSWORD);
   await p.click('#btn-login');
   await p.waitForSelector('#view-main:not(.hide)', { timeout: 25000 });
   await p.waitForFunction(() => !/加载中/.test(document.getElementById('bk-list').textContent), { timeout: 30000 });

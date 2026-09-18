@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """利韩土豆仓 · 管理员上传通道 端到端验证（走真实 HTTP 访问服务）"""
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -8,7 +9,11 @@ import urllib.request
 URL = "https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/admin-upload"
 ORIGIN = "https://levihan-tudou-d0g7jivue1ccc4a35-1325571558.tcloudbaseapp.com"
 CDN = "https://levihan-1325571558.cos-website.ap-nanjing.myqcloud.com"
-PASSWORD = "lh-tudou-dvg9j2bq"
+PASSWORD = os.environ.get("ADMIN_TEST_PASSWORD")
+
+if not PASSWORD:
+    print("SKIP: ADMIN_TEST_PASSWORD is not set; remote admin channel test not run.")
+    sys.exit(0)
 
 PASS, FAIL = [], []
 

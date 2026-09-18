@@ -4,13 +4,17 @@
  * - 捕获控制台错误与失败请求，确认没有 CORS / 转码问题
  */
 const path = require('path');
+const PASSWORD = process.env.ADMIN_TEST_PASSWORD;
+if (!PASSWORD) {
+  console.log('SKIP: ADMIN_TEST_PASSWORD is not set; remote admin UI test not run.');
+  process.exit(0);
+}
 const { chromium } = require('playwright-core');
 
 const BASE = 'https://levihan-tudou-d0g7jivue1ccc4a35-1325571558.tcloudbaseapp.com';
 const ADMIN = BASE + '/admin/';
 const FN = 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/admin-upload';
 const CDN = 'https://levihan-1325571558.cos-website.ap-nanjing.myqcloud.com';
-const PASSWORD = 'lh-tudou-dvg9j2bq';
 const IMGS = ['/tmp/lhtest/p1.png', '/tmp/lhtest/p10.png', '/tmp/lhtest/p2.png']; // 故意乱序
 
 const PASS = [], FAIL = [];
