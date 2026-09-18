@@ -1,5 +1,7 @@
 -- Backend v2 is additive.  In particular, the legacy public.users table is
 -- deliberately untouched: all v2 identity foreign keys target app_users.
+BEGIN;
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE FUNCTION public.backend_v2_set_updated_at()
@@ -12,9 +14,12 @@ BEGIN
 END;
 $$;
 
-CREATE TABLE IF NOT EXISTS public.app_users (
+CREATE TABLE public.app_users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  username text NOT NULL,
+  username text NOT NULL CHECK (
+    username = btrim(username)
+    AND username ~ '^[A-Za-z0-9_]{3,32}$'
+  ),
   password_hash text NOT NULL,
   role text NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'admin')),
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'deleted')),
@@ -22,9 +27,9 @@ CREATE TABLE IF NOT EXISTS public.app_users (
   updated_at timestamptz NOT NULL DEFAULT now(),
   last_login_at timestamptz
 );
-CREATE UNIQUE INDEX IF NOT EXISTS app_users_username_lower_key ON public.app_users (lower(username));
+CREATE UNIQUE INDEX app_users_username_lower_key ON public.app_users (lower(username));
 
-CREATE TABLE IF NOT EXISTS public.user_sessions (
+CREATE TABLE public.user_sessions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE RESTRICT,
   token_hash text NOT NULL,
@@ -36,10 +41,10 @@ CREATE TABLE IF NOT EXISTS public.user_sessions (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CHECK (expires_at > created_at)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS user_sessions_token_hash_key ON public.user_sessions (token_hash);
-CREATE INDEX IF NOT EXISTS user_sessions_user_active_idx ON public.user_sessions (user_id, expires_at DESC) WHERE revoked_at IS NULL;
+CREATE UNIQUE INDEX user_sessions_token_hash_key ON public.user_sessions (token_hash);
+CREATE INDEX user_sessions_user_active_idx ON public.user_sessions (user_id, expires_at DESC) WHERE revoked_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS public.question_bank (
+CREATE TABLE public.question_bank (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   prompt text NOT NULL CHECK (length(btrim(prompt)) > 0),
   accepted_answer_hashes text[] NOT NULL CHECK (cardinality(accepted_answer_hashes) > 0),
@@ -50,9 +55,9 @@ CREATE TABLE IF NOT EXISTS public.question_bank (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS question_bank_active_idx ON public.question_bank (status, sampling_weight DESC) WHERE status = 'active';
+CREATE INDEX question_bank_active_idx ON public.question_bank (status, sampling_weight DESC) WHERE status = 'active';
 
-CREATE TABLE IF NOT EXISTS public.registration_challenges (
+CREATE TABLE public.registration_challenges (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   question_ids uuid[] NOT NULL CHECK (cardinality(question_ids) > 0),
   score integer NOT NULL DEFAULT 0 CHECK (score >= 0),
@@ -66,10 +71,10 @@ CREATE TABLE IF NOT EXISTS public.registration_challenges (
   CHECK (expires_at > created_at),
   CHECK (attempt_count <= max_attempts)
 );
-CREATE INDEX IF NOT EXISTS registration_challenges_ip_expiry_idx ON public.registration_challenges (ip_hash, expires_at DESC);
-CREATE INDEX IF NOT EXISTS registration_challenges_pending_expiry_idx ON public.registration_challenges (status, expires_at) WHERE status = 'pending';
+CREATE INDEX registration_challenges_ip_expiry_idx ON public.registration_challenges (ip_hash, expires_at DESC);
+CREATE INDEX registration_challenges_pending_expiry_idx ON public.registration_challenges (status, expires_at) WHERE status = 'pending';
 
-CREATE TABLE IF NOT EXISTS public.registration_attempts (
+CREATE TABLE public.registration_attempts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   challenge_id uuid NOT NULL REFERENCES public.registration_challenges(id) ON DELETE RESTRICT,
   attempt_no integer NOT NULL CHECK (attempt_no > 0),
@@ -77,9 +82,9 @@ CREATE TABLE IF NOT EXISTS public.registration_attempts (
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (challenge_id, attempt_no)
 );
-CREATE INDEX IF NOT EXISTS registration_attempts_challenge_idx ON public.registration_attempts (challenge_id, created_at DESC);
+CREATE INDEX registration_attempts_challenge_idx ON public.registration_attempts (challenge_id, created_at DESC);
 
-CREATE TABLE IF NOT EXISTS public.registration_tickets (
+CREATE TABLE public.registration_tickets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   challenge_id uuid NOT NULL REFERENCES public.registration_challenges(id) ON DELETE RESTRICT,
   token_hash text NOT NULL,
@@ -90,9 +95,9 @@ CREATE TABLE IF NOT EXISTS public.registration_tickets (
   UNIQUE (challenge_id),
   UNIQUE (token_hash)
 );
-CREATE INDEX IF NOT EXISTS registration_tickets_active_idx ON public.registration_tickets (expires_at) WHERE used_at IS NULL;
+CREATE INDEX registration_tickets_active_idx ON public.registration_tickets (expires_at) WHERE used_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS public.recovery_codes (
+CREATE TABLE public.recovery_codes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE RESTRICT,
   code_hash text NOT NULL,
@@ -100,9 +105,9 @@ CREATE TABLE IF NOT EXISTS public.recovery_codes (
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (code_hash)
 );
-CREATE INDEX IF NOT EXISTS recovery_codes_user_active_idx ON public.recovery_codes (user_id, created_at DESC) WHERE used_at IS NULL;
+CREATE INDEX recovery_codes_user_active_idx ON public.recovery_codes (user_id, created_at DESC) WHERE used_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS public.age_consents (
+CREATE TABLE public.age_consents (
   user_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE RESTRICT,
   policy_version text NOT NULL CHECK (length(btrim(policy_version)) > 0),
   accepted_at timestamptz NOT NULL DEFAULT now(),
@@ -111,9 +116,9 @@ CREATE TABLE IF NOT EXISTS public.age_consents (
   PRIMARY KEY (user_id, policy_version),
   CHECK (revoked_at IS NULL OR revoked_at >= accepted_at)
 );
-CREATE INDEX IF NOT EXISTS age_consents_active_idx ON public.age_consents (user_id, accepted_at DESC) WHERE revoked_at IS NULL;
+CREATE INDEX age_consents_active_idx ON public.age_consents (user_id, accepted_at DESC) WHERE revoked_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS public.works (
+CREATE TABLE public.works (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   slug text NOT NULL CHECK (slug ~ '^[a-z0-9][a-z0-9-]{0,127}$'),
   type text NOT NULL CHECK (type IN ('comic', 'novel', 'art', 'resource')),
@@ -130,11 +135,11 @@ CREATE TABLE IF NOT EXISTS public.works (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (slug)
 );
-CREATE INDEX IF NOT EXISTS works_public_directory_idx ON public.works (status, published_at DESC) WHERE status = 'published';
-CREATE INDEX IF NOT EXISTS works_created_by_idx ON public.works (created_by);
-CREATE INDEX IF NOT EXISTS works_updated_by_idx ON public.works (updated_by);
+CREATE INDEX works_public_directory_idx ON public.works (status, published_at DESC) WHERE status = 'published';
+CREATE INDEX works_created_by_idx ON public.works (created_by);
+CREATE INDEX works_updated_by_idx ON public.works (updated_by);
 
-CREATE TABLE IF NOT EXISTS public.work_assets (
+CREATE TABLE public.work_assets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   work_id uuid NOT NULL REFERENCES public.works(id) ON DELETE RESTRICT,
   kind text NOT NULL CHECK (kind IN ('cover', 'page', 'body', 'attachment', 'preview')),
@@ -151,9 +156,9 @@ CREATE TABLE IF NOT EXISTS public.work_assets (
   UNIQUE (object_key),
   UNIQUE (work_id, kind, page_no)
 );
-CREATE INDEX IF NOT EXISTS work_assets_work_status_idx ON public.work_assets (work_id, status, kind, page_no);
+CREATE INDEX work_assets_work_status_idx ON public.work_assets (work_id, status, kind, page_no);
 
-CREATE TABLE IF NOT EXISTS public.tags (
+CREATE TABLE public.tags (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   slug text NOT NULL,
   name text NOT NULL,
@@ -164,15 +169,15 @@ CREATE TABLE IF NOT EXISTS public.tags (
   UNIQUE (name)
 );
 
-CREATE TABLE IF NOT EXISTS public.work_tags (
+CREATE TABLE public.work_tags (
   work_id uuid NOT NULL REFERENCES public.works(id) ON DELETE RESTRICT,
   tag_id uuid NOT NULL REFERENCES public.tags(id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (work_id, tag_id)
 );
-CREATE INDEX IF NOT EXISTS work_tags_tag_idx ON public.work_tags (tag_id, work_id);
+CREATE INDEX work_tags_tag_idx ON public.work_tags (tag_id, work_id);
 
-CREATE TABLE IF NOT EXISTS public.work_versions (
+CREATE TABLE public.work_versions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   work_id uuid NOT NULL REFERENCES public.works(id) ON DELETE RESTRICT,
   version bigint NOT NULL CHECK (version > 0),
@@ -181,25 +186,25 @@ CREATE TABLE IF NOT EXISTS public.work_versions (
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (work_id, version)
 );
-CREATE INDEX IF NOT EXISTS work_versions_creator_idx ON public.work_versions (created_by);
+CREATE INDEX work_versions_creator_idx ON public.work_versions (created_by);
 
-CREATE TABLE IF NOT EXISTS public.work_likes (
+CREATE TABLE public.work_likes (
   user_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE RESTRICT,
   work_id uuid NOT NULL REFERENCES public.works(id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, work_id)
 );
-CREATE INDEX IF NOT EXISTS work_likes_work_idx ON public.work_likes (work_id, created_at DESC);
+CREATE INDEX work_likes_work_idx ON public.work_likes (work_id, created_at DESC);
 
-CREATE TABLE IF NOT EXISTS public.favorites (
+CREATE TABLE public.favorites (
   user_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE RESTRICT,
   work_id uuid NOT NULL REFERENCES public.works(id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, work_id)
 );
-CREATE INDEX IF NOT EXISTS favorites_work_idx ON public.favorites (work_id, created_at DESC);
+CREATE INDEX favorites_work_idx ON public.favorites (work_id, created_at DESC);
 
-CREATE TABLE IF NOT EXISTS public.comments (
+CREATE TABLE public.comments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   work_id uuid NOT NULL REFERENCES public.works(id) ON DELETE RESTRICT,
   user_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE RESTRICT,
@@ -212,11 +217,11 @@ CREATE TABLE IF NOT EXISTS public.comments (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CHECK (parent_id IS NULL OR parent_id <> id)
 );
-CREATE INDEX IF NOT EXISTS comments_work_list_idx ON public.comments (work_id, status, created_at DESC);
-CREATE INDEX IF NOT EXISTS comments_user_idx ON public.comments (user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS comments_parent_idx ON public.comments (parent_id) WHERE parent_id IS NOT NULL;
+CREATE INDEX comments_work_list_idx ON public.comments (work_id, status, created_at DESC);
+CREATE INDEX comments_user_idx ON public.comments (user_id, created_at DESC);
+CREATE INDEX comments_parent_idx ON public.comments (parent_id) WHERE parent_id IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS public.reading_progress (
+CREATE TABLE public.reading_progress (
   user_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE RESTRICT,
   work_id uuid NOT NULL REFERENCES public.works(id) ON DELETE RESTRICT,
   position bigint NOT NULL CHECK (position >= 0),
@@ -227,9 +232,9 @@ CREATE TABLE IF NOT EXISTS public.reading_progress (
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, work_id)
 );
-CREATE INDEX IF NOT EXISTS reading_progress_work_idx ON public.reading_progress (work_id, updated_at DESC);
+CREATE INDEX reading_progress_work_idx ON public.reading_progress (work_id, updated_at DESC);
 
-CREATE TABLE IF NOT EXISTS public.reports (
+CREATE TABLE public.reports (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   reporter_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE RESTRICT,
   target_type text NOT NULL CHECK (target_type IN ('work', 'comment', 'submission', 'user')),
@@ -241,10 +246,10 @@ CREATE TABLE IF NOT EXISTS public.reports (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (reporter_id, target_type, target_id)
 );
-CREATE INDEX IF NOT EXISTS reports_queue_idx ON public.reports (status, created_at);
-CREATE INDEX IF NOT EXISTS reports_handled_by_idx ON public.reports (handled_by);
+CREATE INDEX reports_queue_idx ON public.reports (status, created_at);
+CREATE INDEX reports_handled_by_idx ON public.reports (handled_by);
 
-CREATE TABLE IF NOT EXISTS public.upload_sessions (
+CREATE TABLE public.upload_sessions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE RESTRICT,
   purpose text NOT NULL CHECK (purpose IN ('work_asset', 'submission_asset')),
@@ -254,9 +259,9 @@ CREATE TABLE IF NOT EXISTS public.upload_sessions (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CHECK (expires_at > created_at)
 );
-CREATE INDEX IF NOT EXISTS upload_sessions_owner_status_idx ON public.upload_sessions (owner_id, status, expires_at DESC);
+CREATE INDEX upload_sessions_owner_status_idx ON public.upload_sessions (owner_id, status, expires_at DESC);
 
-CREATE TABLE IF NOT EXISTS public.upload_files (
+CREATE TABLE public.upload_files (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id uuid NOT NULL REFERENCES public.upload_sessions(id) ON DELETE RESTRICT,
   object_key text NOT NULL,
@@ -270,9 +275,9 @@ CREATE TABLE IF NOT EXISTS public.upload_files (
   CHECK (actual_size IS NULL OR actual_size = expected_size),
   UNIQUE (object_key)
 );
-CREATE INDEX IF NOT EXISTS upload_files_session_status_idx ON public.upload_files (session_id, status);
+CREATE INDEX upload_files_session_status_idx ON public.upload_files (session_id, status);
 
-CREATE TABLE IF NOT EXISTS public.submissions (
+CREATE TABLE public.submissions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE RESTRICT,
   type text NOT NULL CHECK (type IN ('comic', 'novel', 'recommendation', 'other')),
@@ -282,18 +287,19 @@ CREATE TABLE IF NOT EXISTS public.submissions (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS submissions_queue_idx ON public.submissions (status, created_at);
-CREATE INDEX IF NOT EXISTS submissions_user_idx ON public.submissions (user_id, created_at DESC);
+CREATE INDEX submissions_queue_idx ON public.submissions (status, created_at);
+CREATE INDEX submissions_user_idx ON public.submissions (user_id, created_at DESC);
 
-CREATE TABLE IF NOT EXISTS public.submission_assets (
+CREATE TABLE public.submission_assets (
   submission_id uuid NOT NULL REFERENCES public.submissions(id) ON DELETE RESTRICT,
   upload_file_id uuid NOT NULL REFERENCES public.upload_files(id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (submission_id, upload_file_id)
+  PRIMARY KEY (submission_id, upload_file_id),
+  UNIQUE (upload_file_id)
 );
-CREATE INDEX IF NOT EXISTS submission_assets_file_idx ON public.submission_assets (upload_file_id);
+CREATE INDEX submission_assets_file_idx ON public.submission_assets (upload_file_id);
 
-CREATE TABLE IF NOT EXISTS public.snapshot_jobs (
+CREATE TABLE public.snapshot_jobs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   snapshot_type text NOT NULL CHECK (snapshot_type IN ('catalog', 'tags', 'config')),
   source_version bigint NOT NULL CHECK (source_version > 0),
@@ -303,9 +309,9 @@ CREATE TABLE IF NOT EXISTS public.snapshot_jobs (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS snapshot_jobs_queue_idx ON public.snapshot_jobs (status, created_at);
+CREATE INDEX snapshot_jobs_queue_idx ON public.snapshot_jobs (status, created_at);
 
-CREATE TABLE IF NOT EXISTS public.snapshot_versions (
+CREATE TABLE public.snapshot_versions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   snapshot_job_id uuid REFERENCES public.snapshot_jobs(id) ON DELETE RESTRICT,
   snapshot_type text NOT NULL CHECK (snapshot_type IN ('catalog', 'tags', 'config')),
@@ -316,9 +322,9 @@ CREATE TABLE IF NOT EXISTS public.snapshot_versions (
   UNIQUE (snapshot_type, version),
   UNIQUE (object_key)
 );
-CREATE INDEX IF NOT EXISTS snapshot_versions_job_idx ON public.snapshot_versions (snapshot_job_id);
+CREATE INDEX snapshot_versions_job_idx ON public.snapshot_versions (snapshot_job_id);
 
-CREATE TABLE IF NOT EXISTS public.moderation_actions (
+CREATE TABLE public.moderation_actions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   target_type text NOT NULL CHECK (target_type IN ('comment', 'submission', 'report', 'work', 'user')),
   target_id uuid NOT NULL,
@@ -327,10 +333,10 @@ CREATE TABLE IF NOT EXISTS public.moderation_actions (
   admin_id uuid NOT NULL REFERENCES public.app_users(id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS moderation_actions_target_idx ON public.moderation_actions (target_type, target_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS moderation_actions_admin_idx ON public.moderation_actions (admin_id, created_at DESC);
+CREATE INDEX moderation_actions_target_idx ON public.moderation_actions (target_type, target_id, created_at DESC);
+CREATE INDEX moderation_actions_admin_idx ON public.moderation_actions (admin_id, created_at DESC);
 
-CREATE TABLE IF NOT EXISTS public.audit_logs (
+CREATE TABLE public.audit_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   actor_id uuid REFERENCES public.app_users(id) ON DELETE RESTRICT,
   action text NOT NULL,
@@ -340,20 +346,20 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
   request_id text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS audit_logs_target_idx ON public.audit_logs (target_type, target_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS audit_logs_actor_idx ON public.audit_logs (actor_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS audit_logs_request_idx ON public.audit_logs (request_id);
+CREATE INDEX audit_logs_target_idx ON public.audit_logs (target_type, target_id, created_at DESC);
+CREATE INDEX audit_logs_actor_idx ON public.audit_logs (actor_id, created_at DESC);
+CREATE INDEX audit_logs_request_idx ON public.audit_logs (request_id);
 
-CREATE TABLE IF NOT EXISTS public.site_settings (
+CREATE TABLE public.site_settings (
   key text PRIMARY KEY CHECK (length(btrim(key)) > 0),
   value jsonb NOT NULL,
   version bigint NOT NULL DEFAULT 1 CHECK (version > 0),
   updated_by uuid REFERENCES public.app_users(id) ON DELETE RESTRICT,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS site_settings_updated_by_idx ON public.site_settings (updated_by);
+CREATE INDEX site_settings_updated_by_idx ON public.site_settings (updated_by);
 
-CREATE TABLE IF NOT EXISTS public.blocked_subjects (
+CREATE TABLE public.blocked_subjects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   subject_type text NOT NULL CHECK (subject_type IN ('user', 'ip', 'device')),
   subject_hash text NOT NULL,
@@ -362,9 +368,9 @@ CREATE TABLE IF NOT EXISTS public.blocked_subjects (
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (subject_type, subject_hash)
 );
-CREATE INDEX IF NOT EXISTS blocked_subjects_expiry_idx ON public.blocked_subjects (expires_at) WHERE expires_at IS NOT NULL;
+CREATE INDEX blocked_subjects_expiry_idx ON public.blocked_subjects (expires_at) WHERE expires_at IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS public.rate_limit_buckets (
+CREATE TABLE public.rate_limit_buckets (
   subject_hash text NOT NULL,
   bucket text NOT NULL,
   window_started_at timestamptz NOT NULL,
@@ -374,20 +380,87 @@ CREATE TABLE IF NOT EXISTS public.rate_limit_buckets (
   PRIMARY KEY (subject_hash, bucket, window_started_at),
   CHECK (expires_at > window_started_at)
 );
-CREATE INDEX IF NOT EXISTS rate_limit_buckets_expiry_idx ON public.rate_limit_buckets (expires_at);
+CREATE INDEX rate_limit_buckets_expiry_idx ON public.rate_limit_buckets (expires_at);
 
 CREATE FUNCTION public.backend_v2_enforce_comment_reply_depth()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
+DECLARE
+  v_parent_work_id uuid;
+  v_parent_parent_id uuid;
 BEGIN
-  IF NEW.parent_id IS NOT NULL AND EXISTS (
-    SELECT 1 FROM public.comments AS parent_comment
-     WHERE parent_comment.id = NEW.parent_id AND parent_comment.parent_id IS NOT NULL
-  ) THEN
-    RAISE EXCEPTION 'comments support only one reply level' USING ERRCODE = '23514';
+  IF TG_OP = 'UPDATE'
+     AND (NEW.parent_id IS DISTINCT FROM OLD.parent_id OR NEW.work_id IS DISTINCT FROM OLD.work_id)
+     AND EXISTS (SELECT 1 FROM public.comments AS child_comment WHERE child_comment.parent_id = NEW.id) THEN
+    RAISE EXCEPTION 'a comment with replies cannot be reparented or moved' USING ERRCODE = '23514';
+  END IF;
+  IF NEW.parent_id IS NOT NULL THEN
+    SELECT work_id, parent_id
+      INTO v_parent_work_id, v_parent_parent_id
+      FROM public.comments
+     WHERE id = NEW.parent_id
+     FOR KEY SHARE;
+    IF NOT FOUND OR v_parent_work_id <> NEW.work_id OR v_parent_parent_id IS NOT NULL THEN
+      RAISE EXCEPTION 'comment parent must be a top-level comment on the same work' USING ERRCODE = '23514';
+    END IF;
   END IF;
   RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION public.answer_registration_challenge(
+  p_challenge_id uuid,
+  p_is_correct boolean,
+  p_score_delta integer,
+  p_passing_score integer,
+  p_ticket_token_hash text,
+  p_ticket_expires_at timestamptz
+) RETURNS uuid
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_challenge public.registration_challenges%ROWTYPE;
+  v_attempt_no integer;
+  v_next_score integer;
+  v_ticket_id uuid;
+BEGIN
+  IF p_score_delta < 0 OR p_passing_score < 1 OR p_ticket_expires_at <= clock_timestamp() THEN
+    RAISE EXCEPTION 'invalid challenge scoring or ticket expiry' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT * INTO v_challenge
+    FROM public.registration_challenges
+   WHERE id = p_challenge_id
+     AND status = 'pending'
+     AND expires_at > clock_timestamp()
+   FOR UPDATE;
+  IF NOT FOUND OR v_challenge.attempt_count >= v_challenge.max_attempts THEN
+    RAISE EXCEPTION 'challenge is invalid, expired, or exhausted' USING ERRCODE = '23514';
+  END IF;
+
+  v_attempt_no := v_challenge.attempt_count + 1;
+  v_next_score := v_challenge.score + CASE WHEN p_is_correct THEN p_score_delta ELSE 0 END;
+  INSERT INTO public.registration_attempts (challenge_id, attempt_no, result)
+  VALUES (p_challenge_id, v_attempt_no,
+    CASE WHEN p_is_correct THEN 'correct' ELSE 'incorrect' END);
+
+  IF p_is_correct AND v_next_score >= p_passing_score THEN
+    UPDATE public.registration_challenges
+       SET attempt_count = v_attempt_no, score = v_next_score, status = 'passed'
+     WHERE id = p_challenge_id;
+    INSERT INTO public.registration_tickets (challenge_id, token_hash, expires_at)
+    VALUES (p_challenge_id, p_ticket_token_hash, p_ticket_expires_at)
+    RETURNING id INTO v_ticket_id;
+    RETURN v_ticket_id;
+  END IF;
+
+  UPDATE public.registration_challenges
+     SET attempt_count = v_attempt_no,
+         score = v_next_score,
+         status = CASE WHEN v_attempt_no >= v_challenge.max_attempts THEN 'failed' ELSE 'pending' END
+   WHERE id = p_challenge_id;
+  RETURN NULL;
 END;
 $$;
 
@@ -597,6 +670,9 @@ REVOKE ALL ON TABLE public.app_users, public.user_sessions, public.question_bank
   public.moderation_actions, public.audit_logs, public.site_settings, public.blocked_subjects,
   public.rate_limit_buckets FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.backend_v2_set_updated_at() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.backend_v2_enforce_comment_reply_depth() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.backend_v2_validate_submission_asset() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.answer_registration_challenge(uuid, boolean, integer, integer, text, timestamptz) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.consume_registration_ticket(text, text, text, text, timestamptz, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.rotate_user_session(text, text, timestamptz, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.consume_recovery_code(text, text, text, timestamptz, text) FROM PUBLIC;
@@ -643,7 +719,7 @@ CREATE TRIGGER works_set_updated_at BEFORE UPDATE ON public.works FOR EACH ROW E
 CREATE TRIGGER work_assets_set_updated_at BEFORE UPDATE ON public.work_assets FOR EACH ROW EXECUTE FUNCTION public.backend_v2_set_updated_at();
 CREATE TRIGGER tags_set_updated_at BEFORE UPDATE ON public.tags FOR EACH ROW EXECUTE FUNCTION public.backend_v2_set_updated_at();
 CREATE TRIGGER comments_set_updated_at BEFORE UPDATE ON public.comments FOR EACH ROW EXECUTE FUNCTION public.backend_v2_set_updated_at();
-CREATE TRIGGER comments_enforce_reply_depth BEFORE INSERT OR UPDATE OF parent_id ON public.comments FOR EACH ROW EXECUTE FUNCTION public.backend_v2_enforce_comment_reply_depth();
+CREATE TRIGGER comments_enforce_reply_depth BEFORE INSERT OR UPDATE OF parent_id, work_id ON public.comments FOR EACH ROW EXECUTE FUNCTION public.backend_v2_enforce_comment_reply_depth();
 CREATE TRIGGER reading_progress_set_updated_at BEFORE UPDATE ON public.reading_progress FOR EACH ROW EXECUTE FUNCTION public.backend_v2_set_updated_at();
 CREATE TRIGGER reports_set_updated_at BEFORE UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION public.backend_v2_set_updated_at();
 CREATE TRIGGER upload_sessions_set_updated_at BEFORE UPDATE ON public.upload_sessions FOR EACH ROW EXECUTE FUNCTION public.backend_v2_set_updated_at();
@@ -653,3 +729,5 @@ CREATE TRIGGER submission_assets_validate BEFORE INSERT OR UPDATE ON public.subm
 CREATE TRIGGER snapshot_jobs_set_updated_at BEFORE UPDATE ON public.snapshot_jobs FOR EACH ROW EXECUTE FUNCTION public.backend_v2_set_updated_at();
 CREATE TRIGGER site_settings_set_updated_at BEFORE UPDATE ON public.site_settings FOR EACH ROW EXECUTE FUNCTION public.backend_v2_set_updated_at();
 CREATE TRIGGER rate_limit_buckets_set_updated_at BEFORE UPDATE ON public.rate_limit_buckets FOR EACH ROW EXECUTE FUNCTION public.backend_v2_set_updated_at();
+
+COMMIT;
