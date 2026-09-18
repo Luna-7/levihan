@@ -20,7 +20,8 @@ CREATE TABLE public.app_users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   username text NOT NULL CHECK (
     username = btrim(username)
-    AND username ~ '^[A-Za-z0-9_]{3,32}$'
+    AND username = lower(username)
+    AND username ~ '^[a-z0-9_]{3,32}$'
   ),
   password_hash text NOT NULL,
   role text NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'admin')),
@@ -49,6 +50,11 @@ CREATE INDEX user_sessions_user_active_idx ON public.user_sessions (user_id, exp
 CREATE TABLE public.question_bank (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   prompt text NOT NULL CHECK (length(btrim(prompt)) > 0),
+  options jsonb NOT NULL CHECK (
+    jsonb_typeof(options) = 'array'
+    AND jsonb_array_length(options) BETWEEN 2 AND 8
+    AND NOT options @? '$[*] ? (@.type() != "string" || @ like_regex "^\\s*$")'
+  ),
   accepted_answer_hashes text[] NOT NULL CHECK (cardinality(accepted_answer_hashes) > 0),
   normalization_rule text NOT NULL DEFAULT 'trim_lowercase',
   status text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'disabled')),
@@ -407,6 +413,22 @@ LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
      AND session.expires_at > clock_timestamp()
      AND app_user.status = 'active'
    LIMIT 1
+$$;
+
+CREATE FUNCTION public.revoke_user_session(p_token_hash text)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  UPDATE public.user_sessions
+     SET revoked_at = clock_timestamp()
+   WHERE token_hash = p_token_hash
+     AND revoked_at IS NULL
+     AND expires_at > clock_timestamp();
+  RETURN FOUND;
+END;
 $$;
 
 CREATE FUNCTION public.begin_idempotent_request(p_scope text, p_actor_scope_hash text, p_idempotency_key text, p_request_hash text)
@@ -876,6 +898,7 @@ REVOKE EXECUTE ON FUNCTION public.set_favorite(uuid, uuid, boolean) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.sync_reading_progress(uuid, uuid, bigint, numeric, bigint, timestamptz) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.consume_rate_limit_bucket(text, text, integer, integer, timestamptz) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.resolve_user_session(text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.revoke_user_session(text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.begin_idempotent_request(text,text,text,text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.complete_idempotent_request(text,text,text,text,jsonb) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.fail_idempotent_request(text,text,text,text) FROM PUBLIC;

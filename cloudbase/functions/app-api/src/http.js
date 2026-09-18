@@ -130,9 +130,10 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
       if (WRITE_METHODS.has(method) && config.csrfRequired && !route.metadata.csrfExempt) requireCsrf(headers, cookies, config);
       const setCookies = [];
       const query = queryFromEvent(event);
+      const clientIp = trustedIp(event, headers, config);
       const context = {
         method, path: relativePath, params: route.params, headers, cookies, body, query, requestId: id,
-        clientTraceId, idempotencyKey: headers['idempotency-key'], config,
+        clientTraceId, idempotencyKey: headers['idempotency-key'], config, clientIp,
         setCookie: (cookie) => setCookies.push(cookie),
         setActor: (value) => { actorId = value == null ? undefined : String(value); context.actorId = actorId; },
       };
@@ -144,7 +145,7 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
       }
       const rateLimit = route.metadata.rateLimit ?? defaultRateLimitForRoute(method, route.path);
       if (rateLimit && rateLimiter) {
-        const ip = trustedIp(event, headers, config);
+        const ip = clientIp;
         if (!ip) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Trusted client IP is unavailable');
         const policies = Array.isArray(rateLimit) ? rateLimit : [rateLimit];
         for (const policy of policies) {
@@ -169,7 +170,7 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
         if (!idempotency.responsePolicy) throw new ApiError(500, 'INTERNAL_ERROR', 'Idempotency response policy is required');
         if (!/^[A-Za-z0-9_-]{8,128}$/.test(key || '')) throw new ApiError(400, 'VALIDATION_FAILED', 'Invalid Idempotency-Key');
         if (!idempotencyStore) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Idempotency storage unavailable');
-        const ip = trustedIp(event, headers, config);
+        const ip = clientIp;
         if (actorId == null && !ip) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Trusted client identity is unavailable');
         const scopeActorHash = actorScopeHash(actorId, ip, config.sessionHashPepper);
         const requestIdentity = {

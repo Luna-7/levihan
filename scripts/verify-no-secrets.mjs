@@ -66,7 +66,7 @@ export function scanSource(source, path = '<source>') {
 
 function shouldIgnore(relativePath, isDirectory) {
   if (IGNORED_FILES.has(relativePath)) return true;
-  if (isDirectory && [...IGNORED_DIRECTORIES].some((directory) => relativePath === directory || relativePath.startsWith(`${directory}/`))) return true;
+  if (isDirectory && relativePath.split('/').some((segment) => IGNORED_DIRECTORIES.has(segment))) return true;
   if (/^\.superpowers\/sdd\/.+\/review-[^/]*\.diff$/i.test(relativePath)) return true;
   return false;
 }

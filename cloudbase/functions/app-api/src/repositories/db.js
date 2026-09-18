@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { ApiError } = require('../errors');
 const { validateResponsePolicy } = require('../router');
+const { domainHash } = require('../modules/auth/session');
 
 
 class DependencyUnavailableError extends ApiError {
@@ -89,11 +90,11 @@ function createCloudBaseRateLimitRepository({ rdb }) {
 
 function createCloudBaseActorResolver({ rdb, config }) {
   if (!rdb || typeof rdb.rpc !== 'function') throw new Error('CloudBase rdb().rpc(name, params) is required for session resolution');
-  if (!config || !config.sessionCookieName || !config.sessionHashPepper) throw new Error('Session resolver configuration is required');
+  if (!config || !config.sessionCookieName || !config.authHashPepper) throw new Error('Session resolver configuration is required');
   return async function resolveActor(context) {
     const token = context && context.cookies && context.cookies[config.sessionCookieName];
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43,256}$/.test(token)) return null;
-    const tokenHash = crypto.createHmac('sha256', config.sessionHashPepper).update(token).digest('hex');
+    const tokenHash = domainHash(config.authHashPepper, 'session', token);
     let result;
     try { result = await rdb.rpc('resolve_user_session', { p_token_hash: tokenHash }); } catch (error) { throw dependencyError(error); }
     if (!result || result.error) throw dependencyError(result && result.error);

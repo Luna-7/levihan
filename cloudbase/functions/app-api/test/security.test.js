@@ -25,7 +25,7 @@ const responsePolicy = {
 
 const config = {
   environment: 'test', allowedOrigins: [], sessionCookieName: 'lv_session', csrfCookieName: 'lv_csrf',
-  bodyLimitBytes: 1024, csrfRequired: true, sessionHashPepper: 'test-pepper', rateLimitPepper: 'test-rate-pepper',
+  bodyLimitBytes: 1024, csrfRequired: true, sessionHashPepper: 'test-pepper', authHashPepper: 'a'.repeat(32), rateLimitPepper: 'test-rate-pepper',
 };
 
 function request(overrides = {}) {
@@ -77,14 +77,15 @@ describe('security boundaries', () => {
     const apiKey = 'test-api-key';
     expect(() => parseConfig({ NODE_ENV: 'production', API_ALLOWED_ORIGINS: '', SESSION_HASH_PEPPER: '', CLOUDBASE_APIKEY: apiKey }))
       .toThrow(/API_ALLOWED_ORIGINS/);
-    expect(() => parseConfig({ NODE_ENV: 'production', API_ALLOWED_ORIGINS: 'https://app.example.test', SESSION_HASH_PEPPER: 'a'.repeat(32), CLOUDBASE_APIKEY: apiKey, COS_BUCKET: 'test-bucket', COS_REGION: 'ap-test-1', DATABASE_SCHEMA: 'public' }))
+    expect(() => parseConfig({ NODE_ENV: 'production', API_ALLOWED_ORIGINS: 'https://app.example.test', SESSION_HASH_PEPPER: 'a'.repeat(32), AUTH_HASH_PEPPER: 'b'.repeat(32), CLOUDBASE_APIKEY: apiKey, COS_BUCKET: 'test-bucket', COS_REGION: 'ap-test-1', DATABASE_SCHEMA: 'public' }))
       .toThrow(/SESSION_COOKIE_DOMAIN/);
   });
 
   it('rejects short peppers and disabled production CSRF', () => {
     const base = { NODE_ENV: 'production', API_ALLOWED_ORIGINS: 'https://app.example.test', CLOUDBASE_APIKEY: 'test-api-key', COS_BUCKET: 'test-bucket', COS_REGION: 'ap-test-1', DATABASE_SCHEMA: 'public', SESSION_COOKIE_DOMAIN: 'example.test' };
     expect(() => parseConfig({ ...base, SESSION_HASH_PEPPER: 'short' })).toThrow(/SESSION_HASH_PEPPER/);
-    expect(() => parseConfig({ ...base, SESSION_HASH_PEPPER: 'a'.repeat(32), CSRF_REQUIRED: 'false' })).toThrow(/CSRF_REQUIRED/);
+    expect(() => parseConfig({ ...base, SESSION_HASH_PEPPER: 'a'.repeat(32), AUTH_HASH_PEPPER: 'short' })).toThrow(/AUTH_HASH_PEPPER/);
+    expect(() => parseConfig({ ...base, SESSION_HASH_PEPPER: 'a'.repeat(32), AUTH_HASH_PEPPER: 'b'.repeat(32), CSRF_REQUIRED: 'false' })).toThrow(/CSRF_REQUIRED/);
   });
 
   it('does not log request bodies, cookies, tokens, answers, or passwords', () => {
@@ -129,7 +130,7 @@ describe('security boundaries', () => {
     const cloudbase = JSON.parse(readFileSync(resolve(__dirname, '../../../cloudbaserc.json'), 'utf8'));
     const apiFunction = cloudbase.functions.find((item) => item.name === 'app-api');
     expect(apiFunction).toMatchObject({ type: 'HTTP', public: true, gatewayPath: '/api/v1' });
-    expect(apiFunction.envVariables).toMatchObject({ COS_BUCKET: '{{env.COS_BUCKET}}', COS_REGION: '{{env.COS_REGION}}', DATABASE_SCHEMA: '{{env.DATABASE_SCHEMA}}', CSRF_REQUIRED: '{{env.CSRF_REQUIRED}}', TRUST_PROXY_HEADERS: '{{env.TRUST_PROXY_HEADERS}}' });
+    expect(apiFunction.envVariables).toMatchObject({ COS_BUCKET: '{{env.COS_BUCKET}}', COS_REGION: '{{env.COS_REGION}}', DATABASE_SCHEMA: '{{env.DATABASE_SCHEMA}}', AUTH_HASH_PEPPER: '{{env.AUTH_HASH_PEPPER}}', CSRF_REQUIRED: '{{env.CSRF_REQUIRED}}', TRUST_PROXY_HEADERS: '{{env.TRUST_PROXY_HEADERS}}' });
     expect(cloudbase.functions.find((item) => item.name === 'admin-upload').envVariables.DATABASE_SCHEMA).toBeUndefined();
   });
 
@@ -325,7 +326,7 @@ describe('security boundaries', () => {
 
   it('resolves an active session actor using only an HMAC token hash', async () => {
     const sessionValue = `test-${'s'.repeat(59)}`;
-    const expectedHash = crypto.createHmac('sha256', config.sessionHashPepper).update(sessionValue).digest('hex');
+    const expectedHash = crypto.createHmac('sha256', config.authHashPepper).update(`session\0${sessionValue}`).digest('hex');
     const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: '00000000-0000-4000-8000-000000000084', role: 'member' }], error: null });
     const resolveActor = createCloudBaseActorResolver({ rdb: { rpc }, config });
 
@@ -385,14 +386,14 @@ describe('security boundaries', () => {
       if (name === 'begin_idempotent_request') return { data: [{ state: 'acquired', response: null }], error: null };
       return { data: true, error: null };
     });
-    const rdb = { rpc };
+    const rdb = { rpc, from: vi.fn() };
     const cloudbase = { SYMBOL_CURRENT_ENV: 'current', init: vi.fn(() => ({ rdb: vi.fn(() => rdb) })) };
     const runtime = createRuntime({
       cloudbase,
       logger: runtimeLogger,
       env: {
         NODE_ENV: 'test', API_ALLOWED_ORIGINS: 'https://app.example.test',
-        SESSION_HASH_PEPPER: 'a'.repeat(32), RATE_LIMIT_PEPPER: 'b'.repeat(32),
+        SESSION_HASH_PEPPER: 'a'.repeat(32), AUTH_HASH_PEPPER: 'c'.repeat(32), RATE_LIMIT_PEPPER: 'b'.repeat(32),
         CLOUDBASE_APIKEY: 'test-api-key', COS_BUCKET: 'bucket', COS_REGION: 'region', DATABASE_SCHEMA: 'public',
       },
     });

@@ -37,8 +37,8 @@ describe('shared API validation contracts', () => {
   it('accepts every documented input payload', () => {
     const inputs: SchemaCase[] = [
       ['registration challenge request', RegistrationChallengeRequestSchema, {}],
-      ['registration challenge answer', RegistrationChallengeAnswerInputSchema, { challengeId: id, answer: '夏天' }],
-      ['registration', RegistrationInputSchema, { registrationTicket: id, username: 'reader_01', password: 'a-secure-password' }],
+      ['registration challenge answer', RegistrationChallengeAnswerInputSchema, { answer: '夏天' }],
+      ['registration', RegistrationInputSchema, { registrationTicket: 'A'.repeat(43), username: 'reader_01', password: 'a-secure-password' }],
       ['login', LoginInputSchema, { username: 'reader_01', password: 'a-secure-password' }],
       ['recovery code', RecoveryCodeInputSchema, { recoveryCode: 'ABCD-EFGH-JKLM-NPQR', newPassword: 'a-new-secure-password' }],
       ['work summary', WorkSummaryInputSchema, { title: '远方的故事', summary: '一段简短摘要。', contentRating: 'general' }],
@@ -59,8 +59,8 @@ describe('shared API validation contracts', () => {
   it('rejects unknown fields for every input schema', () => {
     const inputs: SchemaCase[] = [
       ['registration challenge request', RegistrationChallengeRequestSchema, {}],
-      ['registration challenge answer', RegistrationChallengeAnswerInputSchema, { challengeId: id, answer: '夏天' }],
-      ['registration', RegistrationInputSchema, { registrationTicket: id, username: 'reader_01', password: 'a-secure-password' }],
+      ['registration challenge answer', RegistrationChallengeAnswerInputSchema, { answer: '夏天' }],
+      ['registration', RegistrationInputSchema, { registrationTicket: 'A'.repeat(43), username: 'reader_01', password: 'a-secure-password' }],
       ['login', LoginInputSchema, { username: 'reader_01', password: 'a-secure-password' }],
       ['recovery code', RecoveryCodeInputSchema, { recoveryCode: 'ABCD-EFGH-JKLM-NPQR', newPassword: 'a-new-secure-password' }],
       ['work summary', WorkSummaryInputSchema, { title: '远方的故事', summary: '一段简短摘要。', contentRating: 'general' }],
@@ -81,11 +81,11 @@ describe('shared API validation contracts', () => {
   it('accepts every documented response payload without putting access tokens in JSON', () => {
     const responses: SchemaCase[] = [
       ['registration challenge response', RegistrationChallengeResponseSchema, { challengeId: id, prompt: '选择夏天对应的选项', options: ['春天', '夏天', '秋天'], expiresAt: timestamp }],
-      ['registration ticket response', RegistrationChallengeAnswerResponseSchema, { registrationTicket: id, expiresAt: timestamp }],
+      ['registration ticket response', RegistrationChallengeAnswerResponseSchema, { registrationTicket: 'A'.repeat(43), expiresAt: timestamp }],
       ['registration response', RegistrationResponseSchema, { userId: id, username: 'reader_01', recoveryCode: 'ABCD-EFGH-JKLM-NPQR' }],
-      ['authenticated user', AuthenticatedUserSchema, { id, username: 'reader_01', ageConsent: { policyVersion: '2026-09', acceptedAt: timestamp } }],
-      ['login response', LoginResponseSchema, { user: { id, username: 'reader_01', ageConsent: null }, session: { expiresAt: laterTimestamp } }],
-      ['recovery response', RecoveryCodeResponseSchema, { user: { id, username: 'reader_01', ageConsent: null }, session: { expiresAt: laterTimestamp } }],
+      ['authenticated user', AuthenticatedUserSchema, { id, username: 'reader_01', role: 'member', capabilities: ['comment', 'submit'], ageConsent: { policyVersion: '2026-09', acceptedAt: timestamp } }],
+      ['login response', LoginResponseSchema, { user: { id, username: 'reader_01', role: 'member', capabilities: ['comment', 'submit'], ageConsent: null }, session: { expiresAt: laterTimestamp } }],
+      ['recovery response', RecoveryCodeResponseSchema, { user: { id, username: 'reader_01', role: 'member', capabilities: ['comment', 'submit'], ageConsent: null }, session: { expiresAt: laterTimestamp }, recoveryCode: 'WXYZ-2345-6789-ABCD' }],
       ['work summary response', WorkSummarySchema, { id, title: '远方的故事', summary: '一段简短摘要。', contentRating: 'general', authorName: 'writer_01', createdAt: timestamp, updatedAt: timestamp }],
       ['comment response', CommentSchema, { id, workId: id, authorName: 'reader_01', body: '很喜欢这一章。', createdAt: timestamp }],
       ['reading progress response', ReadingProgressSchema, { workId: id, position: 42, percent: 20, clientVersion: 2, clientUpdatedAt: timestamp, version: 3, updatedAt: timestamp }],
@@ -100,13 +100,14 @@ describe('shared API validation contracts', () => {
     }
 
     expect(LoginResponseSchema.safeParse({
-      user: { id, username: 'reader_01', ageConsent: null },
+      user: { id, username: 'reader_01', role: 'member', capabilities: ['comment'], ageConsent: null },
       session: { expiresAt: laterTimestamp },
       accessToken: 'must-never-be-in-json',
     }).success).toBe(false);
     expect(RecoveryCodeResponseSchema.safeParse({
-      user: { id, username: 'reader_01', ageConsent: null },
+      user: { id, username: 'reader_01', role: 'member', capabilities: ['comment'], ageConsent: null },
       session: { expiresAt: laterTimestamp },
+      recoveryCode: 'WXYZ-2345-6789-ABCD',
       accessToken: 'must-never-be-in-json',
     }).success).toBe(false);
   });
@@ -150,9 +151,21 @@ describe('shared API validation contracts', () => {
     if (!comment.success) throw new Error('expected trimmed comment to be valid');
     expect(comment.data.body).toBe('很喜欢这一章。');
 
-    const invalid = RegistrationInputSchema.safeParse({ registrationTicket: id, username: 'reader_01', password: 'a-secure-password', ignored: true });
+    const invalid = RegistrationInputSchema.safeParse({ registrationTicket: 'A'.repeat(43), username: 'reader_01', password: 'a-secure-password', ignored: true });
     expect(invalid.success).toBe(false);
     if (invalid.success) throw new Error('unknown registration field must be rejected');
     expect(invalid.error.issues).toContainEqual(expect.objectContaining({ code: 'unrecognized_keys', path: [] }));
+  });
+
+  it('normalizes usernames to their canonical lowercase form and requires opaque tickets', () => {
+    const parsed = RegistrationInputSchema.safeParse({
+      registrationTicket: 'aB_9-'.repeat(9).slice(0, 43),
+      username: '  Reader_01  ',
+      password: 'a-secure-password',
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) throw new Error('expected canonical registration input');
+    expect(parsed.data.username).toBe('reader_01');
+    expect(RegistrationInputSchema.safeParse({ registrationTicket: id, username: 'reader_01', password: 'a-secure-password' }).success).toBe(false);
   });
 });

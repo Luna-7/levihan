@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -101,6 +101,18 @@ describe('hard-coded secret scanner', () => {
     const fixturePath = resolve(repositoryRoot, 'scripts/verify-no-secrets.fixture.ts');
     expect(existsSync(fixturePath)).toBe(true);
     expect(scanRepository(repositoryRoot).some((finding) => finding.path.endsWith('verify-no-secrets.fixture.ts'))).toBe(false);
+  });
+
+  it('ignores dependency directories nested below package roots', () => {
+    const temporaryDirectory = mkdtempSync(join(tmpdir(), 'secret-scanner-dependencies-'));
+    const nestedDependencies = join(temporaryDirectory, 'functions', 'api', 'node_modules', 'fixture-package');
+    mkdirSync(nestedDependencies, { recursive: true });
+    writeFileSync(join(nestedDependencies, 'README.md'), ['pass', 'word: "real-looking-canary-value"\n'].join(''));
+    try {
+      expect(scanRepository(temporaryDirectory)).toEqual([]);
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
   });
 
   it('passes only when tracked/worktree source contains no hard-coded credentials', () => {

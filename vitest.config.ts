@@ -4,6 +4,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    include: ['src/**/*.test.ts', 'scripts/**/*.test.ts', 'cloudbase/functions/**/test/**/*.test.js'],
+    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts', 'cloudbase/functions/**/test/**/*.test.js'],
   },
 });

@@ -24,6 +24,8 @@ function parseConfig(env = process.env) {
   const allowedOrigins = parseOrigins(required(env, 'API_ALLOWED_ORIGINS'));
   const sessionHashPepper = required(env, 'SESSION_HASH_PEPPER');
   if (sessionHashPepper.length < 32) throw new Error('SESSION_HASH_PEPPER must be at least 32 characters');
+  const authHashPepper = required(env, 'AUTH_HASH_PEPPER');
+  if (authHashPepper.length < 32) throw new Error('AUTH_HASH_PEPPER must be at least 32 characters');
   const cloudbaseApiKey = required(env, 'CLOUDBASE_APIKEY');
   const cosBucket = required(env, 'COS_BUCKET');
   const cosRegion = required(env, 'COS_REGION');
@@ -54,6 +56,7 @@ function parseConfig(env = process.env) {
     databaseSchema,
     sessionCookieDomain: sessionCookieDomain || undefined,
     sessionHashPepper,
+    authHashPepper,
     rateLimitPepper,
     bodyLimitBytes,
     csrfRequired: env.CSRF_REQUIRED !== 'false',

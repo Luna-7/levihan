@@ -55,6 +55,7 @@ GRANT EXECUTE ON FUNCTION public.answer_registration_challenge(uuid, boolean, in
   public.sync_reading_progress(uuid, uuid, bigint, numeric, bigint, timestamptz),
   public.consume_rate_limit_bucket(text, text, integer, integer, timestamptz),
   public.resolve_user_session(text),
+  public.revoke_user_session(text),
   public.begin_idempotent_request(text, text, text, text),
   public.complete_idempotent_request(text, text, text, text, jsonb),
   public.fail_idempotent_request(text, text, text, text) TO :"backend_role";

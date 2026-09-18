@@ -2,8 +2,9 @@ import { z } from 'zod';
 
 const IdSchema = z.string().uuid();
 const TimestampSchema = z.string().datetime({ offset: true });
-const UsernameSchema = z.string().min(2).max(32).regex(/^[A-Za-z0-9_-]+$/);
+const UsernameSchema = z.string().trim().toLowerCase().min(3).max(32).regex(/^[a-z0-9_]+$/);
 const PasswordSchema = z.string().min(12).max(128);
+const OpaqueTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43,128}$/);
 const PolicyVersionSchema = z.string().trim().min(1).max(64);
 
 export const ContentRatingSchema = z.enum(['general', 'r18']);
@@ -17,16 +18,15 @@ export const RegistrationChallengeResponseSchema = z.object({
 }).strict();
 
 export const RegistrationChallengeAnswerInputSchema = z.object({
-  challengeId: IdSchema,
   answer: z.string().trim().min(1).max(256),
 }).strict();
 export const RegistrationChallengeAnswerResponseSchema = z.object({
-  registrationTicket: IdSchema,
+  registrationTicket: OpaqueTokenSchema,
   expiresAt: TimestampSchema,
 }).strict();
 
 export const RegistrationInputSchema = z.object({
-  registrationTicket: IdSchema,
+  registrationTicket: OpaqueTokenSchema,
   username: UsernameSchema,
   password: PasswordSchema,
 }).strict();
@@ -52,6 +52,8 @@ export const LoginInputSchema = z.object({
 export const AuthenticatedUserSchema = z.object({
   id: IdSchema,
   username: UsernameSchema,
+  role: z.enum(['member', 'admin']),
+  capabilities: z.array(z.string().trim().min(1).max(64)).max(32),
   ageConsent: AgeConsentSchema.nullable(),
 }).strict();
 const SessionMetadataSchema = z.object({
@@ -69,6 +71,7 @@ export const RecoveryCodeInputSchema = z.object({
 export const RecoveryCodeResponseSchema = z.object({
   user: AuthenticatedUserSchema,
   session: SessionMetadataSchema,
+  recoveryCode: z.string().regex(/^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}$/),
 }).strict();
 
 export const WorkSummaryInputSchema = z.object({

@@ -29,6 +29,7 @@ export const REQUIRED_FUNCTIONS = {
   sync_reading_progress: 'uuid, uuid, bigint, numeric, bigint, timestamptz',
   consume_rate_limit_bucket: 'text, text, integer, integer, timestamptz',
   resolve_user_session: 'text',
+  revoke_user_session: 'text',
   begin_idempotent_request: 'text, text, text, text',
   complete_idempotent_request: 'text, text, text, text, jsonb',
   fail_idempotent_request: 'text, text, text, text',
@@ -289,7 +290,8 @@ function validateMigration(migration, failures) {
 
   const appUsers = sql.match(/CREATE\s+TABLE\s+public\.app_users\s*\(([\s\S]*?)\);/i)?.[1] ?? '';
   addFailure(failures, has(appUsers, /username\s*=\s*btrim\s*\(\s*username\s*\)/i), 'username must reject surrounding whitespace');
-  addFailure(failures, has(appUsers, /username\s*~\s*'\^\[A-Za-z0-9_\]\{3,32\}\$'/i), 'username must enforce the documented ASCII identifier regex');
+  addFailure(failures, has(appUsers, /username\s*=\s*lower\s*\(\s*username\s*\)/i), 'username must be stored in canonical lowercase form');
+  addFailure(failures, has(appUsers, /username\s*~\s*'\^\[a-z0-9_\]\{3,32\}\$'/i), 'username must enforce the documented ASCII identifier regex');
 
   const challenge = functionBody(sql, 'answer_registration_challenge');
   addFailure(failures, Boolean(challenge), 'missing atomic challenge answer function');
@@ -345,6 +347,15 @@ function validateMigration(migration, failures) {
   addFailure(failures, has(sessionResolver, /session\.expires_at\s*>\s*clock_timestamp\(\)/i), 'session resolver must reject expired sessions');
   addFailure(failures, has(sessionResolver, /app_user\.status\s*=\s*'active'/i), 'session resolver must require an active user');
   addFailure(failures, has(sessionResolver, /SELECT\s+session\.user_id\s*,\s*app_user\.role/i), 'session resolver must return only user id and role');
+
+  const questionBank = tableBody(sql, 'question_bank');
+  addFailure(failures, has(questionBank, /options\s+jsonb\s+NOT\s+NULL/i), 'question bank must store JSON options');
+  addFailure(failures, has(questionBank, /jsonb_array_length\s*\(\s*options\s*\)\s+BETWEEN\s+2\s+AND\s+8/i), 'question options must contain two to eight values');
+  addFailure(failures, has(questionBank, /NOT\s+options\s+@\?/i), 'question options must reject non-string and blank values');
+
+  const sessionRevoker = functionBody(sql, 'revoke_user_session');
+  addFailure(failures, has(sessionRevoker, /UPDATE\s+public\.user_sessions[\s\S]*?SET\s+revoked_at\s*=\s*clock_timestamp\(\)/i), 'session revoker must update the current session');
+  addFailure(failures, has(sessionRevoker, /token_hash\s*=\s*p_token_hash[\s\S]*?revoked_at\s+IS\s+NULL/i), 'session revoker must match only the active current token');
 
   const idempotencyTable = tableBody(sql, 'idempotency_records');
   addFailure(failures, has(idempotencyTable, /PRIMARY\s+KEY\s*\(\s*scope\s*,\s*actor_scope_hash\s*,\s*idempotency_key\s*\)/i), 'idempotency records must be unique by scope, actor, and key');

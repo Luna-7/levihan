@@ -61,6 +61,13 @@ function fakeIdempotencyStore() {
 }
 
 describe('HTTP API kernel', () => {
+  it('passes the trusted request-context IP to route services without trusting forwarded headers', async () => {
+    const server = api();
+    server.router.get('/client-ip', (ctx) => ({ clientIp: ctx.clientIp }));
+    const response = await server.handle(request({ path: '/api/v1/client-ip', headers: { 'x-forwarded-for': '198.51.100.99' } }));
+    expect(JSON.parse(response.body)).toEqual({ clientIp: '203.0.113.8' });
+  });
+
   it('parses JSON and serializes a success response with a request ID', async () => {
     const server = api();
     server.router.post('/echo', (ctx) => ({ received: ctx.body }), { csrfExempt: true });
