@@ -143,3 +143,31 @@ Static SQL semantics and mutation tests cover the reviewed paths; staging Postgr
 ### Remaining deployment check
 
 Static SQL semantics and mutation tests cover the reviewed paths; staging PostgreSQL apply and concurrent lease/reacquisition testing remain deployment checkpoints because no database service is available in this worktree.
+
+## Fix round 5 — constrained idempotency projections and cookies
+
+### RED
+
+- The positive projector still accepted any scalar, allowing an unconstrained string field to become a replayed confirmation.
+- The idempotency repository only inspected handler return headers; a handler could call `ctx.setCookie()` while returning a safe body and still complete an idempotency record.
+- JavaScript date parsing normalizes invalid calendar dates, so an `iso-date` descriptor needed canonical validation rather than a successful parse alone.
+
+### Implementation
+
+- Replaced `bodyFields` with a pure-data typed body schema. Each declared top-level field is constrained to `boolean`, safe `integer`, finite `number`, RFC-shaped `uuid`, canonical `iso-date`, or a bounded safe string enum; arbitrary string descriptors are unavailable.
+- Expanded registration-time field validation across sensitive semantics and camel-case segments, including ticket/session/CSRF/key/signature/bearer. Generic carrier names (`value`, `data`, `result`, `payload`) are completely disallowed.
+- The projector validates every returned field against its descriptor before completion and fail-releases malformed UUIDs, out-of-enum statuses, non-integers, invalid ISO dates, arrays, nested values, opaque unknown fields, and `Location` responses.
+- Passed HTTP's actual `setCookies` queue into the idempotency store. Any set or clear cookie after an acquired operation causes fail-release with no completion; the initial response still carries the cookie and has no replay record.
+
+### Verification
+
+- Function tests: `npm test -- --run cloudbase/functions/app-api/test` — 2 files, 85 tests passed.
+- Schema verifier: `npm run verify:backend-schema` — passed.
+- Full suite: `npm test -- --run` — 6 files, 121 tests passed.
+- Type check: `npm run lint` — passed.
+- Secret scan: `npm run verify:secrets` — no findings.
+- Whitespace check: `git diff --check` — passed.
+
+### Remaining deployment check
+
+Static SQL semantics and mutation tests cover the reviewed paths; staging PostgreSQL apply and concurrent lease/reacquisition testing remain deployment checkpoints because no database service is available in this worktree.

@@ -186,6 +186,7 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
           requestHash: digest({ ...requestIdentity, body: body === undefined ? null : body }),
           actorScopeHash: scopeActorHash,
           responsePolicy: idempotency.responsePolicy,
+          cookieQueue: setCookies,
           operation,
         });
       } else data = await operation();

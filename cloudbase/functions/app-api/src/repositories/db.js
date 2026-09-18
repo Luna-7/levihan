@@ -22,8 +22,21 @@ function isPlainObject(value) {
   return Boolean(value) && Object.getPrototypeOf(value) === Object.prototype;
 }
 
-function scalar(value) {
-  return value === null || typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value));
+function validIsoDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) return false;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return false;
+  const canonical = parsed.toISOString();
+  return value === canonical || value === canonical.replace('.000Z', 'Z');
+}
+
+function matchesDescriptor(value, descriptor) {
+  if (descriptor.enum) return descriptor.enum.includes(value);
+  if (descriptor.type === 'boolean') return typeof value === 'boolean';
+  if (descriptor.type === 'integer') return Number.isSafeInteger(value);
+  if (descriptor.type === 'number') return typeof value === 'number' && Number.isFinite(value);
+  if (descriptor.type === 'uuid') return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  return validIsoDate(value);
 }
 
 // This is a positive projector, not a response scrubber: all response keys and
@@ -37,13 +50,13 @@ function projectIdempotencyResponse(response, responsePolicy) {
   if (!policy.statuses.includes(statusCode) || !isPlainObject(body) || !isPlainObject(responseHeaders)) return null;
   const headerEntries = Object.entries(responseHeaders).map(([key, value]) => [key.toLowerCase(), value]);
   if (new Set(headerEntries.map(([key]) => key)).size !== headerEntries.length
-    || headerEntries.some(([key, value]) => !policy.headers.includes(key) || !scalar(value))) return null;
+    || headerEntries.some(([key, value]) => !policy.headers.includes(key) || typeof value !== 'string' || value.length > 256)) return null;
   const bodyEntries = Object.entries(body);
-  if (bodyEntries.some(([key, value]) => !policy.bodyFields.includes(key) || !scalar(value))) return null;
+  if (bodyEntries.some(([key, value]) => !Object.hasOwn(policy.body, key) || !matchesDescriptor(value, policy.body[key]))) return null;
   return {
     statusCode,
     headers: Object.fromEntries(headerEntries.filter(([key]) => policy.headers.includes(key))),
-    body: Object.fromEntries(policy.bodyFields.filter((key) => Object.hasOwn(body, key)).map((key) => [key, body[key]])),
+    body: Object.fromEntries(Object.keys(policy.body).filter((key) => Object.hasOwn(body, key)).map((key) => [key, body[key]])),
   };
 }
 
@@ -93,7 +106,7 @@ function createCloudBaseActorResolver({ rdb, config }) {
 
 function createCloudBaseIdempotencyStore({ rdb, reportSecurityEvent = () => {} }) {
   if (!rdb || typeof rdb.rpc !== 'function') throw new Error('CloudBase rdb().rpc(name, params) is required for idempotency');
-  return { async execute({ scope, key, requestHash, actorScopeHash, responsePolicy, operation }) {
+  return { async execute({ scope, key, requestHash, actorScopeHash, responsePolicy, cookieQueue, operation }) {
     // Validate before begin so a misconfigured caller can never acquire a lease or run a handler.
     const policy = validateResponsePolicy(responsePolicy);
     const params = { p_scope: scope, p_actor_scope_hash: actorScopeHash, p_idempotency_key: key, p_request_hash: requestHash };
@@ -115,7 +128,7 @@ function createCloudBaseIdempotencyStore({ rdb, reportSecurityEvent = () => {} }
       throw error;
     }
     const projectedResponse = projectIdempotencyResponse(response, policy);
-    if (!projectedResponse) {
+    if (!projectedResponse || (Array.isArray(cookieQueue) && cookieQueue.length > 0)) {
       let failed;
       try { failed = await rdb.rpc('fail_idempotent_request', params); } catch (cause) { throw dependencyError(cause); }
       rpcBoolean(failed, 'Idempotency fail');

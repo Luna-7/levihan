@@ -32,8 +32,8 @@ function api(overrides = {}) {
   });
 }
 
-function idempotent(mode = 'supported', bodyFields = ['ok']) {
-  return { mode, responsePolicy: { statuses: [200, 201], bodyFields, headers: [] } };
+function idempotent(mode = 'supported', body = { ok: { type: 'boolean' } }) {
+  return { mode, responsePolicy: { statuses: [200, 201], body, headers: [] } };
 }
 
 function fakeIdempotencyStore() {
@@ -192,7 +192,7 @@ describe('HTTP API kernel', () => {
     });
     const server = api({ idempotencyStore: { execute } });
     const operation = vi.fn(() => ({ created: true }));
-    server.router.post('/write', (ctx) => { expect(ctx.idempotencyKey).toBe('test-idempotency-key'); return operation(); }, { csrfExempt: true, idempotency: idempotent('required', ['created']) });
+    server.router.post('/write', (ctx) => { expect(ctx.idempotencyKey).toBe('test-idempotency-key'); return operation(); }, { csrfExempt: true, idempotency: idempotent('required', { created: { type: 'boolean' } }) });
     const response = await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', body: '{"x":1}', headers: { 'content-type': 'application/json', 'idempotency-key': 'test-idempotency-key' } }));
     await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', body: '{"x":1}', headers: { 'content-type': 'application/json', 'idempotency-key': 'test-idempotency-key' } }));
     expect(response.statusCode).toBe(200);
@@ -204,7 +204,7 @@ describe('HTTP API kernel', () => {
     const operation = vi.fn(() => ({ created: true }));
     const actorResolver = vi.fn(async () => 'member-42');
     const server = api({ idempotencyStore: fakeIdempotencyStore(), actorResolver });
-    server.router.post('/write', operation, { csrfExempt: true, idempotency: idempotent('supported', ['created']) });
+    server.router.post('/write', operation, { csrfExempt: true, idempotency: idempotent('supported', { created: { type: 'boolean' } }) });
     const keyedRequest = request({ httpMethod: 'POST', path: '/api/v1/write', body: '{"x":1}', headers: { 'content-type': 'application/json', 'idempotency-key': 'default-key-01' } });
 
     const first = await server.handle(keyedRequest);
@@ -220,7 +220,7 @@ describe('HTTP API kernel', () => {
     const operation = vi.fn((ctx) => ({ actor: ctx.actorId, id: ctx.params.id, query: ctx.query }));
     let actor = 'member-a';
     const server = api({ idempotencyStore: fakeIdempotencyStore(), actorResolver: async () => actor });
-    server.router.post('/works/{id}', operation, { csrfExempt: true, idempotency: idempotent('supported', ['actor', 'id', 'query']) });
+    server.router.post('/works/{id}', operation, { csrfExempt: true, idempotency: idempotent('supported', { actor: { enum: ['member-a', 'member-b'] }, id: { enum: ['work-a', 'work-b'] }, query: { type: 'boolean' } }) });
     const keyed = { 'idempotency-key': 'shared-key-01' };
 
     await server.handle(request({ httpMethod: 'POST', path: '/api/v1/works/work-a', headers: keyed, queryStringParameters: { page: '1' } }));
@@ -237,7 +237,7 @@ describe('HTTP API kernel', () => {
     const execute = vi.spyOn(stored, 'execute');
     const operation = vi.fn(() => ({ ok: true }));
     const server = api({ idempotencyStore: stored, actorResolver: async () => 'member-42' });
-    server.router.post('/search', operation, { csrfExempt: true, idempotency: idempotent('supported', ['ok']) });
+    server.router.post('/search', operation, { csrfExempt: true, idempotency: idempotent('supported', { ok: { type: 'boolean' } }) });
     const headers = { 'idempotency-key': 'query-key-01' };
 
     await server.handle(request({ httpMethod: 'POST', path: '/api/v1/search', headers, multiValueQueryStringParameters: { tag: ['b', 'a'] }, queryStringParameters: { page: '1' } }));
@@ -255,7 +255,7 @@ describe('HTTP API kernel', () => {
   it('returns 409 when the same actor, scope, and key are reused with a different body', async () => {
     const operation = vi.fn(() => ({ created: true }));
     const server = api({ idempotencyStore: fakeIdempotencyStore(), actorResolver: async () => 'member-42' });
-    server.router.post('/write', operation, { csrfExempt: true, idempotency: idempotent('supported', ['created']) });
+    server.router.post('/write', operation, { csrfExempt: true, idempotency: idempotent('supported', { created: { type: 'boolean' } }) });
     const headers = { 'content-type': 'application/json', 'idempotency-key': 'body-key-001' };
 
     await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', body: '{"x":1}', headers }));
@@ -271,7 +271,7 @@ describe('HTTP API kernel', () => {
       .mockRejectedValueOnce(new ApiError(409, 'STATE_CONFLICT', 'Try again'))
       .mockResolvedValueOnce({ created: true });
     const server = api({ idempotencyStore: fakeIdempotencyStore(), actorResolver: async () => 'member-42' });
-    server.router.post('/write', operation, { csrfExempt: true, idempotency: idempotent('required', ['created']) });
+    server.router.post('/write', operation, { csrfExempt: true, idempotency: idempotent('required', { created: { type: 'boolean' } }) });
     const keyedRequest = request({ httpMethod: 'POST', path: '/api/v1/write', headers: { 'idempotency-key': 'retry-key-01' } });
 
     expect((await server.handle(keyedRequest)).statusCode).toBe(409);
@@ -357,11 +357,11 @@ describe('HTTP API kernel', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it.each(['recoveryCode', 'signedUrl', 'value.url', 'location', 'token'])('rejects unsafe idempotency allowlist field %s at route registration', (field) => {
+  it.each(['recoveryCode', 'signedUrl', 'value.url', 'location', 'token', 'registrationTicket', 'apiKey', 'signature', 'bearer', 'value'])('rejects unsafe or generic idempotency schema field %s at route registration', (field) => {
     const server = api();
     expect(() => server.router.post('/invalid-policy', () => ({ id: '1' }), {
       csrfExempt: true,
-      idempotency: { mode: 'required', responsePolicy: { statuses: [200], bodyFields: [field], headers: [] } },
+      idempotency: { mode: 'required', responsePolicy: { statuses: [200], body: { [field]: field === 'value' ? { type: 'string' } : { type: 'uuid' } }, headers: [] } },
     })).toThrow(/idempotency response policy/i);
   });
 
@@ -369,7 +369,7 @@ describe('HTTP API kernel', () => {
     const server = api();
     expect(() => server.router.post('/invalid-policy', () => ({ id: '1' }), {
       csrfExempt: true,
-      idempotency: { mode: 'required', responsePolicy: { statuses: [200], bodyFields: ['id'], project: () => ({}) } },
+      idempotency: { mode: 'required', responsePolicy: { statuses: [200], body: { id: { type: 'uuid' } }, project: () => ({}) } },
     })).toThrow(/idempotency response policy/i);
   });
 
@@ -377,7 +377,7 @@ describe('HTTP API kernel', () => {
     const server = api();
     expect(() => server.router.post('/invalid-header-policy', () => ({ id: '1' }), {
       csrfExempt: true,
-      idempotency: { mode: 'required', responsePolicy: { statuses: [200], bodyFields: ['id'], headers: ['location'] } },
+      idempotency: { mode: 'required', responsePolicy: { statuses: [200], body: { id: { type: 'uuid' } }, headers: ['location'] } },
     })).toThrow(/idempotency response policy/i);
   });
 

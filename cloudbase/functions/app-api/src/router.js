@@ -2,29 +2,44 @@
 
 const IDEMPOTENCY_MODES = new Set(['none', 'supported', 'required']);
 const SAFE_RESPONSE_HEADERS = new Set(['etag']);
-const SENSITIVE_ALLOWLIST_SEMANTICS = /token|cookie|password|secret|recovery|signed|url|code|credential|authorization|location/i;
+const RESPONSE_TYPES = new Set(['boolean', 'integer', 'number', 'uuid', 'iso-date']);
+const SENSITIVE_ALLOWLIST_SEMANTICS = /token|cookie|password|secret|recovery|signed|url|code|credential|authorization|location|ticket|session|csrf|key|signature|bearer/i;
+const GENERIC_RESPONSE_FIELD = /^(value|data|result|payload)$/i;
 const SAFE_FIELD_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const SAFE_ENUM_VALUE = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
 function policyError() {
   return new Error('Invalid idempotency response policy');
 }
 
 function validateName(name, permittedHeaders) {
-  if (typeof name !== 'string' || !SAFE_FIELD_NAME.test(name) || SENSITIVE_ALLOWLIST_SEMANTICS.test(name)) throw policyError();
+  if (typeof name !== 'string' || !SAFE_FIELD_NAME.test(name) || SENSITIVE_ALLOWLIST_SEMANTICS.test(name) || (!permittedHeaders && GENERIC_RESPONSE_FIELD.test(name))) throw policyError();
   if (permittedHeaders && !SAFE_RESPONSE_HEADERS.has(name.toLowerCase())) throw policyError();
   return permittedHeaders ? name.toLowerCase() : name;
 }
 
+function validateDescriptor(descriptor) {
+  if (!descriptor || Object.getPrototypeOf(descriptor) !== Object.prototype) throw policyError();
+  if (Object.hasOwn(descriptor, 'enum')) {
+    if (Object.keys(descriptor).length !== 1 || !Array.isArray(descriptor.enum) || !descriptor.enum.length || descriptor.enum.length > 32
+      || new Set(descriptor.enum).size !== descriptor.enum.length
+      || descriptor.enum.some((value) => typeof value !== 'string' || !SAFE_ENUM_VALUE.test(value) || SENSITIVE_ALLOWLIST_SEMANTICS.test(value))) throw policyError();
+    return Object.freeze({ enum: Object.freeze([...descriptor.enum]) });
+  }
+  if (Object.keys(descriptor).length !== 1 || !RESPONSE_TYPES.has(descriptor.type)) throw policyError();
+  return Object.freeze({ type: descriptor.type });
+}
+
 function validateResponsePolicy(responsePolicy) {
   if (!responsePolicy || Object.getPrototypeOf(responsePolicy) !== Object.prototype) throw policyError();
-  if (Object.keys(responsePolicy).some((key) => !['statuses', 'bodyFields', 'headers'].includes(key))) throw policyError();
-  const { statuses, bodyFields, headers = [] } = responsePolicy;
+  if (Object.keys(responsePolicy).some((key) => !['statuses', 'body', 'headers'].includes(key))) throw policyError();
+  const { statuses, body, headers = [] } = responsePolicy;
   if (!Array.isArray(statuses) || !statuses.length || new Set(statuses).size !== statuses.length || statuses.some((status) => !Number.isInteger(status) || status < 200 || status > 299)) throw policyError();
-  if (!Array.isArray(bodyFields) || !bodyFields.length || new Set(bodyFields).size !== bodyFields.length) throw policyError();
+  if (!body || Object.getPrototypeOf(body) !== Object.prototype || !Object.keys(body).length) throw policyError();
   if (!Array.isArray(headers) || new Set(headers.map((header) => String(header).toLowerCase())).size !== headers.length) throw policyError();
   return Object.freeze({
     statuses: Object.freeze([...statuses]),
-    bodyFields: Object.freeze(bodyFields.map((field) => validateName(field, false))),
+    body: Object.freeze(Object.fromEntries(Object.entries(body).map(([field, descriptor]) => [validateName(field, false), validateDescriptor(descriptor)]))),
     headers: Object.freeze(headers.map((header) => validateName(header, true))),
   });
 }

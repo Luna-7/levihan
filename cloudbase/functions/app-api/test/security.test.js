@@ -8,7 +8,20 @@ const crypto = require('node:crypto');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 
-const responsePolicy = { statuses: [200, 201], bodyFields: ['id', 'status', 'version', 'ok', 'actor', 'actorId', 'role'], headers: ['etag'] };
+const uuid = '00000000-0000-4000-8000-000000000001';
+const responsePolicy = {
+  statuses: [200, 201],
+  body: {
+    id: { type: 'uuid' },
+    status: { enum: ['created', 'accepted'] },
+    version: { type: 'integer' },
+    ok: { type: 'boolean' },
+    actor: { enum: ['member-84'] },
+    actorId: { type: 'uuid' },
+    role: { enum: ['admin'] },
+  },
+  headers: ['etag'],
+};
 
 const config = {
   environment: 'test', allowedOrigins: [], sessionCookieName: 'lv_session', csrfCookieName: 'lv_csrf',
@@ -138,7 +151,7 @@ describe('security boundaries', () => {
       headers: {
         etag: 'safe-etag',
       },
-      body: { id: '1', status: 'created', version: 2 },
+      body: { id: uuid, status: 'created', version: 2 },
     };
 
     expect(await store.execute({ scope: 'scope-hash', key: 'key-12345', requestHash: 'request-hash', actorScopeHash: 'actor-hash', responsePolicy, operation: async () => response })).toBe(response);
@@ -149,21 +162,21 @@ describe('security boundaries', () => {
     expect(persisted).toEqual({
       statusCode: 201,
       headers: { etag: 'safe-etag' },
-      body: { id: '1', status: 'created', version: 2 },
+      body: { id: uuid, status: 'created', version: 2 },
     });
     expect(Object.keys(persisted.body)).toEqual(['id', 'status', 'version']);
   });
 
   it.each([
-    ['an opaque value at an unknown top-level key', { id: 'work-1', status: 'created', opaque: 'test-opaque-token' }],
-    ['an opaque value inside an unknown array', { id: 'work-1', status: 'created', items: ['test-opaque-token'] }],
-    ['an opaque value inside an unknown nested object', { id: 'work-1', status: 'created', value: { opaque: 'test-opaque-token' } }],
+    ['an opaque JWT at an unknown top-level key', { id: uuid, status: 'created', opaque: 'eyJhbGciOiJIUzI1NiJ9.test.signature' }],
+    ['an opaque token inside an unknown array', { id: uuid, status: 'created', items: ['test-opaque-token'] }],
+    ['an opaque token inside an unknown nested object', { id: uuid, status: 'created', nested: { opaque: 'test-opaque-token' } }],
   ])('releases and never completes when a response contains %s', async (_name, body) => {
     const rpc = vi.fn()
       .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
       .mockResolvedValueOnce({ data: true, error: null });
     const store = createCloudBaseIdempotencyStore({ rdb: { rpc } });
-    const policy = { statuses: [200], bodyFields: ['id', 'status'], headers: [] };
+    const policy = { statuses: [200], body: { id: { type: 'uuid' }, status: { enum: ['created'] } }, headers: [] };
     const response = { statusCode: 200, body };
 
     expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy: policy, operation: async () => response })).toBe(response);
@@ -179,16 +192,16 @@ describe('security boundaries', () => {
       .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
       .mockResolvedValueOnce({ data: true, error: null });
     const store = createCloudBaseIdempotencyStore({ rdb: { rpc } });
-    const response = { statusCode: 200, headers: { location }, body: { id: 'work-1', status: 'created' } };
+    const response = { statusCode: 200, headers: { location }, body: { id: uuid, status: 'created' } };
 
-    expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy: { statuses: [200], bodyFields: ['id', 'status'], headers: [] }, operation: async () => response })).toBe(response);
+    expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy: { statuses: [200], body: { id: { type: 'uuid' }, status: { enum: ['created'] } }, headers: [] }, operation: async () => response })).toBe(response);
     expect(rpc.mock.calls.map(([name]) => name)).toEqual(['begin_idempotent_request', 'fail_idempotent_request']);
   });
 
   it('replays only the projected confirmation after one operation execution', async () => {
-    const policy = { statuses: [201], bodyFields: ['id', 'status'], headers: ['etag'] };
-    const full = { statusCode: 201, headers: { etag: 'v1' }, body: { id: 'work-1', status: 'created' } };
-    const projected = { statusCode: 201, headers: { etag: 'v1' }, body: { id: 'work-1', status: 'created' } };
+    const policy = { statuses: [201], body: { id: { type: 'uuid' }, status: { enum: ['created'] }, version: { type: 'integer' } }, headers: ['etag'] };
+    const full = { statusCode: 201, headers: { etag: 'v1' }, body: { id: uuid, status: 'created', version: 1 } };
+    const projected = { statusCode: 201, headers: { etag: 'v1' }, body: { id: uuid, status: 'created', version: 1 } };
     const rpc = vi.fn()
       .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
       .mockResolvedValueOnce({ data: true, error: null })
@@ -200,6 +213,56 @@ describe('security boundaries', () => {
     expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy: policy, operation })).toEqual(projected);
     expect(operation).toHaveBeenCalledTimes(1);
     expect(rpc.mock.calls[1][1].p_response).toEqual(projected);
+  });
+
+  it.each([
+    ['a malformed UUID', { id: 'not-a-uuid', status: 'created', version: 1 }],
+    ['an enum value outside the policy', { id: uuid, status: 'draft', version: 1 }],
+    ['a non-integer version', { id: uuid, status: 'created', version: 1.5 }],
+  ])('releases rather than completes when a descriptor receives %s', async (_name, body) => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
+      .mockResolvedValueOnce({ data: true, error: null });
+    const store = createCloudBaseIdempotencyStore({ rdb: { rpc } });
+    const policy = { statuses: [200], body: { id: { type: 'uuid' }, status: { enum: ['created'] }, version: { type: 'integer' } }, headers: [] };
+    const response = { statusCode: 200, body };
+
+    expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy: policy, operation: async () => response })).toBe(response);
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(['begin_idempotent_request', 'fail_idempotent_request']);
+  });
+
+  it('releases an invalid calendar date from an iso-date descriptor', async () => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
+      .mockResolvedValueOnce({ data: true, error: null });
+    const store = createCloudBaseIdempotencyStore({ rdb: { rpc } });
+    const response = { statusCode: 200, body: { createdAt: '2024-02-30T00:00:00Z' } };
+    const policy = { statuses: [200], body: { createdAt: { type: 'iso-date' } }, headers: [] };
+
+    expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', responsePolicy: policy, operation: async () => response })).toBe(response);
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(['begin_idempotent_request', 'fail_idempotent_request']);
+  });
+
+  it.each([
+    ['sets a cookie', 'lv_session=test-session; Path=/; HttpOnly'],
+    ['clears a cookie', 'lv_session=; Path=/; Max-Age=0; HttpOnly'],
+  ])('releases a safe response when its handler %s', async (_name, cookie) => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
+      .mockResolvedValueOnce({ data: true, error: null });
+    const store = createCloudBaseIdempotencyStore({ rdb: { rpc } });
+    const server = createApi({ config, idempotencyStore: store, actorResolver: async () => 'member-42', requestId: () => 'cookie-idempotency', logger: { info: vi.fn(), error: vi.fn() } });
+    const policy = { statuses: [201], body: { id: { type: 'uuid' }, status: { enum: ['created'] }, version: { type: 'integer' } }, headers: ['etag'] };
+    server.router.post('/cookie-write', (ctx) => {
+      ctx.setCookie(cookie);
+      return { statusCode: 201, headers: { etag: 'v1' }, body: { id: uuid, status: 'created', version: 1 } };
+    }, { csrfExempt: true, idempotency: { mode: 'required', responsePolicy: policy } });
+
+    const response = await server.handle(request({ path: '/api/v1/cookie-write', headers: { 'idempotency-key': 'cookie-write-key-01' } }));
+
+    expect(response.statusCode).toBe(201);
+    expect(response.multiValueHeaders['set-cookie']).toEqual([cookie]);
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(['begin_idempotent_request', 'fail_idempotent_request']);
   });
 
   it('requires a response policy before the store begins an operation', async () => {
