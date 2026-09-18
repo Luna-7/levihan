@@ -42,6 +42,10 @@ describe('backend v2 PostgreSQL migration', () => {
       ['rollback trigger function', 'rollback', (sql: string) => sql.replace('DROP FUNCTION IF EXISTS public.backend_v2_set_updated_at();', '-- DROP FUNCTION IF EXISTS public.backend_v2_set_updated_at();')],
       ['username regex', 'migration', (sql: string) => sql.replace("username ~ '^[A-Za-z0-9_]{3,32}$'", 'false')],
       ['rate limit RPC', 'migration', (sql: string) => sql.replace('CREATE FUNCTION public.consume_rate_limit_bucket(', '-- CREATE FUNCTION public.consume_rate_limit_bucket(')],
+      ['session resolver RPC', 'migration', (sql: string) => sql.replace('CREATE FUNCTION public.resolve_user_session(', '-- CREATE FUNCTION public.resolve_user_session(')],
+      ['session resolver PUBLIC revoke', 'migration', (sql: string) => sql.replace('REVOKE EXECUTE ON FUNCTION public.resolve_user_session(text) FROM PUBLIC;', '-- REVOKE EXECUTE ON FUNCTION public.resolve_user_session(text) FROM PUBLIC;')],
+      ['session resolver runtime grant', 'runtime', (sql: string) => sql.replace('public.resolve_user_session(text)', 'public.missing_resolve_user_session(text)')],
+      ['session resolver rollback', 'rollback', (sql: string) => sql.replace('DROP FUNCTION IF EXISTS public.resolve_user_session(text);', '-- DROP FUNCTION IF EXISTS public.resolve_user_session(text);')],
       ['idempotency table', 'migration', (sql: string) => sql.replace('CREATE TABLE public.idempotency_records', '-- CREATE TABLE public.idempotency_records')],
       ['idempotency unique key', 'migration', (sql: string) => sql.replace('PRIMARY KEY (scope, actor_scope_hash, idempotency_key)', 'PRIMARY KEY (scope, actor_scope_hash, request_hash)')],
       ['idempotency jsonb response', 'migration', (sql: string) => sql.replace('response jsonb', 'response text')],
@@ -82,7 +86,7 @@ describe('backend v2 PostgreSQL migration', () => {
     const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
     const mutations = [
       ['begin insert', (sql: string) => sql.replace('INSERT INTO public.idempotency_records', 'INSERT INTO public.missing_idempotency_records')],
-      ['begin processing insert', (sql: string) => sql.replace("p_request_hash, 'processing', NULL, v_now + interval '24 hours'", "p_request_hash, 'completed', NULL, v_now + interval '24 hours'")],
+      ['begin processing insert', (sql: string) => sql.replace("p_request_hash, 'processing', NULL, v_now + interval '5 minutes'", "p_request_hash, 'completed', NULL, v_now + interval '5 minutes'")],
       ['begin conflict target', (sql: string) => sql.replace('ON CONFLICT(scope,actor_scope_hash,idempotency_key)', 'ON CONFLICT(scope,actor_scope_hash,request_hash)')],
       ['begin expiry takeover', (sql: string) => sql.replace('WHERE idempotency_records.expires_at <= v_now', 'WHERE false')],
       ['begin hash conflict', (sql: string) => sql.replace("request_hash <> p_request_hash THEN 'request_hash_conflict'", "false THEN 'request_hash_conflict'")],
@@ -100,6 +104,51 @@ describe('backend v2 PostgreSQL migration', () => {
       expect(failures.length, name).toBeGreaterThan(0);
       expect(failures.some((failure) => failure.toLowerCase().includes('idempoten')), name).toBe(true);
     }
+  });
+
+  it('requires the rate-limit upsert to increment through its INSERT alias', () => {
+    const migration = readFileSync(migrationPath, 'utf8');
+    const corrected = migration.replace('rate_limit_buckets.hit_count + 1', 'current_bucket.hit_count + 1');
+    const rollback = readFileSync(rollbackPath, 'utf8');
+    const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
+
+    expect(validateBackendSchema({ migration: corrected, rollback, runtimeAccess })).toEqual([]);
+    expect(validateBackendSchema({
+      migration: corrected.replace('current_bucket.hit_count + 1', 'rate_limit_buckets.hit_count + 1'),
+      rollback,
+      runtimeAccess,
+    })).toContain('rate-limit consumer must increment through the current_bucket alias');
+  });
+
+  it('rejects session resolver mutations that weaken active-session checks', () => {
+    const migration = readFileSync(migrationPath, 'utf8');
+    const rollback = readFileSync(rollbackPath, 'utf8');
+    const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
+    const mutations = [
+      ['token hash', (sql: string) => sql.replace('session.token_hash = p_token_hash', 'true')],
+      ['revocation', (sql: string) => sql.replace('session.revoked_at IS NULL', 'true')],
+      ['expiry', (sql: string) => sql.replace('session.expires_at > clock_timestamp()', 'true')],
+      ['active user', (sql: string) => sql.replace("app_user.status = 'active'", 'true')],
+      ['user join', (sql: string) => sql.replace('app_user.id = session.user_id', 'true')],
+    ] as const;
+
+    for (const [name, mutate] of mutations) {
+      const failures = validateBackendSchema({ migration: mutate(migration), rollback, runtimeAccess });
+      expect(failures.some((failure) => failure.toLowerCase().includes('session resolver')), name).toBe(true);
+    }
+  });
+
+  it('requires a five-minute processing lease and extends only completed records to 24 hours', () => {
+    const migration = readFileSync(migrationPath, 'utf8');
+    const desired = migration;
+    const rollback = readFileSync(rollbackPath, 'utf8');
+    const runtimeAccess = readFileSync(runtimeAccessPath, 'utf8');
+
+    expect(validateBackendSchema({ migration: desired, rollback, runtimeAccess })).toEqual([]);
+    expect(validateBackendSchema({ migration: desired.replace("v_now + interval '5 minutes'", "v_now + interval '24 hours'"), rollback, runtimeAccess }))
+      .toContain('idempotency processing lease must be five minutes');
+    expect(validateBackendSchema({ migration: desired.replace(", expires_at = clock_timestamp() + interval '24 hours'", ''), rollback, runtimeAccess }))
+      .toContain('idempotency completion must extend replay retention to 24 hours');
   });
 
   it('exports string-based validation for mutation tests', () => {

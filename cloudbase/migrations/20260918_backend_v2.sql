@@ -395,6 +395,20 @@ CREATE TABLE public.idempotency_records (
   CHECK ((status = 'processing' AND response IS NULL) OR (status = 'completed' AND response IS NOT NULL))
 );
 CREATE INDEX idempotency_records_expiry_idx ON public.idempotency_records (expires_at);
+CREATE FUNCTION public.resolve_user_session(p_token_hash text)
+RETURNS TABLE (user_id uuid, role text)
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+  SELECT session.user_id, app_user.role
+    FROM public.user_sessions AS session
+    JOIN public.app_users AS app_user ON app_user.id = session.user_id
+   WHERE p_token_hash ~ '^[0-9a-f]{64}$'
+     AND session.token_hash = p_token_hash
+     AND session.revoked_at IS NULL
+     AND session.expires_at > clock_timestamp()
+     AND app_user.status = 'active'
+   LIMIT 1
+$$;
+
 CREATE FUNCTION public.begin_idempotent_request(p_scope text, p_actor_scope_hash text, p_idempotency_key text, p_request_hash text)
 RETURNS TABLE (state text, response jsonb)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
@@ -406,7 +420,7 @@ BEGIN
   LOOP
     v_now := clock_timestamp();
     INSERT INTO public.idempotency_records (scope, actor_scope_hash, idempotency_key, request_hash, status, response, expires_at)
-    VALUES (p_scope, p_actor_scope_hash, p_idempotency_key, p_request_hash, 'processing', NULL, v_now + interval '24 hours')
+    VALUES (p_scope, p_actor_scope_hash, p_idempotency_key, p_request_hash, 'processing', NULL, v_now + interval '5 minutes')
     ON CONFLICT(scope,actor_scope_hash,idempotency_key) DO UPDATE SET
       request_hash = EXCLUDED.request_hash, status = 'processing', response = NULL, expires_at = EXCLUDED.expires_at
     WHERE idempotency_records.expires_at <= v_now;
@@ -434,7 +448,7 @@ DECLARE v_affected integer;
 BEGIN
   IF p_response IS NULL THEN RAISE EXCEPTION 'idempotency response is required' USING ERRCODE = '22023'; END IF;
   UPDATE public.idempotency_records
-     SET status = 'completed', response = p_response
+     SET status = 'completed', response = p_response, expires_at = clock_timestamp() + interval '24 hours'
    WHERE scope = p_scope AND actor_scope_hash = p_actor_scope_hash AND idempotency_key = p_idempotency_key
      AND request_hash = p_request_hash AND status = 'processing';
   GET DIAGNOSTICS v_affected = ROW_COUNT;
@@ -464,7 +478,7 @@ BEGIN
   v_window_started_at := to_timestamp(floor(extract(epoch FROM p_now) / p_window_seconds) * p_window_seconds);
   INSERT INTO public.rate_limit_buckets AS current_bucket (subject_hash, bucket, window_started_at, expires_at, hit_count)
   VALUES (p_subject_hash, p_bucket, v_window_started_at, v_window_started_at + (p_window_seconds * interval '1 second'), 1)
-  ON CONFLICT (subject_hash, bucket, window_started_at) DO UPDATE SET hit_count = rate_limit_buckets.hit_count + 1, updated_at = clock_timestamp()
+  ON CONFLICT (subject_hash, bucket, window_started_at) DO UPDATE SET hit_count = current_bucket.hit_count + 1, updated_at = clock_timestamp()
   RETURNING hit_count, expires_at INTO v_hit_count, v_expires_at;
   accepted := v_hit_count <= p_limit;
   retry_after_seconds := CASE WHEN accepted THEN 0 ELSE GREATEST(1, CEIL(EXTRACT(epoch FROM v_expires_at - p_now))::integer) END;
@@ -861,6 +875,7 @@ REVOKE EXECUTE ON FUNCTION public.set_work_like(uuid, uuid, boolean) FROM PUBLIC
 REVOKE EXECUTE ON FUNCTION public.set_favorite(uuid, uuid, boolean) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.sync_reading_progress(uuid, uuid, bigint, numeric, bigint, timestamptz) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.consume_rate_limit_bucket(text, text, integer, integer, timestamptz) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.resolve_user_session(text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.begin_idempotent_request(text,text,text,text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.complete_idempotent_request(text,text,text,text,jsonb) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.fail_idempotent_request(text,text,text,text) FROM PUBLIC;

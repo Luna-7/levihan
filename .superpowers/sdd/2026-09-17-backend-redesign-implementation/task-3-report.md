@@ -83,3 +83,36 @@ Added method-scoped default rate limits with explicit metadata opt-out, correcte
 #### Remaining deployment check
 
 The SQL behavior is covered by static semantic and mutation verification; a staging PostgreSQL apply/concurrency run remains a deployment checkpoint because no database service is available in this worktree.
+
+## Fix round 3
+
+### RED
+
+- The rate-limit verifier rejected the corrected `current_bucket.hit_count + 1` alias and accepted the invalid target-table reference.
+- Sensitive-response tests showed nested recovery codes/tokens/passwords/secrets, signed URLs, signed query strings, Bearer values, cookie/authorization headers, and primitive strings were sent to `complete_idempotent_request`; `location` was also persisted.
+- Fail-release tests showed `{ error }` and `false` RPC results were ignored and the original operation error was rethrown even when the processing record remained leased.
+- Session actor tests failed because no CloudBase actor resolver existed and the production runtime still used an always-null resolver.
+- Schema mutation tests showed no controlled active-session resolver, a 24-hour processing lease, and no separate 24-hour completed replay retention.
+- Malformed begin RPC rows/states initially surfaced as generic 500 errors rather than safe dependency failures.
+
+### Implementation
+
+- Corrected the rate-limit upsert to increment through its `current_bucket` alias and added a regression mutation that restores the invalid table-qualified expression.
+- Replaced sensitive-field stripping with a reject-and-release persistence guard. Only `content-type`, `etag`, and `cache-control` response headers are eligible; `location` and all other headers are discarded. Any nested credential field, signed URL/query, Bearer value, cookie/authorization header, or primitive string response releases the processing record, skips completion, returns the original one-time result, and emits only a fixed error type/code security event.
+- Added safe `DependencyUnavailableError` mapping with sanitized cause types. Begin/complete/fail protocol errors and false affected results now produce safe 503 responses; a successful fail still rethrows the original operation error.
+- Added `resolve_user_session(text)` as a pinned-search-path SECURITY DEFINER RPC that returns only active user id/role for a non-revoked, unexpired session. PUBLIC revoke, runtime grant, rollback, semantic verification, and mutation coverage use the exact signature.
+- Added `createCloudBaseActorResolver`: absent/low-entropy cookies return null, valid session tokens are HMAC-SHA256 hashed before RPC, and the production runtime injects the resolver before rate limiting, idempotency, and request logging.
+- Reduced processing leases to five minutes; successful completion extends replay retention to 24 hours. Auth recovery/login/register and signed-access route modules are explicitly documented to use `idempotency: 'none'` in Tasks 4 and 6.
+
+### Verification
+
+- Function tests: `npm test -- --run cloudbase/functions/app-api/test` — 2 files, 59 tests passed.
+- Schema verifier: `npm run verify:backend-schema` — passed.
+- Full suite: `npm test -- --run` — 6 files, 95 tests passed.
+- Type check: `npm run lint` — passed.
+- Secret scan: `npm run verify:secrets` — no findings.
+- Whitespace check: `git diff --check` — passed.
+
+### Remaining deployment check
+
+Static SQL semantics and mutation tests cover the reviewed paths; staging PostgreSQL apply and concurrent lease/reacquisition testing remain deployment checkpoints because no database service is available in this worktree.

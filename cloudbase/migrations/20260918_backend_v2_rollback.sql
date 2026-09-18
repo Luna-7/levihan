@@ -25,6 +25,7 @@ DROP TRIGGER IF EXISTS rate_limit_buckets_set_updated_at ON public.rate_limit_bu
 
 DROP FUNCTION IF EXISTS public.sync_reading_progress(uuid, uuid, bigint, numeric, bigint, timestamptz);
 DROP FUNCTION IF EXISTS public.consume_rate_limit_bucket(text, text, integer, integer, timestamptz);
+DROP FUNCTION IF EXISTS public.resolve_user_session(text);
 DROP FUNCTION IF EXISTS public.begin_idempotent_request(text,text,text,text);
 DROP FUNCTION IF EXISTS public.complete_idempotent_request(text,text,text,text,jsonb);
 DROP FUNCTION IF EXISTS public.fail_idempotent_request(text,text,text,text);

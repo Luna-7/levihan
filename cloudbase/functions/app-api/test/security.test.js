@@ -2,8 +2,9 @@ const { createApi } = require('../src/http');
 const { parseConfig } = require('../src/config');
 const { createLogger } = require('../src/logger');
 const { serializeCookie, setSessionCookies, clearSessionCookies } = require('../src/security');
-const { createRateLimitRepository, createCloudBaseIdempotencyStore } = require('../src/repositories/db');
+const { createRateLimitRepository, createCloudBaseIdempotencyStore, createCloudBaseActorResolver } = require('../src/repositories/db');
 const { createRuntime } = require('../index');
+const crypto = require('node:crypto');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 
@@ -125,7 +126,7 @@ describe('security boundaries', () => {
     expect(result).toEqual({ accepted: true, retryAfterSeconds: 0 });
   });
 
-  it('persists only a safe idempotent response envelope through CloudBase RPC', async () => {
+  it('persists only the safe idempotent response header allowlist', async () => {
     const rpc = vi.fn()
       .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
       .mockResolvedValueOnce({ data: true, error: null });
@@ -133,17 +134,13 @@ describe('security boundaries', () => {
     const response = {
       statusCode: 201,
       headers: {
-        location: '/api/v1/works/1',
+        'content-type': 'application/json',
+        'cache-control': 'private, max-age=30',
         etag: 'safe-etag',
-        'set-cookie': 'lv_session=secret',
-        authorization: 'Bearer secret',
-        'x-unsafe': 'secret',
+        location: '/api/v1/works/1',
+        'x-unsafe': 'discard-me',
       },
-      body: {
-        work: { id: '1', title: 'safe' },
-        accessToken: 'secret-token',
-        nested: { cookie: 'secret-cookie', authorization: 'secret-auth' },
-      },
+      body: { work: { id: '1', title: 'safe' } },
     };
 
     expect(await store.execute({ scope: 'scope-hash', key: 'key-12345', requestHash: 'request-hash', actorScopeHash: 'actor-hash', operation: async () => response })).toBe(response);
@@ -153,10 +150,36 @@ describe('security boundaries', () => {
     const persisted = rpc.mock.calls[1][1].p_response;
     expect(persisted).toEqual({
       statusCode: 201,
-      headers: { location: '/api/v1/works/1', etag: 'safe-etag' },
-      body: { work: { id: '1', title: 'safe' }, nested: {} },
+      headers: { 'content-type': 'application/json', 'cache-control': 'private, max-age=30', etag: 'safe-etag' },
+      body: { work: { id: '1', title: 'safe' } },
     });
-    expect(JSON.stringify(persisted).toLowerCase()).not.toMatch(/set-cookie|authorization|token|cookie|secret/);
+    expect(JSON.stringify(persisted).toLowerCase()).not.toMatch(/location|x-unsafe/);
+  });
+
+  it.each([
+    ['nested recovery code', { body: { account: { recoveryCode: 'test-sensitive-value' } } }],
+    ['array token', { body: { items: [{ access_token: 'test-sensitive-value' }] } }],
+    ['password', { body: { password: 'test-sensitive-value' } }],
+    ['secret', { body: { clientSecret: 'test-sensitive-value' } }],
+    ['signed URL field', { body: { signedUrl: 'https://example.test/file' } }],
+    ['signed query string', { body: { url: 'https://example.test/file?X-Amz-Signature=test-sensitive-value' } }],
+    ['COS signed query string', { body: { url: 'https://example.test/file?q-sign-algorithm=sha1&q-ak=test-sensitive-value' } }],
+    ['bearer string', { body: { value: `Bearer ${'test-sensitive-value'}` } }],
+    ['authorization header', { headers: { authorization: `Bearer ${'test-sensitive-value'}` }, body: { ok: true } }],
+    ['set-cookie header', { headers: { 'set-cookie': 'lv_session=test-sensitive-value' }, body: { ok: true } }],
+    ['primitive string response', 'test-sensitive-value'],
+  ])('releases rather than persists a sensitive %s response', async (_name, response) => {
+    const reportSecurityEvent = vi.fn();
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
+      .mockResolvedValueOnce({ data: true, error: null });
+    const store = createCloudBaseIdempotencyStore({ rdb: { rpc }, reportSecurityEvent });
+
+    expect(await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: async () => response })).toBe(response);
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(['begin_idempotent_request', 'fail_idempotent_request']);
+    expect(JSON.stringify(rpc.mock.calls)).not.toContain('test-sensitive-value');
+    expect(reportSecurityEvent).toHaveBeenCalledWith({ errorCode: 'IDEMPOTENCY_RESPONSE_REJECTED', errorType: 'SensitiveIdempotencyResponseError' });
+    expect(JSON.stringify(reportSecurityEvent.mock.calls)).not.toContain('test-sensitive-value');
   });
 
   it('replays completed responses and releases only failed operations', async () => {
@@ -184,28 +207,94 @@ describe('security boundaries', () => {
     }
   });
 
-  it('injects the CloudBase idempotency store and actor resolver in the runtime', async () => {
-    const rpc = vi.fn(async (name) => name === 'begin_idempotent_request'
-      ? { data: [{ state: 'acquired', response: null }], error: null }
-      : { data: true, error: null });
+  it('resolves an active session actor using only an HMAC token hash', async () => {
+    const sessionValue = `test-${'s'.repeat(59)}`;
+    const expectedHash = crypto.createHmac('sha256', config.sessionHashPepper).update(sessionValue).digest('hex');
+    const rpc = vi.fn().mockResolvedValue({ data: [{ user_id: '00000000-0000-4000-8000-000000000084', role: 'member' }], error: null });
+    const resolveActor = createCloudBaseActorResolver({ rdb: { rpc }, config });
+
+    const actor = await resolveActor({ cookies: { [config.sessionCookieName]: sessionValue } });
+
+    expect(actor).toEqual({ actorId: '00000000-0000-4000-8000-000000000084', role: 'member' });
+    expect(rpc).toHaveBeenCalledWith('resolve_user_session', { p_token_hash: expectedHash });
+    expect(JSON.stringify(rpc.mock.calls)).not.toContain(sessionValue);
+  });
+
+  it('returns null without RPC for absent or low-entropy session cookies and for unknown sessions', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+    const resolveActor = createCloudBaseActorResolver({ rdb: { rpc }, config });
+
+    expect(await resolveActor({ cookies: {} })).toBeNull();
+    expect(await resolveActor({ cookies: { [config.sessionCookieName]: 'short-token' } })).toBeNull();
+    expect(rpc).not.toHaveBeenCalled();
+    expect(await resolveActor({ cookies: { [config.sessionCookieName]: 'u'.repeat(64) } })).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['false result', { data: false, error: null }],
+    ['RPC error', { data: null, error: { name: 'DatabaseError', message: 'test-sensitive-value' } }],
+  ])('raises a safe dependency error when fail release returns a %s', async (_name, failResult) => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: [{ state: 'acquired', response: null }], error: null })
+      .mockResolvedValueOnce(failResult);
+    const store = createCloudBaseIdempotencyStore({ rdb: { rpc } });
+
+    let caught;
+    try {
+      await store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: async () => { throw new Error('test-sensitive-value'); } });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ name: 'DependencyUnavailableError', status: 503, errorCode: 'DEPENDENCY_UNAVAILABLE', cause: { name: expect.stringMatching(/^[A-Za-z]+Error$/) } });
+    expect(JSON.stringify(caught)).not.toContain('test-sensitive-value');
+  });
+
+  it.each([
+    ['missing row', { data: null, error: null }],
+    ['unknown state', { data: [{ state: 'unexpected', response: null }], error: null }],
+  ])('maps a %s from begin RPC to a safe dependency error', async (_name, beginResult) => {
+    const store = createCloudBaseIdempotencyStore({ rdb: { rpc: vi.fn().mockResolvedValue(beginResult) } });
+
+    await expect(store.execute({ scope: 'scope', key: 'key-12345', requestHash: 'hash', actorScopeHash: 'actor', operation: vi.fn() }))
+      .rejects.toMatchObject({ name: 'DependencyUnavailableError', status: 503, errorCode: 'DEPENDENCY_UNAVAILABLE', cause: { name: 'InvalidRpcResultError' } });
+  });
+
+  it('injects the CloudBase idempotency store and production session actor resolver in the runtime', async () => {
+    const sessionValue = `test-${'r'.repeat(59)}`;
+    const write = vi.fn();
+    const runtimeLogger = createLogger({ write, actorPepper: 'a'.repeat(32) });
+    const rpc = vi.fn(async (name) => {
+      if (name === 'resolve_user_session') return { data: [{ user_id: '00000000-0000-4000-8000-000000000084', role: 'admin' }], error: null };
+      if (name === 'begin_idempotent_request') return { data: [{ state: 'acquired', response: null }], error: null };
+      return { data: true, error: null };
+    });
     const rdb = { rpc };
     const cloudbase = { SYMBOL_CURRENT_ENV: 'current', init: vi.fn(() => ({ rdb: vi.fn(() => rdb) })) };
-    const actorResolver = vi.fn(async () => 'runtime-member');
     const runtime = createRuntime({
       cloudbase,
-      actorResolver,
+      logger: runtimeLogger,
       env: {
         NODE_ENV: 'test', API_ALLOWED_ORIGINS: 'https://app.example.test',
         SESSION_HASH_PEPPER: 'a'.repeat(32), RATE_LIMIT_PEPPER: 'b'.repeat(32),
         CLOUDBASE_APIKEY: 'test-api-key', COS_BUCKET: 'bucket', COS_REGION: 'region', DATABASE_SCHEMA: 'public',
       },
     });
-    runtime.router.post('/runtime-write', () => ({ ok: true }), { csrfExempt: true });
+    runtime.router.post('/runtime-write', (ctx) => ({ actorId: ctx.actorId, role: ctx.actorRole }), { csrfExempt: true });
+    runtime.router.post('/runtime-sensitive', () => ({ recoveryCode: 'test-sensitive-value' }), { csrfExempt: true });
 
-    const response = await runtime.handle({ httpMethod: 'POST', path: '/api/v1/runtime-write', headers: { 'idempotency-key': 'runtime-key-01' }, requestContext: {} });
+    const response = await runtime.handle({ httpMethod: 'POST', path: '/api/v1/runtime-write', headers: { cookie: `lv_session=${sessionValue}`, 'idempotency-key': 'runtime-key-01' }, requestContext: {} });
+    const sensitiveResponse = await runtime.handle({ httpMethod: 'POST', path: '/api/v1/runtime-sensitive', headers: { cookie: `lv_session=${sessionValue}`, 'idempotency-key': 'runtime-key-02' }, requestContext: {} });
 
     expect(response.statusCode).toBe(200);
-    expect(actorResolver).toHaveBeenCalledTimes(1);
+    expect(sensitiveResponse.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ actorId: '00000000-0000-4000-8000-000000000084', role: 'admin' });
+    expect(rpc).toHaveBeenCalledWith('resolve_user_session', { p_token_hash: expect.stringMatching(/^[a-f0-9]{64}$/) });
     expect(rpc).toHaveBeenCalledWith('begin_idempotent_request', expect.objectContaining({ p_actor_scope_hash: expect.stringMatching(/^[a-f0-9]{64}$/) }));
+    expect(JSON.stringify(rpc.mock.calls)).not.toContain(sessionValue);
+    expect(JSON.stringify(write.mock.calls)).not.toContain(sessionValue);
+    expect(rpc.mock.calls.map(([name]) => name)).toContain('fail_idempotent_request');
+    expect(write).toHaveBeenCalledWith(expect.objectContaining({ errorCode: 'IDEMPOTENCY_RESPONSE_REJECTED', errorType: 'SensitiveIdempotencyResponseError' }));
+    expect(JSON.stringify(write.mock.calls)).not.toContain('test-sensitive-value');
   });
 });

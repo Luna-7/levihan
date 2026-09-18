@@ -138,8 +138,9 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
       };
       const resolvedActor = await actorResolver(context);
       if (resolvedActor != null) {
-        actorId = String(resolvedActor);
+        actorId = String(typeof resolvedActor === 'object' ? resolvedActor.actorId : resolvedActor);
         context.actorId = actorId;
+        if (typeof resolvedActor === 'object' && resolvedActor.role !== undefined) context.actorRole = resolvedActor.role;
       }
       const rateLimit = route.metadata.rateLimit ?? defaultRateLimitForRoute(method, route.path);
       if (rateLimit && rateLimiter) {
@@ -158,7 +159,10 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
       }
       const operation = () => route.handler(context);
       let data;
+      // Task 4 auth recovery/login/register and Task 6 signed-access routes
+      // return non-replayable credentials and must declare `idempotency: 'none'`.
       const idempotency = route.metadata.idempotency ?? (WRITE_METHODS.has(method) ? 'supported' : 'none');
+      context.idempotencyPolicy = idempotency;
       const key = headers['idempotency-key'];
       const useIdempotency = idempotency === 'required' || (idempotency !== 'none' && key !== undefined);
       if (useIdempotency) {

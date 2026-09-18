@@ -28,6 +28,7 @@ export const REQUIRED_FUNCTIONS = {
   set_favorite: 'uuid, uuid, boolean',
   sync_reading_progress: 'uuid, uuid, bigint, numeric, bigint, timestamptz',
   consume_rate_limit_bucket: 'text, text, integer, integer, timestamptz',
+  resolve_user_session: 'text',
   begin_idempotent_request: 'text, text, text, text',
   complete_idempotent_request: 'text, text, text, text, jsonb',
   fail_idempotent_request: 'text, text, text, text',
@@ -334,8 +335,16 @@ function validateMigration(migration, failures) {
   addFailure(failures, has(functionBody(sql, 'set_favorite'), /ON\s+CONFLICT\s*\(\s*user_id\s*,\s*work_id\s*\)\s+DO\s+NOTHING/i), 'favorite upsert must be idempotent');
   addFailure(failures, has(functionBody(sql, 'sync_reading_progress'), /ON\s+CONFLICT\s*\(\s*user_id\s*,\s*work_id\s*\)\s+DO\s+UPDATE/i), 'reading-progress upsert must be idempotent');
   const rateLimit = functionBody(sql, 'consume_rate_limit_bucket');
-  addFailure(failures, has(rateLimit, /INSERT\s+INTO\s+public\.rate_limit_buckets[\s\S]*?ON\s+CONFLICT[\s\S]*?hit_count\s*=\s*rate_limit_buckets\.hit_count\s*\+\s*1/i), 'rate-limit consumer must use an atomic upsert');
+  addFailure(failures, has(rateLimit, /INSERT\s+INTO\s+public\.rate_limit_buckets\s+AS\s+current_bucket[\s\S]*?ON\s+CONFLICT[\s\S]*?hit_count\s*=\s*current_bucket\.hit_count\s*\+\s*1/i), 'rate-limit consumer must increment through the current_bucket alias');
   addFailure(failures, has(rateLimit, /accepted[\s\S]*?retry_after_seconds/i), 'rate-limit consumer must return accepted and retry_after_seconds');
+
+  const sessionResolver = functionBody(sql, 'resolve_user_session');
+  addFailure(failures, has(sessionResolver, /JOIN\s+public\.app_users\s+AS\s+app_user\s+ON\s+app_user\.id\s*=\s*session\.user_id/i), 'session resolver must join the owning app user');
+  addFailure(failures, has(sessionResolver, /session\.token_hash\s*=\s*p_token_hash/i), 'session resolver must match the token hash');
+  addFailure(failures, has(sessionResolver, /session\.revoked_at\s+IS\s+NULL/i), 'session resolver must reject revoked sessions');
+  addFailure(failures, has(sessionResolver, /session\.expires_at\s*>\s*clock_timestamp\(\)/i), 'session resolver must reject expired sessions');
+  addFailure(failures, has(sessionResolver, /app_user\.status\s*=\s*'active'/i), 'session resolver must require an active user');
+  addFailure(failures, has(sessionResolver, /SELECT\s+session\.user_id\s*,\s*app_user\.role/i), 'session resolver must return only user id and role');
 
   const idempotencyTable = tableBody(sql, 'idempotency_records');
   addFailure(failures, has(idempotencyTable, /PRIMARY\s+KEY\s*\(\s*scope\s*,\s*actor_scope_hash\s*,\s*idempotency_key\s*\)/i), 'idempotency records must be unique by scope, actor, and key');
@@ -345,7 +354,7 @@ function validateMigration(migration, failures) {
 
   const beginIdempotency = functionBody(sql, 'begin_idempotent_request');
   addFailure(failures, has(beginIdempotency, /INSERT\s+INTO\s+public\.idempotency_records/i), 'idempotency begin must insert a processing record');
-  addFailure(failures, has(beginIdempotency, /INSERT\s+INTO\s+public\.idempotency_records\s*\(\s*scope\s*,\s*actor_scope_hash\s*,\s*idempotency_key\s*,\s*request_hash\s*,\s*status\s*,\s*response\s*,\s*expires_at\s*\)[\s\S]*?VALUES\s*\(\s*p_scope\s*,\s*p_actor_scope_hash\s*,\s*p_idempotency_key\s*,\s*p_request_hash\s*,\s*'processing'\s*,\s*NULL\s*,\s*v_now\s*\+\s*interval\s*'24 hours'\s*\)/i), 'idempotency begin must insert the exact processing identity and expiry');
+  addFailure(failures, has(beginIdempotency, /INSERT\s+INTO\s+public\.idempotency_records\s*\(\s*scope\s*,\s*actor_scope_hash\s*,\s*idempotency_key\s*,\s*request_hash\s*,\s*status\s*,\s*response\s*,\s*expires_at\s*\)[\s\S]*?VALUES\s*\(\s*p_scope\s*,\s*p_actor_scope_hash\s*,\s*p_idempotency_key\s*,\s*p_request_hash\s*,\s*'processing'\s*,\s*NULL\s*,\s*v_now\s*\+\s*interval\s*'5 minutes'\s*\)/i), 'idempotency processing lease must be five minutes');
   addFailure(failures, has(beginIdempotency, /ON\s+CONFLICT\s*\(\s*scope\s*,\s*actor_scope_hash\s*,\s*idempotency_key\s*\)\s+DO\s+UPDATE/i), 'idempotency begin must arbitrate the exact unique key');
   addFailure(failures, has(beginIdempotency, /DO\s+UPDATE\s+SET[\s\S]*?request_hash\s*=\s*EXCLUDED\.request_hash[\s\S]*?status\s*=\s*'processing'[\s\S]*?response\s*=\s*NULL[\s\S]*?WHERE\s+idempotency_records\.expires_at\s*<=\s*v_now/i), 'idempotency begin must atomically acquire expired records');
   addFailure(failures, has(beginIdempotency, /request_hash\s*<>\s*p_request_hash\s+THEN\s+'request_hash_conflict'/i), 'idempotency begin must detect request hash conflicts');
@@ -355,6 +364,7 @@ function validateMigration(migration, failures) {
 
   const completeIdempotency = functionBody(sql, 'complete_idempotent_request');
   addFailure(failures, has(completeIdempotency, /UPDATE\s+public\.idempotency_records[\s\S]*?SET\s+status\s*=\s*'completed'\s*,\s*response\s*=\s*p_response/i), 'idempotency complete must persist the response');
+  addFailure(failures, has(completeIdempotency, /expires_at\s*=\s*clock_timestamp\(\)\s*\+\s*interval\s*'24 hours'/i), 'idempotency completion must extend replay retention to 24 hours');
   addFailure(failures, has(completeIdempotency, /request_hash\s*=\s*p_request_hash/i), 'idempotency complete must match the request hash');
   addFailure(failures, has(completeIdempotency, /status\s*=\s*'processing'/i), 'idempotency complete must only transition processing records');
 

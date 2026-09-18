@@ -297,6 +297,35 @@ describe('HTTP API kernel', () => {
     expect(operation).toHaveBeenCalledTimes(1);
   });
 
+  it('returns a safe 503 and safe diagnostics for an idempotency dependency failure', async () => {
+    const secretMarker = ['test', 'sensitive', 'value'].join('-');
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const dependencyError = new ApiError(503, 'DEPENDENCY_UNAVAILABLE', secretMarker);
+    dependencyError.name = 'DependencyUnavailableError';
+    const server = createApi({ config, requestId: () => 'dependency-request', logger, actorResolver: async () => 'member-42', idempotencyStore: { execute: async () => { throw dependencyError; } } });
+    server.router.post('/write', () => ({ ok: true }), { csrfExempt: true });
+
+    const response = await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', headers: { 'idempotency-key': 'failure-key-01' } }));
+
+    expect(response.statusCode).toBe(503);
+    expect(JSON.parse(response.body)).toEqual({ errorCode: 'DEPENDENCY_UNAVAILABLE', message: 'Service temporarily unavailable', requestId: 'dependency-request' });
+    expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ errorCode: 'DEPENDENCY_UNAVAILABLE', errorType: 'DependencyUnavailableError' }));
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(secretMarker);
+  });
+
+  it('documents credential and signed-access routes by bypassing idempotency with metadata none', async () => {
+    const operation = vi.fn(() => ({ recoveryCode: 'test-sensitive-value' }));
+    const execute = vi.fn();
+    const server = api({ idempotencyStore: { execute }, actorResolver: async () => 'member-42' });
+    server.router.post('/auth/recovery', operation, { csrfExempt: true, idempotency: 'none' });
+
+    const response = await server.handle(request({ httpMethod: 'POST', path: '/api/v1/auth/recovery', headers: { 'idempotency-key': 'ignored-key-02' } }));
+
+    expect(response.statusCode).toBe(200);
+    expect(operation).toHaveBeenCalledTimes(1);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('returns validation failure rather than 500 for malformed route encoding', async () => {
     const server = api();
     server.router.get('/works/{id}', () => ({ ok: true }));
