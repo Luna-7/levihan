@@ -1,10 +1,6 @@
 node_modules/
-build/
-dist/
-coverage/
+.workbuddy/
 .DS_Store
 *.log
-.env*
-!.env.example
 .vercel
 .worktrees/

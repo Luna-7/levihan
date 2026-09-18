@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "利韩土豆仓",
+  "short_name": "利韩土豆",
+  "description": "利韩土豆仓官方网站，发布群规守则与进群指引，归档进击的巨人利韩Cut、动画素材、资源外链与土豆粮仓驻地。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#1E4334",
+  "background_color": "#F6F1E3",
+  "icons": [
+    { "src": "/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

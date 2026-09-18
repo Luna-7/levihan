@@ -1,0 +1,2 @@
+const tcb=require('@cloudbase/node-sdk');const app=tcb.init({env:tcb.SYMBOL_CURRENT_ENV});const db=app.database();
+exports.main=async()=>{const{uid}=app.auth().getUserInfo();if(!uid)throw new Error('AUTH_REQUIRED');const profile=(await db.collection('users').doc(uid).get()).data?.[0];if(!profile)throw new Error('PROFILE_REQUIRED');const invites=(await db.collection('invite_codes').where({creatorUid:uid}).orderBy('createdAt','desc').get()).data;return{ok:true,profile:{...profile,invites}};};

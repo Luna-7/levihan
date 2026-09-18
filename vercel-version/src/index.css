@@ -1,0 +1,570 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-parchment: #FBF7EC;
+    --bg-card: #FFFBF0;
+    --ink-dark: #22372B;
+    --ink-brown: #4A3A2C;
+    --border-green: #1B4332;
+    --border-gold: #C29641;
+    --pixel-purple: #6A4C93;
+    --gold-accent: #E5A93C;
+
+    /* ---- iOS 独立 PWA（添加到主屏幕）适配 ----
+       --app-h: 页面可用高度。iOS standalone 里 100dvh 会比真实屏幕矮
+                env(safe-area-inset-top)（iPhone 14 Pro 上约 59px），必须用 100vh。
+                Safari / 桌面仍用 100dvh（跟随地址栏伸缩），两种模式各自正确。
+       --sat / --sab: 顶部（灵动岛/状态栏）与底部（home indicator）安全区。 */
+    --app-h: 100dvh;
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+  }
+
+  html.pwa-standalone {
+    --app-h: 100vh;
+  }
+
+  html, body {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+    -webkit-tap-highlight-color: transparent;
+    /* 防止 iOS 在旋转/聚焦时自动缩放文字（standalone 下不会自动缩回） */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    font-size: 16px;
+  }
+
+  @media (max-width: 640px) {
+    html {
+      font-size: 17px;
+    }
+  }
+}
+
+.font-pixel {
+  font-family: 'Press Start 2P', 'DotGothic16', monospace;
+}
+
+.font-retro-jp {
+  font-family: 'DotGothic16', 'Noto Sans SC', monospace, sans-serif;
+}
+
+.font-vt {
+  font-family: 'VT323', monospace;
+}
+
+/* 8-bit crisp pixel rendering */
+.pixel-art {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+@keyframes walking-sprite-cycle {
+  0%, 32% { opacity: 1; }
+  33%, 100% { opacity: 0; }
+}
+
+.walking-sprite-frame {
+  opacity: 0;
+  animation: walking-sprite-cycle 0.36s steps(1, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .walking-sprite-frame { animation: none; }
+  .walking-sprite-frame:first-child { opacity: 1; }
+}
+
+/* Retro pixel box shadow */
+.pixel-box {
+  box-shadow: 
+    -3px 0 0 0 var(--border-green),
+    3px 0 0 0 var(--border-green),
+    0 -3px 0 0 var(--border-green),
+    0 3px 0 0 var(--border-green);
+}
+
+.pixel-box-sm {
+  box-shadow: 
+    -2px 0 0 0 #2D2319,
+    2px 0 0 0 #2D2319,
+    0 -2px 0 0 #2D2319,
+    0 2px 0 0 #2D2319;
+}
+
+.pixel-box-purple {
+  box-shadow: 
+    -2px 0 0 0 #4C356F,
+    2px 0 0 0 #4C356F,
+    0 -2px 0 0 #4C356F,
+    0 2px 0 0 #4C356F;
+}
+
+.pixel-box-gold {
+  box-shadow: 
+    -2px 0 0 0 #A8761E,
+    2px 0 0 0 #A8761E,
+    0 -2px 0 0 #A8761E,
+    0 2px 0 0 #A8761E;
+}
+
+/* Super Mario / NES 8-bit Pixel Wood Block Styles & Cute Cozy Game Styles */
+.mario-wood-block {
+  background-color: #FFFDF9;
+  border-width: 3px;
+  border-style: solid;
+  border-color: #5F977E;
+  box-shadow: 0 4px 0 #3D7B62, inset 2px 2px 0 #FFFFFF, inset -2px -2px 0 #E8F2E7;
+}
+
+.mario-wood-sub {
+  background-color: #FFFDF9;
+  border-width: 3px;
+  border-style: solid;
+  border-color: #5F977E;
+  box-shadow: 0 3px 0 #3D7B62, inset 1px 1px 0 #FFFFFF, inset -1px -1px 0 #E8F2E7;
+}
+
+.mario-parchment-screen {
+  background-color: #FFFDF7;
+  border-width: 2px;
+  border-style: solid;
+  border-color: #5F977E;
+  box-shadow: inset 1px 1px 0 #FFF, inset -1px -1px 0 #E8F2E7;
+}
+
+/* Cute Cozy Pastel Pixel Game Styles (Inspired by image.png) */
+.pixel-cute-binder {
+  background-color: #FFFDF9;
+  border: 3px solid #5F977E;
+  box-shadow: 0 4px 0 #3D7B62, 0 8px 16px rgba(255, 168, 188, 0.25);
+}
+
+.pixel-cute-mint {
+  background-color: #F0FDF4;
+  border: 2px solid #68D391;
+  box-shadow: 0 3px 0 #48BB78;
+}
+
+.pixel-cute-blue {
+  background-color: #F0F9FF;
+  border: 2px solid #7DD3FC;
+  box-shadow: 0 3px 0 #38BDF8;
+}
+
+.pixel-cute-green-btn {
+  background: linear-gradient(180deg, #4E8A6F 0%, #2F6B52 100%);
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 3px 0 #1E4334, inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  color: #FFFFFF;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.pixel-cute-green-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #1E4334;
+}
+
+.pixel-cute-cyan-btn {
+  background: linear-gradient(180deg, #67E8F9 0%, #06B6D4 100%);
+  border: 1.5px solid #FFFFFF;
+  box-shadow: 0 2px 0 #0891B2, inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  color: #FFFFFF;
+}
+
+.pixel-cute-pill {
+  background: #FFFFFF;
+  border: 2px solid #5F977E;
+  box-shadow: 0 2px 0 #3D7B62;
+}
+
+/* Enforce all buttons strictly single-line */
+button {
+  white-space: nowrap !important;
+}
+
+/* Stitched dashed border effect */
+.border-stitched {
+  border: 3px solid #1B4332;
+  outline: 2px dashed #C8A359;
+  outline-offset: -7px;
+}
+
+/* Ruled paper background for Today's Log */
+.paper-ruled {
+  background-color: #FAF5E8;
+  background-image: repeating-linear-gradient(
+    transparent,
+    transparent 27px,
+    #E4D9C3 27px,
+    #E4D9C3 28px
+  );
+  line-height: 28px;
+}
+
+/* Hide horizontal scrollbar everywhere so bottom scroll wheel / scroll bar never appears */
+::-webkit-scrollbar:horizontal {
+  display: none !important;
+  height: 0px !important;
+}
+
+/* Utility to completely hide scrollbar */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Custom scrollbar matching retro parchment style (vertical only) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 0px;
+}
+::-webkit-scrollbar-track {
+  background: #EFE8D6;
+  border: 1px solid #D5C9AF;
+}
+::-webkit-scrollbar-thumb {
+  background: #2D4C3A;
+  border: 1px solid #EFE8D6;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #E5A93C;
+}
+
+/* 沉浸对局模式：隐藏卡片边框上的全部像素装饰。
+   部分带 scale / z-20 的装饰在 Chrome 下会穿透 position:fixed 的全屏遮罩（合成层级异常），
+   沉浸语义上这些装饰本就不该出现，直接整体隐藏最稳。 */
+body.immersive-on .retro-frame-card > .absolute {
+  visibility: hidden;
+}
+
+/* 像素原木公告板跑马灯动画 */
+@keyframes wood-marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-wood-marquee {
+  display: flex;
+  width: max-content;
+  animation: wood-marquee 32s linear infinite;
+}
+
+.animate-wood-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* 兵团驻地深棕色像素点纹理卡片与1px深色阴影 */
+.pixel-wood-card {
+  background-color: #FAF4E5;
+  background-image: radial-gradient(rgba(107, 76, 51, 0.22) 1px, transparent 1px);
+  background-size: 10px 10px;
+  box-shadow: 1px 1px 0px #261307;
+  border: 2px solid #8C6C47;
+}
+
+/* 像素马赛克质感背景 (Mosaic Dither Texture) */
+.pixel-mosaic-nav {
+  background-image: 
+    linear-gradient(45deg, rgba(0, 0, 0, 0.08) 25%, transparent 25%), 
+    linear-gradient(-45deg, rgba(0, 0, 0, 0.08) 25%, transparent 25%), 
+    linear-gradient(45deg, transparent 75%, rgba(0, 0, 0, 0.08) 75%), 
+    linear-gradient(-45deg, transparent 75%, rgba(0, 0, 0, 0.08) 75%);
+  background-size: 4px 4px;
+  background-position: 0 0, 0 2px, 2px -2px, -2px 0px;
+}
+
+.pixel-mosaic-card {
+  background-image: 
+    linear-gradient(45deg, rgba(140, 108, 71, 0.1) 25%, transparent 25%), 
+    linear-gradient(-45deg, rgba(140, 108, 71, 0.1) 25%, transparent 25%), 
+    linear-gradient(45deg, transparent 75%, rgba(140, 108, 71, 0.1) 75%), 
+    linear-gradient(-45deg, transparent 75%, rgba(140, 108, 71, 0.1) 75%);
+  background-size: 4px 4px;
+  background-position: 0 0, 0 2px, 2px -2px, -2px 0px;
+}
+
+/* 勇者大冒险 · 8-bit 小人行走与尘土动画 */
+@keyframes hero-step-left {
+  0%, 100% { transform: translateY(0px) rotate(-18deg); }
+  50% { transform: translateY(-3px) rotate(18deg); }
+}
+
+@keyframes hero-step-right {
+  0%, 100% { transform: translateY(0px) rotate(18deg); }
+  50% { transform: translateY(-3px) rotate(-18deg); }
+}
+
+@keyframes hero-body-bob {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes hero-cape-flutter {
+  0%, 100% { transform: rotate(-8deg) scaleY(1); }
+  50% { transform: rotate(16deg) scaleY(0.9); }
+}
+
+@keyframes hero-dust-puff {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.5) translate(0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.4) translate(-12px, -6px);
+  }
+}
+
+@keyframes hero-arrive-hop {
+  0% { transform: translateY(0) scale(1); }
+  35% { transform: translateY(-8px) scale(1.15, 0.9); }
+  60% { transform: translateY(0) scale(0.95, 1.05); }
+  80% { transform: translateY(-2px) scale(1.02); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+.animate-hero-walk {
+  animation: hero-body-bob 0.18s infinite ease-in-out;
+}
+
+.animate-hero-cape {
+  animation: hero-cape-flutter 0.22s infinite ease-in-out;
+  transform-origin: top left;
+}
+
+.animate-hero-leg-left {
+  animation: hero-step-left 0.22s infinite ease-in-out;
+  transform-origin: top center;
+}
+
+.animate-hero-leg-right {
+  animation: hero-step-right 0.22s infinite ease-in-out;
+  transform-origin: top center;
+}
+
+.animate-hero-dust {
+  animation: hero-dust-puff 0.4s infinite linear;
+}
+
+.animate-hero-arrive {
+  animation: hero-arrive-hop 0.5s ease-out;
+}
+
+/* ====================================================
+   Attack on Titan POP UP SHOP & Mini-Program Styles
+   (Derived from official Pop Up Shop Angel & Devil Visual)
+   ==================================================== */
+.font-serif-title {
+  font-family: 'Cinzel', 'Noto Serif JP', Georgia, 'Times New Roman', serif;
+}
+
+.font-mincho {
+  font-family: 'Noto Serif JP', 'Noto Serif SC', 'Source Han Serif SC', serif;
+}
+
+/* Ornate Antique Navy & Burnished Gold Frame */
+.popup-frame-border {
+  border: 4px solid #16273B;
+  box-shadow:
+    0 0 0 1px #C5A059,
+    0 0 0 3px #16273B,
+    0 8px 24px rgba(22, 39, 59, 0.25);
+}
+
+.popup-gold-filigree-border {
+  border: 2px solid #C5A059;
+  box-shadow: 
+    inset 0 0 0 1px #E8D5A7,
+    0 4px 14px rgba(197, 160, 89, 0.22);
+}
+
+.popup-parchment-bg {
+  background-color: #FAF6ED;
+  background-image: radial-gradient(#E8DBC5 0.75px, transparent 0.75px), radial-gradient(#E8DBC5 0.75px, #FAF6ED 0.75px);
+  background-size: 30px 30px;
+  background-position: 0 0, 15px 15px;
+}
+
+/* POP UP SHOP Badge (matching the image) */
+.popup-shop-badge {
+  background: linear-gradient(180deg, #FFFFFF 0%, #F5EFE0 100%);
+  border: 2px solid #1B324D;
+  box-shadow: 
+    inset 0 0 0 1px #C5A059,
+    0 2px 6px rgba(27, 50, 77, 0.2);
+}
+
+/* WeChat Mini-Program Top Capsule */
+.mini-capsule-btn {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(22, 39, 59, 0.2);
+  backdrop-filter: blur(8px);
+  border-radius: 9999px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Custom Adventure Scrollbar - only visible when overflowing / active scrolling */
+.custom-adventure-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #C5A059 transparent;
+}
+
+.custom-adventure-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-adventure-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 9999px;
+}
+
+.custom-adventure-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #D5C19A;
+  border-radius: 9999px;
+  border: 1px solid #FAF6ED;
+}
+
+.custom-adventure-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #C5A059;
+}
+
+/* Vintage Envelope Styling & Patterns */
+.vintage-envelope-bg {
+  background-color: #FAF4E5;
+  background-image: 
+    radial-gradient(#D5C4A1 0.75px, transparent 0.75px),
+    linear-gradient(135deg, rgba(140, 108, 71, 0.04) 25%, transparent 25%),
+    linear-gradient(225deg, rgba(140, 108, 71, 0.04) 25%, transparent 25%),
+    linear-gradient(45deg, rgba(140, 108, 71, 0.04) 25%, transparent 25%),
+    linear-gradient(315deg, rgba(140, 108, 71, 0.04) 25%, #FAF4E5 25%);
+  background-position: 0 0, 12px 0, 12px 0, 0 0, 0 0;
+  background-size: 24px 24px;
+}
+
+.vintage-airmail-border {
+  border: 2px solid #8C6C47;
+  position: relative;
+}
+
+.vintage-postmark-stamp {
+  border: 2px dashed #8C6C47;
+  border-radius: 50%;
+  transform: rotate(-8deg);
+  opacity: 0.75;
+}
+
+/* ====================================================
+   兵团誓约卷轴（Scroll Unroll）
+   顶轴固定，纸面自上而下展开，底轴随之下落
+   ==================================================== */
+.rules-scroll-rod {
+  position: relative;
+  height: 16px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #2C5C46 0%, #1E4334 100%);
+  border: 2px solid #C5A059;
+  box-shadow: 0 2px 0 rgba(30, 67, 52, 0.55);
+}
+
+.rules-scroll-rod::before,
+.rules-scroll-rod::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #C5A059;
+  border: 2px solid #1E4334;
+  transform: translateY(-50%);
+}
+
+.rules-scroll-rod::before { left: -9px; }
+.rules-scroll-rod::after { right: -9px; }
+
+.rules-scroll-paper {
+  background-color: #FAF6ED;
+  background-image: radial-gradient(#EAE0CD 0.75px, transparent 0.75px);
+  background-size: 22px 22px;
+  border-left: 2px dashed #C5A059;
+  border-right: 2px dashed #C5A059;
+  box-shadow: inset 0 10px 14px -12px rgba(30, 67, 52, 0.4),
+    inset 0 -10px 14px -12px rgba(30, 67, 52, 0.4);
+  animation: scroll-unroll 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.rules-scroll-rod-bottom {
+  animation: scroll-rod-drop 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.rules-scroll-hange {
+  animation: scroll-hange-peek 0.45s ease-out 0.6s both;
+}
+
+@keyframes scroll-unroll {
+  0% { clip-path: inset(0 0 100% 0); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes scroll-rod-drop {
+  0% { transform: translateY(-28px); opacity: 0; }
+  55% { opacity: 1; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes scroll-hange-peek {
+  0%, 40% { opacity: 0; transform: translateY(10px) rotate(-3deg); }
+  100% { opacity: 1; transform: translateY(0) rotate(0deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rules-scroll-paper,
+  .rules-scroll-rod-bottom,
+  .rules-scroll-hange {
+    animation: none;
+  }
+}
+
+/* ====================================================
+   利了个韩：草丛主题背景（羊了个羊风）
+   ::before 铺满整个容器（含 header 按钮区），草丛上下浮动
+   ==================================================== */
+/* 注意：不要在此声明 position —— 使用场景本身已是 fixed 定位，
+   在 Tailwind 之后声明 position 会覆盖 .fixed 导致弹层失效。 */
+.lihan-themed-root::before {
+  content: '';
+  position: absolute;
+  inset: -16px 0;
+  background: url('/images/lihan/bg-grass.webp') center / cover no-repeat;
+  animation: lihan-grass-float 3.2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes lihan-grass-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lihan-themed-root::before {
+    animation: none;
+  }
+}
