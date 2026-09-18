@@ -67,7 +67,7 @@
 
     <!-- Hange Messy Hair Bangs & Side Tufts -->
     <!-- Base Hair Dome -->
-    <path d="M 22,74 C 18,22 142,22 138,74 C 142,94 134,112 128,104 C 122,96 122,66 118,58 C 102,36 58,36 42,58 C 38,66 38,96 32,104 C 26,112 18,94 22,74 Z" 
+    <path d="M 22,74 C 18,22 142,22 138,74 C 142,94 134,112 128,104 C 122,96 122,66 118,58 C 102,36 58,36 42,58 C 38,66 38,96 32,104 C 26,112 18,94 22,74 Z"
           fill="url(#hangeHair)" stroke="#22140D" stroke-width="2.5" />
 
     <!-- Front Bangs with Hange's signature layered strands -->

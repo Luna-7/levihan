@@ -42,4 +42,3 @@ document.getElementsByTagName("title")[0].innerText = '塔塔开 · 合成大西
 
 // 开启选分弹窗：将 false 改为 true
 let selectModal = false;
-

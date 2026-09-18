@@ -25,11 +25,11 @@
 
   <g filter="url(#badgeShadow)">
     <!-- Outer Shield Frame -->
-    <path d="M 20,15 L 140,15 L 140,120 C 140,150 80,182 80,182 C 80,182 20,150 20,120 Z" 
+    <path d="M 20,15 L 140,15 L 140,120 C 140,150 80,182 80,182 C 80,182 20,150 20,120 Z"
           fill="#344054" stroke="url(#shieldFrame)" stroke-width="4" stroke-linejoin="round" />
-    
+
     <!-- Shield Inner Inset -->
-    <path d="M 26,21 L 134,21 L 134,118 C 134,144 80,174 80,174 C 80,174 26,144 26,118 Z" 
+    <path d="M 26,21 L 134,21 L 134,118 C 134,144 80,174 80,174 C 80,174 26,144 26,118 Z"
           fill="#EAECF0" stroke="#98A2B3" stroke-width="2" />
 
     <!-- Shield Quartering Lines (Four quadrants) -->
