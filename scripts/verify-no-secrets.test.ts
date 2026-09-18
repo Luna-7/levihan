@@ -31,6 +31,16 @@ describe('hard-coded secret scanner', () => {
     expect(findings.filter((finding) => finding.ruleId === 'credential-literal')).toHaveLength(6);
   });
 
+  it('recognizes unquoted environment assignments with branded API keys', () => {
+    const canary = ['canary', 'env', '7b'].join('-');
+    const adminPassword = ['ADMIN', 'PASSWORD'].join('_');
+    const brandedApiKey = ['OPENAI', 'API', 'KEY'].join('_');
+    const envFindings = scanSource([adminPassword, '=', canary, ' # inline comment'].join(''), '.env');
+    const dockerFindings = scanSource([brandedApiKey, '=', canary].join(''), 'Dockerfile');
+    const findings = [...envFindings, ...dockerFindings];
+    expect(findings.map((finding) => finding.ruleId)).toEqual(['credential-literal', 'credential-literal']);
+  });
+
   it('recognizes private-key markers and token-shaped credentials', () => {
     const privateMarker = ['-----BEGIN ', 'RSA ', 'PRIVATE KEY-----'].join('');
     const accessKeyId = ['AK', 'IA', '1234567890ABCDEF'].join('');
@@ -41,6 +51,15 @@ describe('hard-coded secret scanner', () => {
       'aws-access-key-id',
       'token-shaped',
     ]);
+  });
+
+  it('recognizes standalone tokens with underscore and dash suffixes', () => {
+    const suffix = ['Canary', '1234567890', '_segment', '-tail'].join('');
+    const secretToken = ['sk-', suffix].join('');
+    const githubToken = ['github_pat_', suffix].join('');
+    const ghpToken = ['ghp_', suffix].join('');
+    const findings = scanSource([secretToken, githubToken, ghpToken].join('\n'), 'fixture.txt');
+    expect(findings.map((finding) => finding.ruleId)).toEqual(['github-token', 'token-shaped', 'token-shaped']);
   });
 
   it('allows environment references, empty values, templates, and obvious placeholders', () => {
