@@ -18,10 +18,18 @@ const tcb = require('@cloudbase/node-sdk');
 const ALLOWED_ORIGINS = new Set([
   'https://levihan.asia',
   'https://www.levihan.asia',
-  'http://localhost:5173',
-  'http://localhost:4173',
 ]);
+/**
+ * 本地开发/预览端口不固定（`npm run dev` 跑 3000、`vite preview` 跑 4173、
+ * vite 默认 5173，`--host` 时还可能是局域网 IP），逐个枚举必然漏 —— 之前只写了
+ * 5173/4173，于是 dev（3000）下浏览器拿到的 Access-Control-Allow-Origin 是
+ * https://levihan.asia，请求被丢，表现为「点了注册完全没反应」。
+ * 注册/登录是匿名接口、不携带会话，CORS 在此不是安全边界，故本地与私有网段整体放行。
+ */
+const LOCAL_ORIGIN =
+  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
 const FALLBACK_ORIGIN = 'https://levihan.asia';
+const isAllowedOrigin = (origin) => ALLOWED_ORIGINS.has(origin) || LOCAL_ORIGIN.test(origin);
 /** 自定义登录票据 30 天免重登；过期后需要重新输入昵称与密码 */
 const TICKET_REFRESH_MS = 30 * 24 * 60 * 60 * 1000;
 const SCRYPT_KEYLEN = 64;
@@ -39,7 +47,7 @@ function corsHeaders(event) {
   const origin = headers.origin || headers.Origin || '';
   return {
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': ALLOWED_ORIGINS.has(origin) ? origin : FALLBACK_ORIGIN,
+    'Access-Control-Allow-Origin': isAllowedOrigin(origin) ? origin : FALLBACK_ORIGIN,
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     Vary: 'Origin',

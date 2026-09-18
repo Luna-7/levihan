@@ -150,7 +150,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
         <p className="font-pixel text-[10px] text-[#8C5828] tracking-widest mb-1">LEVIHAN MEMBER</p>
         <h2 className="font-pixel text-lg text-[#1E4334] mb-4 pr-10">{title}</h2>
 
-        {!account && (view === 'login' || view === 'register') && <div className="space-y-3">
+        {!account && (view === 'login' || view === 'register') && <form className="space-y-3" onSubmit={submit}>
           <label className="block font-bold text-sm">昵称
             <input value={nickname} onChange={(e) => setNickname(e.target.value)} autoComplete="username" minLength={NICKNAME_MIN} maxLength={NICKNAME_MAX} required placeholder={`${NICKNAME_MIN}–${NICKNAME_MAX} 个字`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
           </label>
@@ -166,7 +166,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
               ? <button type="button" onClick={() => switchView('login')} className="underline cursor-pointer">已有账号？返回登录</button>
               : <><button type="button" onClick={() => switchView('register')} className="underline cursor-pointer">还没有账号？注册</button><span className="px-2">·</span><button type="button" onClick={() => onShowToast('暂时不支持找回密码，请重新注册一个昵称')} className="underline cursor-pointer">忘记密码</button></>}
           </p>
-        </div>}
+        </form>}
 
         {account && view === 'account' && <div className="space-y-4">
           <AccountPanel account={account} busy={busy} onLogout={() => run(async () => {
@@ -204,7 +204,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   </>;
 };
 
-const Submit = ({ children, busy }: { children: React.ReactNode; busy: boolean }) => <button disabled={busy} className="w-full p-3 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-bold cursor-pointer disabled:opacity-50">{busy ? '处理中…' : children}</button>;
+const Submit = ({ children, busy }: { children: React.ReactNode; busy: boolean }) => <button type="submit" disabled={busy} className="w-full p-3 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-bold cursor-pointer disabled:opacity-50">{busy ? '处理中…' : children}</button>;
 
 const AccountPanel = ({ account, busy, onLogout }: { account: Account; busy: boolean; onLogout: () => void }) => <div className="space-y-4">
   <dl className="grid grid-cols-2 border-2 border-[#8C6C47] text-center">
