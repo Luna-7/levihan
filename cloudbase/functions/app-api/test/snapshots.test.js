@@ -105,7 +105,7 @@ describe('public catalog snapshots', () => {
 describe('snapshot repository transaction boundary', () => {
   it('allocates, prepares and finalizes versions through controlled routines', async () => {
     const rpc = vi.fn()
-      .mockResolvedValueOnce({ data: [{ job_id: 'job-1', version: 10, lease_token: '550e8400-e29b-41d4-a716-446655440010', lease_epoch: 1, generated_at: '2030-01-01T00:00:00Z', source_revision: 7 }], error: null })
+      .mockResolvedValueOnce({ data: [{ job_id: 'job-1', version: 10, lease_token: '550e8400-e29b-41d4-a716-446655440010', lease_epoch: 1, generated_at: '2030-01-01T00:00:00Z' }], error: null })
       .mockResolvedValueOnce({ data: true, error: null })
       .mockResolvedValueOnce({ data: true, error: null });
     const repository = createSnapshotRepository({ rdb: { rpc, from: vi.fn() } });

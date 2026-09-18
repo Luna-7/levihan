@@ -137,16 +137,27 @@ function createUploadsService({ repository, objectStore, now = () => new Date(),
     async cleanupStalePromotions(ctx, limit = 20) {
       requireAdmin(ctx);
       const items = await repository.claimStalePromotions({ actorId: ctx.actorId, limit });
+      let failed = 0;
+      let reportingFailed = 0;
       for (const item of items) {
-        try {
-          if (item.finalKey) await objectStore.delete(item.finalKey);
-          if (item.stagingKey) await objectStore.delete(item.stagingKey);
-          await repository.finalizePromotionCleanup({ fileId: item.fileId, cleanupToken: item.cleanupToken, actorId: ctx.actorId });
-        } catch {
-          await repository.failPromotionCleanup({ fileId: item.fileId, cleanupToken: item.cleanupToken, actorId: ctx.actorId, errorCode: 'OBJECT_DELETE_FAILED' });
+        let errorCode;
+        if (item.finalKey) {
+          try { await objectStore.delete(item.finalKey); } catch { errorCode = 'FINAL_DELETE_FAILED'; }
+        }
+        if (!errorCode && item.stagingKey) {
+          try { await objectStore.delete(item.stagingKey); } catch { errorCode = 'STAGING_DELETE_FAILED'; }
+        }
+        if (!errorCode) {
+          try { await repository.finalizePromotionCleanup({ fileId: item.fileId, cleanupToken: item.cleanupToken, actorId: ctx.actorId }); }
+          catch { errorCode = 'CLEANUP_FINALIZE_FAILED'; }
+        }
+        if (errorCode) {
+          failed += 1;
+          try { await repository.failPromotionCleanup({ fileId: item.fileId, cleanupToken: item.cleanupToken, actorId: ctx.actorId, errorCode }); }
+          catch { reportingFailed += 1; }
         }
       }
-      return { claimed: items.length };
+      return { claimed: items.length, failed, reportingFailed };
     },
   };
 }

@@ -90,11 +90,18 @@ export function validateContentPipeline({ migration, rollback, access, accessRol
   add(failures, /UPDATE\s+public\.snapshot_jobs\s+SET\s+status\s*=\s*'prepared'/i.test(snapshotPrepare), 'snapshot build must persist a prepared state before switching current');
   add(failures, /job\.status\s*<>\s*'prepared'/i.test(routineDefinition(sql, 'complete_snapshot_build')), 'snapshot completion must require a prepared immutable version');
   add(failures, /INSERT\s+INTO\s+public\.snapshot_current/i.test(routineDefinition(sql, 'complete_snapshot_build')) && /snapshot_current\.version\s*<=\s*EXCLUDED\.version/i.test(routineDefinition(sql, 'complete_snapshot_build')), 'snapshot completion must atomically advance a monotonic PostgreSQL pointer');
-  add(failures, /build_generated_at\s*=\s*COALESCE\(build_generated_at/i.test(snapshotBegin) && /source_revision\s+bigint/i.test(snapshotBegin), 'snapshot retries must retain build time and source revision');
+  add(failures, /build_generated_at\s*=\s*COALESCE\(build_generated_at/i.test(snapshotBegin) && !/source_revision/i.test(snapshotBegin), 'snapshot retries must retain build time without exposing a false source revision contract');
   add(failures, /status='cleanup_pending'/i.test(routineDefinition(sql,'claim_stale_upload_promotions')) && /cleanup_token=p_cleanup_token/i.test(routineDefinition(sql,'finalize_upload_promotion_cleanup')), 'promotion cleanup must be claimed and token fenced');
   add(failures, /cleanup_attempts\s+integer\s+NOT\s+NULL/i.test(sql) && /cleanup_last_error\s+text/i.test(sql) && /cleanup_next_retry_at\s+timestamptz/i.test(sql), 'promotion cleanup retry state must be durable');
   add(failures, /cleanup_next_retry_at\s*<=\s*clock_timestamp\(\)/i.test(routineDefinition(sql,'claim_stale_upload_promotions')) && /cleanup_attempts\s*=\s*cleanup_attempts\s*\+\s*1/i.test(routineDefinition(sql,'fail_upload_promotion_cleanup')) && /make_interval/i.test(routineDefinition(sql,'fail_upload_promotion_cleanup')), 'cleanup failures need bounded durable backoff');
+  const cleanupFail = routineDefinition(sql, 'fail_upload_promotion_cleanup');
+  add(failures, /status\s*=\s*'cleanup_pending'/i.test(cleanupFail) && /cleanup_token\s*=\s*p_cleanup_token/i.test(cleanupFail) && /asset_id\s+IS\s+NULL/i.test(cleanupFail), 'cleanup failure reporting must be status, asset and token fenced');
   add(failures, /rollback_requires_content_export/i.test(down) && down.indexOf('rollback_requires_content_export') < down.indexOf('DROP FUNCTION'), 'rollback compatibility preflight must run before destructive changes');
+  const promotionGuard = down.indexOf('rollback_requires_promotion_drain');
+  const destructive = down.search(/\b(?:DROP|ALTER|UPDATE|DELETE|INSERT|CREATE)\b/i);
+  add(failures, promotionGuard >= 0 && destructive >= 0 && promotionGuard < destructive
+    && /status\s+IN\s*\(\s*'promoting'\s*,\s*'cleanup_pending'\s*\)/i.test(down.slice(0, destructive))
+    && /promotion_token\s+IS\s+NOT\s+NULL/i.test(down.slice(0, destructive)) && /cleanup_token\s+IS\s+NOT\s+NULL/i.test(down.slice(0, destructive)), 'rollback must drain active fenced promotions before any destructive statement');
   add(failures, /work\.rating\s*<>\s*'restricted'/i.test(routineDefinition(sql, 'list_public_catalog')), 'restricted works must be excluded from public snapshots');
   add(failures, /asset\.access_level\s*=\s*'public'/i.test(routineDefinition(sql, 'list_public_catalog')), 'private assets must be excluded from public snapshots');
   add(failures, /asset\.storage_zone\s*=\s*'public'/i.test(routineDefinition(sql, 'list_public_catalog')) && /asset\.storage_zone\s*=\s*'public'/i.test(routineDefinition(sql, 'get_public_work')), 'public reads must enforce the public storage zone');

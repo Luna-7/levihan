@@ -45,6 +45,9 @@ describe('content pipeline migration verifier', () => {
     expect(validate({ accessRollback: accessRollback.replace('REVOKE SELECT ON TABLE public.work_chapters', 'GRANT SELECT ON TABLE public.work_chapters') })).not.toEqual([]);
     expect(validate({ accessRollback: accessRollback.replace('REVOKE EXECUTE ON FUNCTION', 'GRANT EXECUTE ON FUNCTION') })).not.toEqual([]);
     expect(validate({ rollback: rollback.replace('rollback_requires_content_export', 'unsafe_rollback') })).not.toEqual([]);
+    expect(validate({ rollback: rollback.replace('rollback_requires_promotion_drain', 'unsafe_promotion_drop') })).not.toEqual([]);
+    const guard = rollback.match(/DO \$\$ BEGIN[\s\S]*?rollback_requires_promotion_drain[\s\S]*?END \$\$;/)?.[0] || '';
+    expect(validate({ rollback: rollback.replace(guard, '') + `\n${guard}` })).not.toEqual([]);
   });
 
   it('rejects mutations removing domain hashes, immutable COS protection, or the deployed timer', () => {
@@ -58,6 +61,10 @@ describe('content pipeline migration verifier', () => {
     expect(validate({ cloudbaseConfig: cloudbaseConfig.replace('0 */5 * * * * *', '0 0 0 1 1 * *') })).not.toEqual([]);
     expect(validate({ cloudbaseConfig: cloudbaseConfig.replace('0 */10 * * * * *', '0 0 0 1 1 * *') })).not.toEqual([]);
     expect(validate({ migration: migration.replace('cleanup_attempts=cleanup_attempts+1', 'cleanup_attempts=cleanup_attempts') })).not.toEqual([]);
+    const cleanupFence = "status='cleanup_pending' AND cleanup_token=p_cleanup_token AND asset_id IS NULL";
+    const failFenceOffset = migration.lastIndexOf(cleanupFence);
+    const failFenceMutation = migration.slice(0, failFenceOffset) + "status='cleanup_pending'" + migration.slice(failFenceOffset + cleanupFence.length);
+    expect(validate({ migration: failFenceMutation })).not.toEqual([]);
     expect(validate({ cleanupWorkerSource: cleanupWorkerSource.replace('cleanupStalePromotions', 'noopCleanup') })).not.toEqual([]);
     expect(validate({ uploadsRepositorySource: uploadsRepositorySource.replace("unwrapRows(await rdb.rpc('claim_stale_upload_promotions'", "unwrap(await rdb.rpc('claim_stale_upload_promotions'") })).not.toEqual([]);
   });

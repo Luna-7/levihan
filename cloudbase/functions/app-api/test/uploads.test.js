@@ -124,7 +124,7 @@ describe('direct COS upload tickets', () => {
     const repository = { claimStalePromotions: vi.fn().mockResolvedValue([{ fileId, stagingKey: `staging/admin/${uploadId}/${fileId}.webp`, finalKey: `media/works/${workId}/${fileId}.webp`, cleanupToken: uploadId }]), finalizePromotionCleanup: vi.fn() };
     const objectStore = { delete: vi.fn() };
     const service = createUploadsService({ repository, objectStore });
-    await expect(service.cleanupStalePromotions({ actorId, actorRole: 'admin' })).resolves.toEqual({ claimed: 1 });
+    await expect(service.cleanupStalePromotions({ actorId, actorRole: 'admin' })).resolves.toEqual({ claimed: 1, failed: 0, reportingFailed: 0 });
     expect(objectStore.delete).toHaveBeenCalledTimes(2);
     expect(repository.finalizePromotionCleanup).toHaveBeenCalledWith({ fileId, cleanupToken: uploadId, actorId });
   });
@@ -133,9 +133,35 @@ describe('direct COS upload tickets', () => {
     const repository = { claimStalePromotions: vi.fn().mockResolvedValue([{ fileId, stagingKey: `staging/admin/${uploadId}/${fileId}.webp`, finalKey: `media/works/${workId}/${fileId}.webp`, cleanupToken: uploadId }]), finalizePromotionCleanup: vi.fn(), failPromotionCleanup: vi.fn() };
     const objectStore = { delete: vi.fn().mockRejectedValue(new Error('SDK secret detail')) };
     const service = createUploadsService({ repository, objectStore });
-    await expect(service.cleanupStalePromotions({ actorId, actorRole: 'admin' })).resolves.toEqual({ claimed: 1 });
-    expect(repository.failPromotionCleanup).toHaveBeenCalledWith({ fileId, cleanupToken: uploadId, actorId, errorCode: 'OBJECT_DELETE_FAILED' });
+    await expect(service.cleanupStalePromotions({ actorId, actorRole: 'admin' })).resolves.toEqual({ claimed: 1, failed: 1, reportingFailed: 0 });
+    expect(repository.failPromotionCleanup).toHaveBeenCalledWith({ fileId, cleanupToken: uploadId, actorId, errorCode: 'FINAL_DELETE_FAILED' });
     expect(repository.finalizePromotionCleanup).not.toHaveBeenCalled();
+  });
+
+  it('classifies cleanup stages and processes the whole batch when finalize and failure reporting fail', async () => {
+    const secondFile = actorId; const secondToken = workId;
+    const repository = {
+      claimStalePromotions: vi.fn().mockResolvedValue([
+        { fileId, stagingKey: 'staging/admin/a', finalKey: 'media/works/a', cleanupToken: uploadId },
+        { fileId: secondFile, stagingKey: 'staging/admin/b', finalKey: 'media/works/b', cleanupToken: secondToken },
+      ]),
+      finalizePromotionCleanup: vi.fn().mockRejectedValueOnce(new Error('token detail')).mockResolvedValueOnce(undefined),
+      failPromotionCleanup: vi.fn().mockRejectedValueOnce(new Error('database detail')),
+    };
+    const objectStore = { delete: vi.fn() };
+    const service = createUploadsService({ repository, objectStore });
+    await expect(service.cleanupStalePromotions({ actorId, actorRole: 'admin' })).resolves.toEqual({ claimed: 2, failed: 1, reportingFailed: 1 });
+    expect(repository.failPromotionCleanup).toHaveBeenCalledWith({ fileId, cleanupToken: uploadId, actorId, errorCode: 'CLEANUP_FINALIZE_FAILED' });
+    expect(repository.finalizePromotionCleanup).toHaveBeenCalledWith({ fileId: secondFile, cleanupToken: secondToken, actorId });
+    expect(objectStore.delete).toHaveBeenCalledTimes(4);
+  });
+
+  it('distinguishes staging deletion failure from final deletion failure', async () => {
+    const repository = { claimStalePromotions: vi.fn().mockResolvedValue([{ fileId, stagingKey: 'staging/admin/a', finalKey: 'media/works/a', cleanupToken: uploadId }]), finalizePromotionCleanup: vi.fn(), failPromotionCleanup: vi.fn() };
+    const objectStore = { delete: vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('private detail')) };
+    const service = createUploadsService({ repository, objectStore });
+    await expect(service.cleanupStalePromotions({ actorId, actorRole: 'admin' })).resolves.toEqual({ claimed: 1, failed: 1, reportingFailed: 0 });
+    expect(repository.failPromotionCleanup).toHaveBeenCalledWith(expect.objectContaining({ errorCode: 'STAGING_DELETE_FAILED' }));
   });
 });
 

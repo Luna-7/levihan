@@ -1,5 +1,16 @@
 BEGIN;
 
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM public.upload_files
+    WHERE status IN ('promoting','cleanup_pending')
+      OR ((promotion_token IS NOT NULL OR cleanup_token IS NOT NULL)
+          AND status NOT IN ('bound','orphaned','deleted','rejected'))
+  ) THEN
+    RAISE EXCEPTION 'rollback_requires_promotion_drain' USING ERRCODE='P0001';
+  END IF;
+END $$;
+
 -- Safe only before content uses the expanded chapter/asset cardinality. Export and
 -- transform content (or restore the database) once these predicates become true.
 DO $$ BEGIN

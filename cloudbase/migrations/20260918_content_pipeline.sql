@@ -422,7 +422,7 @@ END;
 $$;
 
 CREATE FUNCTION public.begin_snapshot_build(p_snapshot_type text, p_actor_id uuid, p_request_id text, p_idempotency_key text)
-RETURNS TABLE (job_id uuid, version bigint, state text, object_key text, checksum text, lease_token uuid, lease_epoch bigint, generated_at timestamptz, source_revision bigint)
+RETURNS TABLE (job_id uuid, version bigint, state text, object_key text, checksum text, lease_token uuid, lease_epoch bigint, generated_at timestamptz)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE actor public.app_users%ROWTYPE; job public.snapshot_jobs%ROWTYPE; next_version bigint; immutable public.snapshot_versions%ROWTYPE;
 BEGIN
@@ -435,7 +435,7 @@ BEGIN
    WHERE audit.actor_id = p_actor_id AND audit.action = 'snapshot.request' AND audit.idempotency_key = p_idempotency_key;
   IF FOUND AND (job.status = 'succeeded' OR (job.status = 'prepared' AND job.lease_expires_at > clock_timestamp())) THEN
     SELECT * INTO immutable FROM public.snapshot_versions WHERE snapshot_job_id = job.id;
-    RETURN QUERY SELECT job.id, job.delivery_version, job.status, immutable.object_key, immutable.checksum, job.lease_token, job.lease_epoch, job.build_generated_at, job.source_version; RETURN;
+    RETURN QUERY SELECT job.id, job.delivery_version, job.status, immutable.object_key, immutable.checksum, job.lease_token, job.lease_epoch, job.build_generated_at; RETURN;
   ELSIF FOUND AND job.status = 'running' AND job.lease_expires_at > clock_timestamp() THEN
     RAISE EXCEPTION 'snapshot_busy' USING ERRCODE = 'P0001';
   END IF;
@@ -469,7 +469,7 @@ BEGIN
   INSERT INTO public.audit_logs (actor_id, action, target_type, target_id, summary, request_id, idempotency_key)
   VALUES (p_actor_id, 'snapshot.request', 'snapshot_job', job.id, jsonb_build_object('type', p_snapshot_type, 'version', next_version, 'attempt', job.attempts), p_request_id, p_idempotency_key)
   ON CONFLICT (actor_id, action, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
-  RETURN QUERY SELECT job.id, next_version, job.status, immutable.object_key, immutable.checksum, job.lease_token, job.lease_epoch, job.build_generated_at, job.source_version;
+  RETURN QUERY SELECT job.id, next_version, job.status, immutable.object_key, immutable.checksum, job.lease_token, job.lease_epoch, job.build_generated_at;
 END;
 $$;
 
