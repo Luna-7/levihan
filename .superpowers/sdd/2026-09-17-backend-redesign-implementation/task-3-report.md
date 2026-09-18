@@ -28,4 +28,25 @@ Added function-level HTTP and security tests before production modules existed. 
 
 ## Notes
 
-The CloudBase SDK's exact raw-SQL API is isolated behind the injected `rdb().query(sql, params)` adapter. Deployment should confirm that adapter against the installed SDK/runtime; no browser-to-database path is introduced. Business routes remain intentionally out of scope for this task and will opt into CSRF exemptions and rate-limit metadata as they are added.
+The CloudBase SDK's rate-limit integration is isolated behind an injected `rdb.rpc(name, params)` adapter and the controlled PostgreSQL routine. Deployment should confirm that adapter against the installed SDK/runtime; no browser-to-database path is introduced. Business routes remain intentionally out of scope for this task and will opt into CSRF exemptions and rate-limit metadata as they are added.
+
+## Fix round 1
+
+### RED
+
+The new runtime tests first failed for missing multi-cookie output, short production pepper acceptance, the raw-query adapter, trusted-IP handling, custom response status, idempotency execution, and malformed route parameters. The schema verifier then failed with the missing rate-limit SQL routine, PUBLIC revoke, runtime grant, and rollback entry.
+
+### Fixes
+
+- Replaced the speculative raw query path with `rdb.rpc('consume_rate_limit_bucket', params)` and added the atomic SECURITY DEFINER PostgreSQL routine, revoke, runtime grant, rollback entry, and verifier mutation coverage.
+- Added actual multi-value `set-cookie` output plus session/CSRF set and clear helpers.
+- Added the reviewed policy paths, multi-bucket login limits, trusted CloudBase source-IP extraction, idempotency execution, query context, custom status responses, strict preflight validation, and malformed parameter handling.
+- Hardened configuration and CSRF token validation; registered the public `/api/v1` gateway.
+- Made all 5xx envelopes use a fixed safe message and added safe error-type diagnostics with HMAC-only actor logging.
+
+### Verification
+
+- Function tests: 27 passed.
+- Schema verifier: passed.
+- Full suite: 59 passed.
+- Type check, secret scan, and whitespace check: passed.

@@ -2,10 +2,11 @@
 
 function compilePath(path) {
   const keys = [];
-  const source = path.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (_, key) => {
-    keys.push(key);
-    return '([^/]+)';
-  });
+  const source = path.split(/(\{[A-Za-z][A-Za-z0-9_]*\})/g).map((part) => {
+    const match = /^\{([A-Za-z][A-Za-z0-9_]*)\}$/.exec(part);
+    if (match) { keys.push(match[1]); return '([^/]+)'; }
+    return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }).join('');
   return { regex: new RegExp(`^${source}$`), keys };
 }
 
@@ -19,7 +20,13 @@ function createRouter() {
     const route = routes.find((item) => item.method === method.toUpperCase() && item.regex.test(path));
     if (!route) return null;
     const match = route.regex.exec(path);
-    const params = Object.fromEntries(route.keys.map((key, index) => [key, decodeURIComponent(match[index + 1])]));
+    let params;
+    try {
+      params = Object.fromEntries(route.keys.map((key, index) => [key, decodeURIComponent(match[index + 1])]));
+    } catch {
+      const { ApiError } = require('./errors');
+      throw new ApiError(400, 'VALIDATION_FAILED', 'Malformed route parameter');
+    }
     return { ...route, params };
   }
   return {

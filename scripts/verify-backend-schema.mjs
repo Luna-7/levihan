@@ -27,6 +27,7 @@ export const REQUIRED_FUNCTIONS = {
   set_work_like: 'uuid, uuid, boolean',
   set_favorite: 'uuid, uuid, boolean',
   sync_reading_progress: 'uuid, uuid, bigint, numeric, bigint, timestamptz',
+  consume_rate_limit_bucket: 'text, text, integer, integer, timestamptz',
 };
 
 const UPDATED_AT_TABLES = [
@@ -329,6 +330,9 @@ function validateMigration(migration, failures) {
   addFailure(failures, has(functionBody(sql, 'set_work_like'), /ON\s+CONFLICT\s*\(\s*user_id\s*,\s*work_id\s*\)\s+DO\s+NOTHING/i), 'like upsert must be idempotent');
   addFailure(failures, has(functionBody(sql, 'set_favorite'), /ON\s+CONFLICT\s*\(\s*user_id\s*,\s*work_id\s*\)\s+DO\s+NOTHING/i), 'favorite upsert must be idempotent');
   addFailure(failures, has(functionBody(sql, 'sync_reading_progress'), /ON\s+CONFLICT\s*\(\s*user_id\s*,\s*work_id\s*\)\s+DO\s+UPDATE/i), 'reading-progress upsert must be idempotent');
+  const rateLimit = functionBody(sql, 'consume_rate_limit_bucket');
+  addFailure(failures, has(rateLimit, /INSERT\s+INTO\s+public\.rate_limit_buckets[\s\S]*?ON\s+CONFLICT[\s\S]*?hit_count\s*=\s*rate_limit_buckets\.hit_count\s*\+\s*1/i), 'rate-limit consumer must use an atomic upsert');
+  addFailure(failures, has(rateLimit, /accepted[\s\S]*?retry_after_seconds/i), 'rate-limit consumer must return accepted and retry_after_seconds');
 
   const comments = functionBody(sql, 'backend_v2_enforce_comment_reply_depth');
   addFailure(failures, has(comments, /FOR\s+KEY\s+SHARE/i), 'comment parent must be locked while validating a reply');

@@ -25,13 +25,20 @@ function corsHeaders(origin, config) {
   };
 }
 
-function requestPath(event) {
+function requestPath(event, gatewayPath) {
   const raw = event.path || event.rawPath || '/';
   return String(raw).split('?')[0];
 }
 
+function queryFromEvent(event) {
+  const query = { ...(event.queryStringParameters || {}) };
+  for (const [key, values] of Object.entries(event.multiValueQueryStringParameters || {})) query[key] = values;
+  return query;
+}
+
 function parseBody(event, headers, limit) {
   if (event.body === undefined || event.body === null || event.body === '') return undefined;
+  if (typeof event.body === 'object' && !Buffer.isBuffer(event.body)) throw new ApiError(400, 'VALIDATION_FAILED', 'Request body must be encoded text');
   const body = Buffer.isBuffer(event.body) ? event.body : Buffer.from(String(event.body), event.isBase64Encoded ? 'base64' : 'utf8');
   if (body.length > limit) throw new ApiError(413, 'PAYLOAD_TOO_LARGE', 'Request body is too large');
   const text = body.toString('utf8');
@@ -45,31 +52,47 @@ function validRequestId(value) {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value) ? value : null;
 }
 
-function serialize(statusCode, headers, data) {
-  return { statusCode, headers: { ...headers, 'content-type': 'application/json; charset=utf-8' }, body: JSON.stringify(data) };
+function serialize(statusCode, headers, data, cookies = []) {
+  return { statusCode, headers: { ...headers, 'content-type': 'application/json; charset=utf-8' }, ...(cookies.length ? { multiValueHeaders: { 'set-cookie': cookies } } : {}), body: statusCode === 204 ? '' : JSON.stringify(data) };
 }
 
-function createApi({ config, router = createRouter(), requestId = crypto.randomUUID, logger = { info() {}, error() {} }, rateLimiter } = {}) {
+function trustedIp(event, headers, config) {
+  const context = event.requestContext || {};
+  const ip = context.identity && context.identity.sourceIp || context.http && context.http.sourceIp;
+  if (ip) return ip;
+  if (config.trustedProxyHeaders) return (headers['x-forwarded-for'] || headers['x-real-ip'] || '').split(',')[0].trim();
+  return '';
+}
+function createApi({ config, router = createRouter(), requestId = crypto.randomUUID, logger = { info() {}, error() {} }, rateLimiter, idempotencyStore } = {}) {
   if (!config) throw new Error('API configuration is required');
   async function handle(event = {}) {
     const startedAt = Date.now();
     const headers = normalizeHeaders(event.headers);
     const origin = headers.origin;
-    const id = validRequestId(headers['x-request-id']) || requestId();
+    const clientTraceId = validRequestId(headers['x-request-id']) || undefined;
+    const id = requestId();
     const method = String(event.httpMethod || event.method || 'GET').toUpperCase();
-    const path = requestPath(event);
+    const gatewayPath = config.gatewayPath || BASE_PATH;
+    const path = requestPath(event, gatewayPath);
     const responseHeaders = { ...securityHeaders(), ...corsHeaders(origin, config), 'x-request-id': id };
     let routePath = path;
     let status = 500;
     let errorCode;
+    let actorId;
+    let errorType;
     try {
       if (method === 'OPTIONS' && headers['access-control-request-method']) {
         if (!origin || !config.allowedOrigins.includes(origin)) throw new ApiError(403, 'ACCESS_DENIED', 'Origin is not allowed');
+        if (!path.startsWith(`${gatewayPath}/`) && path !== gatewayPath) throw new ApiError(404, 'NOT_FOUND', 'Route not found');
+        const preflightPath = path.slice(gatewayPath.length) || '/';
+        if (!router.resolve(headers['access-control-request-method'], preflightPath)) throw new ApiError(404, 'NOT_FOUND', 'Route not found');
+        const allowed = new Set(['content-type', 'idempotency-key', 'x-csrf-token', 'x-request-id']);
+        if ((headers['access-control-request-headers'] || '').split(',').filter(Boolean).some((name) => !allowed.has(name.trim().toLowerCase()))) throw new ApiError(403, 'ACCESS_DENIED', 'Requested header is not allowed');
         status = 204;
         return { statusCode: 204, headers: responseHeaders, body: '' };
       }
-      if (!path.startsWith(`${BASE_PATH}/`) && path !== BASE_PATH) throw new ApiError(404, 'NOT_FOUND', 'Route not found');
-      const relativePath = path.slice(BASE_PATH.length) || '/';
+      if (!path.startsWith(`${gatewayPath}/`) && path !== gatewayPath) throw new ApiError(404, 'NOT_FOUND', 'Route not found');
+      const relativePath = path.slice(gatewayPath.length) || '/';
       routePath = relativePath;
       const body = parseBody(event, headers, config.bodyLimitBytes);
       const route = router.resolve(method, relativePath);
@@ -79,23 +102,40 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
       if (WRITE_METHODS.has(method) && config.csrfRequired && !route.metadata.csrfExempt) requireCsrf(headers, cookies, config);
       const rateLimit = route.metadata.rateLimit || defaultRateLimitForRoute(route.path);
       if (rateLimit && rateLimiter) {
-        const subject = (headers['x-forwarded-for'] || headers['x-real-ip'] || 'unknown').split(',')[0].trim();
-        const limited = await rateLimiter.consume({ ...rateLimit, subjectHash: hashSubject(subject, config.rateLimitPepper) });
-        if (!limited.accepted) {
-          responseHeaders['retry-after'] = String(limited.retryAfterSeconds);
-          throw new ApiError(429, 'RATE_LIMITED', 'Too many requests');
+        const ip = trustedIp(event, headers, config);
+        if (!ip) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Trusted client IP is unavailable');
+        const policies = Array.isArray(rateLimit) ? rateLimit : [rateLimit];
+        for (const policy of policies) {
+          const subject = policy.subject === 'username' ? String(body && body.username || '').trim().toLowerCase() : ip;
+          if (!subject) throw new ApiError(400, 'VALIDATION_FAILED', 'Username is required for login');
+          const limited = await rateLimiter.consume({ ...policy, subjectHash: hashSubject(subject, config.rateLimitPepper), requestId: id });
+          if (!limited.accepted) {
+            responseHeaders['retry-after'] = String(limited.retryAfterSeconds);
+            throw new ApiError(429, 'RATE_LIMITED', 'Too many requests');
+          }
         }
       }
-      const data = await route.handler({ method, path: relativePath, params: route.params, headers, cookies, body, requestId: id, setCookie() {} });
-      status = 200;
-      return serialize(status, responseHeaders, data === undefined ? null : data);
+      const setCookies = [];
+      const context = { method, path: relativePath, params: route.params, headers, cookies, body, query: queryFromEvent(event), requestId: id, clientTraceId, idempotencyKey: headers['idempotency-key'], config, setCookie: (cookie) => setCookies.push(cookie), setActor: (value) => { actorId = value; } };
+      const operation = () => route.handler(context);
+      let data;
+      if (route.metadata.idempotency === 'required') {
+        const key = headers['idempotency-key'];
+        if (!/^[A-Za-z0-9_-]{8,128}$/.test(key || '')) throw new ApiError(400, 'VALIDATION_FAILED', 'Invalid Idempotency-Key');
+        if (!idempotencyStore) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Idempotency storage unavailable');
+        data = await idempotencyStore.execute({ scope: route.path, key, requestHash: crypto.createHash('sha256').update(JSON.stringify(body || null)).digest('hex'), actorId: context.actorId, operation });
+      } else data = await operation();
+      const custom = data && typeof data === 'object' && Object.hasOwn(data, 'statusCode') && Object.hasOwn(data, 'body');
+      status = custom ? data.statusCode : 200;
+      return serialize(status, { ...responseHeaders, ...(custom ? data.headers : {}) }, custom ? data.body : (data === undefined ? null : data), setCookies);
     } catch (error) {
+      errorType = error && error.name || 'Error';
       const mapped = errorResponse(error, id);
       status = mapped.status;
       errorCode = mapped.body.errorCode;
       return serialize(status, responseHeaders, mapped.body);
     } finally {
-      const entry = { requestId: id, method, route: routePath, status, durationMs: Date.now() - startedAt, ...(errorCode ? { errorCode } : {}) };
+      const entry = { requestId: id, method, route: routePath, status, durationMs: Date.now() - startedAt, environment: config.environment, timestamp: new Date().toISOString(), ...(actorId ? { actorId } : {}), ...(errorCode ? { errorCode } : {}), ...(status >= 500 ? { errorType: errorType || 'Error' } : {}) };
       (status >= 500 ? logger.error : logger.info)(entry);
     }
   }

@@ -24,6 +24,7 @@ DROP TRIGGER IF EXISTS site_settings_set_updated_at ON public.site_settings;
 DROP TRIGGER IF EXISTS rate_limit_buckets_set_updated_at ON public.rate_limit_buckets;
 
 DROP FUNCTION IF EXISTS public.sync_reading_progress(uuid, uuid, bigint, numeric, bigint, timestamptz);
+DROP FUNCTION IF EXISTS public.consume_rate_limit_bucket(text, text, integer, integer, timestamptz);
 DROP FUNCTION IF EXISTS public.set_favorite(uuid, uuid, boolean);
 DROP FUNCTION IF EXISTS public.set_work_like(uuid, uuid, boolean);
 DROP FUNCTION IF EXISTS public.promote_app_user(uuid, uuid, boolean, text);

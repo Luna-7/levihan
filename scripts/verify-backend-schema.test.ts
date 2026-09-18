@@ -41,6 +41,7 @@ describe('backend v2 PostgreSQL migration', () => {
       ['runtime policy', 'runtime', (sql: string) => sql.replace('CREATE POLICY backend_v2_runtime_select ON public.comments', '-- CREATE POLICY backend_v2_runtime_select ON public.comments')],
       ['rollback trigger function', 'rollback', (sql: string) => sql.replace('DROP FUNCTION IF EXISTS public.backend_v2_set_updated_at();', '-- DROP FUNCTION IF EXISTS public.backend_v2_set_updated_at();')],
       ['username regex', 'migration', (sql: string) => sql.replace("username ~ '^[A-Za-z0-9_]{3,32}$'", 'false')],
+      ['rate limit RPC', 'migration', (sql: string) => sql.replace('CREATE FUNCTION public.consume_rate_limit_bucket(', '-- CREATE FUNCTION public.consume_rate_limit_bucket(')],
     ] as const;
 
     try {

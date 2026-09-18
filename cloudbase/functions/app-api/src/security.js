@@ -32,9 +32,21 @@ function secureEqual(left, right) {
 }
 
 function requireCsrf(headers, cookies, config) {
-  if (!secureEqual(cookies[config.csrfCookieName], headers['x-csrf-token'])) {
+  const pattern = /^[A-Za-z0-9_-]{32,128}$/;
+  if (!pattern.test(cookies[config.csrfCookieName] || '') || !pattern.test(headers['x-csrf-token'] || '') || !secureEqual(cookies[config.csrfCookieName], headers['x-csrf-token'])) {
     throw new ApiError(403, 'ACCESS_DENIED', 'CSRF validation failed');
   }
+}
+
+function setSessionCookies(ctx, sessionToken, csrfToken) {
+  const shared = { secure: true, sameSite: 'Lax', path: '/', domain: ctx.config.sessionCookieDomain };
+  ctx.setCookie(serializeCookie(ctx.config.sessionCookieName, sessionToken, { ...shared, httpOnly: true }));
+  ctx.setCookie(serializeCookie(ctx.config.csrfCookieName, csrfToken, shared));
+}
+function clearSessionCookies(ctx) {
+  const shared = { secure: true, sameSite: 'Lax', path: '/', domain: ctx.config.sessionCookieDomain, maxAge: 0 };
+  ctx.setCookie(serializeCookie(ctx.config.sessionCookieName, '', { ...shared, httpOnly: true }));
+  ctx.setCookie(serializeCookie(ctx.config.csrfCookieName, '', shared));
 }
 
 function securityHeaders() {
@@ -47,4 +59,4 @@ function securityHeaders() {
   };
 }
 
-module.exports = { parseCookies, serializeCookie, requireCsrf, securityHeaders };
+module.exports = { parseCookies, serializeCookie, requireCsrf, setSessionCookies, clearSessionCookies, securityHeaders };

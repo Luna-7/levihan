@@ -16,6 +16,9 @@
       "envVariables": {
         "ADMIN_PASSWORD": "{{env.ADMIN_PASSWORD}}",
         "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}",
+        "COS_BUCKET": "{{env.COS_BUCKET}}",
+        "COS_REGION": "{{env.COS_REGION}}",
+        "DATABASE_SCHEMA": "{{env.DATABASE_SCHEMA}}",
         "COS_BUCKET": "levihan-1325571558",
         "COS_REGION": "ap-nanjing",
         "ALLOWED_ORIGINS": "https://levihan-tudou-d0g7jivue1ccc4a35-1325571558.tcloudbaseapp.com,http://localhost:5173,http://localhost:4173,https://admin.levihan.asia,https://www.levihan.asia,https://levihan.asia"
@@ -101,6 +104,8 @@
     {
       "name": "app-api",
       "type": "HTTP",
+      "public": true,
+      "gatewayPath": "/api/v1",
       "runtime": "Nodejs18.15",
       "handler": "index.main",
       "timeout": 30,
@@ -115,7 +120,8 @@
         "SESSION_COOKIE_DOMAIN": "{{env.SESSION_COOKIE_DOMAIN}}",
         "SESSION_COOKIE_NAME": "{{env.SESSION_COOKIE_NAME}}",
         "CSRF_COOKIE_NAME": "{{env.CSRF_COOKIE_NAME}}",
-        "API_BODY_LIMIT_BYTES": "{{env.API_BODY_LIMIT_BYTES}}"
+        "API_BODY_LIMIT_BYTES": "{{env.API_BODY_LIMIT_BYTES}}",
+        "TRUST_PROXY_HEADERS": "{{env.TRUST_PROXY_HEADERS}}"
       }
     }
   ]

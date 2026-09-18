@@ -1,8 +1,10 @@
 const { createApi } = require('../src/http');
 const { parseConfig } = require('../src/config');
 const { createLogger } = require('../src/logger');
-const { serializeCookie } = require('../src/security');
+const { serializeCookie, setSessionCookies, clearSessionCookies } = require('../src/security');
 const { createRateLimitRepository } = require('../src/repositories/db');
+const { readFileSync } = require('node:fs');
+const { resolve } = require('node:path');
 
 const config = {
   environment: 'test', allowedOrigins: [], sessionCookieName: 'lv_session', csrfCookieName: 'lv_csrf',
@@ -21,10 +23,20 @@ describe('security boundaries', () => {
       .toBe('lv_csrf=def; Path=/; Secure; SameSite=Lax');
   });
 
+  it('emits and clears both session cookies through multi-value headers', async () => {
+    const server = createApi({ config, requestId: () => 'cookies', logger: { info: vi.fn(), error: vi.fn() } });
+    server.router.post('/cookies', (ctx) => { setSessionCookies(ctx, 'test-session', 'test-csrf'); clearSessionCookies(ctx); return { ok: true }; }, { csrfExempt: true });
+    const response = await server.handle(request({ path: '/api/v1/cookies' }));
+    expect(response.multiValueHeaders['set-cookie']).toHaveLength(4);
+    expect(response.multiValueHeaders['set-cookie'][0]).toContain('HttpOnly');
+    expect(response.multiValueHeaders['set-cookie'][1]).not.toContain('HttpOnly');
+    expect(response.multiValueHeaders['set-cookie'][2]).toContain('Max-Age=0');
+  });
+
   it('accepts a matching CSRF cookie and header for writes', async () => {
     const server = createApi({ config, requestId: () => 'csrf-pass', logger: { info: vi.fn(), error: vi.fn() } });
     server.router.post('/write', () => ({ ok: true }));
-    const csrfToken = 'test-csrf-pass';
+    const csrfToken = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const response = await server.handle(request({ headers: { cookie: `lv_csrf=${csrfToken}`, 'x-csrf-token': csrfToken } }));
     expect(response.statusCode).toBe(200);
   });
@@ -48,8 +60,14 @@ describe('security boundaries', () => {
     const apiKey = 'test-api-key';
     expect(() => parseConfig({ NODE_ENV: 'production', API_ALLOWED_ORIGINS: '', SESSION_HASH_PEPPER: '', CLOUDBASE_APIKEY: apiKey }))
       .toThrow(/API_ALLOWED_ORIGINS/);
-    expect(() => parseConfig({ NODE_ENV: 'production', API_ALLOWED_ORIGINS: 'https://app.example.test', SESSION_HASH_PEPPER: 'pepper', CLOUDBASE_APIKEY: apiKey }))
+    expect(() => parseConfig({ NODE_ENV: 'production', API_ALLOWED_ORIGINS: 'https://app.example.test', SESSION_HASH_PEPPER: 'a'.repeat(32), CLOUDBASE_APIKEY: apiKey, COS_BUCKET: 'test-bucket', COS_REGION: 'ap-test-1', DATABASE_SCHEMA: 'public' }))
       .toThrow(/SESSION_COOKIE_DOMAIN/);
+  });
+
+  it('rejects short peppers and disabled production CSRF', () => {
+    const base = { NODE_ENV: 'production', API_ALLOWED_ORIGINS: 'https://app.example.test', CLOUDBASE_APIKEY: 'test-api-key', COS_BUCKET: 'test-bucket', COS_REGION: 'ap-test-1', DATABASE_SCHEMA: 'public', SESSION_COOKIE_DOMAIN: 'example.test' };
+    expect(() => parseConfig({ ...base, SESSION_HASH_PEPPER: 'short' })).toThrow(/SESSION_HASH_PEPPER/);
+    expect(() => parseConfig({ ...base, SESSION_HASH_PEPPER: 'a'.repeat(32), CSRF_REQUIRED: 'false' })).toThrow(/CSRF_REQUIRED/);
   });
 
   it('does not log request bodies, cookies, tokens, answers, or passwords', () => {
@@ -65,12 +83,26 @@ describe('security boundaries', () => {
     expect(record.body).toBeUndefined();
   });
 
-  it('uses the rdb adapter for one atomic PostgreSQL rate-limit statement', async () => {
-    const query = vi.fn().mockResolvedValue({ data: [{ hit_count: 1, expires_at: '2030-01-01T00:01:00.000Z' }] });
-    const repository = createRateLimitRepository({ query });
+  it('logs a handler actor only as a hash and preserves safe 5xx diagnostics', async () => {
+    const write = vi.fn();
+    const server = createApi({ config, requestId: () => 'log-request', logger: createLogger({ write, actorPepper: 'pepper' }) });
+    server.router.get('/actor', (ctx) => { ctx.setActor('member-42'); throw new Error('SELECT test-sensitive-value'); });
+    await server.handle({ httpMethod: 'GET', path: '/api/v1/actor' });
+    expect(write.mock.calls[0][0]).toMatchObject({ requestId: 'log-request', errorCode: 'INTERNAL_ERROR', errorType: 'Error', environment: 'test' });
+    expect(JSON.stringify(write.mock.calls[0][0])).not.toContain('member-42');
+  });
+
+  it('registers a public versioned CloudBase HTTP gateway', () => {
+    const cloudbase = JSON.parse(readFileSync(resolve(__dirname, '../../../cloudbaserc.json'), 'utf8'));
+    const apiFunction = cloudbase.functions.find((item) => item.name === 'app-api');
+    expect(apiFunction).toMatchObject({ type: 'HTTP', public: true, gatewayPath: '/api/v1' });
+  });
+
+  it('uses the CloudBase RPC adapter for atomic rate limiting', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [{ accepted: true, retry_after_seconds: 0 }], error: null });
+    const repository = createRateLimitRepository({ rpc });
     const result = await repository.consume({ subjectHash: 'hash', bucket: 'login-ip', windowSeconds: 60, limit: 2, now: new Date('2030-01-01T00:00:10.000Z') });
-    expect(query).toHaveBeenCalledTimes(1);
-    expect(query.mock.calls[0][0]).toContain('INSERT INTO rate_limit_buckets');
+    expect(rpc).toHaveBeenCalledWith('consume_rate_limit_bucket', expect.objectContaining({ p_subject_hash: 'hash', p_bucket: 'login-ip' }));
     expect(result).toEqual({ accepted: true, retryAfterSeconds: 0 });
   });
 });

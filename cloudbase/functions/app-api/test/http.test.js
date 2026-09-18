@@ -7,7 +7,7 @@ const config = {
   sessionCookieName: 'lv_session',
   csrfCookieName: 'lv_csrf',
   sessionCookieDomain: undefined,
-  bodyLimitBytes: 20,
+  bodyLimitBytes: 1024,
   csrfRequired: true,
   sessionHashPepper: 'test-pepper',
   rateLimitPepper: 'test-rate-pepper',
@@ -18,6 +18,7 @@ function request(overrides = {}) {
     httpMethod: 'GET',
     path: '/api/v1/ping',
     headers: { origin: 'https://app.example.test' },
+    requestContext: { identity: { sourceIp: '203.0.113.8' } },
     ...overrides,
   };
 }
@@ -56,7 +57,7 @@ describe('HTTP API kernel', () => {
 
   it('rejects a body that exceeds the configured limit', async () => {
     const response = await api().handle(request({
-      httpMethod: 'POST', path: '/api/v1/none', body: 'x'.repeat(21), headers: { 'content-type': 'text/plain' },
+      httpMethod: 'POST', path: '/api/v1/none', body: 'x'.repeat(1025), headers: { 'content-type': 'text/plain' },
     }));
 
     expect(response.statusCode).toBe(413);
@@ -75,7 +76,9 @@ describe('HTTP API kernel', () => {
   });
 
   it('accepts an allowed CORS preflight without invoking a route', async () => {
-    const response = await api().handle(request({ httpMethod: 'OPTIONS', headers: {
+    const server = api();
+    server.router.post('/ping', () => ({ ok: true }), { csrfExempt: true });
+    const response = await server.handle(request({ httpMethod: 'OPTIONS', headers: {
       origin: 'https://app.example.test', 'access-control-request-method': 'POST',
     } }));
     expect(response.statusCode).toBe(204);
@@ -108,7 +111,7 @@ describe('HTTP API kernel', () => {
     const unknown = await server.handle(request({ path: '/api/v1/unknown' }));
 
     expect(JSON.parse(known.body)).toEqual({ errorCode: 'VERSION_CONFLICT', message: 'Conflict', requestId: 'req-test-123', details: { version: 4 } });
-    expect(JSON.parse(unknown.body)).toEqual({ errorCode: 'INTERNAL_ERROR', message: 'Internal server error', requestId: 'req-test-123' });
+    expect(JSON.parse(unknown.body)).toEqual({ errorCode: 'INTERNAL_ERROR', message: 'Service temporarily unavailable', requestId: 'req-test-123' });
     expect(unknown.body).not.toContain('SELECT');
     expect(unknown.body).not.toContain('/private');
   });
@@ -122,6 +125,59 @@ describe('HTTP API kernel', () => {
     expect(response.statusCode).toBe(429);
     expect(response.headers['retry-after']).toBe('17');
     expect(JSON.parse(response.body).errorCode).toBe('RATE_LIMITED');
+  });
+
+  it('uses independent IP and normalized username buckets for login', async () => {
+    const consume = vi.fn().mockResolvedValue({ accepted: true, retryAfterSeconds: 0 });
+    const server = api({ rateLimiter: { consume } });
+    server.router.post('/auth/login', () => ({ ok: true }), { csrfExempt: true });
+    const response = await server.handle(request({ httpMethod: 'POST', path: '/api/v1/auth/login', body: '{"username":"  Alice "}', headers: { 'content-type': 'application/json' } }));
+    expect(response.statusCode).toBe(200);
+    expect(consume).toHaveBeenCalledTimes(2);
+    expect(consume.mock.calls.map(([value]) => value.bucket)).toEqual(['login-ip', 'login-username']);
+    expect(consume.mock.calls[0][0].subjectHash).not.toBe(consume.mock.calls[1][0].subjectHash);
+  });
+
+  it('rejects a limited route without a trusted CloudBase source IP', async () => {
+    const server = api({ rateLimiter: { consume: vi.fn() } });
+    server.router.post('/submissions', () => ({ ok: true }), { csrfExempt: true });
+    const response = await server.handle(request({ httpMethod: 'POST', path: '/api/v1/submissions', requestContext: {} }));
+    expect(response.statusCode).toBe(503);
+    expect(JSON.parse(response.body)).toEqual({ errorCode: 'DEPENDENCY_UNAVAILABLE', message: 'Service temporarily unavailable', requestId: 'req-test-123' });
+  });
+
+  it('passes query values, client trace and custom response status to handlers', async () => {
+    const server = api();
+    server.router.get('/created', (ctx) => ({ statusCode: 201, headers: { 'x-result': 'yes' }, body: { query: ctx.query, clientTraceId: ctx.clientTraceId } }));
+    const response = await server.handle(request({ path: '/api/v1/created', headers: { 'x-request-id': 'client-trace-9' }, queryStringParameters: { cursor: 'one' }, multiValueQueryStringParameters: { tag: ['a', 'b'] } }));
+    expect(response.statusCode).toBe(201);
+    expect(response.headers['x-request-id']).toBe('req-test-123');
+    expect(response.headers['x-result']).toBe('yes');
+    expect(JSON.parse(response.body)).toEqual({ query: { cursor: 'one', tag: ['a', 'b'] }, clientTraceId: 'client-trace-9' });
+  });
+
+  it('executes a required idempotent operation once through the injected store', async () => {
+    const cached = new Map();
+    const execute = vi.fn(async ({ key, operation }) => {
+      if (!cached.has(key)) cached.set(key, await operation());
+      return cached.get(key);
+    });
+    const server = api({ idempotencyStore: { execute } });
+    const operation = vi.fn(() => ({ created: true }));
+    server.router.post('/write', (ctx) => { expect(ctx.idempotencyKey).toBe('test-idempotency-key'); return operation(); }, { csrfExempt: true, idempotency: 'required' });
+    const response = await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', body: '{"x":1}', headers: { 'content-type': 'application/json', 'idempotency-key': 'test-idempotency-key' } }));
+    await server.handle(request({ httpMethod: 'POST', path: '/api/v1/write', body: '{"x":1}', headers: { 'content-type': 'application/json', 'idempotency-key': 'test-idempotency-key' } }));
+    expect(response.statusCode).toBe(200);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns validation failure rather than 500 for malformed route encoding', async () => {
+    const server = api();
+    server.router.get('/works/{id}', () => ({ ok: true }));
+    const response = await server.handle(request({ path: '/api/v1/works/%E0%A4' }));
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).errorCode).toBe('VALIDATION_FAILED');
   });
 
   it('continues a request when the rate bucket accepts it', async () => {

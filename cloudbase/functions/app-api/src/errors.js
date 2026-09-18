@@ -18,6 +18,9 @@ class ApiError extends Error {
 
 function errorResponse(error, requestId) {
   if (error instanceof ApiError) {
+    if (error.errorCode === 'INTERNAL_ERROR' || error.errorCode === 'DEPENDENCY_UNAVAILABLE' || error.status >= 500) {
+      return { status: error.errorCode === 'DEPENDENCY_UNAVAILABLE' ? 503 : 500, body: { errorCode: error.errorCode, message: 'Service temporarily unavailable', requestId } };
+    }
     return {
       status: error.status,
       body: {
@@ -28,7 +31,7 @@ function errorResponse(error, requestId) {
       },
     };
   }
-  return { status: 500, body: { errorCode: 'INTERNAL_ERROR', message: 'Internal server error', requestId } };
+  return { status: 500, body: { errorCode: 'INTERNAL_ERROR', message: 'Service temporarily unavailable', requestId } };
 }
 
 module.exports = { ApiError, ERROR_CODES, errorResponse };

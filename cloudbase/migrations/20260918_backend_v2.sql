@@ -384,6 +384,24 @@ CREATE TABLE public.rate_limit_buckets (
 );
 CREATE INDEX rate_limit_buckets_expiry_idx ON public.rate_limit_buckets (expires_at);
 
+CREATE FUNCTION public.consume_rate_limit_bucket(
+  p_subject_hash text, p_bucket text, p_window_seconds integer, p_limit integer, p_now timestamptz
+) RETURNS TABLE (accepted boolean, retry_after_seconds integer)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE v_window_started_at timestamptz; v_expires_at timestamptz; v_hit_count integer;
+BEGIN
+  IF p_subject_hash = '' OR p_bucket = '' OR p_window_seconds < 1 OR p_limit < 1 THEN RAISE EXCEPTION 'invalid rate limit input' USING ERRCODE = '22023'; END IF;
+  v_window_started_at := to_timestamp(floor(extract(epoch FROM p_now) / p_window_seconds) * p_window_seconds);
+  INSERT INTO public.rate_limit_buckets AS current_bucket (subject_hash, bucket, window_started_at, expires_at, hit_count)
+  VALUES (p_subject_hash, p_bucket, v_window_started_at, v_window_started_at + (p_window_seconds * interval '1 second'), 1)
+  ON CONFLICT (subject_hash, bucket, window_started_at) DO UPDATE SET hit_count = rate_limit_buckets.hit_count + 1, updated_at = clock_timestamp()
+  RETURNING hit_count, expires_at INTO v_hit_count, v_expires_at;
+  accepted := v_hit_count <= p_limit;
+  retry_after_seconds := CASE WHEN accepted THEN 0 ELSE GREATEST(1, CEIL(EXTRACT(epoch FROM v_expires_at - p_now))::integer) END;
+  RETURN NEXT;
+END;
+$$;
+
 CREATE FUNCTION public.backend_v2_enforce_comment_reply_depth()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -772,6 +790,7 @@ REVOKE EXECUTE ON FUNCTION public.promote_app_user(uuid, uuid, boolean, text) FR
 REVOKE EXECUTE ON FUNCTION public.set_work_like(uuid, uuid, boolean) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.set_favorite(uuid, uuid, boolean) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.sync_reading_progress(uuid, uuid, bigint, numeric, bigint, timestamptz) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.consume_rate_limit_bucket(text, text, integer, integer, timestamptz) FROM PUBLIC;
 
 ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_sessions ENABLE ROW LEVEL SECURITY;

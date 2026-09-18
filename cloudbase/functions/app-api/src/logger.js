@@ -10,7 +10,10 @@ function createLogger({ write = console.log, actorPepper }) {
       route: entry.route,
       status: entry.status,
       durationMs: entry.durationMs,
+      environment: entry.environment,
+      timestamp: entry.timestamp,
       ...(entry.errorCode ? { errorCode: entry.errorCode } : {}),
+      ...(entry.errorType ? { errorType: entry.errorType } : {}),
       ...(entry.actorId ? { actorIdHash: crypto.createHmac('sha256', actorPepper).update(String(entry.actorId)).digest('hex') } : {}),
     };
     write(safe);
