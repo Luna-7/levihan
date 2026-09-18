@@ -90,14 +90,34 @@ function data(result) {
 const firstRow = (value) => (Array.isArray(value) ? value[0] : value);
 
 /**
- * 优先用环境变量里的服务端 API Key；未配置时回退到运行时注入的临时凭证。
- * 本项目用的是环境级 API Key + service_role 授权，缺它时 PostgreSQL 会直接
- * 报 permission denied，所以必须配置 CLOUDBASE_APIKEY。
+ * 环境 ID 必须是具体值：带 accessKey 初始化时 SYMBOL_CURRENT_ENV 解析不出凭证。
  */
-function initApp() {
+const ENV_ID = process.env.TCB_ENV || 'levihan-tudou-d0g7jivue1ccc4a35';
+
+/**
+ * 数据面：服务端 API Key 映射 PostgreSQL 的 service_role，缺它会被 RLS / 表权限拒绝。
+ */
+function initDb() {
   const accessKey = String(process.env.CLOUDBASE_APIKEY || '').trim();
-  const usable = accessKey && !accessKey.startsWith('{{env.');
-  return tcb.init({ env: tcb.SYMBOL_CURRENT_ENV, ...(usable ? { accessKey } : {}) });
+  if (!accessKey || accessKey.startsWith('{{env.')) throw new Error('CLOUDBASE_APIKEY 未配置');
+  return tcb.init({ env: ENV_ID, accessKey });
+}
+
+/**
+ * 票据面：createTicket 不是调接口，而是用「自定义登录私钥」本地签一张 RS256 JWT
+ * （返回 private_key_id + '/@@/' + token）。私钥 JSON 结构 { private_key_id, private_key, env_id }，
+ * 来自控制台「登录授权 → 自定义登录私钥」，以环境变量 CUSTOM_LOGIN_CREDENTIALS 注入。
+ */
+function initAuth() {
+  const raw = String(process.env.CUSTOM_LOGIN_CREDENTIALS || '').trim();
+  if (!raw || raw.startsWith('{{env.')) throw new Error('CUSTOM_LOGIN_CREDENTIALS 未配置');
+  let credentials;
+  try {
+    credentials = JSON.parse(raw);
+  } catch {
+    throw new Error('CUSTOM_LOGIN_CREDENTIALS 不是合法 JSON');
+  }
+  return tcb.init({ env: ENV_ID, credentials });
 }
 
 async function issueTicket(app, uid) {
@@ -127,8 +147,7 @@ exports.main = async (event) => {
   if (invalid) return respond(event, 400, { ok: false, message: invalid });
 
   try {
-    const app = initApp();
-    const db = app.rdb({ database: 'public' });
+    const db = initDb().rdb({ database: 'public' });
     const nicknameKey = nickname.toLowerCase();
 
     const existing = firstRow(
@@ -155,7 +174,7 @@ exports.main = async (event) => {
       throw error;
     }
 
-    const ticket = await issueTicket(app, uid);
+    const ticket = await issueTicket(initAuth(), uid);
     return respond(event, 200, {
       ok: true,
       ticket,

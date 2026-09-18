@@ -30,7 +30,10 @@
       "memorySize": 128,
       "description": "开放注册：昵称 + 密码，写 PG 并签发自定义登录票据（HTTP 访问服务暴露）",
       "installDependency": true,
-      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+      "envVariables": {
+        "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}",
+        "CUSTOM_LOGIN_CREDENTIALS": "{{env.CUSTOM_LOGIN_CREDENTIALS}}"
+      }
     },
     {
       "name": "loginWithPassword",
@@ -41,7 +44,10 @@
       "memorySize": 128,
       "description": "昵称 + 密码登录：校验 scrypt 散列并签发自定义登录票据（HTTP 访问服务暴露）",
       "installDependency": true,
-      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+      "envVariables": {
+        "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}",
+        "CUSTOM_LOGIN_CREDENTIALS": "{{env.CUSTOM_LOGIN_CREDENTIALS}}"
+      }
     },
     {
       "name": "getUserAccount",
@@ -52,7 +58,9 @@
       "memorySize": 128,
       "description": "读取登录用户档案（昵称 / 角色 / 加入时间）",
       "installDependency": true,
-      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+      "envVariables": {
+        "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}"
+      }
     },
     {
       "name": "updateNickname",
@@ -63,7 +71,9 @@
       "memorySize": 128,
       "description": "登录成员修改统一昵称",
       "installDependency": true,
-      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+      "envVariables": {
+        "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}"
+      }
     },
     {
       "name": "submitGameScore",
@@ -74,7 +84,9 @@
       "memorySize": 128,
       "description": "提交小游戏成绩并折算积分（需登录，服务端重算，每人每游戏每日 30 次）",
       "installDependency": true,
-      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+      "envVariables": {
+        "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}"
+      }
     },
     {
       "name": "getGameLeaderboard",
@@ -85,7 +97,9 @@
       "memorySize": 128,
       "description": "读取头号玩家排行榜（公开可读，游客无需登录）",
       "installDependency": true,
-      "envVariables": { "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}" }
+      "envVariables": {
+        "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}"
+      }
     }
   ]
 }

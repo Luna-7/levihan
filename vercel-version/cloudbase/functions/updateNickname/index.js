@@ -1,5 +1,7 @@
 const tcb = require('@cloudbase/node-sdk');
-const app = tcb.init({ env: tcb.SYMBOL_CURRENT_ENV, accessKey: process.env.CLOUDBASE_APIKEY });
+// 环境 ID 用具体值：带 accessKey 初始化时 SYMBOL_CURRENT_ENV 会让 SDK 解析不出凭证。
+const ENV_ID = process.env.TCB_ENV || 'levihan-tudou-d0g7jivue1ccc4a35';
+const app = tcb.init({ env: ENV_ID, accessKey: process.env.CLOUDBASE_APIKEY });
 const db = app.rdb({ database: 'public' });
 
 function data(result) {
