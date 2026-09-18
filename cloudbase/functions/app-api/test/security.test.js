@@ -96,6 +96,8 @@ describe('security boundaries', () => {
     const cloudbase = JSON.parse(readFileSync(resolve(__dirname, '../../../cloudbaserc.json'), 'utf8'));
     const apiFunction = cloudbase.functions.find((item) => item.name === 'app-api');
     expect(apiFunction).toMatchObject({ type: 'HTTP', public: true, gatewayPath: '/api/v1' });
+    expect(apiFunction.envVariables).toMatchObject({ COS_BUCKET: '{{env.COS_BUCKET}}', COS_REGION: '{{env.COS_REGION}}', DATABASE_SCHEMA: '{{env.DATABASE_SCHEMA}}', CSRF_REQUIRED: '{{env.CSRF_REQUIRED}}', TRUST_PROXY_HEADERS: '{{env.TRUST_PROXY_HEADERS}}' });
+    expect(cloudbase.functions.find((item) => item.name === 'admin-upload').envVariables.DATABASE_SCHEMA).toBeUndefined();
   });
 
   it('uses the CloudBase RPC adapter for atomic rate limiting', async () => {

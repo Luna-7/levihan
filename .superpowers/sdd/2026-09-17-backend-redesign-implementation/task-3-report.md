@@ -50,3 +50,7 @@ The new runtime tests first failed for missing multi-cookie output, short produc
 - Schema verifier: passed.
 - Full suite: 59 passed.
 - Type check, secret scan, and whitespace check: passed.
+
+## Fix round 2
+
+Added method-scoped default rate limits with explicit metadata opt-out, corrected `app-api`-only deployment configuration, validated an explicit rate-limit pepper, and bound the CloudBase database handle to the configured schema. Added an idempotency-record table and a CloudBase RPC-backed store injection point for runtime deployment.

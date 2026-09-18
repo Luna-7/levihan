@@ -383,6 +383,8 @@ CREATE TABLE public.rate_limit_buckets (
   CHECK (expires_at > window_started_at)
 );
 CREATE INDEX rate_limit_buckets_expiry_idx ON public.rate_limit_buckets (expires_at);
+CREATE TABLE public.idempotency_records (scope text NOT NULL, actor_scope_hash text NOT NULL, idempotency_key text NOT NULL, request_hash text NOT NULL, status text NOT NULL CHECK (status IN ('processing','completed')), response jsonb, expires_at timestamptz NOT NULL, PRIMARY KEY (scope, actor_scope_hash, idempotency_key));
+CREATE INDEX idempotency_records_expiry_idx ON public.idempotency_records (expires_at);
 
 CREATE FUNCTION public.consume_rate_limit_bucket(
   p_subject_hash text, p_bucket text, p_window_seconds integer, p_limit integer, p_now timestamptz
@@ -777,7 +779,7 @@ REVOKE ALL ON TABLE public.app_users, public.user_sessions, public.question_bank
   public.reading_progress, public.reports, public.upload_sessions, public.upload_files,
   public.submissions, public.submission_assets, public.snapshot_jobs, public.snapshot_versions,
   public.moderation_actions, public.audit_logs, public.site_settings, public.blocked_subjects,
-  public.rate_limit_buckets FROM PUBLIC;
+  public.rate_limit_buckets, public.idempotency_records FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.backend_v2_set_updated_at() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.backend_v2_enforce_comment_reply_depth() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.backend_v2_validate_submission_asset() FROM PUBLIC;

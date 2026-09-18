@@ -20,4 +20,16 @@ function createCloudBaseRateLimitRepository({ rdb }) {
   return createRateLimitRepository({ rpc: (name, params) => rdb.rpc(name, params) });
 }
 
-module.exports = { createRateLimitRepository, createCloudBaseRateLimitRepository };
+function createCloudBaseIdempotencyStore({ rdb }) {
+  return { async execute({ scope, key, requestHash, actorId, operation }) {
+    const begin = await rdb.rpc('begin_idempotent_request', { p_scope: scope, p_actor_scope_hash: actorId || 'anonymous', p_idempotency_key: key, p_request_hash: requestHash });
+    const row = Array.isArray(begin.data) ? begin.data[0] : begin.data;
+    if (begin.error) throw new Error('Idempotency RPC failed');
+    if (row.state === 'completed') return row.response;
+    if (row.state === 'in_progress' || row.state === 'request_hash_conflict') { const error = new Error('Idempotency conflict'); error.status = 409; throw error; }
+    try { const response = await operation(); await rdb.rpc('complete_idempotent_request', { p_scope: scope, p_actor_scope_hash: actorId || 'anonymous', p_idempotency_key: key, p_request_hash: requestHash, p_response: response }); return response; }
+    catch (error) { await rdb.rpc('fail_idempotent_request', { p_scope: scope, p_actor_scope_hash: actorId || 'anonymous', p_idempotency_key: key, p_request_hash: requestHash }); throw error; }
+  } };
+}
+
+module.exports = { createRateLimitRepository, createCloudBaseRateLimitRepository, createCloudBaseIdempotencyStore };

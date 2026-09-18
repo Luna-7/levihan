@@ -186,4 +186,14 @@ describe('HTTP API kernel', () => {
     const response = await server.handle(request({ httpMethod: 'POST', path: '/api/v1/submission', headers: {} }));
     expect(response.statusCode).toBe(200);
   });
+
+  it('does not apply write default rate limits to GET routes or explicit false metadata', async () => {
+    const consume = vi.fn().mockResolvedValue({ accepted: true });
+    const server = api({ rateLimiter: { consume } });
+    server.router.get('/submissions', () => ({ ok: true }));
+    server.router.post('/submissions', () => ({ ok: true }), { csrfExempt: true, rateLimit: false });
+    await server.handle(request({ path: '/api/v1/submissions' }));
+    await server.handle(request({ httpMethod: 'POST', path: '/api/v1/submissions' }));
+    expect(consume).not.toHaveBeenCalled();
+  });
 });

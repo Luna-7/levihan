@@ -17,8 +17,8 @@ function hashSubject(value, pepper) {
   return crypto.createHmac('sha256', pepper).update(String(value || 'unknown')).digest('hex');
 }
 
-function defaultRateLimitForRoute(routePath) {
-  return RATE_LIMIT_POLICIES[routePath];
+function defaultRateLimitForRoute(method, routePath) {
+  return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ? RATE_LIMIT_POLICIES[routePath] : undefined;
 }
 
 module.exports = { RATE_LIMIT_POLICIES, hashSubject, defaultRateLimitForRoute };

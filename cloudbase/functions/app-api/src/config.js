@@ -41,6 +41,8 @@ function parseConfig(env = process.env) {
   }
   const bodyLimitBytes = Number(env.API_BODY_LIMIT_BYTES || 1024 * 1024);
   if (!Number.isSafeInteger(bodyLimitBytes) || bodyLimitBytes < 1) throw new Error('Invalid API_BODY_LIMIT_BYTES');
+  const rateLimitPepper = env.RATE_LIMIT_PEPPER === undefined || String(env.RATE_LIMIT_PEPPER).trim() === '' ? sessionHashPepper : String(env.RATE_LIMIT_PEPPER).trim();
+  if (rateLimitPepper.length < 32) throw new Error('RATE_LIMIT_PEPPER must be at least 32 characters');
   return {
     environment,
     allowedOrigins,
@@ -52,7 +54,7 @@ function parseConfig(env = process.env) {
     databaseSchema,
     sessionCookieDomain: sessionCookieDomain || undefined,
     sessionHashPepper,
-    rateLimitPepper: env.RATE_LIMIT_PEPPER || sessionHashPepper,
+    rateLimitPepper,
     bodyLimitBytes,
     csrfRequired: env.CSRF_REQUIRED !== 'false',
     trustedProxyHeaders: env.TRUST_PROXY_HEADERS === 'true',

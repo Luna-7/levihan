@@ -100,7 +100,7 @@ function createApi({ config, router = createRouter(), requestId = crypto.randomU
       routePath = route.path;
       const cookies = parseCookies(headers.cookie);
       if (WRITE_METHODS.has(method) && config.csrfRequired && !route.metadata.csrfExempt) requireCsrf(headers, cookies, config);
-      const rateLimit = route.metadata.rateLimit || defaultRateLimitForRoute(route.path);
+      const rateLimit = route.metadata.rateLimit ?? defaultRateLimitForRoute(method, route.path);
       if (rateLimit && rateLimiter) {
         const ip = trustedIp(event, headers, config);
         if (!ip) throw new ApiError(503, 'DEPENDENCY_UNAVAILABLE', 'Trusted client IP is unavailable');

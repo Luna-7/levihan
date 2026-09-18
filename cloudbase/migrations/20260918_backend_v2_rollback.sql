@@ -38,6 +38,7 @@ DROP FUNCTION IF EXISTS public.backend_v2_enforce_comment_reply_depth();
 DROP FUNCTION IF EXISTS public.backend_v2_set_updated_at();
 
 DROP TABLE IF EXISTS public.rate_limit_buckets;
+DROP TABLE IF EXISTS public.idempotency_records;
 DROP TABLE IF EXISTS public.blocked_subjects;
 DROP TABLE IF EXISTS public.site_settings;
 DROP TABLE IF EXISTS public.audit_logs;
