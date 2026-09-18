@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html data-page-node-id="3PiEOnbdfhmW64NKBgsG21">
+
+<head data-page-node-id="KLRZT1DADOGR8uf6GWGuAN">
+    <meta charset="utf-8" data-page-node-id="xwFn85bNQsMnpziT42PWCT">
+
+    <!-- 微信搜索公众号『 程序员鱼皮 』，学习编程技术，发现更多好玩的项目！ -->
+    <title>塔塔开 · 合成大西瓜</title>
+
+    <!--http://www.html5rocks.com/en/mobile/mobifying/-->
+    <meta name="viewport" content="width=device-width,user-scalable=no,initial-scale=1, minimum-scale=1,maximum-scale=1" data-page-node-id="5bbebvnejptubkOxOFNsDm" />
+
+    <!--https://developer.apple.com/library/safari/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html-->
+    <meta name="apple-mobile-web-app-capable" content="yes" data-page-node-id="nthgQ4hxp9m68VDsoZ9PtC">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" data-page-node-id="i1YktKLX4dopQKxOfP5gFH">
+    <meta name="format-detection" content="telephone=no" data-page-node-id="IEVp25DzfzgozrJEoQWnTh">
+
+    <!-- force webkit on 360 -->
+    <meta name="renderer" content="webkit" data-page-node-id="ecacEqIjZrkJMtGYYKoAHy" />
+    <meta name="force-rendering" content="webkit" data-page-node-id="jHME0nlUE3RwxUYbcJG2Hy" />
+    <!-- force edge on IE -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" data-page-node-id="vV7xFWVDWQmF0PQU3Io1NL" />
+    <meta name="msapplication-tap-highlight" content="no" data-page-node-id="IkCJrGL9LnifjHbvjBdiDS">
+
+    <!-- force full screen on some browser -->
+    <meta name="full-screen" content="yes" data-page-node-id="wJRgd0h1r5g7vzcfKkp7f0" />
+    <meta name="x5-fullscreen" content="true" data-page-node-id="gXIS1Sf2PwdJV6pYHjC6U4" />
+    <meta name="360-fullscreen" content="true" data-page-node-id="LaQCJVraur2A4sfZziXofz" />
+
+    <!-- force screen orientation on some browser -->
+    <meta name="screen-orientation" content="" data-page-node-id="7SyAmtCJuqJgZt0WYJO5nb" />
+    <meta name="x5-orientation" content="" data-page-node-id="uLE7B3PbxdJreBAO5LXa5G">
+
+    <!--fix fireball/issues/3568 -->
+    <!--<meta name="browsermode" content="application">-->
+    <meta name="x5-page-mode" content="app" data-page-node-id="JIvvh2VhCFFLfGpQ3e4EEj">
+
+    <!--<link rel="apple-touch-icon" href=".png" />-->
+    <!--<link rel="apple-touch-icon-precomposed" href=".png" />-->
+
+
+    <!-- <script>
+        pushHistory();
+        window.addEventListener("popstate", function(e) {
+
+        }, false);
+        function pushHistory() {
+            var state = {
+                title: "",
+                url: window.location.href
+            };
+            window.history.pushState(state, state.title, state.url);
+        }
+    </script> -->
+<!--    <script type="text/javascript">
+        var ua = navigator.userAgent.toLowerCase(); //获取判断用的对象
+        //判断是否是微信下访问
+        if (ua.match(/MicroMessenger/i) == "micromessenger") {
+            // if (/(iPhone|iPad|iPod|iOS)/i.test(navigator.userAgent)) {
+            location.href = "https://mp.weixin.qq.com/s/m0U0L-vnD0Gu8aPJ2vcPoA";
+            // }
+        }
+    </script>-->
+
+    <link rel="stylesheet" type="text/css" href="style-mobile.css" data-page-node-id="C85cG351BzM82XlzV3ZPOc" />
+
+</head>
+
+<body style="margin: 0; background: #F6E7A4;" align="center" data-page-node-id="oPYKfq9jiLVaVFD4ACHOV4">
+    <div style="align:center;display: none" data-page-node-id="Q1s0OFvX55wFlCD0djhQQH"><img src="res/share.jpg" width="10%" data-page-node-id="REAo9AZi7oyP3rMInef45p" /></div>
+
+    <div id="canvasDiv" style="width:100%;height:100%;" data-page-node-id="ZnHVSl68Cfi6gR4dpEGBiG">
+        <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="0" data-page-node-id="7zAGvCZjTC4bg8mbEMc8eN"></canvas>
+
+        <!-- 移除 Google IMA 演示视频（广告SDK遗留），避免外网请求 -->
+        <video id="contentElement" style="display:none;position: absolute;top:0px;left: 0px;" data-page-node-id="vaRaRt19y1ZjzpjzAKgCxN"></video>
+        <div id="block-Box" style="display:block;width:100%;height:100%;" data-page-node-id="txi2Vj5zVFfAin80DEq2Qe"></div>
+    </div>
+
+
+
+    <div id="adContainer" style="display:none;position: absolute;top:0px;left: 0px;width:100%;height:100%;z-index:999;" data-page-node-id="KjtgUBBz8JqZisLAnfo0RI"></div>
+    <div id="loadingText" style="width:100%;display: none;text-align:center;position:absolute;top:45%;z-index:2;font-size:20px;color:#f99f0a" data-page-node-id="LnVO32C3amd5sVQ3QU14BU">
+        loading......0%
+    </div>
+
+    <div id="splash" data-page-node-id="LYF9glaQ5h8sYqIE8dsEaJ">
+        <!-- <div class="progress-bar stripes"> -->
+        <!-- <span style="width: 0%"></span> -->
+        <!-- </div> -->
+    </div>
+
+    <div id="loadingImg" style="top:45%;width: 100%;position:absolute; " data-page-node-id="mOhv3DS0n2A4TqoXGJc8wU">
+        <img src="res/loading.gif" width="7%" height="7%" data-page-node-id="kxeTFUKWl57AxTmWxgRnvT" />
+    </div>
+
+
+    <!-- 移除外部广告 SDK（imasdk.googleapis.com），避免外网请求 -->
+
+    <!-- 战功上报：在 Cocos 写入存档时把分数回传给宿主页面。
+         只 hook Storage.prototype.setItem，不改动 project.js。
+         宿主（TatakaruGame）监听 type='daxigua-result' 的 message。 -->
+    <script type="text/javascript">
+        (function () {
+            var KEY_RE = /playerData\d+$/;
+            var originalSetItem = Storage.prototype.setItem;
+            Storage.prototype.setItem = function (key, value) {
+                try {
+                    if (KEY_RE.test(key)) {
+                        var data = JSON.parse(value);
+                        var score = Math.max(Number(data && data.score) || 0, Number(data && data.highScore) || 0);
+                        if (score > 0 && window.parent !== window) {
+                            window.parent.postMessage({ type: 'daxigua-result', score: score }, '*');
+                        }
+                    }
+                } catch (e) { /* 非 JSON 或跨域时静默 */ }
+                return originalSetItem.apply(this, arguments);
+            };
+        })();
+    </script>
+
+    <script src="src/settings.js" charset="utf-8"></script>
+
+    <script type="text/javascript">
+        /* 桩函数：替代已移除的 ads.js 广告逻辑。
+           noAdGoToScene 负责真正启动游戏场景（原版由被 .gitignore 排除的 ads.js 实现） */
+        var showMyAds = function () { console.log("showMyAds stub"); };
+        var __sceneLaunched = false;
+        var noAdGoToScene = function () {
+            if (__sceneLaunched) return;
+            __sceneLaunched = true;
+            try {
+                var cfg = __require("GameConfig");
+                var sceneName = cfg.launchScene;
+                console.log("noAdGoToScene: launching", sceneName);
+                var hideLoading = function () {
+                    var lt = document.getElementById("loadingText");
+                    if (lt) { lt.style.display = "none"; }
+                    var sp = document.getElementById("splash");
+                    if (sp) { sp.style.display = "none"; }
+                };
+                cc.director.on(cc.Director.EVENT_AFTER_SCENE_LAUNCH, hideLoading);
+                cc.director.loadScene(sceneName, null, function () {
+                    cc.loader.onProgress = null;
+                    hideLoading();
+                    console.log("Success to load scene: " + sceneName);
+                });
+            } catch (e) {
+                console.error("noAdGoToScene failed:", e);
+            }
+        };
+    </script>
+
+    <script type="text/javascript">
+        var preloader;
+        var adCompleteFlag = false;
+        var resCompleteFlag = false;
+
+        var adEndComplete = false;
+        var resEndComplete = false;
+
+        judgeLanTitle();
+
+        function judgeLanTitle() {
+
+            //        console.log("window.navigator.language",window.navigator.language);
+
+            if (window.navigator.language == "zh-CN" || window.navigator.language == "zh-cn") {
+                document.title = "小游戏：合成大西瓜";
+            } else if (window.navigator.language == "zh-TW") {
+                document.title = "小遊戲：合成大西瓜";
+            } else if (window.navigator.language == "zh-HK") {
+                document.title = "小遊戲：合成大西瓜";
+            } else if (window.navigator.language == "ko-KR") {
+                document.title = "작은 놀이：큰 수박 을 합성 하 다";
+            } else if (window.navigator.language == "ja-JP") {
+                document.title = "ミニゲーム：合成スイカ";
+            } else if (window.navigator.language == "th-TH") {
+                document.title = "เกมเล็กๆ：แตงโมสังเคราะห์";
+            } else {
+                document.title = "Little game：Synthetic watermelon";
+            }
+
+
+        }
+
+        var loadintT = document.getElementById("loadingText");
+        var loadintGif = document.getElementById("loadingImg")
+        setTimeout(function() {
+            loadintGif.remove();
+            loadintT.style.display = ""
+            updateLabView(0.1);
+        }, 1 * 1000)
+
+        window.timer = null;
+        window.tempSeconds = 1;
+        window.loadData = {};
+        loadData.completedCount = 0;
+        loadData.totalCount = 0;
+
+        onload();
+
+        function onload() {
+            var winHeight = document.documentElement.clientHeight;
+            document.getElementById("canvasDiv").style.height = winHeight + "px";
+        };
+        window.onload = function() {
+            document.getElementById("block-Box").style.display = "none";
+        }
+
+        function updateLabView(t) {
+            if (timer != null) {
+                clearInterval(timer);
+            }
+            timer = setInterval(function() {
+                tempSeconds++;
+                actualTotal();
+                var loadintT = document.getElementById("loadingText")
+                if (!loadintT) {
+                    return;
+                }
+                loadintT.innerHTML = 'loading......' + parseInt(tempSeconds) + '%';
+
+                switch (tempSeconds) {
+                    case 20:
+                        updateLabView(0.2);
+                        break;
+                    case 40:
+                        updateLabView(0.3);
+                        break;
+                    case 60:
+                        updateLabView(0.4);
+                        break;
+                    case 96:
+                        updateLabView(5);
+                        break;
+                    case 97:
+                        updateLabView(10);
+                        break;
+                    case 98:
+                        updateLabView(50);
+                        break;
+                    case 99:
+                        updateLabView(100);
+                        break;
+                    default:
+                        if (tempSeconds >= 80 && tempSeconds < 96) {
+                            updateLabView(t + 0.1);
+                        }
+                        break;
+                }
+                if (tempSeconds > 100) {
+                    clearInterval(timer);
+                    tempSeconds = 100
+                    loadintT.innerHTML = 'loading......' + parseInt(tempSeconds) + '%';
+                }
+            }, t * 1000);
+        }
+
+        function actualTotal() {
+            var percent = parseInt(100 * loadData.completedCount / loadData.totalCount);
+            if (percent > tempSeconds && loadData.totalCount > 1) {
+                tempSeconds = percent;
+            }
+        }
+
+
+        /*setTimeout("ShowBannerAD()","2000");*/
+    </script>
+
+
+
+
+
+    <script src="src/settings.js" charset="utf-8"></script>
+    <script src="src/extraSettings.js" charset="utf-8"></script>
+
+    <script src="main.js" charset="utf-8"></script>
+
+
+    <script>
+        window.adsbygoogle = window.adsbygoogle || [];
+        const adBreak = function(o) {
+            adsbygoogle.push(o);
+        }
+    </script>
+
+
+    <script type="text/javascript">
+        (function() {
+            // open web debugger console
+            if (typeof VConsole !== 'undefined') {
+                window.vConsole = new VConsole();
+            }
+
+            var splash = document.getElementById('splash');
+            splash.style.display = 'block';
+
+
+            console.log("indexlTextTTTT");
+
+            var cocos2d = document.createElement('script');
+            cocos2d.async = true;
+            cocos2d.src = window._CCSettings.debug ? 'cocos2d-js.js' : 'cocos2d-js-min.js';
+
+            var engineLoaded = function() {
+                document.body.removeChild(cocos2d);
+                cocos2d.removeEventListener('load', engineLoaded, false);
+                window.boot();
+            };
+            cocos2d.addEventListener('load', engineLoaded, false);
+            document.body.appendChild(cocos2d);
+        })();
+    </script>
+
+
+
+
+</body>
+
+</html>

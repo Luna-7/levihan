@@ -1,0 +1,5 @@
+node_modules/
+.workbuddy/
+.DS_Store
+*.log
+.vercel

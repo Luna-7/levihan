@@ -1,0 +1,29 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "framework": "vite",
+  "routes": [
+    {
+      "src": "^/$",
+      "has": [{ "type": "host", "value": "admin.levihan.asia" }],
+      "dest": "/admin/index.html"
+    },
+    {
+      "src": "^/pixiv-artists\\.js$",
+      "has": [{ "type": "host", "value": "admin.levihan.asia" }],
+      "dest": "/admin/pixiv-artists.js"
+    },
+    {
+      "src": "^/manifest\\.webmanifest$",
+      "headers": { "Content-Type": "application/manifest+json" },
+      "continue": true
+    },
+    {
+      "src": "^/sw\\.js$",
+      "headers": { "Cache-Control": "no-cache, no-store, must-revalidate" },
+      "continue": true
+    },
+    { "handle": "filesystem" }
+  ]
+}

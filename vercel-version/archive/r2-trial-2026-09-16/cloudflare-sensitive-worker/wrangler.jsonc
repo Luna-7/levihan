@@ -1,0 +1,8 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "levihan-sensitive-upload",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-16",
+  "vars": { "VERIFY_URL": "https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/admin-upload" },
+  "r2_buckets": [{ "binding": "SENSITIVE_BUCKET", "bucket_name": "levihan-sensitive-works" }]
+}

@@ -1,0 +1,2 @@
+const tcb=require('@cloudbase/node-sdk');const app=tcb.init({env:tcb.SYMBOL_CURRENT_ENV});const db=app.database();
+exports.main=async event=>{const code=String(event.code||'').trim().toUpperCase();const row=(await db.collection('invite_codes').where({code,status:'unused'}).limit(1).get()).data[0];const valid=!!row&&new Date(row.expiresAt)>new Date();return{ok:true,valid,code:valid?code:null,creatorNickname:valid?row.creatorNickname:null};};

@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 190" width="100%" height="100%">
+  <defs>
+    <!-- Silver shield border gradient -->
+    <linearGradient id="shieldFrame" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="50%" stop-color="#D0D5DD" />
+      <stop offset="100%" stop-color="#98A2B3" />
+    </linearGradient>
+    <!-- Deep Survey Corps Cobalt Blue -->
+    <linearGradient id="blueWingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1D4ED8" />
+      <stop offset="60%" stop-color="#0F3894" />
+      <stop offset="100%" stop-color="#0B2361" />
+    </linearGradient>
+    <!-- White wing subtle shading -->
+    <linearGradient id="whiteWingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="70%" stop-color="#F2F4F7" />
+      <stop offset="100%" stop-color="#D0D5DD" />
+    </linearGradient>
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.4" />
+    </filter>
+  </defs>
+
+  <g filter="url(#badgeShadow)">
+    <!-- Outer Shield Frame -->
+    <path d="M 20,15 L 140,15 L 140,120 C 140,150 80,182 80,182 C 80,182 20,150 20,120 Z" 
+          fill="#344054" stroke="url(#shieldFrame)" stroke-width="4" stroke-linejoin="round" />
+    
+    <!-- Shield Inner Inset -->
+    <path d="M 26,21 L 134,21 L 134,118 C 134,144 80,174 80,174 C 80,174 26,144 26,118 Z" 
+          fill="#EAECF0" stroke="#98A2B3" stroke-width="2" />
+
+    <!-- Shield Quartering Lines (Four quadrants) -->
+    <rect x="29" y="24" width="49" height="66" fill="#D0D5DD" />
+    <rect x="82" y="24" width="49" height="66" fill="#EAECF0" />
+    <rect x="29" y="93" width="49" height="52" fill="#EAECF0" />
+    <rect x="82" y="93" width="49" height="52" fill="#D0D5DD" />
+
+    <line x1="80" y1="21" x2="80" y2="170" stroke="#FFFFFF" stroke-width="3" />
+    <line x1="26" y1="91" x2="134" y2="91" stroke="#FFFFFF" stroke-width="3" />
+
+    <!-- Left Wing (Cobalt Blue Feathers) -->
+    <g fill="url(#blueWingGrad)" stroke="#091E47" stroke-width="1.8" stroke-linejoin="round">
+      <!-- Feather 1 (Top) -->
+      <polygon points="40,32 58,16 68,26 50,42" />
+      <!-- Feather 2 -->
+      <polygon points="34,44 54,28 66,38 46,54" />
+      <!-- Feather 3 -->
+      <polygon points="28,58 50,42 64,52 42,68" />
+      <!-- Feather 4 -->
+      <polygon points="22,72 46,56 62,68 38,84" />
+      <!-- Feather 5 -->
+      <polygon points="18,88 42,72 60,84 34,100" />
+      <!-- Feather 6 -->
+      <polygon points="16,104 40,88 58,102 32,118" />
+      <!-- Feather 7 -->
+      <polygon points="18,122 38,106 56,120 32,136" />
+      <!-- Feather 8 (Bottom hook) -->
+      <polygon points="24,140 40,126 56,140 36,154" />
+      <!-- Inner blue wing core feather spine -->
+      <polygon points="48,18 78,48 76,148 56,162 48,154" fill="#0B2361" />
+      <polygon points="52,24 74,48 72,138 56,150" fill="#1D4ED8" />
+    </g>
+
+    <!-- Right Wing (Pure White Feathers with metallic contrast) -->
+    <g fill="url(#whiteWingGrad)" stroke="#475467" stroke-width="1.8" stroke-linejoin="round">
+      <!-- Feather 1 (Top) -->
+      <polygon points="120,32 102,16 92,26 110,42" />
+      <!-- Feather 2 -->
+      <polygon points="126,44 106,28 94,38 114,54" />
+      <!-- Feather 3 -->
+      <polygon points="132,58 110,42 96,52 118,68" />
+      <!-- Feather 4 -->
+      <polygon points="138,72 114,56 98,68 122,84" />
+      <!-- Feather 5 -->
+      <polygon points="142,88 118,72 100,84 126,100" />
+      <!-- Feather 6 -->
+      <polygon points="144,104 120,88 102,102 128,118" />
+      <!-- Feather 7 -->
+      <polygon points="142,122 122,106 104,120 128,136" />
+      <!-- Feather 8 (Bottom hook extending out) -->
+      <polygon points="136,140 120,126 104,140 124,154" />
+      <!-- Inner white wing spine -->
+      <polygon points="112,18 82,48 84,148 104,162 112,154" fill="#E4E7EC" />
+      <polygon points="108,24 86,48 88,138 104,150" fill="#FFFFFF" />
+    </g>
+
+    <!-- Feather Highlights -->
+    <g stroke="#93C5FD" stroke-width="1.2" stroke-linecap="round" fill="none">
+      <line x1="44" y1="34" x2="62" y2="24" />
+      <line x1="38" y1="46" x2="58" y2="36" />
+      <line x1="32" y1="60" x2="54" y2="50" />
+      <line x1="26" y1="74" x2="50" y2="64" />
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="100%" height="100%">
+  <defs>
+    <filter id="plantShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <g filter="url(#plantShadow)">
+    <!-- Tall Slender Flower Stems -->
+    <!-- Left Stem -->
+    <rect x="60" y="28" width="6" height="68" fill="#4B8B2E" stroke="#14300E" stroke-width="1.8" />
+    <!-- Right Stem -->
+    <rect x="94" y="38" width="6" height="58" fill="#4B8B2E" stroke="#14300E" stroke-width="1.8" />
+
+    <!-- Left Pink Flower Bud (Pixel tiered shape matching 联络.png) -->
+    <g>
+      <rect x="56" y="10" width="14" height="20" fill="#E86E9E" stroke="#14300E" stroke-width="2" rx="1" />
+      <rect x="58" y="12" width="6" height="8" fill="#F8B4CF" />
+      <rect x="58" y="24" width="10" height="4" fill="#992E5B" />
+      <!-- Calyx green under bud -->
+      <rect x="58" y="28" width="10" height="5" fill="#2E6B1B" stroke="#14300E" stroke-width="1.5" />
+    </g>
+
+    <!-- Right Pink Flower Bud -->
+    <g>
+      <rect x="90" y="20" width="14" height="20" fill="#E86E9E" stroke="#14300E" stroke-width="2" rx="1" />
+      <rect x="92" y="22" width="6" height="8" fill="#F8B4CF" />
+      <rect x="92" y="34" width="10" height="4" fill="#992E5B" />
+      <rect x="92" y="38" width="10" height="5" fill="#2E6B1B" stroke="#14300E" stroke-width="1.5" />
+    </g>
+
+    <!-- Clustered Stepped Pixel Green Leaves (matching 联络.png pixel grass bush) -->
+    <!-- Center Left Main Blade -->
+    <polygon points="56,70 70,45 80,75 66,135 52,130" fill="#75C232" stroke="#14300E" stroke-width="2" />
+    <polygon points="68,50 78,72 68,130 62,75" fill="#9EE85A" />
+
+    <!-- Center Right Main Blade -->
+    <polygon points="86,72 96,48 110,75 98,135 84,130" fill="#5AA826" stroke="#14300E" stroke-width="2" />
+    <polygon points="94,54 104,74 94,130 88,75" fill="#75C232" />
+
+    <!-- Far Left Stepped Blades -->
+    <polygon points="26,115 18,92 40,82 56,120 40,140" fill="#4B8B2E" stroke="#14300E" stroke-width="2" />
+    <polygon points="24,96 38,86 50,118 36,135" fill="#75C232" />
+
+    <polygon points="34,125 36,104 54,95 64,138" fill="#2E6B1B" stroke="#14300E" stroke-width="2" />
+
+    <!-- Far Right Stepped Blades -->
+    <polygon points="134,115 142,92 120,82 104,120 120,140" fill="#4B8B2E" stroke="#14300E" stroke-width="2" />
+    <polygon points="136,96 122,86 110,118 124,135" fill="#75C232" />
+
+    <polygon points="126,125 124,104 106,95 96,138" fill="#2E6B1B" stroke="#14300E" stroke-width="2" />
+
+    <!-- Bush Center Base Tufts -->
+    <polygon points="46,135 80,105 114,135 80,148" fill="#2E6B1B" stroke="#14300E" stroke-width="2" />
+    <polygon points="56,132 80,112 104,132 80,142" fill="#4B8B2E" />
+  </g>
+</svg>
