@@ -343,6 +343,10 @@ function normalizeBook(raw) {
   const warning = String(raw.warning || '').trim().slice(0, 100);
   if (warning) book.warning = warning;
 
+  // 敏感内容标记：只有前端显式传布尔值时才写入 —— 传 false 用于取消标记，缺省则保留原值。
+  // 站点依据它把本子导向 SecureComicReader（403 伪装页 + 双重解密），所以必须能显式清除。
+  if (typeof raw.secure === 'boolean') book.secure = raw.secure;
+
   // 只在给出合法值时写入；空值/0 必须忽略，否则前端 getCosPageUrl 的 `?? 2` 会拿到 0 而丢掉补零
   const padDigits = parseInt(raw.pagePadDigits, 10);
   if (Number.isFinite(padDigits) && padDigits >= 1 && padDigits <= 5 && padDigits !== 2) {

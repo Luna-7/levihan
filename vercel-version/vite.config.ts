@@ -85,6 +85,9 @@ export default defineConfig(({ mode }) => {
       workbox: {
         // Only the app shell is installed up front. Games and comics stay on demand.
         globPatterns: ['index.html', 'assets/**/*.{js,css}'],
+        // 加密阅读器（pdfjs-dist + crypto-js，约 414 KB）只服务「含有敏感元素」的本子，
+        // 且它本身就必须联网取密文，离线预缓存没有意义 —— 别让每个访客都在后台拖它。
+        globIgnores: ['assets/SecureComicReader-*.js'],
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/daxigua\//, /^\/save-hange\//, /^\/admin\//],
         cleanupOutdatedCaches: true,

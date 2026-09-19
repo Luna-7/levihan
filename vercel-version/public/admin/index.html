@@ -75,6 +75,16 @@
   .admin-page-head h2{margin:0 0 2px;font-size:17px}
   [data-admin-page].hide+.panel{margin-top:0}
   .category-select{cursor:pointer;border-color:var(--green-2);background:#FFFCF4;font-weight:700}
+  /* ---- 漫画上传页功能区左右切换 ---- */
+  .sub-switch{display:inline-flex;align-items:center;border:1.5px solid var(--green-2);border-radius:8px;
+              background:#FFFCF4;overflow:hidden;box-shadow:2px 2px 0 rgba(30,67,52,.12)}
+  .sub-arrow{border:0;background:transparent;color:var(--green-2);font-size:17px;line-height:1;
+             padding:8px 13px;cursor:pointer;font-weight:900}
+  .sub-arrow:hover:not(:disabled){background:#F1EADA}
+  .sub-arrow:active:not(:disabled){transform:translateY(1px)}
+  .sub-name{min-width:132px;text-align:center;font-weight:700;color:var(--ink);font-size:13px;
+            padding:8px 12px;border-left:1.5px solid var(--rule);border-right:1.5px solid var(--rule);
+            white-space:nowrap}
   .author-link-hint{min-height:18px;margin-top:3px}
   #bk-list{max-height:min(48vh,430px);overflow-y:auto;overscroll-behavior:contain;padding:2px 8px 2px 2px;
            scrollbar-width:thin;scrollbar-color:var(--green-2) #EFE8D6}
@@ -224,6 +234,36 @@
   .ed-tools .lb-t{font-size:11.5px;color:var(--ink-3);font-weight:700}
   .ed-hint{color:#D8CFBB;font-size:12px;text-align:center}
   .ed-thumb{width:54px;height:81px;object-fit:cover;border:1.5px solid var(--line);border-radius:4px;background:#fff}
+  /* ---- 工具箱（图片 / PDF 处理） ---- */
+  .tool-tabs{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1.5px dashed var(--rule);margin-bottom:16px}
+  .tool-tab{border-color:var(--line);background:#fff;color:var(--ink-2);font-size:12.5px;padding:6px 12px;white-space:nowrap}
+  .tool-tab:hover:not(:disabled){background:#F1EADA;color:var(--green-2)}
+  .tool-tab.active{background:var(--gold);border-color:var(--gold-2);color:#3A2A08;box-shadow:0 2px 6px rgba(183,121,31,.24)}
+  .tool-page{display:none}
+  .tool-page.active{display:block}
+  .tool-page h2{margin-top:0}
+  .tool-bar-text{min-height:18px;margin-top:6px;font-family:'VT323',monospace;font-size:13px;color:var(--ink-3);letter-spacing:.4px}
+  .tool-out{background:#FFF9EC!important;cursor:default;font-family:'VT323',monospace;font-size:14px}
+  .tool-preview{display:block;max-width:100%;max-height:340px;margin-top:12px;border:1.5px solid var(--line);
+                border-radius:6px;background:#fff}
+  .tool-file-name{min-height:17px;margin-top:4px;font-size:12px;color:var(--ink-3);
+                  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tool-file-name.has{color:var(--green-2);font-weight:700}
+  input[type=color]{width:64px;height:34px;padding:2px;border:1.5px solid var(--line);border-radius:6px;
+                    background:#fff;cursor:pointer}
+  /* ---- 工具箱同色系确认弹窗（替代浏览器原生 confirm） ---- */
+  .tk-modal{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:18px;
+            background:rgba(34,55,43,.55);animation:tkFade .14s ease-out}
+  @keyframes tkFade{from{opacity:0}to{opacity:1}}
+  .tk-modal-box{width:min(430px,100%);background:var(--paper);border:2px solid var(--green-2);border-radius:10px;
+                box-shadow:5px 5px 0 rgba(30,67,52,.22),inset 0 0 0 3px rgba(229,169,60,.18);padding:18px}
+  .tk-modal-box h3{margin:0 0 10px;display:flex;align-items:center;gap:8px;font-family:'DotGothic16',monospace;
+                   font-size:15px;color:var(--green-2)}
+  .tk-modal-box h3 .ico{width:24px;height:24px;flex:none;display:flex;align-items:center;justify-content:center;
+                        border-radius:50%;background:#FFF9EC;border:1.5px solid var(--gold-2);font-size:13px}
+  .tk-modal-box p{margin:0 0 16px;font-size:13px;line-height:1.75;color:var(--ink-2);white-space:pre-wrap}
+  .tk-modal-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+  .tk-modal-box button:focus{outline:none;box-shadow:0 0 0 3px rgba(30,67,52,.18)}
 </style>
 </head>
 <body data-page-node-id="3AGdYi6o1dC1vHPHJmaRyD">
@@ -272,17 +312,21 @@
       <button type="button" class="admin-tab" data-admin-tab="forum">🌳 餐厅论坛</button>
     </nav>
 
-    <div class="admin-page-head" data-admin-page="manga">
-      <h2>📚 漫画上传</h2><div class="muted">管理已收录漫画、作品信息与内页图片。</div>
+    <div class="row mode-switch" data-admin-page="manga" aria-label="功能区与作品分类选择">
+      <label>当前功能 <span class="req">*</span></label>
+      <div class="sub-switch" role="group" aria-label="功能区左右切换">
+        <button type="button" class="sub-arrow" id="f-sub-prev" aria-label="上一个功能">‹</button>
+        <span class="sub-name" id="f-sub-name">📚 漫画上传</span>
+        <button type="button" class="sub-arrow" id="f-sub-next" aria-label="下一个功能">›</button>
+      </div>
+      <span class="row" data-sub="upload" style="gap:8px"></span>
     </div>
-    <div class="row mode-switch" data-admin-page="manga" aria-label="作品分类选择">
-      <label for="f-category">作品类型 <span class="req">*</span></label>
-      <select id="f-category" class="category-select" aria-label="作品分类">
-        <option value="漫画本" selected>漫画本</option>
-        <option value="插画集">插画集</option>
-        <option value="商业志">商业志</option>
-      </select>
-    </div>
+    <!-- 作品类型选择器已按需求移除；上传接口仍需要 category 字段，保留隐藏默认值「漫画本」 -->
+    <select id="f-category" class="hide" aria-hidden="true" tabindex="-1">
+      <option value="漫画本" selected>漫画本</option>
+      <option value="插画集">插画集</option>
+      <option value="商业志">商业志</option>
+    </select>
 
     <div class="admin-page-head hide" data-admin-page="inbox"><h2>📬 联络收件箱</h2><div class="muted">处理站内来信与小说投稿。</div></div>
     <div class="panel hide" id="inbox-panel" data-admin-page="inbox">
@@ -363,8 +407,157 @@
     <div class="admin-page-head hide" data-admin-page="forum"><h2>🌳 餐厅论坛收录区</h2><div class="muted">展开帖子后可删除整帖或单条言论。</div></div>
     <div class="panel hide" id="forum-panel" data-admin-page="forum"><div class="spread"><h2>论坛帖子</h2><button class="btn-sm" id="forum-reload">↻ 刷新</button></div><div id="forum-admin-list"><p class="muted">加载中…</p></div><div class="msg" id="forum-msg"></div></div>
 
+    <!-- ================= 文件工具箱 ================= -->
+    <div class="admin-page-head hide" data-admin-page="manga" data-sub="toolkit">
+      <h2>🧰 文件工具箱</h2>
+      <div class="muted">群内资源处理：图片/文件转加密 PDF、PDF 拆图、加长白条、线条变色、文件名生成。全部在浏览器本地运算，不会上传到服务器。</div>
+    </div>
+    <div class="panel hide" id="toolkit-panel" data-admin-page="manga" data-sub="toolkit">
+      <div class="tool-tabs" id="tk-tabs" role="tablist" aria-label="工具切换">
+        <button type="button" class="tool-tab active" data-tool="pdf" role="tab">🖼 图片/文件转加密 PDF</button>
+        <button type="button" class="tool-tab" data-tool="split" role="tab">📄 PDF 转图片</button>
+        <button type="button" class="tool-tab" data-tool="strip" role="tab">⬜ 加长白条</button>
+        <button type="button" class="tool-tab" data-tool="recolor" role="tab">🎨 线条变色</button>
+        <button type="button" class="tool-tab" data-tool="rename" role="tab">🏷 复制命名</button>
+      </div>
+
+      <!-- ① 图片转加密 PDF -->
+      <div class="tool-page active" data-tool-page="pdf" role="tabpanel">
+        <h2><span class="n">1</span> 图片 / 文件转加密 PDF</h2>
+        <div class="grid">
+          <div class="f"><label for="tk-workTitle">作品名</label><input type="text" id="tk-workTitle" placeholder="必填，用于文件名"></div>
+          <div class="f"><label for="tk-author">原作者</label><input type="text" id="tk-author" placeholder="作者 / 社团"></div>
+          <div class="f"><label for="tk-source">来源</label>
+            <select id="tk-source"><option value="Web">Web</option><option value="群友分享实体本">群友分享实体本</option></select>
+          </div>
+          <div class="f hide" id="tk-friendWrap"><label for="tk-friendName">分享群友名称</label><input type="text" id="tk-friendName" placeholder="群友昵称"></div>
+          <div class="f"><label for="tk-translator">汉化</label><input type="text" id="tk-translator" placeholder="汉化组 / 译者"></div>
+          <div class="f"><label for="tk-typesetter">嵌字</label><input type="text" id="tk-typesetter" placeholder="嵌字"></div>
+        </div>
+        <div class="sw" style="margin-top:14px">
+          <input type="checkbox" id="tk-hasWarning"><label for="tk-hasWarning" style="font-weight:400">首页插入预警页（白底红字）</label>
+        </div>
+        <div class="f hide" id="tk-warningWrap" style="margin-top:10px">
+          <label for="tk-warningText">预警具体内容 <span class="tag">选填</span></label>
+          <input type="text" id="tk-warningText" placeholder="如：含血腥描写 / 强制情节">
+        </div>
+        <div class="f" style="margin-top:14px">
+          <label for="tk-imageFiles">上传图片 / PDF <span class="tag">可多选，按文件名自然排序</span></label>
+          <input type="file" id="tk-imageFiles" accept="image/*,.pdf,application/pdf" multiple>
+          <div class="tool-file-name" id="tk-imageFilesName">未选择任何文件</div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn-gold" id="tk-makePdf">生成加密 PDF</button>
+        </div>
+        <div class="bar"><i id="tk-pdf-bar"></i></div>
+        <div class="tool-bar-text" id="tk-pdf-bar-text"></div>
+        <div class="msg" id="tk-pdf-msg"></div>
+        <div class="note">生成物统一加口令 <b>levihan</b>，右下角浮水印标注来源与「土豆群内部资源，严禁外传，违者永久拉黑」。PDF 会先按页渲染成图再合并加密；一次选到多个 PDF（或图片与 PDF 混选）时，会先询问「合并为一份」还是「分别导出」。</div>
+      </div>
+
+      <!-- ② PDF 转图片 -->
+      <div class="tool-page" data-tool-page="split" role="tabpanel">
+        <h2><span class="n">2</span> PDF 转图片</h2>
+        <div class="f">
+          <label for="tk-pdfFile">上传 PDF <span class="tag">单文件，本地按页拆图</span></label>
+          <input type="file" id="tk-pdfFile" accept=".pdf,application/pdf">
+          <div class="tool-file-name" id="tk-pdfFileName">未选择任何文件</div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn-gold" id="tk-splitPdf">导出 JPG ZIP</button>
+        </div>
+        <div class="bar"><i id="tk-split-bar"></i></div>
+        <div class="tool-bar-text" id="tk-split-bar-text"></div>
+        <div class="msg" id="tk-split-msg"></div>
+        <div class="note">使用 pdf.js 逐页渲染（2 倍清晰度），按页码打包为 ZIP 下载。</div>
+      </div>
+
+      <!-- ③ 加长白条 -->
+      <div class="tool-page" data-tool-page="strip" role="tabpanel">
+        <h2><span class="n">3</span> 加长白条</h2>
+        <div class="f">
+          <label for="tk-stripFiles">上传图片 <span class="tag">可多选</span></label>
+          <input type="file" id="tk-stripFiles" accept="image/*" multiple>
+          <div class="tool-file-name" id="tk-stripFilesName">未选择任何文件</div>
+        </div>
+        <div class="grid" style="margin-top:12px">
+          <div class="f"><label for="tk-stripExport">导出方式</label>
+            <select id="tk-stripExport"><option value="单张长图">单张长图</option><option value="多图ZIP">多图 ZIP</option></select>
+          </div>
+        </div>
+        <div class="sw" style="margin-top:12px">
+          <input type="checkbox" id="tk-customWarning"><label for="tk-customWarning" style="font-weight:400">自定义预警文字</label>
+        </div>
+        <div class="f hide" id="tk-customWarningWrap" style="margin-top:10px">
+          <label for="tk-customWarningText">预警文字内容</label>
+          <input type="text" id="tk-customWarningText" placeholder="⚠️下有图片，请滑动">
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn-gold" id="tk-makeStrip">处理图片</button>
+        </div>
+        <div class="bar"><i id="tk-strip-bar"></i></div>
+        <div class="tool-bar-text" id="tk-strip-bar-text"></div>
+        <div class="msg" id="tk-strip-msg"></div>
+        <div class="note">每张图顶部自动补两张同比例白图，默认文字：⚠️下有图片，请滑动。</div>
+      </div>
+
+      <!-- ④ 线条变色 -->
+      <div class="tool-page" data-tool-page="recolor" role="tabpanel">
+        <h2><span class="n">4</span> 线条智能变色</h2>
+        <div class="f">
+          <label for="tk-lineartFiles">上传图片 / PDF <span class="tag">PDF 仅支持单文件</span></label>
+          <input type="file" id="tk-lineartFiles" accept="image/*,.pdf,application/pdf" multiple>
+          <div class="tool-file-name" id="tk-lineartFilesName">未选择任何文件</div>
+        </div>
+        <div class="grid" style="margin-top:12px">
+          <div class="f"><label for="tk-lineartColor">目标颜色</label>
+            <div class="row" style="gap:8px">
+              <input type="color" id="tk-lineartColor" value="#1B4332">
+              <span class="muted" id="tk-colorHex" style="font-family:'VT323',monospace">#1B4332</span>
+            </div>
+          </div>
+          <div class="f"><label for="tk-lineartThreshold">识别阈值 <span class="tag">亮度低于此值视为线条，20–255</span></label>
+            <input type="number" id="tk-lineartThreshold" min="20" max="255" step="5" value="200">
+          </div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn-gold" id="tk-processLineart">处理</button>
+        </div>
+        <div class="bar"><i id="tk-lineart-bar"></i></div>
+        <div class="tool-bar-text" id="tk-lineart-bar-text"></div>
+        <div class="msg" id="tk-lineart-msg"></div>
+        <img id="tk-lineartPreview" class="tool-preview hide" alt="线条变色结果预览">
+      </div>
+
+      <!-- ⑤ 文件名生成 -->
+      <div class="tool-page" data-tool-page="rename" role="tabpanel">
+        <h2><span class="n">5</span> 文件名生成</h2>
+        <div class="sw">
+          <input type="checkbox" id="tk-renameHasWarning"><label for="tk-renameHasWarning" style="font-weight:400">含预警（前缀加 [预警]）</label>
+        </div>
+        <div class="grid" style="margin-top:12px">
+          <div class="f"><label for="tk-renameTitle">作品名</label><input type="text" id="tk-renameTitle" placeholder="作品名"></div>
+          <div class="f"><label for="tk-renameAuthor">原作者</label><input type="text" id="tk-renameAuthor" placeholder="作者 / 社团"></div>
+          <div class="f"><label for="tk-renameTranslator">汉化</label><input type="text" id="tk-renameTranslator" placeholder="汉化组 / 译者"></div>
+          <div class="f"><label for="tk-renameSource">来源</label>
+            <select id="tk-renameSource"><option value="群友分享实体本">群友分享实体本</option><option value="Web">Web</option></select>
+          </div>
+          <div class="f" id="tk-renameFriendWrap"><label for="tk-renameFriendName">分享群友名称</label><input type="text" id="tk-renameFriendName" placeholder="群友昵称"></div>
+        </div>
+        <div class="f" style="margin-top:14px">
+          <label for="tk-filenamePreview">文件名预览 <span class="tag">随输入自动生成，可手动微调后复制</span></label>
+          <input type="text" id="tk-filenamePreview" class="tool-out" readonly>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn-gold" id="tk-copyFilename">📋 点击复制</button>
+        </div>
+        <div class="msg" id="tk-copy-msg"></div>
+      </div>
+
+    </div>
+
     <!-- 已收录作品 -->
-    <div class="panel" id="bk-panel" data-admin-page="manga" data-page-node-id="6gFnUcCwsrfARsrivblWLQ">
+    <div class="panel" id="bk-panel" data-admin-page="manga" data-sub="upload" data-page-node-id="6gFnUcCwsrfARsrivblWLQ">
       <div class="spread" style="margin-bottom:12px" data-page-node-id="FiviVc5TPEkFHxMS2uUaHo">
         <h2 style="margin:0" data-page-node-id="IYpnDIkGBPv287jygxdrEe"><span class="n" data-page-node-id="ytF97SP8ofKVIXvoVagowv">A</span> 已收录作品 <span class="muted" id="bk-count" data-page-node-id="PxWTykMMoRUWZ9Gw9sLeNG"></span></h2>
         <button class="btn-sm" id="btn-reload" data-page-node-id="mMzk8Q9VnoXKsVSw7LCjfl">↻ 刷新列表</button>
@@ -373,7 +566,7 @@
     </div>
 
     <!-- 作品信息 -->
-    <div class="panel" id="book-panel" data-admin-page="manga" data-page-node-id="WkOpGAVJle1SiWlCSxB1Tf">
+    <div class="panel" id="book-panel" data-admin-page="manga" data-sub="upload" data-page-node-id="WkOpGAVJle1SiWlCSxB1Tf">
       <h2 data-page-node-id="9zoT8ZxdW7rMI7AB7er5km"><span class="n" data-page-node-id="fv7rRNqfgA5AtV8daZAdV6">B</span> 作品信息 <span class="muted" id="mode-hint" data-page-node-id="tKYFWY2wJHGsxSghcUxoUU">（新建）</span></h2>
 
       <div class="grid" data-page-node-id="qaHDO5ECP0FQrvWTvK0pLW">
@@ -464,7 +657,7 @@
     </div>
 
     <!-- 上传图片 -->
-    <div class="panel" id="images-panel" data-admin-page="manga" data-page-node-id="vJDBThRpWJCVsaxuGJzieD">
+    <div class="panel" id="images-panel" data-admin-page="manga" data-sub="upload" data-page-node-id="vJDBThRpWJCVsaxuGJzieD">
       <div class="spread" style="margin-bottom:12px" data-page-node-id="Qt9bTFg8kOhwp75yNGQlmU">
         <h2 style="margin:0" data-page-node-id="4IcfHIynEa2ZJNDS2hrHGS"><span class="n" data-page-node-id="nNzGdLNojMdoBIO9fjRTHn">C</span> 内页图片 <span class="muted" id="files-count" data-page-node-id="Mkm0h5T7z5gy1Pk90mbuDE">未选择</span></h2>
         <div class="row" style="gap:8px" data-page-node-id="8RuKymaLM1RnXSi3kH2GbH">
@@ -488,6 +681,38 @@
           <input type="range" id="opt-q" min="60" max="95" value="85" style="width:90px" data-page-node-id="Z9ovsnbWotmjrznb6L89fL">
           <span class="muted" id="q-val" style="font-family:'VT323',monospace;font-size:15px" data-page-node-id="SdgavqMEsfOGXk70cEbLFW">85</span>
         </label>
+      </div>
+
+      <!-- 敏感内容开关：勾选后整条上传流程切换为「本地合并 PDF → AES-256-CBC 深度加密 → 伪装 .txt → 直传 COS」 -->
+      <div class="row" style="margin-top:10px;gap:14px">
+        <label class="sw"><input type="checkbox" id="opt-secure"> 🔒 含有敏感元素（深度加密后上传）</label>
+      </div>
+      <p class="muted" id="secure-hint" style="margin:8px 0 0">未勾选时按普通图片流程上传（每张一个文件，站点可直接预览）。</p>
+
+      <!-- 敏感本专用封面：单独一张、不参与加密。
+           密文里没有可读图片，前台卡片要有封面只能另存一张公开图，
+           所以它走普通 upload 通道，落到 {ID}/cover.<ext>，前台按 coverFile 直接读。 -->
+      <div id="secure-cover-box" class="hide" style="margin-top:14px;border:1.5px dashed var(--line);border-radius:10px;padding:14px;background:var(--card)">
+        <div class="spread" style="margin-bottom:10px">
+          <label style="margin:0;font-weight:700">🖼 敏感本封面 <span class="tag">单独上传 · 不加密 · 前台卡片显示</span></label>
+          <button class="btn-sm" id="secure-cover-remove" type="button">移除封面</button>
+        </div>
+
+        <div id="secure-cover-drop" class="drop" style="padding:16px 12px">
+          <div style="font-size:22px">🖼</div>
+          <div style="font-weight:700;color:var(--ink);margin-top:4px">把封面图拖到这里，或点击选择</div>
+          <div class="muted" style="margin-top:4px">jpg / png / webp · 建议竖版 2:3 · 单张 ≤ 4MB · <b>该图公开可访问</b></div>
+          <input type="file" id="secure-cover-picker" accept="image/*" class="hide">
+        </div>
+
+        <div id="secure-cover-info" class="hide" style="margin-top:10px;display:flex;gap:12px;align-items:flex-start">
+          <img id="secure-cover-thumb" alt="封面预览" style="width:92px;aspect-ratio:2/3;object-fit:cover;border:1.5px solid var(--line);border-radius:6px;background:#FAF5E8">
+          <div class="muted" style="line-height:1.8;min-width:0">
+            <div id="secure-cover-name" style="color:var(--ink);word-break:break-all"></div>
+            <div id="secure-cover-key" style="font-family:'VT323',monospace;font-size:15px"></div>
+            <div style="color:var(--gold-2);margin-top:2px">⚠ 封面不加密 —— 拿到地址的任何人都会看到这张图；内页仍是密文。别把敏感画面放封面。</div>
+          </div>
+        </div>
       </div>
 
       <div class="bar" data-page-node-id="VvdQqc8yBeeWXA4cAnWY50"><i id="bar" data-page-node-id="oemAFl6e3eDGCC3a9Auc2V"></i></div>
@@ -617,7 +842,15 @@
   </div>
 </div>
 
+<!-- 工具箱依赖：jsPDF（加密 PDF）/ pdf.js（拆页）/ JSZip（打包），仅在「文件工具箱」用到 -->
+<script src="https://cdn.staticfile.net/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.staticfile.net/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.staticfile.net/jszip/3.10.1/jszip.min.js"></script>
 <script src="./pixiv-artists.js"></script>
+<script src="./tools.js"></script>
+<!-- cos-js-sdk-v5：浏览器直传 COS 用。加载失败不影响页面，secure-upload.js 会自动降级为中转上传 -->
+<script src="https://cdn.jsdelivr.net/npm/cos-js-sdk-v5@1.8.7/dist/cos-js-sdk-v5.min.js"></script>
+<script src="./secure-upload.js"></script>
 <script>
 'use strict';
 /* ============ 配置 ============ */
@@ -758,8 +991,11 @@ function syncCategory(){
 
 var activeAdminPage = 'manga';
 function switchAdminPage(page, updateHash){
-  var allowed = ['manga','novel','announcement','inbox','authors','forum'];
+  var allowed = ['manga','novel','announcement','inbox','authors','forum','toolkit'];
   if (allowed.indexOf(page) < 0) page = 'manga';
+  // 文件工具箱已并入「漫画上传」页的功能区下拉，#admin-toolkit 仍可直达
+  var sub = 'upload';
+  if (page === 'toolkit') { page = 'manga'; sub = 'toolkit'; }
   activeAdminPage = page;
   document.querySelectorAll('[data-admin-page]').forEach(function(el){
     el.classList.toggle('hide', el.getAttribute('data-admin-page') !== page);
@@ -768,9 +1004,33 @@ function switchAdminPage(page, updateHash){
     var on = tab.getAttribute('data-admin-tab') === page;
     tab.classList.toggle('active', on); tab.setAttribute('aria-selected', on ? 'true' : 'false');
   });
-  if (updateHash !== false) history.replaceState(null, '', '#admin-' + page);
+  setMangaSub(sub, false);
+  if (updateHash !== false) history.replaceState(null, '', '#admin-' + (sub === 'toolkit' ? 'toolkit' : page));
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+/* ===== 漫画上传页内的功能区左右切换：upload（漫画上传）⇄ toolkit（文件工具箱） ===== */
+var mangaSub = 'upload';
+var MANGA_SUBS = ['upload', 'toolkit'];
+var MANGA_SUB_NAMES = { upload: '📚 漫画上传', toolkit: '🧰 文件工具箱' };
+function setMangaSub(sub, updateHash){
+  mangaSub = sub === 'toolkit' ? 'toolkit' : 'upload';
+  document.querySelectorAll('[data-sub]').forEach(function(el){
+    el.classList.toggle('hide', el.getAttribute('data-sub') !== mangaSub);
+  });
+  var nameEl = $('f-sub-name');
+  if (nameEl) nameEl.textContent = MANGA_SUB_NAMES[mangaSub];
+  if (updateHash !== false) history.replaceState(null, '', '#admin-' + (mangaSub === 'toolkit' ? 'toolkit' : 'manga'));
+}
+(function(){
+  function step(delta){
+    var idx = MANGA_SUBS.indexOf(mangaSub);
+    idx = (idx + delta + MANGA_SUBS.length) % MANGA_SUBS.length;
+    setMangaSub(MANGA_SUBS[idx]);
+  }
+  if ($('f-sub-prev')) $('f-sub-prev').addEventListener('click', function(){ step(-1); });
+  if ($('f-sub-next')) $('f-sub-next').addEventListener('click', function(){ step(1); });
+})();
 document.querySelector('.admin-tabs').addEventListener('click', function(e){
   var tab = e.target.closest('[data-admin-tab]');
   if (tab) switchAdminPage(tab.getAttribute('data-admin-tab'));
@@ -942,7 +1202,9 @@ function loadBooks(){
         '<img src="' + esc(cover) + '" alt="" loading="lazy" onerror="this.style.opacity=.25">' +
         '<div class="info">' +
           '<div class="row" style="gap:8px"><span class="id">' + esc(b.id) + '</span>' +
-          '<span class="t">' + esc(b.titleZh) + '</span></div>' +
+          '<span class="t">' + esc(b.titleZh) + '</span>' +
+          (b.secure ? '<span class="tag" style="background:#7A1F1F;color:#F6E7C1;border-color:#7A1F1F">🔒 含有敏感元素</span>' : '') +
+          '</div>' +
           '<div class="muted">' + esc(b.circle || '—') + ' · ' + (b.pages || 0) + ' 页' +
             (b.tags && b.tags.length ? ' · ' + b.tags.map(esc).join(' / ') : '') + '</div>' +
         '</div>' +
@@ -1012,6 +1274,7 @@ function fillForm(b){
   $('f-pagePrefix').value = b.pagePrefix || '';
   $('f-pagePadDigits').value = b.pagePadDigits && b.pagePadDigits !== 2 ? b.pagePadDigits : '';
   $('f-coverFile').value = b.coverFile && b.coverFile !== 'image01.webp' ? b.coverFile : '';
+  coverFileWritten = '';   // 载入的记录值不是本控件写的，别让「移除封面」误清它
   $('f-warn-on').checked = !!b.warning;
   $('f-warning').value = b.warning || '';
   syncWarn();
@@ -1035,6 +1298,8 @@ function resetForm(){
   $('f-warning').value = '';
   syncWarn();
   clearFiles();
+  // 表单重置也把待传封面丢掉：不清的话下一次上传会带着上一本的封面
+  clearSecureCover(true);
 }
 
 /* ============ 在线小说（D 面板） ============ */
@@ -1194,14 +1459,23 @@ $('nv-list').addEventListener('click', function(e){
   if (f.originalUrl && f.originalUrl !== f.url) { try { URL.revokeObjectURL(f.originalUrl); } catch(e){} }
 }
 
+// PDF 在相册里没有可用的 <img> 缩略图，用内联 SVG 占位，避免出现破图
+var PDF_THUMB = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="200"><rect width="160" height="200" fill="#f4efe4" stroke="#c9bfa6"/><text x="80" y="112" font-size="54" text-anchor="middle">PDF</text></svg>'
+);
+
 function addFiles(list){
   var incoming = Array.prototype.slice.call(list || []);
   incoming.sort(function(a, b){ return naturalSort(a.name, b.name); });
   incoming.forEach(function(f){
-    if (!/^image\//.test(f.type) && !/\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(f.name)) return;
+    var isPdf = /^application\/pdf$/i.test(f.type || '') || /\.pdf$/i.test(f.name || '');
+    // PDF 只有「深度加密」流程能处理；普通流程只收图片，放进来会在转码阶段才炸
+    if (isPdf) { if (!isSecureMode()) return; }
+    else if (!/^image\//.test(f.type) && !/\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(f.name)) return;
+
     files.push({
       file: f, originalFile: f,
-      url: URL.createObjectURL(f), originalUrl: URL.createObjectURL(f),
+      url: isPdf ? PDF_THUMB : URL.createObjectURL(f), originalUrl: isPdf ? PDF_THUMB : URL.createObjectURL(f),
       status: 'idle', err: '', name: f.name,
       edited: false, op: null
     });
@@ -1273,6 +1547,7 @@ function syncPages(){
   if (files.length) $('f-pages').value = files.length;
   var id = $('f-id').value.trim();
   if (id && !$('f-bookFolder').value.trim()) $('f-bookFolder').placeholder = id;
+  if (secureCover) renderSecureCover();   // 封面「入库地址」跟着 ID 变
   syncButtons();
 }
 
@@ -1543,6 +1818,236 @@ $('author-export').onclick = function(){
   a.remove();
 };
 
+/* ============ 敏感内容：深度加密 → 伪装 .txt → 直传 COS ============ */
+// 密码学与上传细节全部收在 secure-upload.js 里；这里只负责把表单、进度条、归档记录串起来。
+if (window.LeVihanVault) {
+  LeVihanVault.configure({
+    apiEndpoint: FN_URL,
+    getToken: function(){ return token; }
+  });
+}
+
+/* ============ 敏感本封面（单独一张，不参与加密） ============ */
+/* 为什么单独传：内页被合进 PDF 再整体加密，密文里没有任何可读图片，
+   前台卡片要有封面就只能另存一张公开图 —— 它走普通 upload 通道，
+   固定命名 {ID}/cover.<ext>，前台 getCoverUrl() 按 coverFile 直接读 CDN。 */
+var SECURE_COVER_STEM = 'cover';
+var secureCover = null;        // { file, url, name, byteSize, uploadedName }
+var coverFileWritten = '';     // 上一次由本控件写进 #f-coverFile 的值
+
+function coverExt(name){
+  var m = String(name || '').match(/\.(webp|jpe?g|png|gif|avif)$/i);
+  return m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'webp';
+}
+/** 固定文件名：重传同一本时天然覆盖旧封面，桶里不会堆垃圾 */
+function secureCoverName(name){
+  return SECURE_COVER_STEM + '.' + coverExt(name);
+}
+/** 把封面名同步进「封面文件」字段；只在「字段里是我们自己写的值」时才回退，不踩管理员手填的内容 */
+function syncCoverFileField(){
+  var f = $('f-coverFile');
+  if (!f) return;
+  var next = secureCover ? secureCoverName(secureCover.name) : '';
+  if (next) { f.value = next; coverFileWritten = next; return; }
+  if (f.value.trim() && f.value.trim() === coverFileWritten) f.value = '';
+  coverFileWritten = '';
+}
+
+function setSecureCover(file){
+  if (!file) return;
+  var isImg = /^image\//.test(file.type || '') || /\.(jpe?g|png|webp|gif|avif)$/i.test(file.name || '');
+  if (!isImg) { show($('main-msg'), 'err', '封面只支持 jpg / png / webp / gif / avif。'); return; }
+  if (file.size > envMax) {
+    show($('main-msg'), 'err', '封面 ' + fmtSize(file.size) + '，超过 ' + fmtSize(envMax) + ' 上限，压缩后再传。');
+    return;
+  }
+  clearSecureCover(true);
+  secureCover = { file:file, url:URL.createObjectURL(file), name:file.name, byteSize:file.size, uploadedName:'' };
+  hide($('main-msg'));
+  renderSecureCover();
+}
+
+/** keepMsg=true 用于「换一张封面」的中途清理，避免把上一条提示也抹掉 */
+function clearSecureCover(keepMsg){
+  if (secureCover && secureCover.url) URL.revokeObjectURL(secureCover.url);
+  secureCover = null;
+  if ($('secure-cover-picker')) $('secure-cover-picker').value = '';
+  renderSecureCover();
+  if (!keepMsg) hide($('main-msg'));
+}
+
+function renderSecureCover(){
+  var has = !!secureCover;
+  var info = $('secure-cover-info');
+  if (info) info.classList.toggle('hide', !has);
+  if ($('secure-cover-thumb')) $('secure-cover-thumb').src = has ? secureCover.url : '';
+  if ($('secure-cover-name')) {
+    $('secure-cover-name').textContent = has
+      ? '已选：' + secureCover.name + '（' + fmtSize(secureCover.byteSize) + '）'
+      : '';
+  }
+  syncCoverFileField();
+  if ($('secure-cover-key')) {
+    var id = ($('f-id').value || '').trim() || 'lh-???';
+    $('secure-cover-key').textContent = has
+      ? (secureCover.uploadedName
+          ? '已入库：' + id + '/' + secureCover.uploadedName
+          : '入库地址：' + id + '/' + secureCoverName(secureCover.name))
+      : '';
+  }
+  syncButtons();
+}
+
+function isSecureMode(){ return !!($('opt-secure') && $('opt-secure').checked); }
+
+// 勾选状态会同时改变按钮文案、拖拽区说明与文件选择器的 accept —— 让管理员点之前就知道会发生什么
+function refreshSecureUI(){
+  var on = isSecureMode();
+
+  if ($('secure-hint')) {
+    $('secure-hint').textContent = on
+      ? '🔒 已开启深度加密：图片先在本地按文件名顺序合并成 PDF，再用 AES-256-CBC 加密、Base64 伪装成 .txt 后上传；COS 上无法直接预览。'
+      : '未勾选时按普通图片流程上传（每张一个文件，站点可直接预览）。';
+  }
+
+  var btn = $('btn-upload');
+  if (btn) btn.textContent = on ? '🔒 加密上传并发布' : '🚀 上传并发布';
+
+  // 加密流程不经过 WebP 转码 / 画质压缩，把这两项视觉上置灰，避免误解
+  if ($('opt-webp') && $('opt-webp').parentNode) $('opt-webp').parentNode.style.opacity = on ? '0.45' : '';
+
+  if ($('picker')) $('picker').accept = on ? 'image/*,application/pdf' : 'image/*';
+  var dropHint = $('drop') && $('drop').querySelector('.muted');
+  if (dropHint) {
+    dropHint.textContent = on
+      ? '支持多张图片（按文件名顺序在本地合并成 PDF），或直接拖入一个 PDF 文件'
+      : '支持 jpg / png / webp，将按顺序自动命名为 image01、image02…';
+  }
+
+  // 封面控件只在敏感模式下出现。取消勾选即丢弃这次选的封面（已传上桶的图不会删，
+  // 重新勾选后重传会覆盖同名文件）—— 免得留下一个指向不存在文件的 coverFile。
+  var coverBox = $('secure-cover-box');
+  if (coverBox) coverBox.classList.toggle('hide', !on);
+  if (!on && secureCover) clearSecureCover(true);
+  renderSecureCover();
+}
+
+// 把流水线的阶段进度映射到页面已有的进度条与文案
+function secureProgress(info){
+  if (!info) return;
+  var pct = typeof info.ratio === 'number' ? Math.round(Math.max(0, Math.min(1, info.ratio)) * 100) : 0;
+  $('bar').style.width = pct + '%';
+  $('prog-text').textContent = info.text || '';
+}
+
+/**
+ * 敏感本封面的上传。走的是普通 upload 通道（明文图片），不是 COS 直传、也不进加密流水线。
+ * 能转 WebP 就转（卡片首屏图，越小越好），浏览器不支持时原样上传。
+ * @returns {Promise<string|null>} 落库的文件名，未选封面时为 null
+ */
+function uploadSecureCover(bookId){
+  if (!secureCover) return Promise.resolve(null);
+  var file = secureCover.file;
+  $('prog-text').textContent = '上传封面（不加密）…';
+  return toWebp(file, 0.85)
+    .catch(function(){ return { blob:file, name:file.name }; })   // 无法编 WebP 时原样传
+    .then(function(r){
+      var blob = r.blob || file;
+      if (blob.size > envMax) throw new Error('封面转码后仍超过 ' + fmtSize(envMax));
+      var name = secureCoverName(r.name || file.name);
+      var ext = name.split('.').pop();
+      return toBase64(blob).then(function(b64){
+        return api({
+          action:'upload', bookId:bookId, fileName:name,
+          dataBase64:b64,
+          contentType: blob.type || ('image/' + (ext === 'jpg' ? 'jpeg' : ext))
+        });
+      }).then(function(){
+        secureCover.uploadedName = name;
+        renderSecureCover();
+        return name;
+      });
+    });
+}
+
+/**
+ * 加密直传主流程。界面上仍然只有一个「上传并发布」按钮，
+ * 是否走这条路完全由「含有敏感元素」复选框决定（见 uploadAll）。
+ */
+function handleSecureUpload(){
+  if (LOCAL_PREVIEW) { show($('main-msg'), 'err', '本地预览模式不连云端，深度加密上传请在正式站点操作。'); return; }
+  if (!window.LeVihanVault) { show($('main-msg'), 'err', 'secure-upload.js 未加载，无法执行深度加密。'); return; }
+
+  var form = readForm();
+  if (!validate(form, false)) return;
+  if (!files.length) { show($('main-msg'), 'err', '加密上传需要先选择图片或 PDF。'); return; }
+
+  var sources = files.map(function(f){ return f.file; }).filter(Boolean);
+  hide($('main-msg'));
+  $('bar').style.width = '0%';
+  $('prog-text').textContent = '准备深度加密…';
+  setBusy(true);
+
+  // ① 先传封面：明文、体积小、失败代价低。顺序反过来的话，密文传完才发现封面挂了，
+  //    归档里就会留下一个指向不存在文件的 coverFile。
+  uploadSecureCover(form.id)
+    .then(function(coverName){
+      if (coverName) form.coverFile = coverName;
+      return LeVihanVault.handleComicUpload(sources, { bookId: form.id, onProgress: secureProgress });
+    })
+    .then(function(result){
+      // 密文已经落在 COS 上。归档记录写不写、由管理员当场决定：
+      // 站点阅读端目前还没有「.txt 密文 → 解密 → 渲染」的分支，写早了会看到空内页。
+      var coverLine = form.coverFile
+        ? '封面：' + form.coverFile + '（公开可读，前台卡片用它）\n'
+        : '⚠ 未上传封面：站点卡片只会显示「资源隔离」占位图。\n';
+      var writeArchive = confirm(
+        '✅ 深度加密文件已上传\n' +
+        'Key：' + result.key + '\n' +
+        coverLine +
+        '体积：PDF ' + fmtSize(result.bytes.source) + ' → 密文 ' + fmtSize(result.bytes.cipher) +
+        '（通道 ' + result.channel + '，耗时 ' + (result.elapsedMs / 1000).toFixed(1) + 's）\n\n' +
+        '是否同时写入归档记录？\n' +
+        '注意：站点阅读端尚未接解密分支，写入后这本的内页会暂时显示为空。'
+      );
+
+      var after = writeArchive
+        ? api({ action:'publish', book: Object.assign({}, form, {
+            // 图片合并时用实际张数；直接传 PDF 时 pageCount 为 null，沿用管理员填的「总页数」
+            pages: result.pageCount || form.pages,
+            bookFolder: form.bookFolder || form.id,
+            // 站点据此把本子导向 403 伪装阅读器；键存在页面才会显示「🔒 含有敏感元素」
+            secure: true
+          }) }).then(function(d){
+            show($('main-msg'), 'ok',
+              '🔒 加密上传并发布成功：' + form.id + ' · ' + form.titleZh + '（归档共 ' + d.count + ' 本）\n' +
+              '密文 Key：' + result.key + '\n' +
+              (form.coverFile ? '封面：' + form.coverFile : '封面：未上传（卡片显示隔离占位图）') + '\n' +
+              '阅读端上线前，请先用 LeVihanVault.decryptVaultToPdfBlob() 接好解密分支。'
+            );
+            resetForm();
+            loadBooks();
+            loadAuthorLib();
+          })
+        : Promise.resolve().then(function(){
+            show($('main-msg'), 'ok',
+              '🔒 密文已上传，未写入归档。\n密文 Key：' + result.key +
+              (form.coverFile ? '\n封面：' + form.coverFile : '') + '\n（这条 Key 请自行留存）'
+            );
+          });
+
+      return after.then(function(){
+        // 无论是否入库，都把完整结果留一份在控制台，便于排查与手工复核
+        console.log('[LeVihanVault] 加密上传结果', result);
+      });
+    })
+    .catch(function(err){
+      if (onAuthFail(err)) return;
+      show($('main-msg'), 'err', '✗ 深度加密上传失败：' + (err.message || String(err)));
+    })
+    .then(function(){ setBusy(false); });
+}
+
 /* ============ 上传主流程 ============ */
 function setBusy(on){
   ['btn-upload','btn-publish-only','btn-logout','btn-reload','btn-nextid','btn-clear','btn-sort'].forEach(function(id){
@@ -1552,6 +2057,9 @@ function setBusy(on){
 }
 
 function uploadAll(){
+  // 勾选了「含有敏感元素」就整条切换到深度加密直传，不再走下面的普通图片流程
+  if (isSecureMode()) { handleSecureUpload(); return; }
+
   var form = readForm();
   if (!validate(form, false)) return;
 
@@ -1619,6 +2127,9 @@ function uploadAll(){
     book.bookFolder = form.bookFolder || form.id;
     book.pageFiles = prepared.map(function(p, i){ return pageName(i, pad, prefix, p && p.name); });
     book.coverFile = form.coverFile || pageName(0, pad, prefix, prepared[0] && prepared[0].name);
+    // 走这条路径说明「含有敏感元素」没勾选：内页已被替换成普通图片，
+    // 必须显式把标记清成 false，否则站点会拿着旧的 secure 标记去解一批根本不在的密文。
+    book.secure = false;
     return api({ action:'publish', book: book }).then(function(d){
       show($('main-msg'), 'ok',
         '✅ 发布成功：' + book.id + ' · ' + book.titleZh + '（共 ' + d.count + ' 本）\n' +
@@ -2241,6 +2752,24 @@ $('picker').onchange = function(e){ addFiles(e.target.files); e.target.value = '
 $('drop').addEventListener('drop', function(e){
   if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
 });
+
+/* ---- 敏感本封面：点选 / 拖入 / 移除（单张，不进 files 列表） ---- */
+$('secure-cover-drop').onclick = function(){ $('secure-cover-picker').click(); };
+$('secure-cover-picker').onchange = function(e){
+  if (e.target.files && e.target.files[0]) setSecureCover(e.target.files[0]);
+  e.target.value = '';
+};
+['dragenter','dragover'].forEach(function(ev){
+  $('secure-cover-drop').addEventListener(ev, function(e){ e.preventDefault(); $('secure-cover-drop').classList.add('over'); });
+});
+['dragleave','drop'].forEach(function(ev){
+  $('secure-cover-drop').addEventListener(ev, function(e){ e.preventDefault(); $('secure-cover-drop').classList.remove('over'); });
+});
+$('secure-cover-drop').addEventListener('drop', function(e){
+  var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) setSecureCover(f);
+});
+$('secure-cover-remove').onclick = function(){ clearSecureCover(); };
 $('files').addEventListener('click', function(e){
   var b = e.target.closest('button');
   if (!b) return;
@@ -2325,6 +2854,8 @@ $('btn-sort').onclick = function(){
   renderFiles();
 };
 $('opt-q').oninput = function(){ $('q-val').textContent = $('opt-q').value; };
+$('opt-secure').onchange = refreshSecureUI;
+refreshSecureUI();   // 首屏同步一次按钮文案 / 拖拽区说明
 $('btn-upload').onclick = uploadAll;
 $('btn-publish-only').onclick = publishOnly;
 

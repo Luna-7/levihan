@@ -7,6 +7,10 @@ import { soundManager } from '../utils/audio';
 import { cosService } from '../services/cosClient';
 import { NovelModule } from './NovelModule';
 import LazyComicPage from './LazyComicPage';
+// SecureComicReader 静态引入会把 pdfjs-dist + crypto-js（合计约 570 KB）拖进主包：
+// 每个访客都白下载一遍，还会顶破 Workbox 的 2 MiB 预缓存上限导致构建失败。
+// 它只在打开「含有敏感元素」的本子时才用得到，所以按需加载。
+const SecureComicReader = React.lazy(() => import('./SecureComicReader'));
 import { DoujinMaintenanceGate } from './DoujinMaintenanceGate';
 import { AuthorWithLink } from '../utils/authorLink';
 import { MangaCommentSection } from './MangaCommentSection';
@@ -35,6 +39,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
   // 当前正在无缝长图阅读的书籍
   const [readingBook, setReadingBook] = useState<DoujinBookItem | null>(null);
+  // 加密归档本子：走独立的伪装阅读器，普通长图画廊状态完全不受影响
+  const [secureBook, setSecureBook] = useState<DoujinBookItem | null>(null);
 
   // 动态探测与检测到的内页总数
   const [detectedPages, setDetectedPages] = useState<number | null>(null);
@@ -100,6 +106,16 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   // 点击卡片直接进入查看来源于 COS 的无缝长图
   const handleOpenBookReader = async (book: DoujinBookItem) => {
     soundManager.playPageTurn();
+
+    // 加密归档的本子：正文只有 comic_vault/{id}_secure.txt，没有可读的图片，
+    // 所以不进长图画廊，改走 SecureComicReader（403 伪装页 → 校验码 → 内存解密 → Canvas）
+    if (book.secure) {
+      setSecureBook(book);
+      onShowToast(`《${book.titleZh}》资源已被安全隔离，需校验码解析 🔒`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     setReadingBook(book);
     setDetectedPages(book.pages || 30);
     onShowToast(`正在开启《${book.titleZh}》无缝长图画廊 📖`);
@@ -150,6 +166,33 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const handleCoverError = (bookId: string) => {
     setFailedCovers((prev) => new Set(prev).add(bookId));
   };
+
+  // ==========================================
+  // 🔒 加密归档阅读模式（403 伪装页 → 校验码 → 双重解密 → Canvas 瀑布流）
+  // 放在长图模式之前：敏感本子绝不允许落到任何图片直链渲染路径上
+  // ==========================================
+  if (secureBook) {
+    return (
+      <React.Suspense
+        fallback={
+          // 冷灰色，和 403 伪装页同一套视觉：加载解码器时也不露馅
+          <div className="flex flex-col items-center justify-center w-full h-full bg-[#F2F3F5] gap-2">
+            <div className="font-mono text-xs text-[#5F6368] tracking-widest">SECURE NODE GATEWAY</div>
+            <div className="font-mono text-[11px] text-[#9AA0A6]">正在加载安全解析节点…</div>
+          </div>
+        }
+      >
+        <SecureComicReader
+          book={secureBook}
+          onClose={() => {
+            soundManager.playScrollOpen();
+            setSecureBook(null);
+          }}
+          onShowToast={onShowToast}
+        />
+      </React.Suspense>
+    );
+  }
 
   // ==========================================
   // 📖 无缝长图阅读模式 (基于 腾讯云 COS CDN 映射 + react-pinch-zoom-pan)
@@ -371,6 +414,14 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                       <span className="font-pixel text-[10px] sm:text-xs px-2 py-0.5 bg-[#1E4334] text-[#F9E79F] rounded-xs font-bold whitespace-nowrap">
                         {book.category || '漫画本'}
                       </span>
+                      {book.secure && (
+                        <span
+                          className="font-pixel text-[10px] px-2 py-0.5 bg-[#7A1F1F] text-[#F6E7C1] rounded-xs font-bold whitespace-nowrap"
+                          title="该作品为加密归档，需输入社群安全校验码才能解析"
+                        >
+                          🔒 含有敏感元素
+                        </span>
+                      )}
                       {book.pages && (
                         <span className="text-xs font-retro-jp text-[#8C7A68] whitespace-nowrap">
                           {book.pages}P
@@ -390,7 +441,33 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
                 {/* 封面图片展示区 (来源 腾讯云 COS CDN 链接映射，竖版漫画本比例 2:3，悬浮显示点击阅读长图) */}
                 <div className="relative w-full aspect-[2/3] bg-[#FAF5E8] border border-[#E0D5BE] rounded-xs overflow-hidden group-hover:border-[#1E4334] flex items-center justify-center transition-colors">
-                  {!failedCovers.has(book.id) ? (
+                  {book.secure ? (
+                    // 敏感本：内页在 COS 上只有密文，读不到任何图片。
+                    // 但后台可以「单独上传一张封面」——它不参与加密，落在 {目录}/cover.<ext>，
+                    // 面向前台公开可读；有这张才显示封面，没有就退回冷色隔离占位。
+                    book.coverFile && !failedCovers.has(book.id) ? (
+                      <img
+                        src={coverUrl}
+                        alt={book.titleZh}
+                        title="封面为公开图；正文已加密归档，需校验码解析"
+                        loading="lazy"
+                        decoding="async"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        onError={() => handleCoverError(book.id)}
+                      />
+                    ) : (
+                      <div className="flex flex-col p-3 text-center w-full h-full items-center justify-center bg-[#EDEFF2]">
+                        <div className="text-3xl">🔒</div>
+                        <div className="font-mono text-[10px] text-[#5F6368] mt-2 tracking-wide">RESOURCE ISOLATED</div>
+                        <div className="font-pixel text-xs text-[#1E3A2B] mt-2 font-bold break-words">{book.titleZh}</div>
+                        <div className="font-mono text-[9px] text-[#9AA0A6] mt-1 break-all px-1">
+                          node://isolated/{book.id}
+                        </div>
+                        <div className="text-[10px] text-[#B7791F] mt-2">需校验码解析</div>
+                      </div>
+                    )
+                  ) : !failedCovers.has(book.id) ? (
                     <img
                       src={coverUrl}
                       alt={book.titleZh}
@@ -410,7 +487,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                   )}
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <span className="px-3.5 py-2 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs sm:text-sm rounded-xs shadow-lg flex items-center gap-1.5 whitespace-nowrap">
-                      <span>📖 点击阅读长图</span>
+                      <span>{book.secure ? '🔒 校验码解析' : '📖 点击阅读长图'}</span>
                       <span>→</span>
                     </span>
                   </div>

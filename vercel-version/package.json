@@ -14,6 +14,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test:auth": "node --test tests/auth-functions.test.cjs",
+    "test:secure": "node --test tests/secure-vault.test.cjs tests/secure-pdf-merge.test.cjs tests/secure-reader-interop.test.cjs tests/secure-cover-contract.test.cjs",
     "test": "npm run lint && npm run test:auth",
     "verify:levels": "node scripts/verify-save-hange-levels.ts",
     "prebuild": "node scripts/generate-admin-pixiv.mjs"
@@ -27,13 +28,16 @@
     "@tailwindcss/vite": "^4.1.14",
     "@vercel/analytics": "^2.0.1",
     "@vitejs/plugin-react": "^5.0.4",
+    "crypto-js": "^4.2.0",
     "dotenv": "^17.2.3",
     "lucide-react": "^0.546.0",
+    "pdfjs-dist": "3.11.174",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-pinch-zoom-pan": "^1.4.5"
   },
   "devDependencies": {
+    "@types/crypto-js": "^4.2.0",
     "@types/node": "^22.14.0",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.2",

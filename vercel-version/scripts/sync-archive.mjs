@@ -22,6 +22,8 @@ import 'dotenv/config';
 const BUCKET = 'levihan-1325571558';
 const REGION = 'ap-nanjing';
 const ENDPOINT = 'https://cos.ap-nanjing.myqcloud.com';
+/** 公开访问域名：用来读回线上 archive.json，把本脚本管不了的字段接住（见下方 preserveFlags） */
+const CDN_BASE = 'https://levihan-1325571558.cos-website.ap-nanjing.myqcloud.com';
 
 const csvArg = process.argv[2];
 const csvPath = path.resolve(csvArg || 'archive/ID编号.csv');
@@ -151,6 +153,42 @@ if (!fs.existsSync(csvPath)) {
 
 const rows = parseCSV(fs.readFileSync(csvPath, 'utf8'));
 const { items, problems } = buildArchive(rows);
+
+/* ---------- 接住表格里没有、但由管理台上传时写入的标记 ----------
+ * 表格是归档的主体信息源，但有几个字段只有后台知道：
+ *   secure —— 勾了「含有敏感元素」的本子，站点要靠它走 403 伪装阅读器；
+ *             丢了它，密文本子会被当成普通图片本，点开就是一片空白。
+ * 这里从线上 archive.json 读回来按 id 合并。读不到就跳过并提示，绝不阻断同步。 */
+async function preserveFlags(list) {
+  // 表格里没有的字段，全靠线上 archive.json 接住，否则每跑一次同步就会被 buildArchive 的默认值冲掉：
+  //   secure    —— 敏感标记，丢了这本就退回普通图集，阅读端行为直接错
+  //   coverFile —— 后台「敏感本封面 / 首图即封面」选定的真实文件名，丢了会被重置成 image01.webp
+  const KEEP = ['secure', 'coverFile'];
+  let remote = null;
+  try {
+    const res = await fetch(`${CDN_BASE}/archive.json`, { cache: 'no-store' });
+    if (res.ok) remote = await res.json();
+  } catch {
+    /* 网络不可达时静默降级，下面统一提示 */
+  }
+  if (!Array.isArray(remote)) {
+    console.warn('⚠ 读不到线上 archive.json，本次未能保全 secure / coverFile 标记（表格里没有这两个字段）。');
+    return list;
+  }
+  const byId = new Map(remote.filter((b) => b && b.id).map((b) => [b.id, b]));
+  let carried = 0;
+  list.forEach((item) => {
+    const old = byId.get(item.id);
+    if (!old) return;
+    KEEP.forEach((k) => {
+      if (old[k] !== undefined) { item[k] = old[k]; carried += 1; }
+    });
+  });
+  if (carried) console.log(`✓ 已从线上 archive.json 保全 ${carried} 个后台标记（secure / coverFile）`);
+  return list;
+}
+
+if (items.length) await preserveFlags(items);
 
 if (problems.length) {
   console.warn('⚠ 数据问题：');

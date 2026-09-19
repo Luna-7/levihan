@@ -14,12 +14,21 @@ export interface DoujinBookItem {
   translator?: string; // 汉化，如 "LG"
   typesetter?: string; // 嵌字，如 "LG"
   pages: number; // 总页数，如 30
-  coverFile?: string; // 封面文件名，若不填默认自动映射为 "image01.webp"
+  coverFile?: string; // 封面文件名，若不填默认自动映射为 "image01.webp"；也允许直接写 http(s) 绝对地址
   bookFolder?: string; // 存储桶子目录，若不填默认自动映射为 id (如 "lh-001")
   pagePrefix?: string; // 图片前缀，默认为 "image"
   pagePadDigits?: number; // 页码位数，默认为 2 (如 image01.webp)
   pageFiles?: string[]; // 后台上传时记录每一页的真实文件名，可混用 jpg/png/webp
   warning?: string; // 内容预警说明（后台勾选后填写，站点卡片显示 ⚠ 提示）
+  /**
+   * 敏感内容标记：后台勾选「含有敏感元素」后上传的本子。
+   * 正文不是图片，而是 comic_vault/{id}_secure.txt —— AES 双重加密后的密文，
+   * 站点必须走 SecureComicReader（403 伪装页 + 双重解密 + Canvas 渲染）才看得到。
+   *
+   * 注意：标记为 secure 时，`coverFile` 指向的是后台「敏感本封面」单独上传的**明文**图
+   * （{bookFolder}/cover.<ext>），是公开可读的，卡片照常显示；不填则卡片只显示隔离占位图。
+   */
+  secure?: boolean;
 }
 
 /** 站外推荐条目（腾讯表格「推荐」表 → scripts/sync-archive.mjs → COS recs.json） */
