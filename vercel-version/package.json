@@ -13,9 +13,10 @@
     "sync:archive": "node scripts/sync-archive.mjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "check:admin": "node scripts/check-admin-inline.cjs",
     "test:auth": "node --test tests/auth-functions.test.cjs",
     "test:secure": "node --test tests/secure-vault.test.cjs tests/secure-pdf-merge.test.cjs tests/secure-reader-interop.test.cjs tests/secure-cover-contract.test.cjs",
-    "test": "npm run lint && npm run test:auth",
+    "test": "npm run check:admin && npm run lint && npm run test:auth",
     "verify:levels": "node scripts/verify-save-hange-levels.ts",
     "prebuild": "node scripts/generate-admin-pixiv.mjs"
   },

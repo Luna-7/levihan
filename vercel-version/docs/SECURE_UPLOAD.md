@@ -53,7 +53,8 @@
    语义细节见第五节 5.1。
 
 5. **敏感本封面**（勾选后出现在内页选择框下方）：`#secure-cover-box`，单张、不加密、
-   走普通 upload 通道落到 `{ID}/cover.<ext>`，让前台卡片有图可显示。详见第五节 5.2。
+   可**就地裁切**（复用图片编辑器），走普通 upload 通道落到 `{ID}/cover.<ext>`，
+   让前台卡片有图可显示。详见第五节 5.2。
 
 ---
 
@@ -169,8 +170,17 @@ case 'vaultUpload': {
 
 - **管理台**：勾选「🔒 含有敏感元素」后，内页选择框下方出现独立区块「🖼 敏感本封面」（`#secure-cover-box`）。
   单张、支持点选或拖入，选完即时预览。取消勾选会丢弃这次选的封面并回退它写过的 `coverFile` 值。
+- **就地裁切**：封面区右上角有「✂ 裁切」按钮（`#secure-cover-crop`，没选封面时置灰）。
+  点开的是**内页图片共用的那套图片编辑器**，所以自动拿到 2:3 竖版裁剪框、马赛克涂抹、
+  「站点效果」预览 —— 裁出来的就是卡片实际会显示的样子。
+  分流靠 `edTarget`（`'page'` = 写回 `files[]`；`'secure-cover'` = 写回 `secureCover`），
+  封面走的是 `idx: -1` 的合成编辑对象，**不会**混进 `files[]`。
+  完工由 `commitSecureCoverEdit()` 回写：统一转 WebP、原名主干换 `.webp` 后缀，
+  落库名仍由 `secureCoverName()` 钉成 `cover.webp`；上次的裁剪参数记在 `secureCover.op`，
+  再点一次裁切能接着改。《tests/secure-cover-contract.test.cjs》里钉着这几条契约。
 - **上传通道**：走**普通** `api({action:'upload'})`，不是 COS 直传、更不进加密流水线。
   能转 WebP 就转（卡片首屏图，越小越好），浏览器不支持编码时原样上传。
+  裁切产物在上传前已经被烘进这张图，上传侧不需要知道裁过没有。
 - **落库文件名**：固定为 `cover.<ext>`，即 Key = `{bookFolder}/cover.<ext>`。
   固定名字让「重传同一本」天然覆盖旧封面，桶里不会堆垃圾。
 - **归档字段**：上传成功后把 `coverFile = 'cover.webp'` 写回「封面文件」字段，随 `publish` 一起入库。
@@ -274,9 +284,12 @@ const doc = await pdfjsLib.getDocument({ data: pdfBytes, password }).promise;
   —— 现有云函数的 `normalizeBook()` 是字段白名单，透传不了 `vaultKey` 字段。
   要严格按需求原文的 `comic_vault/${Date.now()}_secure.txt`，把这个开关置 `true`，
   但同时得自己找地方存这条 Key。
-- **归档模型不匹配**：加密本没有 `pageFiles`，也不会有封面图，所以站点画廊/封面都取不到东西。
-  阅读端已经接好（第五节），卡片会显示隔离占位而不是破图；但**「已收录作品」列表里这本永远没有缩略图**，
-  这是预期行为而非故障。
+- **归档模型不匹配**：加密本没有 `pageFiles`（内页都在 PDF 里），所以站点画廊取不到逐页图，
+  阅读端改走 Canvas 瀑布流（第五节）。缩略图则由 5.2 的单独封面提供 —— 没设封面的本子在
+  「已收录作品」列表里显示隔离占位，这是预期行为而非故障。
+- **裁切只作用在封面这一张明文图上**，跟密文里的内页没有任何关系：
+  裁封面的编辑器不会也不能改动 PDF / 密文。想让内页也裁，得在合并成 PDF **之前**
+  用内页图片编辑器逐张处理（`edTarget === 'page'` 那条路径）。
 - **总页数**：`syncPages()` 会把「总页数」自动设成选中文件数。传 PDF 时这是 1，请手工改成真实页数
   （合并图片时则自动就是张数）。阅读端实际按 PDF 的真实页数渲染，所以这个值只影响卡片上显示的 "nP"。
 - **体积**：Base64 让密文比 PDF 大约 33%，再加上 AES 的 16 字节以内填充。
@@ -290,7 +303,7 @@ const doc = await pdfjsLib.getDocument({ data: pdfBytes, password }).promise;
 ## 九、测试
 
 ```bash
-# 全部安全相关测试（32 项）
+# 全部安全相关测试（35 项）
 npm run test:secure
 ```
 
@@ -301,7 +314,7 @@ npm run test:secure
 | `tests/secure-vault.test.cjs` | 加密本身。含**已知答案测试**：把 WebCrypto 的密文与 `node:crypto` 的 `createCipheriv('aes-256-cbc', sha256('levihan'), iv)` 逐字节比对，证明这是标准 AES-256-CBC + PKCS#7，不是自定义算法 |
 | `tests/secure-pdf-merge.test.cjs` | 图片合并 PDF。用最小 DOM 桩（canvas / createImageBitmap / document）在 Node 里验页数、页面尺寸、端到端往返 |
 | `tests/secure-reader-interop.test.cjs` | **一密双解**。用浏览器端同一个实现（crypto-js 解外层 + PDF.js 解内层），验跨实现能对上，并覆盖"必须给密码才能打开 / 同一密码透传即可解锁 / 密码错误明确报错" |
-| `tests/secure-cover-contract.test.cjs` | **敏感本封面的跨文件契约**。命名规则从管理台真实实现里摘出来跑，钉住：文件名能过云函数 `FILE_RE`、固定 `cover.<ext>`、控件只在敏感模式下出现、**封面先于密文上传**、封面不进加密模块、归档载荷同时带 `secure` 与 `coverFile`、前台按 `coverFile` 判定、同步脚本保全清单含 `coverFile` |
+| `tests/secure-cover-contract.test.cjs` | **敏感本封面的跨文件契约**（11 项）。命名规则从管理台真实实现里摘出来跑，钉住：文件名能过云函数 `FILE_RE`、固定 `cover.<ext>`、控件只在敏感模式下出现、**封面先于密文上传**、封面不进加密模块、归档载荷同时带 `secure` 与 `coverFile`、前台按 `coverFile` 判定、同步脚本保全清单含 `coverFile`。另把**封面裁切**的接线钉牢：`#secure-cover-crop` 入口存在且无封面时置灰、`openEditor` 必须把 `edTarget` 重置回 `'page'`、封面走 `idx:-1` 的合成对象、**`edDone` 的封面分支必须排在 `var f = files[i]` 之前**（排在后面会静默写错对象）、回写产物仍是 `cover.webp` 且清空 `uploadedName` 强制重传 |
 
 依赖产物找不到时，各文件会显式 skip（不会伪装成通过）。也可以用环境变量指向从 CDN 取来的构建：
 

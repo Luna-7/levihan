@@ -127,6 +127,51 @@
   .bk .info{flex:1;min-width:0}
   .bk .id{font-family:'VT323',monospace;font-size:15px;color:var(--gold-2);font-weight:700}
   .bk .t{font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* ---- 在线小说卡片：复刻前台 NovelModule 的小说卡排版（徽章/标题/字段块/标签/预警/作者说/底栏） ---- */
+  /* 注意：这里刻意不给 #nv-list 定高 + overflow —— CSS 多列在定高容器里会被强制
+     column-fill:auto，内容超高时是往右长出「第 5 列」而不是纵向滚动。跟随内容自然展开最稳。 */
+  .nv-cards{column-count:2;column-gap:10px}
+  @media(min-width:780px){.nv-cards{column-count:3}}
+  @media(min-width:1040px){.nv-cards{column-count:4}}
+  .nv-card{break-inside:avoid;-webkit-column-break-inside:avoid;page-break-inside:avoid;margin:0 0 10px;
+           background:#FFFEEF;border:1.5px solid #D5C9AF;border-radius:7px;padding:11px 11px 9px;
+           transition:border-color .15s,box-shadow .15s}
+  .nv-card:hover{border-color:var(--green-2);box-shadow:0 3px 10px rgba(30,67,52,.14)}
+  .nv-card.editing{border-color:var(--gold-2);box-shadow:0 0 0 3px rgba(183,121,31,.18)}
+  .nv-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .nv-badge{font-family:'Press Start 2P','DotGothic16',monospace;font-size:8px;line-height:1;font-weight:700;
+            padding:4px 5px;border-radius:3px;background:var(--green-2);color:#F9E79F}
+  .nv-chars{font-size:10.5px;color:#8C7A68}
+  .nv-id{margin-left:auto;font-family:'VT323',monospace;font-size:14px;color:var(--gold-2);font-weight:700;
+         user-select:all}
+  .nv-title{font-family:'Press Start 2P','DotGothic16',monospace;font-size:11px;font-weight:700;color:#1E3A2B;
+            line-height:1.65;margin:7px 0 0;word-break:break-word;transition:color .15s}
+  .nv-card:hover .nv-title{color:var(--gold-2)}
+  .nv-fields{margin-top:7px;background:#FAF5E8;border:1px solid #EBE3D0;border-radius:4px;padding:6px 7px;
+             font-family:'DotGothic16','Noto Sans SC',monospace;font-size:11px;line-height:1.75}
+  .nv-fields .r{display:flex;gap:5px;align-items:flex-start}
+  .nv-fields .k{flex:none;width:34px;text-align:right;font-weight:700;color:#7A6958}
+  .nv-fields .r.au .k{color:#8C6B38}
+  .nv-fields .v{flex:1;min-width:0;word-break:break-word;color:#5B4636}
+  .nv-fields .r.au .v{color:#3E342B;font-weight:700}
+  .nv-fields .v a{color:#8C6B38;text-decoration:none;border-bottom:1px dotted #C29641}
+  .nv-fields .v a:hover{color:#B7791F;border-bottom-style:solid}
+  .nv-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+  .nv-tag{font-family:'DotGothic16','Noto Sans SC',monospace;font-size:9px;padding:2px 5px;border-radius:3px;
+          background:#F4EEDF;color:#7A6958;border:1px solid #DECFA9}
+  .nv-warn{display:flex;gap:6px;align-items:flex-start;margin-top:7px;background:#FDF0E3;border:1px solid #E8B04B;
+           border-radius:4px;padding:5px 7px;font-family:'DotGothic16','Noto Sans SC',monospace;font-size:10.5px;
+           color:#8A5A12;line-height:1.65}
+  .nv-warn .ic{flex:none;line-height:1.2}
+  .nv-note{margin-top:7px;border-left:3px solid #C29641;background:#FAF5E8;border-radius:0 4px 4px 0;padding:6px 8px;
+           font-family:'DotGothic16','Noto Sans SC',monospace;font-size:10.5px;color:#5B4636;line-height:1.7}
+  .nv-note b{color:#8C6B38}
+  .nv-note-txt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+               word-break:break-word}
+  .nv-foot{margin-top:8px;padding-top:7px;border-top:1px dashed #E0D5BE;display:flex;justify-content:space-between;
+           align-items:center;gap:6px;font-family:'DotGothic16','Noto Sans SC',monospace;font-size:10.5px;color:#8C7A68}
+  .nv-acts{display:flex;gap:6px;flex:none}
+  .nv-acts button{padding:3px 9px;font-size:11px;border-radius:5px}
   .notice-preview{width:100%;max-width:560px;aspect-ratio:16/9;object-fit:cover;border:1.5px solid var(--line);
                   border-radius:8px;background:#EEE7D7;display:block;margin-top:8px}
   .notice-row{display:flex;gap:10px;align-items:center;padding:9px;border:1.5px solid var(--rule);
@@ -695,13 +740,16 @@
       <div id="secure-cover-box" class="hide" style="margin-top:14px;border:1.5px dashed var(--line);border-radius:10px;padding:14px;background:var(--card)">
         <div class="spread" style="margin-bottom:10px">
           <label style="margin:0;font-weight:700">🖼 敏感本封面 <span class="tag">单独上传 · 不加密 · 前台卡片显示</span></label>
-          <button class="btn-sm" id="secure-cover-remove" type="button">移除封面</button>
+          <div class="row" style="gap:8px">
+            <button class="btn-sm" id="secure-cover-crop" type="button" title="按站点卡片的 2:3 竖版裁切（也可顺手涂抹遮挡）">✂ 裁切</button>
+            <button class="btn-sm" id="secure-cover-remove" type="button">移除封面</button>
+          </div>
         </div>
 
         <div id="secure-cover-drop" class="drop" style="padding:16px 12px">
           <div style="font-size:22px">🖼</div>
           <div style="font-weight:700;color:var(--ink);margin-top:4px">把封面图拖到这里，或点击选择</div>
-          <div class="muted" style="margin-top:4px">jpg / png / webp · 建议竖版 2:3 · 单张 ≤ 4MB · <b>该图公开可访问</b></div>
+          <div class="muted" style="margin-top:4px">jpg / png / webp · 建议竖版 2:3（选后可用 ✂ 裁切）· 单张 ≤ 4MB · <b>该图公开可访问</b></div>
           <input type="file" id="secure-cover-picker" accept="image/*" class="hide">
         </div>
 
@@ -995,7 +1043,10 @@ function switchAdminPage(page, updateHash){
   if (allowed.indexOf(page) < 0) page = 'manga';
   // 文件工具箱已并入「漫画上传」页的功能区下拉，#admin-toolkit 仍可直达
   var sub = 'upload';
+  var isManga = true;
   if (page === 'toolkit') { page = 'manga'; sub = 'toolkit'; }
+  else if (page === 'manga') { sub = mangaSub; }   // 回漫画页 = 回到上次那个功能区
+  else { isManga = false; }                        // 别的页没有功能区，别去动 mangaSub
   activeAdminPage = page;
   document.querySelectorAll('[data-admin-page]').forEach(function(el){
     el.classList.toggle('hide', el.getAttribute('data-admin-page') !== page);
@@ -1004,9 +1055,17 @@ function switchAdminPage(page, updateHash){
     var on = tab.getAttribute('data-admin-tab') === page;
     tab.classList.toggle('active', on); tab.setAttribute('aria-selected', on ? 'true' : 'false');
   });
-  setMangaSub(sub, false);
+  // 只有漫画页才有功能区；离开漫画页必须把带 data-sub 的面板整批收起，
+  // 否则它们带着 data-sub="upload" 会被一并放出来，串到小说 / 公告等页面上。
+  if (isManga) setMangaSub(sub, false);
+  else hideAllSubPanels();
   if (updateHash !== false) history.replaceState(null, '', '#admin-' + (sub === 'toolkit' ? 'toolkit' : page));
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/** 收起所有带 data-sub 的功能区面板（离开漫画页时用） */
+function hideAllSubPanels(){
+  document.querySelectorAll('[data-sub]').forEach(function(el){ el.classList.add('hide'); });
 }
 
 /* ===== 漫画上传页内的功能区左右切换：upload（漫画上传）⇄ toolkit（文件工具箱） ===== */
@@ -1016,6 +1075,10 @@ var MANGA_SUB_NAMES = { upload: '📚 漫画上传', toolkit: '🧰 文件工具
 function setMangaSub(sub, updateHash){
   mangaSub = sub === 'toolkit' ? 'toolkit' : 'upload';
   document.querySelectorAll('[data-sub]').forEach(function(el){
+    // 只切换「当前页」的功能区。漫画那三块带着 data-sub="upload"，
+    // 如果在这里无条件放出来，切到小说 / 公告页时它们会跟着漏出来。
+    var page = el.getAttribute('data-admin-page');
+    if (page && page !== activeAdminPage) { el.classList.add('hide'); return; }
     el.classList.toggle('hide', el.getAttribute('data-sub') !== mangaSub);
   });
   var nameEl = $('f-sub-name');
@@ -1304,27 +1367,82 @@ function resetForm(){
 
 /* ============ 在线小说（D 面板） ============ */
 var novels = [];
+/* 编辑态：空 = 新建，否则 = 正在改写的那篇 id。
+   注意这个变量以前只在读写在用、从未声明 —— 严格模式下读写未声明标识符会抛
+   ReferenceError，结果「编辑 / 清空表单 / 保存并发布」整条链路全炸，小说库恒为 0 篇。 */
+var nvEditingId = '';
+
+/** 字数缩写，与前台 NovelModule.fmtChars 完全一致：12345 → 1.2 万，8600 → 8.6 千 */
+function fmtChars(n){
+  n = Number(n) || 0;
+  if (n >= 10000) return String((n / 10000).toFixed(1)).replace(/\.0$/, '') + ' 万';
+  if (n >= 1000) return String((n / 1000).toFixed(1)).replace(/\.0$/, '') + ' 千';
+  return String(n);
+}
+
+/** 与前台 newestNovelsFirst 同序：更新时间倒序，同时间按 id 倒序 —— 列表顺序也和前台对齐 */
+function sortNovels(list){
+  return list.slice().sort(function(a, b){
+    var ta = Date.parse((a && (a.updatedAt || a.createdAt)) || '') || 0;
+    var tb = Date.parse((b && (b.updatedAt || b.createdAt)) || '') || 0;
+    if (tb !== ta) return tb - ta;
+    return String(b.id || '').localeCompare(String(a.id || ''));
+  });
+}
+
+/** 作者名 → 主页链接：优先用小说自带的 authorUrl，没有就查后台已有的作者登记表 / Pixiv 画师表 */
+function novelAuthorLink(n){
+  var url = String(n.authorUrl || '').trim() || findAuthorUrl(n.author || '');
+  var name = esc(n.author || '—');
+  if (!url) return name;
+  return '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + name + '</a>';
+}
+
+/** 单张小说卡：结构与配色照前台 NovelModule 的小说卡走
+    （徽章行 / 标题 / 作者-字数-更新字段块 / #标签 / ⚠预警 / 作者说 / 底栏）。
+    只有「ID 角标」和底栏的「编辑·删除」是后台独有的，前台没有这两样。 */
+function novelCardHTML(n){
+  var h = '<div class="nv-card' + (n.id === nvEditingId ? ' editing' : '') + '">';
+  h += '<div class="nv-top">' +
+         '<span class="nv-badge">在线</span>' +
+         '<span class="nv-chars">' + fmtChars(n.chars) + '字</span>' +
+         '<span class="nv-id" title="正文路径 novels/' + esc(n.id) + '.txt">' + esc(n.id) + '</span>' +
+       '</div>';
+  h += '<div class="nv-title">' + esc(n.title || '（无标题）') + '</div>';
+  h += '<div class="nv-fields">' +
+         '<div class="r au"><span class="k">作者:</span><span class="v">' + novelAuthorLink(n) + '</span></div>' +
+         '<div class="r"><span class="k">字数:</span><span class="v">' + fmtChars(n.chars) + '</span></div>' +
+         (n.updatedAt
+           ? '<div class="r"><span class="k">更新:</span><span class="v">' + esc(String(n.updatedAt).slice(0, 10)) + '</span></div>'
+           : '') +
+       '</div>';
+  if (n.tags && n.tags.length) {
+    h += '<div class="nv-tags">' + n.tags.map(function(t){
+      return '<span class="nv-tag">#' + esc(t) + '</span>';
+    }).join('') + '</div>';
+  }
+  if (n.warning) {
+    h += '<div class="nv-warn"><span class="ic">⚠</span><span>' + esc(n.warning) + '</span></div>';
+  }
+  if (n.authorNote) {
+    h += '<div class="nv-note"><b>作者说：</b><span class="nv-note-txt">' + esc(n.authorNote) + '</span></div>';
+  }
+  h += '<div class="nv-foot"><span>共 ' + fmtChars(n.chars) + ' 字</span>' +
+         '<span class="nv-acts">' +
+           '<button class="btn-sm" data-nv-edit="' + esc(n.id) + '">编辑</button>' +
+           '<button class="btn-sm btn-danger" data-nv-del="' + esc(n.id) + '">删除</button>' +
+         '</span></div>';
+  h += '</div>';
+  return h;
+}
 
 function loadNovels(){
   var box = $('nv-list');
   box.innerHTML = '<p class="muted">加载中…</p>';
   api({ action:'novelList' }).then(function(d){
     novels = d.novels || [];
-    $('nv-count').textContent = '共 ' + novels.length + ' 篇';
-    if (!novels.length) { box.innerHTML = '<p class="muted">还没有在线小说，在下面粘贴正文发布第一篇吧。</p>'; return; }
-    box.innerHTML = novels.map(function(n){
-      return '<div class="bk">' +
-        '<div class="info">' +
-          '<div class="row" style="gap:8px"><span class="id">' + esc(n.id) + '</span>' +
-          '<span class="t">' + esc(n.title) + '</span></div>' +
-          '<div class="muted">' + esc(n.author) + ' · ' + (n.chars || 0) + ' 字' +
-            (n.tags && n.tags.length ? ' · ' + n.tags.map(esc).join(' / ') : '') +
-            (n.updatedAt ? ' · 更新于 ' + esc(n.updatedAt.slice(0, 10)) : '') + '</div>' +
-        '</div>' +
-        '<button class="btn-sm" data-nv-edit="' + esc(n.id) + '">编辑</button>' +
-        '<button class="btn-sm btn-danger" data-nv-del="' + esc(n.id) + '">删除</button>' +
-      '</div>';
-    }).join('');
+    nvEditingId = '';           // 重新拉列表 = 放弃当前编辑态
+    renderNovelList();
   }).catch(function(err){
     if (onAuthFail(err)) return;
     box.innerHTML = '';
@@ -1374,6 +1492,7 @@ function saveNovel(){
         tags: form.tags, warning: form.warning, authorNote: form.authorNote, authorUrl: form.authorUrl, body: form.body })
     .then(function(d){
       novels = d.novels || [];
+      nvEditingId = '';   // 存完回到新建态，否则再点一次保存会去覆盖刚发布的那篇
       renderNovelList();
       resetNovelForm();
       loadAuthorLib();   // 小说作者链接已自动登记
@@ -1390,24 +1509,14 @@ function renderNovelList(){
   var box = $('nv-list');
   $('nv-count').textContent = '共 ' + novels.length + ' 篇';
   if (!novels.length) { box.innerHTML = '<p class="muted">还没有在线小说，在下面粘贴正文发布第一篇吧。</p>'; return; }
-  box.innerHTML = novels.map(function(n){
-    return '<div class="bk">' +
-      '<div class="info">' +
-        '<div class="row" style="gap:8px"><span class="id">' + esc(n.id) + '</span>' +
-        '<span class="t">' + esc(n.title) + '</span></div>' +
-        '<div class="muted">' + esc(n.author) + ' · ' + (n.chars || 0) + ' 字' +
-          (n.tags && n.tags.length ? ' · ' + n.tags.map(esc).join(' / ') : '') + '</div>' +
-      '</div>' +
-      '<button class="btn-sm" data-nv-edit="' + esc(n.id) + '">编辑</button>' +
-      '<button class="btn-sm btn-danger" data-nv-del="' + esc(n.id) + '">删除</button>' +
-    '</div>';
-  }).join('');
+  // 瀑布流多列（窄屏 2 列 / 中屏 3 列 / 宽屏 4 列），与前台小说区一致
+  box.innerHTML = '<div class="nv-cards">' + sortNovels(novels).map(novelCardHTML).join('') + '</div>';
 }
 
 $('btn-nv-save').addEventListener('click', saveNovel);
 $('btn-nv-reload').addEventListener('click', loadNovels);
 $('btn-nv-clear').addEventListener('click', function(){
-  nvEditingId = ''; resetNovelForm(); hide($('nv-msg'));
+  nvEditingId = ''; resetNovelForm(); hide($('nv-msg')); renderNovelList();
 });
 $('nv-body').addEventListener('input', function(){
   $('nv-body-len').textContent = String(this.value.length);
@@ -1424,6 +1533,7 @@ $('nv-list').addEventListener('click', function(e){
     var n = findNovel(ed.getAttribute('data-nv-edit'));
     if (!n) return;
     nvEditingId = n.id;
+    renderNovelList();   // 把正在编辑的那张卡高亮出来
     $('nv-title').value = n.title || '';
     $('nv-author').value = n.author || '';
     $('nv-authorUrl').value = n.authorUrl || '';
@@ -1444,6 +1554,7 @@ $('nv-list').addEventListener('click', function(e){
     if (!confirm('确定删除《' + (target ? target.title : id) + '》？正文与索引会一起删除，不可恢复。')) return;
     api({ action:'novelDelete', id: id }).then(function(d){
       novels = d.novels || [];
+      if (nvEditingId === id) nvEditingId = '';   // 正在编辑的这篇被删了，编辑态要跟着放掉
       renderNovelList();
       show($('nv-msg'), 'ok', '✓ 已删除');
     }).catch(function(err){
@@ -1558,6 +1669,8 @@ function syncButtons(){
   var hasId = !!$('f-id').value.trim();
   $('btn-upload').disabled = LOCAL_PREVIEW || busy || !files.length;
   $('btn-publish-only').disabled = LOCAL_PREVIEW || busy || !hasId;
+  // 没选封面就没得裁 —— 按钮跟着封面状态走
+  if ($('secure-cover-crop')) $('secure-cover-crop').disabled = !secureCover;
 }
 
 /* ============ 图片处理 ============ */
@@ -1898,6 +2011,53 @@ function renderSecureCover(){
   syncButtons();
 }
 
+/** 用共用的图片编辑器裁切敏感本封面：完成后写回 secureCover，仍命中 cover.<ext> 固定命名 */
+function openSecureCoverEditor(){
+  if (!secureCover) { show($('main-msg'), 'err', '先选一张封面图，再点裁切。'); return; }
+  var src = secureCover.url;
+  loadImage(src).then(function(im){
+    edTarget = 'secure-cover';
+    ed = {
+      idx: -1, img: im,
+      natural: { w: im.naturalWidth, h: im.naturalHeight },
+      isCover: true,
+      crop: null,
+      cropOn: true,
+      strokes: [],
+      brush: 'medium',
+      mode: 'none',
+      history: [],
+      view: { w: 0, h: 0 }
+    };
+    if (secureCover.op) {
+      ed.crop = secureCover.op.crop ? cloneRect(secureCover.op.crop) : null;
+      ed.cropOn = !!secureCover.op.crop;
+      ed.strokes = cloneStrokes(secureCover.op.strokes);
+    }
+    if (!ed.crop) ed.crop = defaultCrop();   // 默认按 2:3 居中取最大框，正好是站点卡片的比例
+    $('editor').classList.remove('hide');
+    $('ed-grp-crop').style.display = '';
+    $('ed-preview').style.display = '';
+    $('ed-img').src = src;
+    layoutEditor();
+    renderEditor();
+  }).catch(function(err){ alert('✗ ' + (err.message || err)); });
+}
+
+/** 封面裁切产物回写：统一转 WebP，沿用原名主干 → 仍是 cover.<ext>。
+    注意 uploadedName 会被 setSecureCover 重置 —— 内容变了就必须重新入库，不能复用旧地址。 */
+function commitSecureCoverEdit(blob, op){
+  if (!secureCover) return;
+  var base = String(secureCover.name || 'cover').replace(/\.[^.]+$/, '') || 'cover';
+  var name = base + '.webp';
+  var nf;
+  try { nf = new File([blob], name, { type: 'image/webp' }); }
+  catch (err) { nf = blob; try { Object.defineProperty(nf, 'name', { value: name }); } catch (e2) {} }
+  setSecureCover(nf);
+  if (secureCover) secureCover.op = op;    // 记住裁剪框，二次裁切不丢
+  show($('main-msg'), 'ok', '✓ 封面已裁切（' + fmtSize(blob.size) + '），上传时会按这张图入库。');
+}
+
 function isSecureMode(){ return !!($('opt-secure') && $('opt-secure').checked); }
 
 // 勾选状态会同时改变按钮文案、拖拽区说明与文件选择器的 accept —— 让管理员点之前就知道会发生什么
@@ -2216,6 +2376,9 @@ function lbStep(d){
 /* ============ 图片编辑器 ============ */
 var ed = null;
 var edDrag = null;
+/* 编辑器是共用的：内页图片（files[]）与「敏感本封面」（secureCover）都用它裁切/涂抹。
+   'page' = 完成后写回 files[ed.idx]；'secure-cover' = 写回 secureCover。 */
+var edTarget = 'page';
 var MAX_UNDO = 10;
 var COVER_RATIO = 2 / 3;   // 站点封面 aspect-[2/3]
 // 画笔涂抹：strokes = [{ r: 半径(占图宽比例), pts: [[x,y],...] }]（归一化坐标）
@@ -2321,6 +2484,7 @@ function openEditor(i){
   var f = files[i];
   if (!f) return;
   if (f.status === 'busy' || f.status === 'done') { alert('已上传的图片不能再编辑，请先清空重传。'); return; }
+  edTarget = 'page';
   var src = f.originalUrl || f.url;
   loadImage(src).then(function(im){
     ed = {
@@ -2417,7 +2581,7 @@ function renderEditor(){
     b.classList.toggle('sel', b.getAttribute('data-brush') === ed.brush);
   });
   $('ed-hint').textContent = ed.isCover
-    ? '封面：金框内的区域会被裁成 2:3 作为封面（站点卡片按此比例居中裁切）。拖拽金框移动，右下角方块缩放，比例锁定。'
+    ? (edTarget === 'secure-cover' ? '敏感本封面：' : '封面：') + '金框内的区域会被裁成 2:3（站点卡片按此比例居中裁切）。拖拽金框移动，右下角方块缩放，比例锁定。'
     : '选「✎ 画笔涂抹」后按住鼠标在图上涂抹，走过的区域即打上马赛克（所见即导出所得，可反复叠加）；笔刷三档可调，🧹 清空全部涂抹。';
   $('ed-mask-mode').textContent = (ed.mode === 'mask') ? '● 涂抹中（再点退出）' : '✎ 画笔涂抹';
   $('ed-crop-toggle').textContent = ed.cropOn ? '隐藏裁剪框' : '显示裁剪框';
@@ -2600,6 +2764,7 @@ function burnImage(img, op){
 function edDone(){
   if (!ed) return;
   var i = ed.idx;
+  var target = edTarget;
   var op = {
     crop: (ed.isCover && ed.cropOn && ed.crop) ? cloneRect(ed.crop) : null,
     strokes: cloneStrokes(ed.strokes)
@@ -2609,6 +2774,8 @@ function edDone(){
   burnImage(ed.img, op).then(function(blob){
     if (!blob) throw new Error('图片导出失败，请换用 Chrome / Edge');
     if (blob.size > envMax) throw new Error('编辑后 ' + fmtSize(blob.size) + '，超过单张上限 ' + fmtSize(envMax));
+    // 敏感本封面：写回 secureCover。必须在碰 files[i] 之前分支（封面不在 files 里，idx 是 -1）
+    if (target === 'secure-cover') { commitSecureCoverEdit(blob, op); closeEditor(); return; }
     var f = files[i];
     if (!op.crop && !op.strokes.length) {
       // 无改动 → 还原成原始文件
@@ -2769,6 +2936,7 @@ $('secure-cover-drop').addEventListener('drop', function(e){
   var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
   if (f) setSecureCover(f);
 });
+$('secure-cover-crop').onclick = openSecureCoverEditor;
 $('secure-cover-remove').onclick = function(){ clearSecureCover(); };
 $('files').addEventListener('click', function(e){
   var b = e.target.closest('button');

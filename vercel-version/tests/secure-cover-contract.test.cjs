@@ -117,3 +117,100 @@ test('同步脚本：coverFile 必须进保全清单，否则表格同步会把�
   assert.ok(KEEP.includes('secure'), 'KEEP 丢了 secure');
   assert.ok(KEEP.includes('coverFile'), 'KEEP 丢了 coverFile');
 });
+
+/* ==========================================================================
+ * 封面裁切：复用图片编辑器的第二条出口
+ *
+ * 编辑器是共用的（内页 files[] 与敏感本封面 secureCover），靠 edTarget 分流。
+ * 这里最怕两件事：① 封面被写进 files[]（idx 是 -1，会静默写错对象）；
+ * ② 内页图片被写进 secureCover（普通流程的图会顶掉封面）。
+ * 所以下面既钉「顺序」，也把完工回写函数真跑一遍。
+ * ========================================================================== */
+
+/** 从真实实现里摘出命名规则 + 挂载/回写函数，用桩替掉 DOM 依赖后在 vm 里跑 */
+function loadCoverCommit() {
+  const start = ADMIN.indexOf('var SECURE_COVER_STEM');
+  const end = ADMIN.indexOf('function isSecureMode');
+  assert.ok(start >= 0 && end > start, '管理台里找不到封面挂载/回写的实现片段');
+  const src = ADMIN.slice(start, end);
+  const sandbox = {
+    URL: { createObjectURL: () => 'blob:new', revokeObjectURL: () => {} },
+    File,
+    console,
+    // DOM 与工具函数按「全部缺失」桩掉：实现里都写了 if (el) 守卫，取不到就跳过
+    $: () => null,
+    document: { getElementById: () => null, querySelector: () => null },
+    show: () => {},
+    hide: () => {},
+    syncButtons: () => {},
+    loadImage: () => Promise.resolve(),
+    cloneRect: (r) => (r ? { x: r.x, y: r.y, w: r.w, h: r.h } : null),
+    cloneStrokes: (s) => (s || []).map((k) => ({ r: k.r, pts: k.pts.slice() })),
+    defaultCrop: () => ({ x: 0, y: 0, w: 2, h: 3 }),
+    layoutEditor: () => {},
+    renderEditor: () => {},
+    envMax: 4 * 1024 * 1024,
+    fmtSize: (n) => `${n}B`,
+  };
+  vm.runInNewContext(`${src}\n;this.__api = { get secureCover(){return secureCover;}, setSecureCover, commitSecureCoverEdit, secureCoverName };`, sandbox);
+  return sandbox.__api;
+}
+
+test('管理台：封面裁切入口存在，且没封面时按钮不可点', () => {
+  assert.ok(ADMIN.includes('id="secure-cover-crop"'), '缺少 #secure-cover-crop 按钮');
+  assert.match(ADMIN, /\$\('secure-cover-crop'\)\.onclick = openSecureCoverEditor/);
+  // 标题栏按钮文案带 ✂，拖拽区说明要提前告诉管理员「选后可以裁」
+  assert.match(ADMIN, /id="secure-cover-crop"[^>]*>✂ 裁切</);
+  assert.match(ADMIN, /选后可用 ✂ 裁切/);
+  // 没选封面就没得裁 —— syncButtons 里必须联动
+  assert.match(ADMIN, /\$\('secure-cover-crop'\)\.disabled = !secureCover/);
+});
+
+test('管理台：编辑器按 edTarget 分流，裁切封面不会碰 files[]', () => {
+  const openAt = ADMIN.indexOf('function openEditor(i)');
+  const openBody = ADMIN.slice(openAt, ADMIN.indexOf('function closeEditor'));
+  assert.match(openBody, /edTarget = 'page'/, 'openEditor 必须把目标重置回内页图片');
+
+  const coverAt = ADMIN.indexOf('function openSecureCoverEditor');
+  const coverBody = ADMIN.slice(coverAt, ADMIN.indexOf('function commitSecureCoverEdit'));
+  assert.match(coverBody, /edTarget = 'secure-cover'/);
+  assert.match(coverBody, /idx: -1/, '封面不在 files[] 里，idx 必须是 -1');
+  assert.match(coverBody, /isCover: true/, '封面要走编辑器的 2:3 裁剪框分支');
+
+  // edDone 的封面分支必须在读取 files[i] 之前返回
+  const doneAt = ADMIN.indexOf('function edDone');
+  // 取到 edDone 的闭合大括号为止：不能只按下一个 "function " 切，
+  // 那会把后面整段代码一起吞进来，匹配到无关的 files[i]
+  const doneBody = ADMIN.slice(doneAt, ADMIN.indexOf('\n}\n', doneAt) + 3);
+  assert.ok(doneBody.includes('function edDone'), 'edDone 切片失败');
+  const branchAt = doneBody.indexOf("target === 'secure-cover'");
+  // 只认真正的取值语句，别被注释里提到的 "files[i]" 骗到
+  const filesAt = doneBody.indexOf('var f = files[i]');
+  assert.ok(branchAt >= 0, 'edDone 里没有封面分支');
+  assert.ok(filesAt >= 0, 'edDone 里找不到 var f = files[i]');
+  assert.ok(branchAt < filesAt, '封面分支必须排在 files[i] 之前，否则会写错对象');
+  assert.match(doneBody.slice(0, filesAt), /commitSecureCoverEdit/, '封面分支要调用回写函数');
+});
+
+test('封面裁切产物：仍是 cover.<ext>，且强制重传（内容变了不能复用旧地址）', () => {
+  const api = loadCoverCommit();
+  const before = new File([Buffer.from('original-jpeg-bytes')], 'my-shot.jpg', { type: 'image/jpeg' });
+  api.setSecureCover(before);
+  assert.equal(api.secureCover.name, 'my-shot.jpg');
+  assert.equal(api.secureCoverName(api.secureCover.name), 'cover.jpg');
+
+  // 模拟编辑器完工：喂回一个 WebP 产物 + 裁剪参数
+  const out = new File([Buffer.from('cropped-webp-bytes')], 'my-shot.webp', { type: 'image/webp' });
+  const op = { crop: { x: 0.1, y: 0.05, w: 0.5, h: 0.75 }, strokes: [] };
+  api.commitSecureCoverEdit(out, op);
+
+  // 回写会把 blob 重新包成 File（为了钉住 .webp 后缀），所以比内容而不是比对象
+  assert.equal(api.secureCover.file.type, 'image/webp', '回写产物应是 WebP');
+  assert.equal(api.secureCover.byteSize, out.size, '回写后应以裁切产物的字节数为准');
+  assert.equal(api.secureCover.op.crop.x, 0.1, '裁剪参数要留下来，二次裁切才不丢');
+  assert.equal(api.secureCover.uploadedName, '', '内容变了必须清掉 uploadedName，否则会复用旧地址');
+  // 文件名主干换了也不能改落库名
+  assert.equal(api.secureCover.name, 'my-shot.webp');
+  assert.equal(api.secureCoverName(api.secureCover.name), 'cover.webp');
+  assert.ok(FILE_RE.test(api.secureCoverName(api.secureCover.name)));
+});
