@@ -100,6 +100,20 @@
       "envVariables": {
         "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}"
       }
+    },
+    {
+      "name": "auth",
+      "type": "Event",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 30,
+      "memorySize": 256,
+      "description": "账号统一入口：答题注册 + 自建会话（challenge/answer/register/login/logout/me）。argon2 随包，node-sdk 云端装",
+      "installDependency": true,
+      "envVariables": {
+        "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}",
+        "AUTH_PEPPER": "{{env.AUTH_PEPPER}}"
+      }
     }
   ]
 }

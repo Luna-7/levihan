@@ -7,8 +7,7 @@ import {
   Trash2, ChevronLeft, ChevronRight, ShoppingBag, Share2
 } from 'lucide-react';
 import { soundManager } from '../utils/audio';
-import { cloudbase } from '../utils/cloudbase';
-import { getAccessToken, getCurrentUid } from '../utils/cloudbaseToken';
+import { getAccessToken, getCurrentUid, getCurrentProfile } from '../utils/cloudbaseToken';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { CharacterArt, spriteRef } from './CharacterArt';
@@ -605,12 +604,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
     void (async () => {
       try {
-        const user = await cloudbase.auth().getCurrentUser();
-        if (!user) return;
-        const response = await cloudbase.callFunction({ name: 'getUserAccount', data: {} });
-        const fetchedNick = (response?.result || response)?.profile?.nickname;
-        if (fetchedNick && composeCategory !== 'roleplay') {
-          setNickname(fetchedNick);
+        const profile = await getCurrentProfile();
+        if (!profile) return;
+        if (profile.nickname && composeCategory !== 'roleplay') {
+          setNickname(profile.nickname);
         }
       } catch {
         /* ignore */

@@ -1,0 +1,10 @@
+{
+  "name": "levihan-auth",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^3.0.1",
+    "@node-rs/argon2": "^2.0.0"
+  }
+}

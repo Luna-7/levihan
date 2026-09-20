@@ -707,10 +707,10 @@ function inboxDb() {
 }
 
 /**
- * 校验前端 CloudBase 登录态（access_token），返回当前用户 uid。
+ * 校验前端自建会话 token（不透明 token，服务端只存 SHA-256 哈希），返回当前用户 uuid。
  * 用于「发布/删除需登录 + 只能操作自己内容」的身份绑定。
- * access_token 由前端 cloudbase.auth().getAccessToken() 提供，经
- * node-sdk 的 getUserInfoByAccessToken 验证（网关级，前端无法伪造 uid）。
+ * token 由前端 localStorage 里的 session token 提供（Authorization: Bearer 头），
+ * 经 user_sessions.token_hash（SHA-256）匹配，再查 app_users 拿 uuid（active 才有效）。
  */
 async function authUid(bearer) {
   const token = String(bearer || '').replace(/^Bearer\s+/i, '').trim();
@@ -718,9 +718,18 @@ async function authUid(bearer) {
   try {
     const tcb = require('@cloudbase/node-sdk');
     const app = tcb.init({ env: 'levihan-tudou-d0g7jivue1ccc4a35', accessKey: process.env.CLOUDBASE_APIKEY });
-    const auth = app.auth();
-    const info = await auth.getUserInfoByAccessToken(token);
-    return (info && info.uid) ? String(info.uid) : null;
+    const db = app.rdb({ database: 'public' });
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const session = await db.from('user_sessions').select('user_id,expires_at,revoked_at').eq('token_hash', tokenHash).limit(1);
+    if (session.error) return null;
+    const row = Array.isArray(session.data) ? session.data[0] : session.data;
+    if (!row || row.revoked_at) return null;
+    if (new Date(row.expires_at).getTime() < Date.now()) return null;
+    const users = await db.from('app_users').select('id,status').eq('id', row.user_id).limit(1);
+    if (users.error) return null;
+    const user = Array.isArray(users.data) ? users.data[0] : users.data;
+    if (!user || user.status !== 'active') return null;
+    return String(user.id);
   } catch (err) {
     return null; // token 无效/过期 → 视为未登录
   }

@@ -2,7 +2,7 @@
  * CloudBase 云函数（HTTP 访问服务）地址的唯一出口。
  *
  * 为什么本地开发不直连真实域名：
- * admin-upload / registerWithPassword / loginWithPassword 都用 http 访问服务暴露，
+ * admin-upload / auth 都用 http 访问服务暴露，
  * 云函数的 ALLOWED_ORIGINS 只认 levihan.asia / www / admin / localhost:5173 / localhost:4173。
  * 而 `npm run dev` 跑在 localhost:3000（`--host=0.0.0.0` 时还有局域网 IP），
  * 浏览器跨域会被云函数回落的 ACAO 头挡下，报 TypeError: Failed to fetch，

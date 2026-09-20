@@ -15,7 +15,7 @@ import { DoujinMaintenanceGate } from './DoujinMaintenanceGate';
 import { AuthorWithLink } from '../utils/authorLink';
 import { MangaCommentSection } from './MangaCommentSection';
 import { getCommentCountByBookId } from '../data/mangaComments';
-import { cloudbase } from '../utils/cloudbase';
+import { getSessionToken } from '../utils/cloudbaseToken';
 
 interface Props {
   onCopyCode?: (code: string) => void;
@@ -84,8 +84,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     let active = true;
     const refreshLogin = async () => {
       try {
-        const user = await cloudbase.auth().getCurrentUser();
-        if (active) setIsMangaUnlocked(previewLoggedIn || Boolean(user));
+        const hasSession = Boolean(getSessionToken());
+        if (active) setIsMangaUnlocked(previewLoggedIn || hasSession);
       } catch {
         if (active) setIsMangaUnlocked(previewLoggedIn);
       } finally {

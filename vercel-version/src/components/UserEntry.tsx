@@ -1,19 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { cloudbase } from '../utils/cloudbase';
 import { CLOUDBASE_API_BASE } from '../utils/cloudbaseEndpoint';
+import { getSessionToken, setSessionToken, type AuthProfile } from '../utils/cloudbaseToken';
 import { UiSprite } from './UiSprite';
 import { PopupSketchOverlay } from './PopupSketchOverlay';
 
-type View = 'login' | 'register' | 'account';
-type Account = { uid: string; nickname: string; role?: string; createdAt?: string };
+type View = 'login' | 'register' | 'quiz' | 'account';
 type Props = { onShowToast: (message: string) => void };
 
 /**
- * 注册 / 登录走 HTTP 访问服务，而不是 cloudbase.callFunction：
- * 这两步必然发生在拿到登录态之前，而网关鉴权默认只放行已登录用户。
- * 与其对应的云函数是 registerWithPassword / loginWithPassword。
+ * 注册 / 登录 / 答题 / 账号管理统一入口。
+ * 后端是 auth 云函数（HTTP 访问服务），走自建会话 token（localStorage），
+ * 不再依赖 CloudBase 内置 auth()。
  */
+
 const NICKNAME_MIN = 2;
 const NICKNAME_MAX = 20;
 const PASSWORD_MIN = 6;
@@ -36,15 +36,17 @@ const errorMessage = (error: unknown) => {
 };
 
 /** 用 text/plain 发送，避开浏览器对 application/json 的 CORS 预检 */
-const postAccountApi = async (path: string, body: Record<string, unknown>) => {
-  const response = await fetch(`${CLOUDBASE_API_BASE}/${path}`, {
+const postAuth = async (action: string, body: Record<string, unknown>, token?: string | null) => {
+  const headers: Record<string, string> = { 'Content-Type': 'text/plain;charset=UTF-8' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetch(`${CLOUDBASE_API_BASE}/auth`, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-    body: JSON.stringify(body),
+    headers,
+    body: JSON.stringify({ action, ...body }),
   });
   const result = await response.json().catch(() => null);
   if (!response.ok || !result?.ok) throw new Error(result?.message || '账号服务暂时不可用，请稍后重试');
-  return result as { ok: true; ticket: string; profile: Account };
+  return result;
 };
 
 const validateNickname = (nickname: string) =>
@@ -57,44 +59,34 @@ const validatePassword = (password: string) =>
     ? `密码需要 ${PASSWORD_MIN}–${PASSWORD_MAX} 位`
     : null;
 
+type Question = { id: string; prompt: string; options: string[] };
+
 export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>('login');
-  const [account, setAccount] = useState<Account | null>(null);
+  const [account, setAccount] = useState<AuthProfile | null>(null);
   const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [newNickname, setNewNickname] = useState('');
 
-  const call = async (name: string, data: Record<string, unknown> = {}) => {
-    try {
-      const response = await cloudbase.callFunction({ name, data });
-      const result = response?.result || response;
-      if (result?.ok === false) throw new Error(result.message || '操作失败，请稍后重试');
-      return result;
-    } catch (error) {
-      throw new Error(errorMessage(error));
-    }
-  };
-
-  /** 拿到服务端签发的一次性票据后换登录态 */
-  const signInWithTicket = async (ticket: string) => {
-    const auth = cloudbase.auth();
-    const result = await auth.signInWithCustomTicket(() => Promise.resolve(ticket));
-    if (result && typeof result === 'object' && 'error' in result && result.error) {
-      throw new Error(errorMessage(result.error));
-    }
-    return result;
-  };
+  // 答题态
+  const [question, setQuestion] = useState<Question | null>(null);
+  const [challengeId, setChallengeId] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [ticket, setTicket] = useState('');
 
   const refresh = async () => {
+    const token = getSessionToken();
+    if (!token) return setAccount(null);
     try {
-      const user = await cloudbase.auth().getCurrentUser();
-      if (!user) return setAccount(null);
-      const result = await call('getUserAccount');
-      setAccount(result.profile);
-    } catch { setAccount(null); }
+      const result = await postAuth('me', {}, token);
+      setAccount(result.profile as AuthProfile);
+    } catch {
+      setSessionToken(null);
+      setAccount(null);
+    }
   };
   useEffect(() => { void refresh(); }, []);
 
@@ -106,7 +98,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     finally { setBusy(false); }
   };
 
-  const clearSecrets = () => { setPassword(''); setConfirmPassword(''); };
+  const clearSecrets = () => { setPassword(''); setConfirmPassword(''); setAnswer(''); };
   const switchView = (next: View) => { clearSecrets(); setView(next); };
   const showEntry = () => { switchView(account ? 'account' : 'login'); setOpen(true); };
 
@@ -116,29 +108,94 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     return () => window.removeEventListener('levihan-open-login', handleOpenRequest);
   }, [account]);
 
-  const submit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const registering = view === 'register';
+  /** 注册第一步：发起答题挑战 */
+  const startRegister = () => {
     void run(async () => {
       const name = nickname.trim();
       const invalid = validateNickname(name) || validatePassword(password);
       if (invalid) throw new Error(invalid);
-      if (registering && password !== confirmPassword) throw new Error('两次输入的密码不一致');
-
-      const result = await postAccountApi(registering ? 'registerWithPassword' : 'loginWithPassword', {
-        nickname: name,
-        password,
-      });
-      await signInWithTicket(result.ticket);
-      await refresh();
-      window.dispatchEvent(new Event('levihan-auth-changed'));
-      clearSecrets();
-      setOpen(false);
-      onShowToast(registering ? '注册成功，欢迎加入利韩土豆仓' : '欢迎回到利韩土豆仓');
+      if (password !== confirmPassword) throw new Error('两次输入的密码不一致');
+      const result = await postAuth('challenge', {});
+      setQuestion(result.question as Question);
+      setChallengeId(result.challengeId as string);
+      setTicket('');
+      switchView('quiz');
     });
   };
 
-  const title = account ? account.nickname : view === 'register' ? '加入 LeviHan' : '欢迎回来';
+  /** 注册第二步：提交答案 */
+  const submitAnswer = () => {
+    void run(async () => {
+      const trimmed = answer.trim();
+      if (!trimmed) throw new Error('请先作答');
+      const result = await postAuth('answer', { challengeId, answer: trimmed });
+      if (result.correct) {
+        setTicket(result.ticket as string);
+      } else {
+        // 答错：若非耗尽，可重试；耗尽则触发冷却，回到登录页
+        onShowToast(result.message || '答案不正确');
+        if (result.exhausted) { switchView('login'); }
+        else { setAnswer(''); }
+      }
+    });
+  };
+
+  /** 注册第三步：答对后凭票据 + 昵称 + 密码正式注册 */
+  const confirmRegister = () => {
+    void run(async () => {
+      const name = nickname.trim();
+      const result = await postAuth('register', { ticket, nickname: name, password });
+      setSessionToken(result.token as string);
+      setAccount(result.profile as AuthProfile);
+      window.dispatchEvent(new Event('levihan-auth-changed'));
+      clearSecrets();
+      setOpen(false);
+      onShowToast('注册成功，欢迎加入利韩土豆仓');
+    });
+  };
+
+  const login = () => {
+    void run(async () => {
+      const name = nickname.trim();
+      const invalid = validateNickname(name) || validatePassword(password);
+      if (invalid) throw new Error(invalid);
+      const result = await postAuth('login', { nickname: name, password });
+      setSessionToken(result.token as string);
+      setAccount(result.profile as AuthProfile);
+      window.dispatchEvent(new Event('levihan-auth-changed'));
+      clearSecrets();
+      setOpen(false);
+      onShowToast('欢迎回到利韩土豆仓');
+    });
+  };
+
+  const logout = () => {
+    void run(async () => {
+      const token = getSessionToken();
+      if (token) { try { await postAuth('logout', {}, token); } catch { /* 忽略 */ } }
+      setSessionToken(null);
+      setAccount(null);
+      window.dispatchEvent(new Event('levihan-auth-changed'));
+      switchView('login');
+      setOpen(false);
+      onShowToast('已退出登录');
+    });
+  };
+
+  const updateNickname = () => {
+    void run(async () => {
+      const name = newNickname.trim();
+      const invalid = validateNickname(name);
+      if (invalid) throw new Error(invalid);
+      await postAuth('update-nickname', { nickname: name }, getSessionToken());
+      setNewNickname('');
+      await refresh();
+      window.dispatchEvent(new Event('levihan-auth-changed'));
+      onShowToast('昵称已更新，后续发布与评论将使用新昵称');
+    });
+  };
+
+  const title = account ? account.nickname : view === 'register' ? '加入 LeviHan' : view === 'quiz' ? '入门答题' : '欢迎回来';
 
   return <>
     {account ? (
@@ -158,46 +215,58 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
         <p className="font-pixel text-[10px] text-[#8C5828] tracking-widest mb-1">LEVIHAN MEMBER</p>
         <h2 className="font-pixel text-lg text-[#1E4334] mb-4 pr-10">{title}</h2>
 
-        {!account && (view === 'login' || view === 'register') && <form className="space-y-3" onSubmit={submit}>
+        {!account && view === 'login' && <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); login(); }}>
           <label className="block font-bold text-sm">昵称
             <input value={nickname} onChange={(e) => setNickname(e.target.value)} autoComplete="username" minLength={NICKNAME_MIN} maxLength={NICKNAME_MAX} required placeholder={`${NICKNAME_MIN}–${NICKNAME_MAX} 个字`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
           </label>
           <label className="block font-bold text-sm">密码
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={view === 'register' ? 'new-password' : 'current-password'} minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required placeholder={`至少 ${PASSWORD_MIN} 位`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required placeholder={`至少 ${PASSWORD_MIN} 位`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
           </label>
-          {view === 'register' && <label className="block font-bold text-sm">确认密码
-            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
-          </label>}
-          <Submit busy={busy}>{view === 'register' ? '创建账号' : '登录'}</Submit>
+          <Submit busy={busy}>登录</Submit>
           <p className="pt-1 text-center text-xs text-[#73583F]">
-            {view === 'register'
-              ? <button type="button" onClick={() => switchView('login')} className="underline cursor-pointer">已有账号？返回登录</button>
-              : <><button type="button" onClick={() => switchView('register')} className="underline cursor-pointer">还没有账号？注册</button><span className="px-2">·</span><button type="button" onClick={() => onShowToast('暂时不支持找回密码，请重新注册一个昵称')} className="underline cursor-pointer">忘记密码</button></>}
+            <button type="button" onClick={() => switchView('register')} className="underline cursor-pointer">还没有账号？注册</button><span className="px-2">·</span><button type="button" onClick={() => onShowToast('暂时不支持找回密码，请重新注册一个昵称')} className="underline cursor-pointer">忘记密码</button>
           </p>
         </form>}
 
+        {!account && view === 'register' && <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); startRegister(); }}>
+          <label className="block font-bold text-sm">昵称
+            <input value={nickname} onChange={(e) => setNickname(e.target.value)} autoComplete="username" minLength={NICKNAME_MIN} maxLength={NICKNAME_MAX} required placeholder={`${NICKNAME_MIN}–${NICKNAME_MAX} 个字`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
+          </label>
+          <label className="block font-bold text-sm">密码
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required placeholder={`至少 ${PASSWORD_MIN} 位`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
+          </label>
+          <label className="block font-bold text-sm">确认密码
+            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
+          </label>
+          <Submit busy={busy}>继续（答题验证）</Submit>
+          <p className="pt-1 text-center text-xs text-[#73583F]">
+            <button type="button" onClick={() => switchView('login')} className="underline cursor-pointer">已有账号？返回登录</button>
+          </p>
+        </form>}
+
+        {!account && view === 'quiz' && question && !ticket && <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); submitAnswer(); }}>
+          <p className="text-sm text-[#73583F]">答对这道题才能完成注册（3 次机会）：</p>
+          <p className="p-3 bg-[#FFF8E8] border-2 border-[#B99461] font-bold text-[#1E4334]">{question.prompt}</p>
+          <div className="space-y-2">
+            {question.options.map((opt) => (
+              <label key={opt} className={`flex items-center gap-2 p-2 border-2 cursor-pointer ${answer === opt ? 'border-[#1E4334] bg-[#FFF8E8]' : 'border-[#8C6C47] bg-white'}`}>
+                <input type="radio" name="quiz-option" value={opt} checked={answer === opt} onChange={() => setAnswer(opt)} className="accent-[#1E4334]" />
+                <span>{opt}</span>
+              </label>
+            ))}
+          </div>
+          <Submit busy={busy}>提交答案</Submit>
+          <button type="button" onClick={() => switchView('register')} className="w-full text-center text-xs text-[#73583F] underline cursor-pointer">返回修改昵称密码</button>
+        </form>}
+
+        {!account && view === 'quiz' && ticket && <div className="space-y-3">
+          <p className="p-3 bg-[#EAF5E4] border-2 border-[#3B6D11] text-[#1E4334] font-bold">答对了！</p>
+          <Submit busy={busy} onClick={confirmRegister}>完成注册</Submit>
+        </div>}
+
         {account && view === 'account' && <div className="space-y-4">
-          <AccountPanel account={account} busy={busy} onLogout={() => run(async () => {
-            await cloudbase.auth().signOut();
-            setAccount(null);
-            window.dispatchEvent(new Event('levihan-auth-changed'));
-            switchView('login');
-            setOpen(false);
-            onShowToast('已退出登录');
-          })} />
-          <form onSubmit={(event) => {
-            event.preventDefault();
-            void run(async () => {
-              const name = newNickname.trim();
-              const invalid = validateNickname(name);
-              if (invalid) throw new Error(invalid);
-              await call('updateNickname', { nickname: name });
-              setNewNickname('');
-              await refresh();
-              window.dispatchEvent(new Event('levihan-auth-changed'));
-              onShowToast('昵称已更新，后续发布与评论将使用新昵称');
-            });
-          }} className="p-3 bg-[#FFF8E8] border-2 border-[#B99461]">
+          <AccountPanel account={account} busy={busy} onLogout={logout} />
+          <form onSubmit={(e) => { e.preventDefault(); updateNickname(); }} className="p-3 bg-[#FFF8E8] border-2 border-[#B99461]">
             <label className="block text-sm font-bold">修改统一昵称
               <div className="mt-2 flex gap-2">
                 <input value={newNickname} onChange={(e) => setNewNickname(e.target.value)} minLength={NICKNAME_MIN} maxLength={NICKNAME_MAX} placeholder={account.nickname} className="min-w-0 flex-1 p-2 bg-white border-2 border-[#8C6C47]" />
@@ -212,9 +281,11 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   </>;
 };
 
-const Submit = ({ children, busy }: { children: React.ReactNode; busy: boolean }) => <button type="submit" disabled={busy} className="w-full p-3 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-bold cursor-pointer disabled:opacity-50">{busy ? '处理中…' : children}</button>;
+const Submit = ({ children, busy, onClick }: { children: React.ReactNode; busy: boolean; onClick?: () => void }) => (
+  <button type="submit" disabled={busy} onClick={onClick} className="w-full p-3 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-bold cursor-pointer disabled:opacity-50">{busy ? '处理中…' : children}</button>
+);
 
-const AccountPanel = ({ account, busy, onLogout }: { account: Account; busy: boolean; onLogout: () => void }) => <div className="space-y-4">
+const AccountPanel = ({ account, busy, onLogout }: { account: AuthProfile; busy: boolean; onLogout: () => void }) => <div className="space-y-4">
   <dl className="grid grid-cols-2 border-2 border-[#8C6C47] text-center">
     <div className="p-2"><dt className="text-xs text-[#7A6958]">加入时间</dt><dd className="font-bold">{account.createdAt ? new Date(account.createdAt).toLocaleDateString('zh-CN') : '—'}</dd></div>
     <div className="p-2 border-l border-[#8C6C47]"><dt className="text-xs text-[#7A6958]">身份</dt><dd className="font-bold">{account.role === 'admin' ? '仓管' : '同好'}</dd></div>

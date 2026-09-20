@@ -11,6 +11,7 @@
  * 改任一端都要同步改另一端，否则本地预估值与入库值会对不上。
  */
 import { cloudbase } from './cloudbase';
+import { getSessionToken } from './cloudbaseToken';
 import { FALLBACK_TRACK_SECONDS } from '../save-hange/constants';
 
 export type GameKey = 'daxigua' | 'hange';
@@ -117,12 +118,8 @@ export interface SubmitResult {
 }
 
 async function currentUid(): Promise<string | null> {
-  try {
-    const user = await cloudbase.auth().getCurrentUser();
-    return user?.uid || null;
-  } catch {
-    return null;
-  }
+  // 自建会话：有 token 即视为已登录（uid 由后端凭 token 解析）
+  return getSessionToken() ? 'authed' : null;
 }
 
 /**

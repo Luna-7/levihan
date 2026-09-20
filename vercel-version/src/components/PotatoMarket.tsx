@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { soundManager } from '../utils/audio';
-import { cloudbase } from '../utils/cloudbase';
-import { getAccessToken } from '../utils/cloudbaseToken';
+import { getAccessToken, getCurrentProfile } from '../utils/cloudbaseToken';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { PopupSketchOverlay } from './PopupSketchOverlay';
@@ -150,14 +149,12 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
     // 2. Fetch logged-in user nickname
     void (async () => {
       try {
-        const currentUser = await cloudbase.auth().getCurrentUser();
-        if (currentUser) {
+        const profile = await getCurrentProfile();
+        if (profile) {
           setIsUserLoggedIn(true);
-          const response = await cloudbase.callFunction({ name: 'getUserAccount', data: {} });
-          const fetchedNick = (response?.result || response)?.profile?.nickname;
-          if (fetchedNick) {
-            setAutoNickname(fetchedNick);
-            setFormNickname(fetchedNick);
+          if (profile.nickname) {
+            setAutoNickname(profile.nickname);
+            setFormNickname(profile.nickname);
           }
         }
       } catch {
