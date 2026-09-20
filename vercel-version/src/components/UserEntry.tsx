@@ -119,7 +119,8 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
       setQuestion(result.question as Question);
       setChallengeId(result.challengeId as string);
       setTicket('');
-      switchView('quiz');
+      // 只切视图，不清密码 —— 答题后 confirmRegister 还要用 nickname/password
+      setView('quiz');
     });
   };
 
@@ -256,7 +257,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
             ))}
           </div>
           <Submit busy={busy}>提交答案</Submit>
-          <button type="button" onClick={() => switchView('register')} className="w-full text-center text-xs text-[#73583F] underline cursor-pointer">返回修改昵称密码</button>
+          <button type="button" onClick={() => { setAnswer(''); setView('register'); }} className="w-full text-center text-xs text-[#73583F] underline cursor-pointer">返回修改昵称密码</button>
         </form>}
 
         {!account && view === 'quiz' && ticket && <div className="space-y-3">
