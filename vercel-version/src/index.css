@@ -3,6 +3,7 @@
 @theme {
   --font-sans: 'Almendra', 'Noto Serif SC', 'Noto Sans SC', serif, sans-serif;
   --font-serif: 'Noto Serif SC', 'Source Han Serif SC', serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', 'Noto Serif SC', monospace;
 }
 
 @layer base {
@@ -115,7 +116,7 @@
 }
 
 .font-pixel {
-  font-family: 'Press Start 2P', 'DotGothic16', monospace;
+  font-family: 'Press Start 2P', 'DotGothic16', 'Noto Serif SC', monospace;
 }
 
 .font-retro-jp {
@@ -123,7 +124,7 @@
 }
 
 .font-vt {
-  font-family: 'VT323', monospace;
+  font-family: 'VT323', 'Noto Serif SC', monospace;
 }
 
 /* 8-bit crisp pixel rendering */
@@ -546,19 +547,19 @@ body.immersive-on .retro-frame-card > .absolute {
    (Derived from official Pop Up Shop Angel & Devil Visual)
    ==================================================== */
 .font-serif-title {
-  font-family: 'Cinzel Decorative', 'Cinzel', 'Noto Serif JP', Georgia, 'Times New Roman', serif;
+  font-family: 'Cinzel Decorative', 'Cinzel', 'Noto Serif SC', Georgia, 'Times New Roman', serif;
 }
 
 .font-mincho {
-  font-family: 'Noto Serif JP', 'Noto Serif SC', 'Source Han Serif SC', serif;
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', serif;
 }
 
 .font-gothic {
-  font-family: 'UnifrakturMaguntia', 'Cinzel', serif;
+  font-family: 'UnifrakturMaguntia', 'Cinzel', 'Noto Serif SC', serif;
 }
 
 .font-medieval {
-  font-family: 'MedievalSharp', 'Almendra', serif;
+  font-family: 'MedievalSharp', 'Almendra', 'Noto Serif SC', serif;
 }
 
 /* ====================================================
