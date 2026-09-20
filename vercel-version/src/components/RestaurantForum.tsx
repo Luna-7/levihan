@@ -890,7 +890,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
           if (serverPost && serverPost.id) {
             setPosts((cur) => cur.map((p) => (p.id === newPost.id ? { ...p, ...serverPost, id: p.id } : p)));
           }
-        }).catch(() => undefined);
+        }).catch(() => onShowToast('⚠️ 帖子同步失败（只保存在本机，其他设备看不到）'));
       } catch (error) {
         onShowToast(error instanceof Error ? error.message : '发布失败');
       } finally {
@@ -944,7 +944,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
           if (serverPost && serverPost.id) {
             setPosts((cur) => cur.map((p) => (p.id === newPost.id ? { ...p, ...serverPost, id: p.id } : p)));
           }
-        }).catch(() => undefined);
+        }).catch(() => onShowToast('⚠️ 帖子同步失败（只保存在本机，其他设备看不到）'));
       } catch (error) {
         onShowToast(error instanceof Error ? error.message : '发布失败');
       } finally {
@@ -1061,7 +1061,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
           setMarketItems(result.items);
           localStorage.setItem(MARKET_STORAGE_KEY, JSON.stringify(result.items));
         }
-      }).catch(() => undefined);
+      }).catch(() => onShowToast('⚠️ 商品同步失败（只保存在本机，其他设备看不到）'));
       onShowToast('🎉 发布成功！已同步至市集列表');
 
       setMarketFormTitle('');
@@ -1190,7 +1190,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
         postId, author: authorName, body: text,
         characterName: authorName, characterAvatar, isHost,
         relayStep: stepIndex, wordCount: text.length, diceRoll,
-      }).catch(() => undefined);
+      }).catch(() => onShowToast('⚠️ 接棒同步失败（只保存在本机，其他设备看不到）'));
       onShowToast(`第 ${stepIndex} 棒已递交 (${text.length}字)，合订本已同步更新 📖`);
     } else {
       const newComment: ForumComment = {
@@ -1227,7 +1227,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       void api('forumComment', {
         postId, author: authorName, body: text,
         characterName: authorName, characterAvatar, isHost, diceRoll,
-      }).catch(() => undefined);
+      }).catch(() => onShowToast('⚠️ 评论同步失败（只保存在本机，其他设备看不到）'));
     }
   };
 

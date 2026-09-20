@@ -1434,7 +1434,7 @@ function corsHeaders(origin) {
         : allow.split(',')[0].trim();
   return {
     'Access-Control-Allow-Origin': value,
-    'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Token',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Token, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Max-Age': '86400',
   };
