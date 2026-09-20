@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   MessageCircle, Plus, X, Feather, Dice5, Copy, Check, BookOpen, Sparkles, RefreshCw,
   Lock, Unlock, ChevronDown, ChevronUp, Send, Upload, Link as LinkIcon, DollarSign,
-  User as UserIcon, AlertTriangle, Search, PlusCircle, ShieldAlert, CheckCircle2,
+  AlertTriangle, Search, PlusCircle, ShieldAlert,
   Trash2, ChevronLeft, ChevronRight, ShoppingBag, Share2
 } from 'lucide-react';
 import { soundManager } from '../utils/audio';
@@ -341,7 +341,9 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       const stored = localStorage.getItem(MARKET_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        // 旧版种进缓存的样品卡片（id 以 init- 开头）一律过滤，列表以 marketList 后端数据为准
+        const cleaned = Array.isArray(parsed) ? parsed.filter((item: MarketItem) => !item.id?.startsWith('init-')) : [];
+        if (cleaned.length > 0) return cleaned;
       }
       localStorage.setItem(MARKET_STORAGE_KEY, JSON.stringify(INITIAL_MARKET_ITEMS));
       return INITIAL_MARKET_ITEMS;
@@ -424,6 +426,8 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
   // Composer Modal
   const [showComposer, setShowComposer] = useState(false);
+  // 土豆市集专用发布弹窗（已从通用发布弹窗中剥离，市集物资只走「发布市集物资」入口）
+  const [showMarketComposer, setShowMarketComposer] = useState(false);
   const [composeCategory, setComposeCategory] = useState<PostCategory>('roleplay');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -1350,6 +1354,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
               type="button"
               onClick={() => {
                 soundManager.playActionClick();
+                setComposeCategory('chat');
                 setShowComposer(true);
               }}
               className="px-3.5 py-1 rounded-full bg-[#1E4334] hover:bg-[#2C5C46] text-[#F9E79F] border border-[#163327] text-xs font-bold cursor-pointer flex items-center gap-1 active:scale-95 shadow-xs"
@@ -1408,7 +1413,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                   onClick={() => {
                     soundManager.playActionClick();
                     setComposeCategory('market');
-                    setShowComposer(true);
+                    setShowMarketComposer(true);
                   }}
                   className="px-3.5 py-1.5 bg-[#8C5828] hover:bg-[#72451E] text-[#FFFDF8] rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-transform active:scale-95 shrink-0"
                 >
@@ -2320,12 +2325,13 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
         </div>
       </main>
 
-      {/* 发起发布弹窗 (使用 createPortal 居中渲染于 document.body) */}
-      {showComposer &&
+      {/* 发起发布弹窗 (使用 createPortal 居中渲染于 document.body)；
+          showMarketComposer 时同一容器复用为「发布市集物资」专用弹窗 */}
+      {(showComposer || showMarketComposer) &&
         createPortal(
           <div
             className="fixed inset-0 z-[999] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 select-none overflow-y-auto animate-in fade-in duration-150"
-            onClick={() => setShowComposer(false)}
+            onClick={() => { setShowComposer(false); setShowMarketComposer(false); }}
           >
             <div
               onClick={(e) => e.stopPropagation()}
@@ -2336,19 +2342,21 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
               <div className="relative z-10 flex items-center justify-between pb-2 border-b border-[#D8C7AA]">
                 <h2 className="font-serif-title text-sm font-black text-[#2D1F13]">
-                  发起发布
+                  {showMarketComposer ? '发布市集物资' : '发起发布'}
                 </h2>
                 <button
                   type="button"
-                  onClick={() => setShowComposer(false)}
+                  onClick={() => { setShowComposer(false); setShowMarketComposer(false); }}
                   className="text-[#8C7A65] hover:text-[#2D1F13] cursor-pointer"
                 >
                   <X size={16} />
                 </button>
               </div>
 
-              {/* 类别切换 (4种类型: 闲聊茶歇 -> 角色拟音 -> 故事接龙 -> 土豆市集) */}
-              <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
+              {/* 类别切换（仅通用发布：闲聊茶歇 / 角色拟音 / 故事接龙；
+                  土豆市集已剥离到「发布市集物资」专用弹窗，不再出现在通用发布里） */}
+              {!showMarketComposer && (
+              <div className="relative z-10 grid grid-cols-3 gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -2369,7 +2377,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                   onClick={() => {
                     soundManager.playWoodTap();
                     setComposeCategory('roleplay');
-                    if (selectedChar) setNickname(selectedChar.name);
                   }}
                   className={`py-2 px-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
                     composeCategory === 'roleplay'
@@ -2395,25 +2402,11 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                   <Feather size={13} />
                   <span>故事接龙</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundManager.playWoodTap();
-                    setComposeCategory('market');
-                  }}
-                  className={`py-2 px-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
-                    composeCategory === 'market'
-                      ? 'bg-[#8C5828] text-[#FFFDF8] border-[#643D16] shadow-xs'
-                      : 'bg-[#FDF8EE] text-[#8C5828] border-[#DEC49C]'
-                  }`}
-                >
-                  <span>🥔</span>
-                  <span>土豆市集</span>
-                </button>
               </div>
+              )}
 
-              {/* 🥔 土豆市集专属发布表单 */}
-              {composeCategory === 'market' ? (
+              {/* 🥔 土豆市集专属发布表单（仅 showMarketComposer 时渲染） */}
+              {showMarketComposer ? (
                 <form onSubmit={publish} className="relative z-10 space-y-3">
                   {/* 1. 商品名称 */}
                   <div>
@@ -2430,41 +2423,23 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                     />
                   </div>
 
-                  {/* 2. 出让定价 & 署名 */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">
-                        出让定价 (¥ 必填):
-                      </label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D4F]" />
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={marketFormPrice}
-                          onChange={(e) => setMarketFormPrice(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-[#C5B498] text-xs font-bold outline-none bg-white focus:border-[#8C5828]"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">
-                        发布者署名 (必填):
-                      </label>
-                      <div className="relative">
-                        <UserIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D4F]" />
-                        <input
-                          type="text"
-                          value={nickname}
-                          onChange={(e) => setNickname(e.target.value)}
-                          placeholder="账号昵称（默认）"
-                          className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-[#C5B498] text-xs font-bold outline-none bg-white focus:border-[#8C5828]"
-                        />
-                      </div>
+                  {/* 2. 出让定价（署名已移除：默认以账号昵称发布） */}
+                  <div>
+                    <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">
+                      出让定价 (¥ 必填):
+                    </label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D4F]" />
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={marketFormPrice}
+                        onChange={(e) => setMarketFormPrice(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-[#C5B498] text-xs font-bold outline-none bg-white focus:border-[#8C5828]"
+                        required
+                      />
                     </div>
                   </div>
 
@@ -2732,22 +2707,8 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                   )}
 
                   <form onSubmit={publish} className="relative z-10 space-y-2.5">
-                    {/* 昵称输入行：语C 不发署名，身份就是所选拟音人物本人；
-                        其余分类保留署名输入 */}
-                    {composeCategory !== 'roleplay' && (
-                      <div>
-                        <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">
-                          发帖署名:
-                        </label>
-                        <input
-                          type="text"
-                          value={nickname}
-                          onChange={(e) => setNickname(e.target.value)}
-                          placeholder="账号昵称（默认）"
-                          className="w-full px-3 py-1.5 rounded-lg border border-[#C5B498] text-xs font-bold outline-none bg-white focus:border-[#235340]"
-                        />
-                      </div>
-                    )}
+                    {/* 署名输入已移除：发布人固定为账号昵称（mount 时自动载入，
+                        未登录兜底 '调查兵'），不再提供手动输入。 */}
 
                     {/* 只有故事接龙需要填写标题，闲聊茶歇和角色拟音去除标题 */}
                     {composeCategory === 'relay' && (

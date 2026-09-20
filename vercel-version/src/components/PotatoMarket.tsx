@@ -41,66 +41,21 @@ const api = async (action: string, fields: Record<string, unknown> = {}) => {
   return result;
 };
 
-// Pre-populated immersive mock items
-export const INITIAL_MARKET_ITEMS: MarketItem[] = [
-  {
-    id: 'init-1',
-    title: '【利韩手作】「壁外观测日记」Q版双人摇摇乐立牌',
-    price: 38,
-    image: '/images/characters/hange_angel.jpg',
-    link: 'https://item.taobao.com/example-1',
-    description: '手工定制双层亚克力立牌，高约8cm，利韩双人可摇晃结构，工艺精美，限量带亲签明信片特典。',
-    nickname: '韩吉趴趴',
-    date: '2026-09-18'
-  },
-  {
-    id: 'init-2',
-    title: '【同人制品】「落日茶会」复古烫金特种纸手写信封套装',
-    price: 18,
-    image: '/images/characters/levi_tea.jpg',
-    link: 'https://item.taobao.com/example-2',
-    description: '一套含3款不同设计的烫金信纸与信封，包含复古火漆印章贴纸，特别定制利威尔红茶暖色调纹理。',
-    nickname: '利威尔茶会',
-    date: '2026-09-17'
-  },
-  {
-    id: 'init-3',
-    title: '【二创制品】「自由之翼」复古雕花黄铜书签套组',
-    price: 25,
-    image: '/images/rules-hange-tea.png',
-    link: 'https://item.taobao.com/example-3',
-    description: '黄铜拉丝工艺，流苏挂件，刻有利韩经典对话台词。随书签附赠定制调查兵团羊皮纸纪念袋。',
-    nickname: '壁外调查小队',
-    date: '2026-09-16'
-  },
-  {
-    id: 'init-4',
-    title: '【回血出闲置】日版中古利韩小说本《Brave New World》',
-    price: 45,
-    image: '/images/archive-maintenance.webp',
-    link: 'https://2.taobao.com/example-4',
-    description: '无折痕、九五新，仅翻阅过一次。附赠原画师插画卡片特典一张，走闲鱼担保，包邮。',
-    nickname: '红茶包好喝',
-    date: '2026-09-18'
-  },
-  {
-    id: 'init-5',
-    title: '【重合特典出】利韩同人画集《落日余晖》中日双语版',
-    price: 60,
-    image: '/images/zipline-cadets.webp',
-    link: 'https://2.taobao.com/example-5',
-    description: '全新未拆封，带全套明信片和透明胶片挂件。急需回血，可议价，闲鱼直接搜索“利韩余晖”或点击下方外链。',
-    nickname: '利韩守护犬',
-    date: '2026-09-15'
-  }
-];
+/**
+ * 市集初始数据：已清空内置样品卡片（原 5 条 init-* mock），
+ * 列表完全以 admin-upload 云函数 marketList 返回的后端数据为准。
+ * 保留导出是因为 RestaurantForum 还在用它作为 localStorage 兜底种子。
+ */
+export const INITIAL_MARKET_ITEMS: MarketItem[] = [];
+
+/** 旧版本种进 localStorage 的样品卡片 id 前缀，加载时一律过滤掉 */
+const LEGACY_MOCK_PREFIX = 'init-';
 
 export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
   const [items, setItems] = useState<MarketItem[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isPublishOpen, setIsPublishOpen] = useState<boolean>(false);
-  const [autoNickname, setAutoNickname] = useState<string>('');
-  const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean>(false);
+  const [autoNickname, setAutoNickname] = useState<string>('');  const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean>(false);
 
   // 查看卡片详情弹窗
   const [selectedItem, setSelectedItem] = useState<MarketItem | null>(null);
@@ -115,7 +70,6 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
   const [formPrice, setFormPrice] = useState<string>('');
   const [formLink, setFormLink] = useState<string>('');
   const [formDesc, setFormDesc] = useState<string>('');
-  const [formNickname, setFormNickname] = useState<string>('');
   const [formImages, setFormImages] = useState<string[]>([]);
   const [activeUploadPreviewIndex, setActiveUploadPreviewIndex] = useState<number>(0);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -123,11 +77,12 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
 
   // Load items and user login nickname
   useEffect(() => {
-    // 1. Load listings from localStorage or fallback
+    // 1. Load listings from localStorage or fallback（过滤旧版样品卡片 init-*）
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        setItems(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        setItems(Array.isArray(parsed) ? parsed.filter((item: MarketItem) => !item.id?.startsWith(LEGACY_MOCK_PREFIX)) : []);
       } else {
         setItems(INITIAL_MARKET_ITEMS);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_MARKET_ITEMS));
@@ -154,7 +109,6 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
           setIsUserLoggedIn(true);
           if (profile.nickname) {
             setAutoNickname(profile.nickname);
-            setFormNickname(profile.nickname);
           }
         }
       } catch {
@@ -265,7 +219,7 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
       return;
     }
 
-    const finalNickname = autoNickname || formNickname.trim() || '匿名同好';
+    const finalNickname = autoNickname || '匿名同好';
 
     const newItem: MarketItem = {
       id: `item-${Date.now()}`,
@@ -302,7 +256,6 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
     setFormPrice('');
     setFormLink('');
     setFormDesc('');
-    if (!autoNickname) setFormNickname('');
     setFormImages([]);
     setActiveUploadPreviewIndex(0);
     setIsPublishOpen(false);
@@ -473,19 +426,17 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
                 <span className="shrink-0 font-mono text-[10px] text-[#A6937C]">{item.date}</span>
               </div>
 
-              {/* 下架此物资 (仅限用户自己添加的物资，即 id 以 item- 开头的自定义数据) */}
-              {!item.id.startsWith('init-') && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteItem(item.id);
-                  }}
-                  className="block w-full text-center py-1.5 bg-[#FFF0E8] hover:bg-[#F2D7D5] border border-[#E67E22]/60 hover:border-[#C0392B] rounded-lg text-[#78281F] font-pixel text-[10px] font-bold transition-all duration-200 active:scale-97 cursor-pointer"
-                >
-                  🗑️ 下架此物资
-                </button>
-              )}
+              {/* 下架此物资 */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteItem(item.id);
+                }}
+                className="block w-full text-center py-1.5 bg-[#FFF0E8] hover:bg-[#F2D7D5] border border-[#E67E22]/60 hover:border-[#C0392B] rounded-lg text-[#78281F] font-pixel text-[10px] font-bold transition-all duration-200 active:scale-97 cursor-pointer"
+              >
+                🗑️ 下架此物资
+              </button>
 
             </div>
           </div>
@@ -743,7 +694,7 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
                 />
               </div>
 
-              {/* 发布人昵称 (自动锁定已注册账号名称) */}
+              {/* 发布人昵称（固定取账号昵称，不提供手动输入） */}
               <div className="space-y-1.5">
                 <label className="block font-bold text-[#5B4636]">
                   发布者署名 <span className="text-[#C0392B]">*</span>
@@ -758,21 +709,12 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
                     </span>
                   </div>
                 ) : (
-                  <div className="space-y-1">
-                    <div className="relative">
-                      <UserIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C7A68]" />
-                      <input
-                        type="text"
-                        required
-                        placeholder="请输入您的同好昵称"
-                        value={formNickname}
-                        onChange={(e) => setFormNickname(e.target.value)}
-                        className="w-full pl-8 pr-3 py-2 bg-[#FAF5E8] border-2 border-[#D5C9AF] rounded-lg focus:outline-none focus:border-[#1E4334]"
-                      />
-                    </div>
-                    <p className="text-[10px] text-[#E67E22] leading-tight">
-                      ⚠️ 检测到您尚未登录，您可以直接输入署名发布。推荐点击右上角登录账号以实现发布自动实名同步！
-                    </p>
+                  <div className="flex items-center gap-2 bg-[#FFF8E8] border-2 border-[#E67E22]/50 px-3 py-2 rounded-lg text-[#B45309] font-bold">
+                    <UserIcon className="w-4 h-4 text-[#E67E22]" />
+                    <span className="flex-1">尚未登录</span>
+                    <span className="text-[10px] font-normal text-[#92400E]">
+                      请先点击右上角登录账号，发布将自动以账号昵称署名
+                    </span>
                   </div>
                 )}
               </div>
