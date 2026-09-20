@@ -204,7 +204,7 @@ export default function App() {
 
       {/* Floating Retro Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-22 sm:bottom-24 left-1/2 transform -translate-x-1/2 z-50 bg-[#FFFDF9] text-[#1E4334] border-2 border-[#5F977E] px-4 py-2 rounded-full shadow-[0_4px_16px_rgba(255,168,188,0.5)] font-retro-jp text-xs sm:text-sm flex items-center gap-2 animate-bounce max-w-[90vw]">
+        <div className="fixed bottom-22 sm:bottom-24 left-1/2 transform -translate-x-1/2 z-[2000] bg-[#FFFDF9] text-[#1E4334] border-2 border-[#5F977E] px-4 py-2 rounded-full shadow-[0_4px_16px_rgba(255,168,188,0.5)] font-retro-jp text-xs sm:text-sm flex items-center gap-2 animate-bounce max-w-[90vw]">
           <span className="text-base shrink-0">✨</span>
           <span className="truncate font-bold">{toastMessage}</span>
         </div>

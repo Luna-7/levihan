@@ -19,7 +19,8 @@
     "test:admin": "node --test tests/admin-pdf-expand-contract.test.cjs tests/admin-vendor-local.test.cjs",
     "test:vault": "node --test tests/vault-multipart-contract.test.cjs",
     "test:secure": "node --test tests/secure-vault.test.cjs tests/secure-pdf-merge.test.cjs tests/secure-pdf-compress.test.cjs tests/secure-compress-ladder.test.cjs tests/secure-reader-interop.test.cjs tests/secure-cover-contract.test.cjs tests/secure-canvas-safety.test.cjs tests/secure-reader-no-cdn.test.cjs",
-    "test": "npm run check:admin && npm run test:admin && npm run test:vault && npm run test:secure && npm run lint && npm run test:auth",
+    "test:ui": "node --test tests/user-entry-credentials.test.cjs",
+    "test": "npm run check:admin && npm run test:admin && npm run test:vault && npm run test:secure && npm run test:ui && npm run lint && npm run test:auth",
     "verify:levels": "node scripts/verify-save-hange-levels.ts",
     "prebuild": "node scripts/generate-admin-pixiv.mjs"
   },

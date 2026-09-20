@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CLOUDBASE_API_BASE } from '../utils/cloudbaseEndpoint';
 import { getSessionToken, setSessionToken, type AuthProfile } from '../utils/cloudbaseToken';
@@ -59,6 +59,17 @@ const validatePassword = (password: string) =>
     ? `密码需要 ${PASSWORD_MIN}–${PASSWORD_MAX} 位`
     : null;
 
+/**
+ * 从表单 DOM 读值，而不是只读 React state。
+ * 浏览器密码管理器 / iCloud 钥匙串自动填充**不一定会触发 React 的 onChange**，
+ * 只看 state 会拿到空串，于是「明明填了密码却报密码需要 6–64 位」。
+ * FormData 读的是输入框的真实当前值，自动填充也在内。
+ */
+const readField = (form: HTMLFormElement, name: string, fallback: string) => {
+  const value = new FormData(form).get(name);
+  return typeof value === 'string' && value.length > 0 ? value : fallback;
+};
+
 type Question = { id: string; prompt: string; options: string[] };
 
 export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
@@ -76,6 +87,15 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   const [challengeId, setChallengeId] = useState('');
   const [answer, setAnswer] = useState('');
   const [ticket, setTicket] = useState('');
+
+  /**
+   * 注册凭据的「保险箱」。
+   * 第一步（继续·答题验证）到第三步（完成注册）之间隔着答题页，
+   * 密码只存在 state 里的话，任何一次视图切换/清空都会让它静默丢失，
+   * 表现为答完题点「完成注册」时服务端收到空密码 → 报「密码需要 6–64 位」。
+   * 放 ref 里，clearSecrets / switchView 都动不到它。
+   */
+  const pendingRegister = useRef<{ nickname: string; password: string } | null>(null);
 
   const refresh = async () => {
     const token = getSessionToken();
@@ -100,7 +120,8 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
 
   const clearSecrets = () => { setPassword(''); setConfirmPassword(''); setAnswer(''); };
   const switchView = (next: View) => { clearSecrets(); setView(next); };
-  const showEntry = () => { switchView(account ? 'account' : 'login'); setOpen(true); };
+  // 重新打开入口 = 重新开始，凭据保险箱一并清空（不把密码留在内存里）
+  const showEntry = () => { pendingRegister.current = null; switchView(account ? 'account' : 'login'); setOpen(true); };
 
   useEffect(() => {
     const handleOpenRequest = () => showEntry();
@@ -108,14 +129,19 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     return () => window.removeEventListener('levihan-open-login', handleOpenRequest);
   }, [account]);
 
-  /** 注册第一步：发起答题挑战 */
-  const startRegister = () => {
+  /** 注册第一步：发起答题挑战（值从表单 DOM 读，兼容密码管理器自动填充） */
+  const startRegister = (form: HTMLFormElement) => {
+    const name = readField(form, 'nickname', nickname).trim();
+    const pw = readField(form, 'password', password);
+    const confirm = readField(form, 'confirmPassword', confirmPassword);
     void run(async () => {
-      const name = nickname.trim();
-      const invalid = validateNickname(name) || validatePassword(password);
+      const invalid = validateNickname(name) || validatePassword(pw);
       if (invalid) throw new Error(invalid);
-      if (password !== confirmPassword) throw new Error('两次输入的密码不一致');
+      if (pw !== confirm) throw new Error('两次输入的密码不一致');
       const result = await postAuth('challenge', {});
+      // 存进保险箱：答题页不持有密码，答完后靠它完成注册
+      pendingRegister.current = { nickname: name, password: pw };
+      setNickname(name);
       setQuestion(result.question as Question);
       setChallengeId(result.challengeId as string);
       setTicket('');
@@ -135,7 +161,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
       } else {
         // 答错：若非耗尽，可重试；耗尽则触发冷却，回到登录页
         onShowToast(result.message || '答案不正确');
-        if (result.exhausted) { switchView('login'); }
+        if (result.exhausted) { pendingRegister.current = null; switchView('login'); }
         else { setAnswer(''); }
       }
     });
@@ -144,8 +170,13 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   /** 注册第三步：答对后凭票据 + 昵称 + 密码正式注册 */
   const confirmRegister = () => {
     void run(async () => {
-      const name = nickname.trim();
-      const result = await postAuth('register', { ticket, nickname: name, password });
+      const saved = pendingRegister.current;
+      const name = (saved?.nickname || nickname).trim();
+      const pw = saved?.password || password;
+      if (!name) throw new Error('昵称已丢失，请点「返回修改昵称密码」重新填写');
+      if (!pw) throw new Error('密码已丢失，请点「返回修改昵称密码」重新填写');
+      const result = await postAuth('register', { ticket, nickname: name, password: pw });
+      pendingRegister.current = null;
       setSessionToken(result.token as string);
       setAccount(result.profile as AuthProfile);
       window.dispatchEvent(new Event('levihan-auth-changed'));
@@ -155,12 +186,13 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     });
   };
 
-  const login = () => {
+  const login = (form: HTMLFormElement) => {
+    const name = readField(form, 'nickname', nickname).trim();
+    const pw = readField(form, 'password', password);
     void run(async () => {
-      const name = nickname.trim();
-      const invalid = validateNickname(name) || validatePassword(password);
+      const invalid = validateNickname(name) || validatePassword(pw);
       if (invalid) throw new Error(invalid);
-      const result = await postAuth('login', { nickname: name, password });
+      const result = await postAuth('login', { nickname: name, password: pw });
       setSessionToken(result.token as string);
       setAccount(result.profile as AuthProfile);
       window.dispatchEvent(new Event('levihan-auth-changed'));
@@ -174,6 +206,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     void run(async () => {
       const token = getSessionToken();
       if (token) { try { await postAuth('logout', {}, token); } catch { /* 忽略 */ } }
+      pendingRegister.current = null;
       setSessionToken(null);
       setAccount(null);
       window.dispatchEvent(new Event('levihan-auth-changed'));
@@ -216,12 +249,12 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
         <p className="font-pixel text-[10px] text-[#8C5828] tracking-widest mb-1">LEVIHAN MEMBER</p>
         <h2 className="font-pixel text-lg text-[#1E4334] mb-4 pr-10">{title}</h2>
 
-        {!account && view === 'login' && <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); login(); }}>
+        {!account && view === 'login' && <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); login(e.currentTarget); }}>
           <label className="block font-bold text-sm">昵称
-            <input value={nickname} onChange={(e) => setNickname(e.target.value)} autoComplete="username" minLength={NICKNAME_MIN} maxLength={NICKNAME_MAX} required placeholder={`${NICKNAME_MIN}–${NICKNAME_MAX} 个字`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
+            <input name="nickname" value={nickname} onChange={(e) => setNickname(e.target.value)} autoComplete="username" minLength={NICKNAME_MIN} maxLength={NICKNAME_MAX} required placeholder={`${NICKNAME_MIN}–${NICKNAME_MAX} 个字`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
           </label>
           <label className="block font-bold text-sm">密码
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required placeholder={`至少 ${PASSWORD_MIN} 位`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
+            <input name="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required placeholder={`至少 ${PASSWORD_MIN} 位`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
           </label>
           <Submit busy={busy}>登录</Submit>
           <p className="pt-1 text-center text-xs text-[#73583F]">
@@ -229,15 +262,15 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
           </p>
         </form>}
 
-        {!account && view === 'register' && <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); startRegister(); }}>
+        {!account && view === 'register' && <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); startRegister(e.currentTarget); }}>
           <label className="block font-bold text-sm">昵称
-            <input value={nickname} onChange={(e) => setNickname(e.target.value)} autoComplete="username" minLength={NICKNAME_MIN} maxLength={NICKNAME_MAX} required placeholder={`${NICKNAME_MIN}–${NICKNAME_MAX} 个字`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
+            <input name="nickname" value={nickname} onChange={(e) => setNickname(e.target.value)} autoComplete="username" minLength={NICKNAME_MIN} maxLength={NICKNAME_MAX} required placeholder={`${NICKNAME_MIN}–${NICKNAME_MAX} 个字`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
           </label>
           <label className="block font-bold text-sm">密码
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required placeholder={`至少 ${PASSWORD_MIN} 位`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
+            <input name="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required placeholder={`至少 ${PASSWORD_MIN} 位`} className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
           </label>
           <label className="block font-bold text-sm">确认密码
-            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
+            <input name="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" minLength={PASSWORD_MIN} maxLength={PASSWORD_MAX} required className="mt-1 w-full p-3 bg-[#FFFDF5] border-2 border-[#8C6C47] text-base outline-none focus:border-[#1E4334]" />
           </label>
           <Submit busy={busy}>继续（答题验证）</Submit>
           <p className="pt-1 text-center text-xs text-[#73583F]">
