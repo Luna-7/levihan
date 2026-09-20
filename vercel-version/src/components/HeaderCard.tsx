@@ -33,13 +33,13 @@ export const HeaderCard: React.FC<Props> = ({
       btnBg: 'bg-[#245340] hover:bg-[#2e6850] border-[#37755c] text-[#D5F5E3]',
     },
     resources: {
-      icon: '📚',
-      title: '资源外链库',
-      subTitle: 'RESOURCE ARCHIVES',
-      desc: '动画原片 · 二创素材 · 画师推荐',
-      themeBg: 'bg-[#16382B]',
-      themeBorder: 'border-[#0F281E]',
-      btnBg: 'bg-[#1e4c3a] hover:bg-[#27614a] border-[#337a5f] text-[#D5F5E3]',
+      icon: '🌳',
+      title: '巨树餐厅',
+      subTitle: 'GIANT TREE RESTAURANT',
+      desc: '利韩同人本 · 电子画集 · 同人小说精修阁',
+      themeBg: 'bg-[#1E4334]',
+      themeBorder: 'border-[#153025]',
+      btnBg: 'bg-[#245340] hover:bg-[#2e6850] border-[#37755c] text-[#D5F5E3]',
     },
     doujinshi: {
       icon: '🍠',
@@ -99,7 +99,7 @@ export const HeaderCard: React.FC<Props> = ({
               </span>
             </div>
             <div className="flex items-center gap-1.5 mt-0.5 sm:mt-1">
-              <span className="font-pixel text-[10px] xs:text-[11px] sm:text-[10px] text-[#F9E79F] tracking-wider font-bold shrink-0">
+              <span className="font-serif-title text-[11px] xs:text-[12px] sm:text-[12px] text-[#F9E79F] tracking-widest font-black shrink-0 uppercase">
                 {currentHeader.subTitle}
               </span>
               <span className="hidden xs:inline font-retro-jp text-[10px] xs:text-[11px] sm:text-[10px] text-[#D5F5E3] tracking-wider truncate">

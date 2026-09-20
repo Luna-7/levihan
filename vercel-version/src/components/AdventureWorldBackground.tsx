@@ -10,7 +10,7 @@ export const AdventureWorldBackground: React.FC<Props> = () => (
     <div
       className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-90 transition-opacity duration-500"
       style={{
-        backgroundImage: 'url(/images/levihan-character-wall.png)',
+        backgroundImage: 'url(/images/levihan-character-wall.webp)',
         backgroundSize: 'cover',
         backgroundPosition: 'center center',
       }}

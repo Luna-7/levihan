@@ -116,6 +116,28 @@
                 } catch (e) { /* 非 JSON 或跨域时静默 */ }
                 return originalSetItem.apply(this, arguments);
             };
+
+            // 音频环境激活与交互握手：解除浏览器对 Cocos WebAudio 的限制，并通知宿主播放 BGM
+            var hasNotifiedHost = false;
+            var unlockAudioAndWakeHost = function () {
+                try {
+                    var ctx = window.cc && cc.sys && cc.sys.__audioSupport && cc.sys.__audioSupport.context;
+                    if (ctx && ctx.state === 'suspended') {
+                        ctx.resume();
+                    }
+                } catch (e) {}
+                if (!hasNotifiedHost) {
+                    hasNotifiedHost = true;
+                    try {
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage({ type: 'daxigua-user-interaction' }, '*');
+                        }
+                    } catch (e) {}
+                }
+            };
+            ['touchstart', 'touchend', 'mousedown', 'pointerdown', 'click'].forEach(function (evt) {
+                window.addEventListener(evt, unlockAudioAndWakeHost, { passive: true });
+            });
         })();
     </script>
 

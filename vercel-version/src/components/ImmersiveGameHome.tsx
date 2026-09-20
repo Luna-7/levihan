@@ -1,17 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
 } from 'lucide-react';
-import { PopUpShopBanner } from './PopUpShopBanner';
 import { MiniProgramJumpGrid } from './MiniProgramJumpGrid';
+import { HomeAnnouncementGrid } from './HomeAnnouncementGrid';
 import { RestaurantForum } from './RestaurantForum';
 import { TatakaruGame } from './TatakaruGame';
 import { GameLeaderboard } from './GameLeaderboard';
+import { PotatoMarket } from './PotatoMarket';
+import { ResourceHub } from './ResourceHub';
 import { soundManager } from '../utils/audio';
 import { GROUP_INFO } from '../data/initialData';
 import { UserEntry } from './UserEntry';
 import { UiSprite } from './UiSprite';
+import { CardPatternOverlay } from './CardPatternOverlay';
+import { PopupSketchOverlay } from './PopupSketchOverlay';
+import { LEVIHAN_OPEN_DOUJIN_EVENT } from '../utils/relayNovels';
 
 interface Props {
   onNavigateTab: (tabId: string) => void;
@@ -29,8 +34,21 @@ export const ImmersiveGameHome: React.FC<Props> = ({
   // 选中的沉浸游戏（点击下方街机进入后全屏直接玩）
   const [activeGame, setActiveGame] = useState<'daxigua' | 'hange' | 'lihan' | null>(null);
 
-  const [activeModal, setActiveModal] = useState<'game' | 'leaderboard' | 'rules' | null>(null);
+  const [activeModal, setActiveModal] = useState<'game' | 'leaderboard' | 'rules' | 'doujinshi' | 'resources' | null>(null);
   const [isForumOpen, setIsForumOpen] = useState(false);
+
+  // 监听接龙合订本跳转事件，自动跳转到巨树餐厅典藏阁
+  useEffect(() => {
+    const onOpenDoujin = () => {
+      setIsForumOpen(false);
+      setActiveModal(null);
+      onNavigateTab('resources');
+    };
+    window.addEventListener(LEVIHAN_OPEN_DOUJIN_EVENT, onOpenDoujin);
+    return () => {
+      window.removeEventListener(LEVIHAN_OPEN_DOUJIN_EVENT, onOpenDoujin);
+    };
+  }, [onNavigateTab]);
 
   if (isForumOpen) {
     return <RestaurantForum onBack={() => setIsForumOpen(false)} onShowToast={onShowToast} />;
@@ -39,167 +57,290 @@ export const ImmersiveGameHome: React.FC<Props> = ({
   return (
     <div
       id="view-main"
-      className="relative w-full h-full max-h-full select-none pb-20 sm:pb-22 flex flex-col justify-between overflow-hidden"
+      className="relative w-full h-full select-none flex flex-col justify-between overflow-hidden bg-[#FFFEEF]/55 backdrop-blur-md"
     >
       {/* ====================================================
-          1. 顶栏 (Top Bar)
-          包含：左侧微章与“Levi✖️Hans的土豆仓”，最右侧登录按键与音量键
+          1. 顶部 Header 横幅（不再使用卡片容器）
+          打开网页时 header PNG 自动向下移入（animate-header-slide-down）
          ==================================================== */}
-      <header className="shrink-0 w-full max-w-xl mx-auto px-2.5 sm:px-3 py-1 sm:py-1.5 backdrop-blur-md bg-[#FAF6ED]/95 border-b border-[#D5C19A] shadow-xs z-30">
-        <div className="flex items-center justify-between gap-2">
-          {/* 左侧：登录入口放在原双头像位置，后接站点标题 */}
-          <div className="flex items-center gap-1.5 min-w-0">
-            <UserEntry onShowToast={onShowToast} />
+      <div className="relative shrink-0 animate-header-slide-down w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto">
+        {/* header 横幅：宽度始终与导航栏对齐，高度按图片比例等比缩放 */}
+        <img
+          src="/images/header.webp"
+          alt="LEVI × HANS WAREHOUSE 调查兵团特别驻地 · 情报与粮草整备"
+          className="w-full h-auto max-w-full block"
+          referrerPolicy="no-referrer"
+          fetchPriority="high"
+        />
 
-            <span className="font-serif-title text-xs sm:text-sm font-black text-[#16273B] tracking-wide truncate">
-              Levi✖️Hans的土豆仓
-            </span>
-          </div>
-
-          {/* 最右侧：仅保留音量键 */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            {/* 音效/静音切换 */}
+        {/* 顶部控制条：悬浮在横幅上 (Avoid top notch / status bar) */}
+        <header className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 pt-3 sm:pt-4 px-1">
+          {/* 左侧：无边框无背景音量键 */}
+          <div className="flex items-center">
             <button
               type="button"
               onClick={() => {
                 soundManager.playWoodTap();
                 onToggleSound();
               }}
-              className="p-0 bg-transparent border-0 transition-transform active:scale-90 cursor-pointer flex items-center justify-center"
+              className="p-1 sm:p-1.5 bg-transparent border-0 shadow-none flex items-center justify-center transition-all cursor-pointer active:scale-90 hover:opacity-80 shrink-0"
               title={isSoundMuted ? '开启音效 🔊' : '静音 🔇'}
               id="btn-header-volume"
             >
-              <UiSprite name="volume" width={42} role="img" label={isSoundMuted ? '开启音效' : '静音'} className={isSoundMuted ? 'opacity-45 grayscale' : 'drop-shadow-sm'} />
+              <UiSprite
+                name="volume"
+                width={44}
+                role="img"
+                label={isSoundMuted ? '开启音效' : '静音'}
+                className={isSoundMuted ? 'opacity-40 grayscale drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]' : 'drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]'}
+              />
             </button>
           </div>
-        </div>
-      </header>
+
+          {/* 右侧：登录按钮 */}
+          <div className="flex items-center shrink-0">
+            <UserEntry variant="pill" onShowToast={onShowToast} />
+          </div>
+        </header>
+      </div>
 
       {/* ====================================================
-          2. 小程序固定主体内容区 (Fixed Content Container)
-          上面是宣传公告，下面是跳转按钮（严格固定且仅2个方块，无滚轮）
+          2. 主体内容区：按照参考图排版
+          （【上段】公告栏自身滚动，最多 3 条公告在其中滚动查看；
+            【下段】3 个入口按钮固定不跟随滚动。
+            窄屏恰好放得下、公告不滚动；只有公告超出时才在卡片区内滚动。
+            矮屏/桌面（header 占高大）空间不足时，main 仍保留兜底滚动，
+            避免按钮被裁掉看不见。）
          ==================================================== */}
-      <main className="w-full max-w-xl mx-auto px-2 sm:px-3 pt-1.5 sm:pt-2 pb-2 flex-1 min-h-0 flex flex-col justify-start gap-2 sm:gap-3 overflow-hidden">
+      <main className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto px-2.5 pt-1 sm:pt-2 clear-adventure-nav flex-1 min-h-0 flex flex-col justify-start gap-4 overflow-y-auto no-scrollbar">
         {/* ====================================================
-            【上面】：宣传公告区 (Promotional Announcements)
-            POP UP SHOP 官方画卷展位 (展出轮播)
+            【上段】：首页最多 3 条公告卡片 (显现内容、时间、发布人)
+            —— 这一块是唯一的滚动容器
            ==================================================== */}
-        <section className="w-full flex-1 min-h-0 flex flex-col">
-          {/* POP UP SHOP 官方画卷宣传展位 */}
-          <PopUpShopBanner
+        <section
+          id="home-announce-scroll"
+          className="w-full flex-1 min-h-[132px] lg:min-h-[196px] flex flex-col overflow-y-auto overflow-x-hidden no-scrollbar px-1 py-1"
+        >
+          <HomeAnnouncementGrid
             onNavigateTab={onNavigateTab}
             onShowToast={onShowToast}
-            onOpenGameModal={() => setActiveModal('game')}
-            onOpenRulesModal={() => setActiveModal('rules')}
           />
         </section>
 
         {/* ====================================================
-            【下面】：跳转按钮区 (2个方块: 塔塔开 + 餐厅展示，紧凑平铺在公告栏下方)
+            【下段】：3 个大复古羊皮纸入口 (塔塔开 + 影视厅 + 巨人资源)
+            —— 固定不滚动
            ==================================================== */}
-        <section className="w-full h-[20dvh] min-h-[138px] max-h-[210px] shrink-0">
-          <MiniProgramJumpGrid
-            onOpenGameModal={() => setActiveModal('game')}
-            onOpenRestaurant={() => setIsForumOpen(true)}
-          />
+        <section className="w-full shrink-0 short-screen-m-neg">
+          <div className="short-screen-scale">
+            <MiniProgramJumpGrid
+              onOpenGameModal={() => setActiveModal('game')}
+              onOpenResourceModal={() => setActiveModal('resources')}
+            />
+          </div>
         </section>
       </main>
 
       {/* ====================================================
-          4. 弹窗模块：小游戏快捷启动
+          4. 弹窗模块：小游戏快捷启动 (塔塔开异形军徽战术框)
          ==================================================== */}
       {typeof document !== 'undefined' && activeModal === 'game' && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200 select-none"
-          onClick={() => setActiveModal(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200 select-none"
+          onClick={() => {
+            soundManager.playWoodTap();
+            setActiveModal(null);
+          }}
         >
+          {/* 异形外框战术切角: 复古银金属 */}
           <div
-            className="relative w-full max-w-sm bg-[#FAF6ED] popup-frame-border rounded-2xl shadow-2xl p-4 sm:p-5 text-[#16273B] overflow-hidden"
+            className="relative w-full max-w-sm bg-gradient-to-br from-[#FFFFFF] via-[#8FA69D] to-[#1E4334] p-[2.5px] shadow-[0_16px_36px_rgba(18,43,33,0.35)] overflow-hidden"
+            style={{
+              clipPath:
+                'polygon(0 16px, 16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px))',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* 关闭按钮 */}
-            <button
-              type="button"
-              onClick={() => {
-                soundManager.playWoodTap();
-                setActiveModal(null);
+            {/* 内层卡面: 磨砂透光玻璃 */}
+            <div
+              className="w-full bg-gradient-to-b from-white/95 via-[#F6FAF8]/90 to-[#E8F2ED]/85 backdrop-blur-md p-4 sm:p-5 text-[#16273B] relative"
+              style={{
+                clipPath:
+                  'polygon(0 14px, 14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px))',
               }}
-              className="absolute top-3 right-3 w-7 h-7 rounded-full bg-[#16273B] text-[#F4EADB] hover:bg-[#2A4465] flex items-center justify-center cursor-pointer shadow-xs z-20"
-              title="关闭"
             >
-              <X size={15} />
-            </button>
+              {/* 玻璃斜向高光 */}
+              <div className="absolute inset-0 bg-gradient-to-br from-white/50 via-transparent to-transparent pointer-events-none" />
+              <PopupSketchOverlay />
+              <CardPatternOverlay
+                opacity={0.08}
+                mode="multiply"
+                clipPath="polygon(0 14px, 14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px))"
+              />
+              {/* 四角银质金属铆钉 */}
+              <span className="silver-rivet top-2 left-2" />
+              <span className="silver-rivet top-2 right-2" />
+              <span className="silver-rivet bottom-2 left-2" />
+              <span className="silver-rivet bottom-2 right-2" />
 
-            {/* 三款游戏卡带 - 极简无边框冗余文字 */}
-            <div className="space-y-2.5 pt-2">
-              {/* 游戏 1: 利韩 · 合成大西皮 */}
+              {/* 标题栏与关闭 */}
+              <div className="flex items-center justify-between pb-2.5 mb-2 border-b-2 border-dashed border-[#8FA69D]/60">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 rounded bg-[#1E4334] text-[#F8FAFC] text-xs shadow-xs border border-[#C5A059]/40">⚔️</span>
+                  <div>
+                    <h2 className="font-serif-title text-base font-black text-[#1E4334] leading-none">
+                      塔塔开 · 街机训练场
+                    </h2>
+                    <p className="font-retro-jp text-[10px] text-[#557B6B] mt-0.5">
+                      调查兵团绝境小游戏 · 突破极限高分
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundManager.playWoodTap();
+                    setActiveModal(null);
+                  }}
+                  className="w-7 h-7 rounded-full bg-[#1E4334] hover:bg-[#2C5C46] text-[#F8FAFC] flex items-center justify-center cursor-pointer shadow-xs transition-colors z-20 shrink-0 border border-[#C5A059]/40"
+                  title="关闭"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+
+              {/* 三款游戏卡带 - 异形切边与银金属玻璃效果 */}
+              <div className="space-y-2.5 pt-1">
+                {/* 游戏 1: 利韩 · 合成大西皮 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundManager.playCoin();
+                    setActiveModal(null);
+                    setActiveGame('daxigua');
+                    onShowToast('⚔️ 已进入「利韩 · 合成大西皮」');
+                  }}
+                  className="relative w-full group bg-white/80 hover:bg-white border-2 border-[#8FA69D] p-2.5 sm:p-3 cursor-pointer transition-all shadow-md active:scale-98 flex items-center gap-3 text-left overflow-hidden rounded-lg backdrop-blur-sm"
+                  style={{
+                    clipPath:
+                      'polygon(0 8px, 10px 0, calc(100% - 10px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 8px))',
+                  }}
+                >
+                  <UiSprite
+                    name="game-watermelon"
+                    width={44}
+                    role="img"
+                    label="合成大西皮"
+                    className="relative z-10 group-hover:scale-110 transition-transform shrink-0 drop-shadow-sm"
+                  />
+                  <div className="relative z-10 min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-serif-title text-sm sm:text-base font-black text-[#1E4334] truncate">
+                        利韩 · 合成大西皮
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[#557B6B] mt-0.5">
+                      解压西瓜合成消除 · 收集利韩各阶形态
+                    </p>
+                  </div>
+                </button>
+
+                {/* 游戏 2: 利韩 · 拯救韩吉 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundManager.playCoin();
+                    setActiveModal(null);
+                    setActiveGame('hange');
+                    onShowToast('⚔️ 已进入「利韩 · 拯救韩吉」');
+                  }}
+                  className="relative w-full group bg-white/80 hover:bg-white border-2 border-[#8FA69D] p-2.5 sm:p-3 cursor-pointer transition-all shadow-md active:scale-98 flex items-center gap-3 text-left overflow-hidden rounded-lg backdrop-blur-sm"
+                  style={{
+                    clipPath:
+                      'polygon(0 8px, 10px 0, calc(100% - 10px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 8px))',
+                  }}
+                >
+                  <UiSprite
+                    name="game-hange"
+                    width={52}
+                    role="img"
+                    label="拯救韩吉"
+                    className="relative z-10 group-hover:scale-110 transition-transform shrink-0 drop-shadow-sm"
+                  />
+                  <div className="relative z-10 min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-serif-title text-sm sm:text-base font-black text-[#1E4334] truncate">
+                        利韩 · 拯救韩吉
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[#557B6B] mt-0.5">
+                      绝境闪避跳跃战术 · 避开超大型巨人
+                    </p>
+                  </div>
+                </button>
+
+                {/* 游戏 3: 利韩 · 利了个韩 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundManager.playBlip();
+                    onShowToast('🥔「利了个韩」即将上线');
+                  }}
+                  className="relative w-full group bg-[#F1EEE6] border-2 border-[#8C7A68] p-2.5 sm:p-3 cursor-pointer transition-all shadow-xs flex items-center gap-3 text-left overflow-hidden opacity-75"
+                  style={{
+                    clipPath:
+                      'polygon(0 8px, 10px 0, calc(100% - 10px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 8px))',
+                  }}
+                >
+                  <UiSprite
+                    name="game-lihan"
+                    width={52}
+                    role="img"
+                    label="利了个韩"
+                    className="relative z-10 group-hover:scale-110 transition-transform shrink-0"
+                  />
+                  <div className="relative z-10 min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-1.5 py-0.2 rounded bg-[#8C7A68] text-white font-pixel text-[9px]">
+                        PREVIEW
+                      </span>
+                      <span className="font-serif-title text-sm sm:text-base font-black text-[#16273B] truncate">
+                        利韩 · 利了个韩
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[#8C7A68] mt-0.5">
+                      三消消除拼图测试 · 研发试作中
+                    </p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-[#8C7A68] text-white font-pixel text-[9px] font-bold shrink-0">
+                    即将上线
+                  </span>
+                </button>
+              </div>
+
+              {/* 头号玩家跳转入口 */}
               <button
                 type="button"
                 onClick={() => {
-                  soundManager.playCoin();
-                  setActiveModal(null);
-                  setActiveGame('daxigua');
-                  onShowToast('⚔️ 已进入「利韩 · 合成大西皮」');
+                  soundManager.playWoodTap();
+                  setActiveModal('leaderboard');
                 }}
-                className="relative w-full group bg-white hover:bg-[#F5EFE0] border-2 border-[#16273B] rounded-xl p-3 cursor-pointer transition-all shadow-[0_2px_8px_rgba(22,39,59,0.1)] active:scale-98 flex items-center gap-3 text-left overflow-hidden"
+                className="w-full mt-3 pt-2.5 border-t-2 border-dashed border-[#C5A059] flex items-center justify-between gap-2 cursor-pointer group hover:bg-[#F2EADB]/60 p-1.5 rounded-lg transition-colors"
               >
-                <UiSprite name="game-watermelon" width={42} role="img" label="合成大西皮" className="relative z-10 group-hover:scale-110 transition-transform" />
-                <span className="relative z-10 font-serif-title text-base font-black text-[#16273B]">
-                  利韩 · 合成大西皮
+                <span className="flex items-center gap-2">
+                  <span className="text-lg">🏆</span>
+                  <div>
+                    <span className="font-serif-title text-xs sm:text-sm font-bold text-[#16273B] block leading-tight">
+                      全服头号玩家排行榜
+                    </span>
+                    <span className="text-[9px] text-[#715431]">实时汇总西瓜与拯救韩吉通关纪录</span>
+                  </div>
                 </span>
-              </button>
-
-              {/* 游戏 2: 利韩 · 拯救韩吉 */}
-              <button
-                type="button"
-                onClick={() => {
-                  soundManager.playCoin();
-                  setActiveModal(null);
-                  setActiveGame('hange');
-                  onShowToast('⚔️ 已进入「利韩 · 拯救韩吉」');
-                }}
-                className="relative w-full group bg-white hover:bg-[#F5EFE0] border-2 border-[#16273B] rounded-xl p-3 cursor-pointer transition-all shadow-[0_2px_8px_rgba(22,39,59,0.1)] active:scale-98 flex items-center gap-3 text-left overflow-hidden"
-              >
-                <UiSprite name="game-hange" width={54} role="img" label="拯救韩吉" className="relative z-10 group-hover:scale-110 transition-transform" />
-                <span className="relative z-10 font-serif-title text-base font-black text-[#16273B]">
-                  利韩 · 拯救韩吉
+                <span className="font-pixel text-[11px] text-[#8C6226] group-hover:translate-x-0.5 transition-transform font-bold">
+                  查看榜单 ›
                 </span>
-              </button>
-
-              {/* 游戏 3: 利韩 · 利了个韩 */}
-              <button
-                type="button"
-                onClick={() => {
-                  soundManager.playBlip();
-                  onShowToast('🥔「利了个韩」即将上线');
-                }}
-                className="relative w-full group bg-[#F1EEE6] border-2 border-[#8C7A68] rounded-xl p-3 cursor-pointer transition-all shadow-[0_2px_8px_rgba(22,39,59,0.08)] active:scale-98 flex items-center gap-3 text-left overflow-hidden opacity-75"
-              >
-                <UiSprite name="game-lihan" width={54} role="img" label="利了个韩" className="relative z-10 group-hover:scale-110 transition-transform" />
-                <span className="relative z-10 font-serif-title text-base font-black text-[#16273B]">
-                  利韩 · 利了个韩
-                </span>
-                <span className="ml-auto text-xs font-bold text-[#8C6226]">即将上线</span>
               </button>
             </div>
-
-            {/* 头号玩家跳转入口：榜单本身在独立弹窗里 */}
-            <button
-              type="button"
-              onClick={() => {
-                soundManager.playWoodTap();
-                setActiveModal('leaderboard');
-              }}
-              className="w-full mt-3 pt-3 border-t-2 border-dashed border-[#C5A059] flex items-center justify-between gap-2 cursor-pointer group"
-            >
-              <span className="flex items-center gap-2">
-                <span className="text-lg">🏆</span>
-                <span className="font-serif-title text-sm font-bold text-[#16273B]">头号玩家</span>
-              </span>
-              <span className="font-pixel text-[11px] text-[#8C6226] group-hover:translate-x-0.5 transition-transform">
-                查看 ›
-              </span>
-            </button>
           </div>
         </div>,
         document.body
@@ -211,13 +352,18 @@ export const ImmersiveGameHome: React.FC<Props> = ({
       {typeof document !== 'undefined' && activeModal === 'leaderboard' && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200 select-none"
-          onClick={() => setActiveModal(null)}
+          onClick={() => {
+            soundManager.playWoodTap();
+            setActiveModal(null);
+          }}
         >
           <div
             className="relative w-full max-w-sm max-h-[86dvh] bg-[#FAF6ED] popup-frame-border rounded-2xl shadow-2xl p-4 sm:p-5 text-[#16273B] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-2 mb-1">
+            <PopupSketchOverlay />
+            <CardPatternOverlay opacity={0.14} mode="multiply" />
+            <div className="relative z-10 flex items-center justify-between pb-2 mb-1">
               <div className="flex items-center gap-2">
                 <span className="text-lg">🏆</span>
                 <p className="font-retro-jp text-[11px] text-[#715431]">大西皮 + 拯救韩吉（绝境）统一排名</p>
@@ -247,10 +393,13 @@ export const ImmersiveGameHome: React.FC<Props> = ({
       {typeof document !== 'undefined' && activeGame && createPortal(
         <div
           className={`fixed inset-0 z-50 flex items-center justify-center p-0 overflow-hidden animate-in fade-in duration-200 select-none ${activeGame === 'lihan' ? 'bg-transparent lihan-themed-root' : 'bg-black/95 backdrop-blur-md'}`}
-          onClick={() => setActiveGame(null)}
+          onClick={() => {
+            soundManager.playWoodTap();
+            setActiveGame(null);
+          }}
         >
           <div
-            className="relative w-full h-full max-w-[100vw] max-h-full flex flex-col items-center justify-center overflow-hidden"
+            className="relative w-full h-full max-w-[100vw] max-h-[100dvh] flex flex-col items-center justify-center overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* 居中沉浸式游戏画面 (内部自带顶部集成控制条，零遮挡) */}
@@ -272,13 +421,18 @@ export const ImmersiveGameHome: React.FC<Props> = ({
       {typeof document !== 'undefined' && activeModal === 'rules' && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200 select-none"
-          onClick={() => setActiveModal(null)}
+          onClick={() => {
+            soundManager.playWoodTap();
+            setActiveModal(null);
+          }}
         >
           <div
-            className="w-full max-w-lg bg-[#FAF6ED] popup-frame-border rounded-2xl p-4 text-[#16273B] shadow-2xl relative"
+            className="w-full max-w-lg bg-[#FAF6ED] popup-frame-border rounded-2xl p-4 text-[#16273B] shadow-2xl relative overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-[#C5A059] pb-2 mb-3">
+            <PopupSketchOverlay />
+            <CardPatternOverlay opacity={0.14} mode="multiply" />
+            <div className="relative z-10 flex items-center justify-between border-b border-[#C5A059] pb-2 mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-2xl">📜</span>
                 <div>
@@ -369,6 +523,131 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                   谨遵誓约
                 </button>
               </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ====================================================
+          6. 弹窗模块：土豆市集 · 互助流转 (卡片弹窗直开)
+         ==================================================== */}
+      {typeof document !== 'undefined' && activeModal === 'doujinshi' && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 select-none"
+          onClick={() => {
+            soundManager.playWoodTap();
+            setActiveModal(null);
+          }}
+        >
+          <div
+            className="w-full max-w-2xl max-h-[92dvh] bg-[#FAF5EA] popup-frame-border rounded-2xl shadow-2xl flex flex-col overflow-hidden relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PopupSketchOverlay />
+            <CardPatternOverlay opacity={0.12} mode="multiply" />
+
+            {/* 弹窗顶部标题栏 */}
+            <div className="relative z-10 flex items-center justify-between px-3 sm:px-4 py-2.5 bg-gradient-to-r from-[#2E1E12] via-[#4A3525] to-[#2E1E12] text-[#F8FAFC] border-b-2 border-[#C5A059] shrink-0 shadow-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🥔</span>
+                <div>
+                  <h3 className="font-serif-title text-sm sm:text-base font-black text-[#F8FAFC] leading-none">
+                    土豆市集 · 互助流转
+                  </h3>
+                  <p className="font-retro-jp text-[10px] text-[#E8D5A7] mt-0.5">
+                    个人手作制品发布 · 闲置转卖回血
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  soundManager.playWoodTap();
+                  setActiveModal(null);
+                }}
+                className="w-7 h-7 rounded-full bg-[#1A110A] text-[#F8FAFC] hover:bg-[#3D2C1F] flex items-center justify-center cursor-pointer shadow-xs shrink-0 transition-colors border border-[#C5A059]/40"
+                title="关闭"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* 弹窗内容区：包含完整的 PotatoMarket 组件 */}
+            <div className="relative z-10 flex-1 min-h-0 overflow-y-auto p-2 sm:p-4">
+              <PotatoMarket
+                onShowToast={onShowToast}
+              />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ====================================================
+          7. 弹窗模块：巨人资源 · 官方典藏 (卡片弹窗直开)
+         ==================================================== */}
+      {typeof document !== 'undefined' && activeModal === 'resources' && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 select-none"
+          onClick={() => {
+            soundManager.playWoodTap();
+            setActiveModal(null);
+          }}
+        >
+          <div
+            className="w-full max-w-2xl max-h-[92dvh] bg-[#FAF5EA] popup-frame-border rounded-2xl shadow-2xl flex flex-col overflow-hidden relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PopupSketchOverlay />
+            <CardPatternOverlay opacity={0.12} mode="multiply" />
+
+            {/* 弹窗顶部标题栏 */}
+            <div className="relative z-10 flex items-center justify-between px-3 sm:px-4 py-2.5 bg-gradient-to-r from-[#16273B] via-[#243E60] to-[#16273B] text-[#F8FAFC] border-b-2 border-[#C5A059] shrink-0 shadow-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📚</span>
+                <div>
+                  <h3 className="font-serif-title text-sm sm:text-base font-black text-[#F8FAFC] leading-none">
+                    官方典藏 · 巨人资源
+                  </h3>
+                  <p className="font-retro-jp text-[10px] text-[#E9D5FF] mt-0.5">
+                    动漫原片 · 漫画手稿 · 二创素材 · AU官方小说
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  soundManager.playWoodTap();
+                  setActiveModal(null);
+                }}
+                className="w-7 h-7 rounded-full bg-[#0E1A29] text-[#F8FAFC] hover:bg-[#203652] flex items-center justify-center cursor-pointer shadow-xs shrink-0 transition-colors border border-[#C5A059]/40"
+                title="关闭"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* 弹窗内容区：包含完整的 ResourceHub 组件 */}
+            <div className="relative z-10 flex-1 min-h-0 overflow-y-auto p-2 sm:p-4">
+              <ResourceHub
+                onCopyCode={(code) => {
+                  soundManager.playCopySuccess();
+                  if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(code).then(
+                      () => onShowToast(`已复制提取码：${code} 📋`),
+                      () => onShowToast(`提取码为：${code}`)
+                    );
+                  } else {
+                    onShowToast(`提取码为：${code}`);
+                  }
+                }}
+                onShowToast={onShowToast}
+                onGoToDoujin={() => {
+                  soundManager.playPageTurn();
+                  setActiveModal('doujinshi');
+                }}
+              />
             </div>
           </div>
         </div>,

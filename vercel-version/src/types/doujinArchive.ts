@@ -20,6 +20,8 @@ export interface DoujinBookItem {
   pagePadDigits?: number; // 页码位数，默认为 2 (如 image01.webp)
   pageFiles?: string[]; // 后台上传时记录每一页的真实文件名，可混用 jpg/png/webp
   warning?: string; // 内容预警说明（后台勾选后填写，站点卡片显示 ⚠ 提示）
+  storageProvider?: 'cos' | 'r2';
+  sensitiveLevel?: 'safe' | 'mild-r18';
   /**
    * 敏感内容标记：后台勾选「含有敏感元素」后上传的本子。
    * 正文不是图片，而是 comic_vault/{id}_secure.txt —— AES 双重加密后的密文，
@@ -56,4 +58,10 @@ export interface GroupNovel {
   authorNote?: string; // 作者说的话：卡片引用块 + 阅读器顶部；空则不渲染
   warning?: string; // 内容预警：卡片琥珀条 + 阅读器顶部；空则不渲染
   tags?: string[]; // 卡片标签行；空则整行不渲染
+  isRelayCompiled?: boolean; // 是否为故事接龙合订本
+  relayAuthors?: string[]; // 所有接力的人（依序排列）
+  relayStepsCount?: number; // 接力总棒数
+  prompt?: string; // 起笔设定
+  bodyContent?: string; // 完整编译正文内容
+  originalPostId?: string; // 关联论坛贴ID
 }

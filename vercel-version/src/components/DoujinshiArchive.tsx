@@ -33,6 +33,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('漫画本');
   const [selectedTag, setSelectedTag] = useState<string>('全部');
+  const [selectedAuthor, setSelectedAuthor] = useState<string>('全部');
   const previewLoggedIn = import.meta.env.DEV && new URLSearchParams(window.location.search).get('previewAuth') === '1';
   const [isMangaUnlocked, setIsMangaUnlocked] = useState<boolean>(previewLoggedIn);
   const [isCheckingLogin, setIsCheckingLogin] = useState<boolean>(true);
@@ -57,6 +58,20 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const allCategories = ['漫画本', '小说本', '插画集'];
   const dynamicTags = Array.from(new Set(books.flatMap((b) => b.tags || [])));
   const allTags = ['全部', ...dynamicTags];
+
+  // 统计所有作者（动态汇总当前数据中的 circle，去重并按作品数降序）
+  const dynamicAuthors = Array.from(
+    books
+      .reduce((acc, b) => {
+        const name = (b.circle || '未知').trim();
+        acc.set(name, (acc.get(name) || 0) + 1);
+        return acc;
+      }, new Map<string, number>())
+      .entries()
+  )
+    .sort((a, b) => b[1] - a[1])
+    .map(([name]) => name);
+  const allAuthors = ['全部', ...dynamicAuthors];
 
   // 组件挂载时自动尝试同步 COS 远端归档（推荐表与在线小说索引并行加载，失败静默降级）
   useEffect(() => {
@@ -148,6 +163,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const filteredBooks = books.filter((book) => {
     const matchCat = (book.category || '漫画本') === selectedCategory;
     const matchTag = selectedTag === '全部' || book.tags.includes(selectedTag);
+    const matchAuthor =
+      selectedAuthor === '全部' || (book.circle || '未知').trim() === selectedAuthor;
     const q = searchQuery.trim().toLowerCase();
     const matchSearch =
       !q ||
@@ -159,7 +176,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
       (book.typesetter && book.typesetter.toLowerCase().includes(q)) ||
       book.tags.some((t) => t.toLowerCase().includes(q));
 
-    return matchCat && matchTag && matchSearch;
+    return matchCat && matchTag && matchAuthor && matchSearch;
   });
 
   // 处理封面加载失败
@@ -224,8 +241,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
     return (
       <div id="seamless-doujin-reader" className="relative w-full select-text pb-12">
-        {/* 顶部快捷导航与手势缩放控制条 */}
-        <div className="sticky top-2 z-40 mb-3 px-3 py-2 bg-[#FAF5E8]/95 border border-[#1E4334] rounded-lg shadow-md backdrop-blur-xs flex items-center justify-between gap-2">
+        {/* 顶部快捷导航控制条（不随滚动固定，回到顶部靠全局悬浮向上按钮） */}
+        <div className="mb-3 px-3 py-2 bg-[#FAF5E8]/95 border border-[#1E4334] rounded-lg shadow-md backdrop-blur-xs flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={handleCloseReader}
@@ -244,19 +261,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
               </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={() => {
-                soundManager.playBlip();
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="px-2 py-1 bg-[#FAF5E8] hover:bg-[#EAE2CE] border border-[#D5C9AF] text-[#5B4636] font-pixel text-[10px] rounded-xs cursor-pointer"
-              title="回到顶端"
-            >
-              ↑ 顶端
-            </button>
-          </div>
         </div>
 
         {/* 无缝长图展示区 */}
@@ -271,15 +275,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
               className="px-3.5 py-1.5 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs rounded-xs hover:bg-[#2B5E4A] cursor-pointer shadow-xs"
             >
               返回本子列表 📚
-            </button>
-            <button
-              onClick={() => {
-                soundManager.playBlip();
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="px-3 py-1.5 bg-[#FFFEEF] text-[#5B4636] border border-[#D5C9AF] text-xs rounded-xs cursor-pointer hover:bg-white"
-            >
-              回到顶部
             </button>
           </div>
         </div>
@@ -320,6 +315,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                 onClick={() => {
                   soundManager.playBlip();
                   setSelectedCategory(cat);
+                  setSelectedTag('全部');
+                  setSelectedAuthor('全部');
                 }}
                 className={`px-2.5 py-1 rounded-xs border transition-all cursor-pointer text-xs shrink-0 whitespace-nowrap select-none active:scale-95 ${
                   selectedCategory === cat
@@ -378,6 +375,27 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           )}
         </div>
         )}
+
+        {/* 作者筛选：仅漫画本显示，主题同款下拉框，动态汇总 circle 去重（作品数降序） */}
+        {(selectedCategory === '漫画本' && isMangaUnlocked) && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-dashed border-[#E0D5BE]">
+            <span className="text-[11px] font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">作者:</span>
+            <select
+              value={selectedAuthor}
+              onChange={(e) => {
+                soundManager.playBlip();
+                setSelectedAuthor(e.target.value);
+              }}
+              className="w-auto min-w-[120px] max-w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2 py-1.5 text-xs outline-hidden cursor-pointer font-retro-jp text-[#3B2818]"
+            >
+              {allAuthors.map((author) => (
+                <option key={author} value={author}>
+                  {author}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* 小说本 = 专属视图：段切换（站外推荐 / 在线小说）+ 题材筛选 + 瀑布流 */}
@@ -393,7 +411,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           loginRequired
           onLogin={() => window.dispatchEvent(new Event('levihan-open-login'))}
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4.5 w-full">
+          <div className="columns-1 sm:columns-2 gap-3.5 sm:gap-4.5 w-full">
         {filteredBooks.map((book) => {
           // 通过 COS 逻辑层动态生成封面 CDN 地址
           const coverUrl = cosService.getCoverUrl(book);
@@ -403,7 +421,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
             <div
               key={book.id}
               onClick={() => handleOpenBookReader(book)}
-              className="bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full"
+              className="bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full mb-3.5 sm:mb-4.5 break-inside-avoid"
               title="点击直接打开查看无缝长图"
             >
               <div className="space-y-2">

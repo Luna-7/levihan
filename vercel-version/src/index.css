@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: 'Almendra', 'Noto Serif SC', 'Noto Sans SC', serif, sans-serif;
+  --font-serif: 'Noto Serif SC', 'Source Han Serif SC', serif;
+}
+
 @layer base {
   :root {
     --bg-parchment: #FBF7EC;
@@ -10,19 +15,6 @@
     --border-gold: #C29641;
     --pixel-purple: #6A4C93;
     --gold-accent: #E5A93C;
-
-    /* ---- iOS 独立 PWA（添加到主屏幕）适配 ----
-       --app-h: 页面可用高度。iOS standalone 里 100dvh 会比真实屏幕矮
-                env(safe-area-inset-top)（iPhone 14 Pro 上约 59px），必须用 100vh。
-                Safari / 桌面仍用 100dvh（跟随地址栏伸缩），两种模式各自正确。
-       --sat / --sab: 顶部（灵动岛/状态栏）与底部（home indicator）安全区。 */
-    --app-h: 100dvh;
-    --sat: env(safe-area-inset-top, 0px);
-    --sab: env(safe-area-inset-bottom, 0px);
-  }
-
-  html.pwa-standalone {
-    --app-h: 100vh;
   }
 
   html, body {
@@ -30,15 +22,80 @@
     width: 100%;
     max-width: 100vw;
     -webkit-tap-highlight-color: transparent;
-    /* 防止 iOS 在旋转/聚焦时自动缩放文字（standalone 下不会自动缩回） */
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     font-size: 16px;
+    padding-top: env(safe-area-inset-top, 0px);
+    font-family: 'Almendra', 'Noto Serif SC', 'Noto Sans SC', serif, sans-serif;
+    overflow: hidden;
+    height: 100%;
+  }
+
+  /* Disable scrollbar globally but allow it in specific containers if needed */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Height-based adjustments to prevent scroll on short screens
+     （导航栏改为文档流占位后内容区变矮约一个导航栏高度，阈值同步下调） */
+  @media (max-height: 690px) {
+    .short-screen-scale {
+      transform: scale(0.92);
+      transform-origin: bottom center;
+    }
+    .short-screen-gap-sm {
+      gap: 0.35rem !important;
+    }
+    .short-screen-p-sm {
+      padding: 0.4rem !important;
+    }
+    .short-screen-m-neg {
+      margin-top: -0.75rem !important;
+      margin-bottom: -0.75rem !important;
+    }
+    .short-screen-hide {
+      display: none !important;
+    }
+    .short-screen-text-xs {
+      font-size: 0.65rem !important;
+    }
+  }
+
+  @media (max-height: 580px) {
+    .short-screen-scale {
+      transform: scale(0.82);
+    }
+    .short-screen-compact-header {
+      height: 8.5rem !important;
+      padding-top: 0.25rem !important;
+      padding-bottom: 0.25rem !important;
+    }
+    .short-screen-compact-header h1 {
+      font-size: 0.9rem !important;
+    }
+    .short-screen-compact-header p {
+      display: none !important;
+    }
+  }
+
+  /* PWA Safe Area Utilities */
+  .safe-pt {
+    padding-top: max(env(safe-area-inset-top, 0px), 4px);
+  }
+
+  .safe-pb {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
   }
 
   @media (max-width: 640px) {
     html {
-      font-size: 17px;
+      font-size: 16px;
     }
   }
 }
@@ -48,7 +105,7 @@
 }
 
 .font-retro-jp {
-  font-family: 'DotGothic16', 'Noto Sans SC', monospace, sans-serif;
+  font-family: 'DotGothic16', 'Noto Serif SC', monospace, serif;
 }
 
 .font-vt {
@@ -59,6 +116,114 @@
 .pixel-art {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+}
+
+/* Zipline Cadets Gliding Animation (向右滑行，生动有趣) */
+@keyframes ziplineSlideRight {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(110vw);
+  }
+}
+
+/* 首页 Header 横幅：打开网页自动向下移入 */
+@keyframes headerSlideDown {
+  0% {
+    transform: translateY(-108%);
+    opacity: 0;
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-header-slide-down {
+  animation: headerSlideDown 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-header-slide-down {
+    animation: none;
+  }
+}
+
+@keyframes cadetBobbing {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  25% {
+    transform: translateY(2px) rotate(0.8deg);
+  }
+  50% {
+    transform: translateY(-1px) rotate(-0.6deg);
+  }
+  75% {
+    transform: translateY(2.5px) rotate(1.2deg);
+  }
+}
+
+.animate-zipline-glide {
+  animation: ziplineSlideRight 16s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-cadet-bob {
+  animation: cadetBobbing 2.8s ease-in-out infinite;
+}
+
+/* 兵长茶会 · 滑索横带：整宽无缝循环。
+   位移量取自元素上的 --zipline-shift（= 恰好一份图的宽度），
+   所以换份数、换图都不用动 keyframes。 */
+@keyframes ziplineLoopTranslate {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(var(--zipline-shift, -100%));
+  }
+}
+
+.animate-zipline-loop {
+  animation: ziplineLoopTranslate 26s linear infinite;
+}
+
+.animate-zipline-loop-fast {
+  animation: ziplineLoopTranslate 12s linear infinite;
+}
+
+/* 悬挂上下摆动：只做 translateY，不叠加 rotate。
+   横带平铺后宽约 2900px，1° 旋转会把两端抬起几十像素，
+   相邻两份的钢轨会错位、接缝可见。 */
+@keyframes ziplineHangBob {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(3px);
+  }
+  60% {
+    transform: translateY(-1.5px);
+  }
+  80% {
+    transform: translateY(2px);
+  }
+}
+
+.animate-zipline-bob {
+  animation: ziplineHangBob 3.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-zipline-loop,
+  .animate-zipline-loop-fast,
+  .animate-zipline-bob {
+    animation: none;
+  }
 }
 
 @keyframes walking-sprite-cycle {
@@ -147,10 +312,11 @@
   box-shadow: 0 3px 0 #48BB78;
 }
 
-.pixel-cute-blue {
-  background-color: #F0F9FF;
-  border: 2px solid #7DD3FC;
-  box-shadow: 0 3px 0 #38BDF8;
+.pixel-cute-purple {
+  background-color: #3B0764;
+  border: 2px solid #5B21B6;
+  box-shadow: 0 3px 0 #2E1065;
+  color: #F3E8FF;
 }
 
 .pixel-cute-green-btn {
@@ -166,10 +332,10 @@
   box-shadow: 0 1px 0 #1E4334;
 }
 
-.pixel-cute-cyan-btn {
-  background: linear-gradient(180deg, #67E8F9 0%, #06B6D4 100%);
-  border: 1.5px solid #FFFFFF;
-  box-shadow: 0 2px 0 #0891B2, inset 0 1px 0 rgba(255, 255, 255, 0.8);
+.pixel-cute-purple-btn {
+  background: linear-gradient(180deg, #5B21B6 0%, #3B0764 100%);
+  border: 1.5px solid #A855F7;
+  box-shadow: 0 2px 0 #2E1065, inset 0 1px 0 rgba(255, 255, 255, 0.4);
   color: #FFFFFF;
 }
 
@@ -366,27 +532,95 @@ body.immersive-on .retro-frame-card > .absolute {
    (Derived from official Pop Up Shop Angel & Devil Visual)
    ==================================================== */
 .font-serif-title {
-  font-family: 'Cinzel', 'Noto Serif JP', Georgia, 'Times New Roman', serif;
+  font-family: 'Cinzel Decorative', 'Cinzel', 'Noto Serif JP', Georgia, 'Times New Roman', serif;
 }
 
 .font-mincho {
   font-family: 'Noto Serif JP', 'Noto Serif SC', 'Source Han Serif SC', serif;
 }
 
-/* Ornate Antique Navy & Burnished Gold Frame */
-.popup-frame-border {
-  border: 4px solid #16273B;
-  box-shadow:
-    0 0 0 1px #C5A059,
-    0 0 0 3px #16273B,
-    0 8px 24px rgba(22, 39, 59, 0.25);
+.font-gothic {
+  font-family: 'UnifrakturMaguntia', 'Cinzel', serif;
 }
 
-.popup-gold-filigree-border {
-  border: 2px solid #C5A059;
+.font-medieval {
+  font-family: 'MedievalSharp', 'Almendra', serif;
+}
+
+/* ====================================================
+   调查兵团军规古银金属框 & 典雅磨砂玻璃质感体系
+   (Survey Corps Antique Silver Metal & Themed Glass Morphism)
+   ==================================================== */
+
+/* 1. 核心弹窗/画卷外框：双色古银嵌金微浮雕框 */
+.popup-frame-border {
+  border: 2.5px solid #8FA69D;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(246, 250, 248, 0.85) 45%, rgba(234, 242, 238, 0.78) 100%);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow:
+    0 0 0 1px #FFFFFF,
+    0 0 0 2px #2D4C3E,
+    0 0 0 3.5px #C5A059,
+    0 0 0 4.5px #CBD5E1,
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.95),
+    inset 0 -1.5px 2px rgba(27, 67, 50, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+    0 16px 36px -8px rgba(18, 43, 33, 0.35);
+  position: relative;
+}
+
+/* 2. 主舞台与展会通用框体：兵团复古古银框架 */
+.silver-retro-frame {
+  border: 2.5px solid #849A90;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.88) 0%, rgba(245, 249, 246, 0.78) 100%);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  box-shadow:
+    0 0 0 1px #FFFFFF,
+    0 0 0 2px #1E4334,
+    0 0 0 3px #C5A059,
+    inset 0 1px 2px rgba(255, 255, 255, 0.95),
+    inset 0 -1px 2px rgba(30, 67, 52, 0.3),
+    0 8px 24px -4px rgba(18, 43, 33, 0.25);
+  position: relative;
+}
+
+/* 3. 玻璃斜向高光与通透反光覆层 */
+.glass-reflection-overlay {
+  position: relative;
+}
+.glass-reflection-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(125deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.15) 20%, transparent 40%, rgba(255, 255, 255, 0.08) 85%);
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 5;
+}
+
+/* 4. 兵团军徽古银铆钉 (点缀复古金边) */
+.silver-rivet {
+  width: 7.5px;
+  height: 7.5px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 35%, #FFFFFF 0%, #D1D5DB 40%, #6B7280 80%, #374151 100%);
+  border: 1px solid #C5A059;
+  box-shadow: 0 1px 2px rgba(18, 43, 33, 0.4), inset 0 0.5px 0.5px #FFFFFF;
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.popup-gold-filigree-border,
+.silver-filigree-border {
+  border: 2px solid #8FA69D;
   box-shadow: 
-    inset 0 0 0 1px #E8D5A7,
-    0 4px 14px rgba(197, 160, 89, 0.22);
+    inset 0 0 0 1px #FFFFFF,
+    0 0 0 1px #1E4334,
+    0 0 0 2px #C5A059,
+    0 4px 14px rgba(18, 43, 33, 0.22);
 }
 
 .popup-parchment-bg {
@@ -438,6 +672,51 @@ body.immersive-on .retro-frame-card > .absolute {
 
 .custom-adventure-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: #C5A059;
+}
+
+/* 避开固定悬浮的底部行军导航栏（AdventureBottomNav）。
+   导航栏波浪纸按 1242:331 比例随宽度拉伸（≈26.65vw），容器上限
+   max-w-xl / sm:max-w-2xl / lg:max-w-3xl，另有 6px 安全区垫条。
+   该类 = 导航栏总高 + 10px 余量，用于首页内容与三个卡片页滚动容器。 */
+.clear-adventure-nav {
+  padding-bottom: calc(min(26.65vw, 153.6px) + 16px);
+}
+
+/* ============================================================
+   首页公告栏卡片：羊皮纸木板底图（1177×337，含回形针与虚线内框）
+   - background-size 100% 100%：卡片高度由内容决定，底图随卡片拉伸；
+     卡片高度与底图比例偏差实测 ≤15%，肉眼不可辨。
+   - border-radius 用百分比：横向 2.38% ≈ 底图圆角 28/1177，
+     纵向 10.09% ≈ 34/337。这样圆角半径与底图同步缩放，
+     刚好把底图自带的肤色直角背景裁掉，露出圆角木板。
+   - padding 百分比按**宽度**计算：上方 6% 让内容落到回形针下方
+     （回形针纵向占到宽度 5.3% 处），左右 3.4% / 下 3.4% 落在虚线框内。
+   ============================================================ */
+.announcement-board {
+  background-image: url('/images/announcement-board.webp');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+  border-radius: 2.38% / 10.09%;
+  padding: 6% 3.4% 3.4%;
+}
+
+@media (max-height: 690px) {
+  .announcement-board {
+    padding: 5.9% 3.2% 3.1%;
+  }
+}
+
+@media (min-width: 640px) {
+  .clear-adventure-nav {
+    padding-bottom: calc(min(26.65vw, 179.2px) + 16px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .clear-adventure-nav {
+    padding-bottom: calc(min(26.65vw, 204.8px) + 16px);
+  }
 }
 
 /* Vintage Envelope Styling & Patterns */
@@ -568,3 +847,145 @@ body.immersive-on .retro-frame-card > .absolute {
     animation: none;
   }
 }
+
+/* 注意：原来的 .translucent-card-overlay（半透明卡片花纹层）已删除 —— 全仓无任何
+   组件使用该 class，配套的 card-overlay.{webp,jpg,png}（合计 2.6MB）也一并删除。 */
+
+/* ====================================================
+   PWA 专属响应式网格与弹性盒趴趴定位系统 (PWA Peek & Banner Responsive System)
+   利用 CSS Grid 与 Flexbox 媒体查询，实现不同屏幕下的自适应缩放与居中，避免大屏松散
+   ==================================================== */
+.pwa-banner-grid {
+  display: grid;
+  grid-template-rows: 1fr;
+  grid-template-columns: 100%;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+}
+
+.pwa-card-flex-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+}
+
+/* 趴趴锚点：精确放置在卡片下方 1/3 处的边框线上 (bottom: 33.333%)，横向绝对居中 */
+.pwa-peek-anchor-third {
+  position: absolute;
+  left: 50%;
+  bottom: 33.333%;
+  transform: translate(-50%, 50%);
+  z-index: 35;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  margin: 0 auto;
+}
+
+/* 内部弹性盒：严格居中并限定最大宽度，杜绝大屏幕拉伸分散 */
+.pwa-peek-dock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 1.6vw, 12px);
+  padding: 2px 4px;
+  max-width: 320px;
+  width: auto;
+  transition: all 0.25s ease-out;
+}
+
+/* 利威尔与韩吉趴趴响应式尺寸定义 */
+.pwa-peek-sprite-levi {
+  width: clamp(34px, 5.5vw, 44px);
+  height: auto;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.22));
+  flex-shrink: 0;
+  transform: translateY(1px);
+}
+
+.pwa-peek-sprite-hange {
+  width: clamp(32px, 5.2vw, 42px);
+  height: auto;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.22));
+  flex-shrink: 0;
+  transform: translateY(1px);
+}
+
+/* 徽章胶囊文字响应式尺寸 */
+.pwa-peek-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(2px, 0.5vw, 4px) clamp(8px, 1.6vw, 14px);
+  font-size: clamp(9px, 1.5vw, 12px);
+  font-family: var(--font-serif-title, 'Cinzel', serif);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  background: rgba(232, 242, 231, 0.96);
+  border: 1px solid #C5A059;
+  color: #1E4334;
+  border-radius: 9999px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+}
+
+/* 媒体查询细化：超小屏幕 (折叠屏/小屏手机 < 360px) */
+@media (max-width: 360px) {
+  .pwa-peek-anchor-third {
+    bottom: 33.333%;
+  }
+  .pwa-peek-dock {
+    gap: 4px;
+    max-width: 260px;
+  }
+  .pwa-peek-sprite-levi {
+    width: 32px;
+  }
+  .pwa-peek-sprite-hange {
+    width: 30px;
+  }
+  .pwa-peek-badge {
+    padding: 1px 6px;
+    font-size: 8.5px;
+  }
+}
+
+/* 媒体查询细化：中大屏幕平板/桌面 (>= 640px) 保持紧凑优雅，不松散 */
+@media (min-width: 640px) {
+  .pwa-peek-anchor-third {
+    bottom: 33.333%;
+  }
+  .pwa-peek-dock {
+    gap: 10px;
+    max-width: 340px;
+  }
+  .pwa-peek-sprite-levi {
+    width: 44px;
+  }
+  .pwa-peek-sprite-hange {
+    width: 42px;
+  }
+}
+
+/* 媒体查询细化：大屏幕桌面 (>= 1024px) */
+@media (min-width: 1024px) {
+  .pwa-peek-anchor-third {
+    bottom: 33.333%;
+  }
+  .pwa-peek-dock {
+    gap: 12px;
+    max-width: 360px;
+  }
+}
+
+

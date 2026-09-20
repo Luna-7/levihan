@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { Analytics } from '@vercel/analytics/react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+const Analytics = () => null;
 import { RetroPixelFrame } from './components/RetroPixelFrame';
 import { HeaderCard } from './components/HeaderCard';
 import { ImmersiveGameHome } from './components/ImmersiveGameHome';
@@ -7,13 +7,16 @@ import { GameStageLayout } from './components/GameStageLayout';
 import { AdventureWorldBackground } from './components/AdventureWorldBackground';
 import { AdventureBottomNav } from './components/AdventureBottomNav';
 import { ResourceHub } from './components/ResourceHub';
+import { ExquisiteStoryWorkshop } from './components/ExquisiteStoryWorkshop';
 import { DoujinshiArchive } from './components/DoujinshiArchive';
+import { RestaurantForum } from './components/RestaurantForum';
 import { DispatchHub } from './components/DispatchHub';
 import { BackToTopButton } from './components/BackToTopButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { GROUP_INFO, POTATO_EGG_QUOTES } from './data/initialData';
 import { soundManager } from './utils/audio';
 import { NavigationTab } from './types';
+import { LEVIHAN_OPEN_DOUJIN_EVENT } from './utils/relayNovels';
 
 const TAB_INDEX_MAP: Partial<Record<NavigationTab, number>> = {
   home: 0,
@@ -40,6 +43,17 @@ export default function App() {
   const toastTimerRef = useRef<number | null>(null);
 
   const activeIndex = TAB_INDEX_MAP[activeTab] ?? 0;
+
+  // 监听接龙合订本跳转事件，切换到巨树餐厅（同人典藏阁）
+  useEffect(() => {
+    const handleOpenNovel = () => {
+      setActiveTab('resources');
+    };
+    window.addEventListener(LEVIHAN_OPEN_DOUJIN_EVENT, handleOpenNovel);
+    return () => {
+      window.removeEventListener(LEVIHAN_OPEN_DOUJIN_EVENT, handleOpenNovel);
+    };
+  }, []);
 
   const showToast = useCallback((msg: string) => {
     if (toastTimerRef.current !== null) {
@@ -89,13 +103,13 @@ export default function App() {
   };
 
   const handleNavigate = (tab: NavigationTab) => {
-    soundManager.playWoodTap();
+    soundManager.playNavClick();
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
-    <main className="relative w-full h-[var(--app-h)] max-h-[var(--app-h)] pt-[var(--sat)] pb-0 px-0 flex flex-col items-center justify-start bg-transparent antialiased selection:bg-[#C5A059] selection:text-[#16273B] overflow-hidden">
+    <main className="relative w-full h-[100dvh] max-h-[100dvh] pt-0 pb-0 px-0 flex flex-col items-center justify-start bg-transparent antialiased selection:bg-[#C5A059] selection:text-[#16273B] overflow-hidden">
       {/* 勇者大冒险 · 完全固定优雅羊皮纸背景 (固定不移动) */}
       <AdventureWorldBackground activeTab={activeTab} />
 
@@ -106,7 +120,7 @@ export default function App() {
           卡片随着小人行军水平平移滑动层 (Card Follows Character Walking)
           4 个页面卡片横向平铺，随导航小人移动平滑平移切换
          ==================================================== */}
-      <div className="relative z-10 w-full flex-1 overflow-hidden h-full max-h-full">
+      <div className="relative z-10 w-full flex-1 min-h-0 overflow-hidden">
         <div
           className="flex w-[400%] h-full transition-transform duration-650 ease-out"
           style={{
@@ -128,7 +142,7 @@ export default function App() {
             />
           </div>
 
-          {/* VIEW 2: 公共资源库 (固定舞台外框，仅在展开/溢出时内部滚动) */}
+          {/* VIEW 2: 巨树餐厅 (同人归档) */}
           <div
             className={`w-1/4 shrink-0 h-full overflow-hidden transition-opacity duration-300 ${
               activeTab === 'resources' ? 'opacity-100' : 'opacity-85 pointer-events-none'
@@ -142,43 +156,27 @@ export default function App() {
               onToggleSound={handleToggleSound}
               onShowToast={showToast}
             >
-              <ResourceHub
+              <DoujinshiArchive
                 onCopyCode={handleCopyExtractionCode}
                 onShowToast={showToast}
-                onGoToDoujin={() => {
-                  soundManager.playPageTurn();
-                  handleNavigate('doujinshi');
-                }}
               />
             </GameStageLayout>
           </div>
 
-          {/* VIEW 3: 同人本专区 (固定舞台外框，仅在展开/阅读时内部滚动) */}
+          {/* VIEW 3: 团长茶话会 (同好茶室·故事接龙·安科创作) */}
           <div
             className={`w-1/4 shrink-0 h-full overflow-hidden transition-opacity duration-300 ${
               activeTab === 'doujinshi' ? 'opacity-100' : 'opacity-85 pointer-events-none'
             }`}
             aria-hidden={activeTab !== 'doujinshi'}
           >
-            <GameStageLayout
-              activeTab="doujinshi"
-              onNavigateTab={handleNavigate}
-              isSoundMuted={isSoundMuted}
-              onToggleSound={handleToggleSound}
+            <RestaurantForum
+              onBack={() => handleNavigate('home')}
               onShowToast={showToast}
-            >
-              <DoujinshiArchive
-                onCopyCode={handleCopyExtractionCode}
-                onShowToast={showToast}
-                onGoToResources={() => {
-                  soundManager.playScrollOpen();
-                  handleNavigate('resources');
-                }}
-              />
-            </GameStageLayout>
+            />
           </div>
 
-          {/* VIEW 4: 联络呈递 (固定舞台外框，仅在表单展开时内部滚动) */}
+          {/* VIEW 4: 调查联络 (飞鸽信使·投递·讨论·营地) */}
           <div
             className={`w-1/4 shrink-0 h-full overflow-hidden transition-opacity duration-300 ${
               activeTab === 'dispatch' ? 'opacity-100' : 'opacity-85 pointer-events-none'

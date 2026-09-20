@@ -109,7 +109,7 @@ export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = tru
             aria-label="像素人物装饰"
           >
             <img
-              src="/images/archive-maintenance.png"
+              src="/images/archive-maintenance.webp"
               alt=""
               draggable={false}
               className="block w-full h-full object-contain pointer-events-none"

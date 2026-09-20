@@ -19,8 +19,7 @@
   var collator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' });
 
   if (window.pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdn.staticfile.net/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
   }
 
   /* ---------- DOM / 通用小工具 ---------- */
@@ -169,7 +168,7 @@
     var ok = (name === 'jspdf' && window.jspdf && window.jspdf.jsPDF) ||
              (name === 'pdfjs' && window.pdfjsLib) ||
              (name === 'jszip' && window.JSZip);
-    if (!ok) throw new Error('依赖 ' + name + ' 加载失败，请检查网络后刷新页面。');
+    if (!ok) throw new Error('依赖 ' + name + ' 未加载（vendor/ 本地资源），请刷新页面后重试。');
   }
 
   /* ---------- 图像基础 ---------- */

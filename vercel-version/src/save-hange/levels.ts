@@ -34,14 +34,14 @@ export interface DifficultyConfig {
   initialPieces: readonly Piece[];
 }
 
-/** 简单：韩吉位于中下部，路线较直观 */
+/** 简单：韩吉位于中下部，路线较直观，新手友好 */
 export const EASY_LAYOUT: readonly Piece[] = [
-  { id: 'hange', name: '韩吉', type: 'target', w: 2, h: 2, x: 1, y: 1 },
-  { id: 'founding_eren', name: '始祖巨人', type: 'horizontal', w: 2, h: 1, x: 1, y: 3 },
+  { id: 'hange', name: '韩吉', type: 'target', w: 2, h: 2, x: 1, y: 2 },
+  { id: 'founding_eren', name: '始祖巨人', type: 'horizontal', w: 2, h: 1, x: 1, y: 4 },
   { id: 'eren', name: '艾伦', type: 'vertical', w: 1, h: 2, x: 0, y: 0 },
   { id: 'ymir', name: '尤弥尔', type: 'vertical', w: 1, h: 2, x: 3, y: 0 },
-  { id: 'floch', name: '弗洛克', type: 'vertical', w: 1, h: 2, x: 0, y: 2 },
-  { id: 'zeke', name: '吉克', type: 'vertical', w: 1, h: 2, x: 3, y: 2 },
+  { id: 'floch', name: '弗洛克', type: 'small', w: 1, h: 1, x: 0, y: 2 },
+  { id: 'zeke', name: '吉克', type: 'small', w: 1, h: 1, x: 3, y: 2 },
   { id: 'titan_1', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 1, y: 0 },
   { id: 'titan_2', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 2, y: 0 },
   { id: 'titan_3', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 0, y: 4 },
@@ -62,18 +62,18 @@ export const NORMAL_LAYOUT: readonly Piece[] = [
   { id: 'titan_4', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 3, y: 4 },
 ];
 
-/** 困难：韩吉被压在左上角，出口附近封锁最重 */
+/** 困难：韩吉在上方正中，周围完全被纵向棋子包围，出口附近多层封锁 */
 export const HARD_LAYOUT: readonly Piece[] = [
-  { id: 'hange', name: '韩吉', type: 'target', w: 2, h: 2, x: 0, y: 0 },
-  { id: 'founding_eren', name: '始祖巨人', type: 'horizontal', w: 2, h: 1, x: 0, y: 2 },
-  { id: 'eren', name: '艾伦', type: 'vertical', w: 1, h: 2, x: 2, y: 0 },
+  { id: 'hange', name: '韩吉', type: 'target', w: 2, h: 2, x: 1, y: 0 },
+  { id: 'founding_eren', name: '始祖巨人', type: 'horizontal', w: 2, h: 1, x: 1, y: 2 },
+  { id: 'eren', name: '艾伦', type: 'vertical', w: 1, h: 2, x: 0, y: 0 },
   { id: 'ymir', name: '尤弥尔', type: 'vertical', w: 1, h: 2, x: 3, y: 0 },
-  { id: 'floch', name: '弗洛克', type: 'vertical', w: 1, h: 2, x: 2, y: 2 },
+  { id: 'floch', name: '弗洛克', type: 'vertical', w: 1, h: 2, x: 0, y: 2 },
   { id: 'zeke', name: '吉克', type: 'vertical', w: 1, h: 2, x: 3, y: 2 },
-  { id: 'titan_1', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 0, y: 3 },
-  { id: 'titan_2', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 1, y: 3 },
+  { id: 'titan_1', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 1, y: 3 },
+  { id: 'titan_2', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 2, y: 3 },
   { id: 'titan_3', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 0, y: 4 },
-  { id: 'titan_4', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 1, y: 4 },
+  { id: 'titan_4', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 3, y: 4 },
 ];
 
 export const DIFFICULTIES: Record<Difficulty, DifficultyConfig> = {
@@ -82,7 +82,7 @@ export const DIFFICULTIES: Record<Difficulty, DifficultyConfig> = {
     name: '简单',
     sublabel: '新兵突破',
     tag: 'EASY',
-    description: '守备较为分散，适合快速熟悉突围路线',
+    description: '韩吉距离出口较近，适合快速熟悉突围路线',
     initialPieces: EASY_LAYOUT,
   },
   normal: {
@@ -98,7 +98,7 @@ export const DIFFICULTIES: Record<Difficulty, DifficultyConfig> = {
     name: '困难',
     sublabel: '绝境地鸣',
     tag: 'HARD',
-    description: '绝境布局封锁最重，时长同样以终曲为准',
+    description: '韩吉被围困在中心区域，出口附近多重封锁，突围路径最复杂',
     initialPieces: HARD_LAYOUT,
   },
 };

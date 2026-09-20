@@ -32,8 +32,8 @@ const STAGE_CONFIGS: Partial<Record<
     landmark: '🌲',
     desc: '勇者小人已抵达古木书库：收集到140+画师、AO3珍藏与官方原案资料！',
     status: '情报搜集完成',
-    borderCol: 'border-[#7DD3FC]',
-    bgBadge: 'bg-[#E0F2FE] text-[#0369A1] border border-[#7DD3FC]',
+    borderCol: 'border-[#5B21B6]',
+    bgBadge: 'bg-[#3B0764] text-[#F3E8FF] border border-[#5B21B6]',
   },
   doujinshi: {
     stage: 'STAGE 3',
@@ -50,8 +50,8 @@ const STAGE_CONFIGS: Partial<Record<
     landmark: '🕊️',
     desc: '勇者小人已登上信号高塔：飞鸽整装待发，等待呈递你的专属战术心意！',
     status: '信号就绪',
-    borderCol: 'border-[#D8B4FE]',
-    bgBadge: 'bg-[#F3E8FF] text-[#7E22CE] border border-[#D8B4FE]',
+    borderCol: 'border-[#5B21B6]',
+    bgBadge: 'bg-[#3B0764] text-[#F3E8FF] border border-[#5B21B6]',
   },
 };
 

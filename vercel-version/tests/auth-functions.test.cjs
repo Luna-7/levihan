@@ -6,6 +6,14 @@ const test = require('node:test');
 
 const projectRoot = path.resolve(__dirname, '..');
 
+// 被加载的这几个云函数会读 CUSTOM_LOGIN_CREDENTIALS / CLOUDBASE_APIKEY，缺了就直接返回 503。
+// 而在 vercel-version/ 下裸跑 `npm run test` 时，cloudbase/.env 并不会自动进环境，
+// 于是会得到 2 条与代码无关的假失败（曾误判成回归）。这里兜一道：
+// 文件在就读，不在就静默跳过（CI 里自行注入环境变量即可）。
+try {
+  require('dotenv').config({ path: path.join(projectRoot, 'cloudbase', '.env'), quiet: true });
+} catch { /* dotenv 缺失时不影响其余测试 */ }
+
 function loadFunction(relativePath, app) {
   const filename = path.join(projectRoot, relativePath);
   delete require.cache[require.resolve(filename)];

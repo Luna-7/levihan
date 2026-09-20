@@ -217,7 +217,7 @@ export const WoodenAnnouncementBoard: React.FC<Props> = ({ onShowToast }) => {
 
   const handleCopy = (tag: string, number?: string) => {
     if (!number) return;
-    soundManager.playCoin();
+    soundManager.playCopySuccess();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(number).then(
         () => onShowToast(`已复制${tag}：${number} 📋`),
@@ -229,24 +229,25 @@ export const WoodenAnnouncementBoard: React.FC<Props> = ({ onShowToast }) => {
   };
 
   const handleNoticeClick = (item: NoticeItem) => {
-    soundManager.playBlip();
     if (selectedNotice?.id === item.id) {
+      soundManager.playSoftSwoosh();
       setSelectedNotice(null);
     } else {
+      soundManager.playScrollOpen();
       setSelectedNotice(item);
     }
   };
 
   const handlePrev = (e: React.MouseEvent) => {
     e.stopPropagation();
-    soundManager.playBlip();
+    soundManager.playPageTurn();
     setIsAnimating(true);
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : total - 1));
   };
 
   const handleNext = (e: React.MouseEvent) => {
     e.stopPropagation();
-    soundManager.playBlip();
+    soundManager.playPageTurn();
     setIsAnimating(true);
     setCurrentIndex((prev) => (prev < total ? prev + 1 : 1));
   };
@@ -315,6 +316,7 @@ export const WoodenAnnouncementBoard: React.FC<Props> = ({ onShowToast }) => {
                     key={`${item.id}-${idx}`}
                     style={{ height: `${ITEM_HEIGHT}px` }}
                     className="flex items-center justify-between gap-1.5 px-0.5 text-[#FFF8EC] font-pixel text-[13px] sm:text-xs select-none border-b border-white/5 last:border-b-0 cursor-pointer hover:bg-white/5 transition-colors"
+                    onMouseEnter={() => soundManager.playCardHover()}
                     onClick={() => handleNoticeClick(item)}
                     title="点击查看详情"
                   >

@@ -676,7 +676,10 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
                 🔄 再次挑战
               </button>
               <button
-                onClick={onBack}
+                onClick={() => {
+                  soundManager.playWoodTap();
+                  onBack();
+                }}
                 className="w-full py-1.5 bg-[#EAECEE] hover:bg-[#D5D8DC] text-[#2C3E50] border-2 border-[#BDC3C7] text-xs font-bold cursor-pointer"
               >
                 返回大厅
@@ -717,7 +720,10 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
                 🔄 重新开局
               </button>
               <button
-                onClick={onBack}
+                onClick={() => {
+                  soundManager.playWoodTap();
+                  onBack();
+                }}
                 className="w-full py-1.5 bg-[#EAECEE] hover:bg-[#D5D8DC] text-[#2C3E50] border-2 border-[#BDC3C7] text-xs font-bold cursor-pointer"
               >
                 返回大厅

@@ -300,7 +300,7 @@ export const SaveHangeGame: React.FC = () => {
   const boardLocked = isGameOver || hasWon;
 
   return (
-    <div className="relative w-full h-[var(--app-h)] bg-[#080d0a] text-[#f2f7f4] select-none overflow-hidden">
+    <div className="relative w-full h-[100dvh] bg-[#080d0a] text-[#f2f7f4] select-none overflow-hidden">
       {/*
         游戏画面直接铺满主站提供的 9:16 iframe（外框由主站 TatakaruGame 统一绘制，不再叠加机壳）
       */}

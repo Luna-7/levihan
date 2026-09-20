@@ -1,15 +1,15 @@
-# 漫画 / 文档「深度加密直传 COS」接入说明
+# 漫画 / 文档「深度加密上传 COS」接入说明
 
 管理台上传台（`public/admin/index.html`）新增的「含有敏感元素」开关，以及站点侧的加密阅读器。
 本文件讲清整条闭环怎么接线、怎么复核、边界在哪。涉及的文件：
 
 | 位置 | 角色 |
 | --- | --- |
-| `public/admin/secure-upload.js` | 上传侧核心：图片→PDF、AES 加密、伪装 Key、直传 COS |
-| `public/admin/index.html` | 复选框、分流、进度条、卡片徽章 |
+| `public/admin/secure-upload.js` | 上传侧核心：图片→PDF、压缩阶梯、AES 加密、伪装 Key、单次/分片上传路由 |
+| `public/admin/index.html` | 复选框、分流、进度条、卡片徽章、PDF 重渲染器（`renderPdfPagesForVault`） |
 | `src/components/SecureComicReader.tsx` | 阅读侧：403 伪装页 + 一密双解 + Canvas 瀑布流 |
 | `src/components/DoujinshiArchive.tsx` | 卡片徽章与路由分流 |
-| `cloudbase/functions/admin-upload/index.js` | `normalizeBook()` 增加 `secure` 字段白名单 |
+| `cloudbase/functions/admin-upload/index.js` | vault 系列 5 个 action（`vaultUpload/Init/Part/Complete/Abort`）+ `normalizeBook()` 的 `secure` 字段白名单 |
 | `scripts/sync-archive.mjs` | 保全 `secure`，避免表格同步覆盖掉 |
 
 > 本文档刻意放在 `docs/` 而不是 `public/`：`public/` 下的文件会被原样发布到站点，
@@ -22,25 +22,62 @@
 | 步骤 | 做什么 | 落在哪 |
 | --- | --- | --- |
 | ① 交互 | 勾选「含有敏感元素」→ 走加密流程；未勾选 → 原样走 `uploadAll()` 的普通图片流程 | `index.html` → `isSecureMode()` / `refreshSecureUI()` |
-| ② 预处理 | 图片按文件名自然排序，**在浏览器内存里**用 jsPDF 合并成一份 PDF；输入本身就是 PDF 则跳过 | `secure-upload.js` → `imagesToPdfBytes()` / `normalizeToPdfBytes()` |
-| ③ 强拦截 + 加密 | 拦下 PDF 字节流：`SHA-256("levihan")` 派生密钥 → `AES-256-CBC` → `Base64` → `new Blob([base64], {type:'text/plain'})` | `encryptPdfToCipherPayload()` |
-| ④ 伪装 + 上传 | Key 抹掉 `.pdf/.jpg/...` 强改 `.txt`；Body 换成密文 Blob → `cos.putObject` | `buildVaultKey()` / `uploadCipher()` |
+| ② 预处理 + 压缩 | 图片按文件名自然排序，**在浏览器内存里**用 jsPDF 合并成一份 PDF；输入本身就是 PDF 则跳过合并。随后跑**压缩阶梯**（从无损档开始，降到够用为止） | `secure-upload.js` → `imagesToPdfBytes()` / `normalizeToPdfBytes()` / `runCompressLadder()` |
+| ③ 判定 + 加密 | 按**产出 PDF 的字节**判定是否达标（旧版按输入字节，量错了对象）；再拦下 PDF 字节流：`SHA-256("levihan")` 派生密钥 → `AES-256-CBC` → `Base64` → `new Blob([base64], {type:'text/plain'})` | `runCompressLadder()` / `encryptPdfToCipherPayload()` |
+| ④ 伪装 + 上传 | Key 抹掉 `.pdf/.jpg/...` 强改 `.txt`；Body 换成密文 Blob → 云函数中转，**超 4MB 自动切 COS 分片** | `buildVaultKey()` / `uploadCipher()` |
 
 界面上只有一个「上传并发布」按钮，分流点在 `uploadAll()` 的第一行。
 
 上传成功后还有 **下游一读**：站点读 `archive.json` 上的 `secure` 标记 → 卡片显示徽章 →
 点开进 `SecureComicReader`（403 伪装页 → 校验码 → 一密双解 → Canvas 瀑布流）。见第五节。
 
+### 1.1 内页压缩策略（②的细则，都是"不损伤画质"优先）
+
+三个旋钮都在 `secure-upload.js` 的 `CONFIG` 里：
+
+| 旋钮 | 默认 | 含义 |
+| --- | --- | --- |
+| `IMAGE_LONG_SIDE_MAX` | `0` | 内页降采样长边上限。**0 = 不缩放**。这是唯一真正改画质的操作，所以默认关着 |
+| `PNG_POLICY` | `'keep'` | `keep` = PNG 一律保持无损；`auto` = 只有真含 alpha 才留 PNG，其余转 JPEG；`jpeg` = 一律转 JPEG |
+| `JPEG_QUALITY` | `0.9` | 只作用于"走 canvas 重编码"的图 |
+
+**JPEG 源在尺寸合格时走原字节直通**（`buildPageImage()` 里判定），完全绕过 canvas：
+jsPDF 用 `DCTDecode` 把原始 JPEG 流直接塞进 PDF，**不二次重编码**。
+实测一张 661,677 B 的源图产出 664,966 B 的 PDF（开销仅 3,289 B）；
+而旧行为是"过 canvas 用 q0.92 重编码"→ 761,348 B，**既涨 15% 又白丢一次画质**。
+
+判定需要知道图片尺寸，但直通路径不经过 canvas 就拿不到 ——
+所以用 `readJpegHeader()` **只扫 JPEG 标记段**读出宽高与分量数（不解码像素，开销几 KB）。
+
+⚠️ **PNG 策略只该管 PNG 源。** JPEG 源即便因为要降采样而走 canvas，也必须继续输出 JPEG ——
+把一张有损 JPEG 重编码成无损 PNG 只会让体积暴涨，且救不回任何已丢的信息。
+（这是实测中真的踩到的 bug，`tests/secure-pdf-compress.test.cjs` 里有回归保护。）
+
+**信息论下界**：若源全是 JPEG 且不降采样，PDF 里存的就是这批 JPEG 的原始字节之和，
+**在"不损伤画质"的前提下不可能更小**。要显著减体积只有两条路：
+调小 `IMAGE_LONG_SIDE_MAX`（改分辨率）或把 `PNG_POLICY` 改成 `auto`（仅对有 PNG 源的批次有效）。
+
+### 1.2 但是"合出来多大"事前算不出，所以改成事后实测
+
+上面的旋钮是**静态配置**，而实际产出取决于源图成分（是不是 JPEG、有没有 alpha、分辨率分布），
+事前无法预判。于是有了 `COMPRESS_LADDER`：**把这些档位排成一列逐档实跑**，
+每跑一档就量一次产出体积，**达标立即停手**（无损能过就永远走无损），并把停在哪一档报给用户。
+PDF 输入另有一条重渲染阶梯 —— 详见 **4.4 两段式**。
+
+一条重要纪律：**判定用的是产出 PDF 的字节，不是输入字节之和**。
+旧版拿输入总和去比 60MB，既会误拦小图合集、又会放过产出超标的大图，两个方向都错（详见 4.2）。
+
 ---
 
-## 二、管理台里的五处改动
+## 二、管理台里的六处改动
 
 1. **引入脚本**（`tools.js` 之后）：
    ```html
    <script src="https://cdn.jsdelivr.net/npm/cos-js-sdk-v5@1.8.7/dist/cos-js-sdk-v5.min.js"></script>
    <script src="./secure-upload.js"></script>
    ```
-   COS SDK 加载失败不影响页面：`secure-upload.js` 会自动降级为中转上传通道。
+   COS SDK 仍在页面上（`UPLOAD_MODE:'auto'` 会先试直传），但云函数**没有** `cosCredential` 分支，
+   所以实测总是落到云函数中转通道 —— 见第四节开头。SDK 加载失败也不影响页面。
 
 2. **复选框**（C 内页图片区块，画质滑杆下方）：`<input type="checkbox" id="opt-secure">`，
    联动按钮文案、拖拽区说明、文件选择器 `accept`（加密模式下额外放行 `application/pdf`）。
@@ -55,6 +92,10 @@
 5. **敏感本封面**（勾选后出现在内页选择框下方）：`#secure-cover-box`，单张、不加密、
    可**就地裁切**（复用图片编辑器），走普通 upload 通道落到 `{ID}/cover.<ext>`，
    让前台卡片有图可显示。详见第五节 5.2。
+
+6. **PDF 重渲染器注入**：`configure({ renderPdfPages: renderPdfPagesForVault })`，
+   供 `PDF_LADDER` 逐页重渲染用（`canvasToJpegBlob()` 负责输出 JPEG 以走 DCTDecode 直通）。
+   成功后两个面板都会追加 `vaultLadderNote(result)` —— "本次停在哪一档、有没有降画质"。
 
 ---
 
@@ -77,67 +118,116 @@
 
 ---
 
-## 四、后端需要的两个 action
+## 四、后端的 vault 系列 action（**已实现**）
 
-两条通道各需要一个新分支，都加在 `cloudbase/functions/admin-upload/index.js` 的
-`switch (payload.action)` 里（该函数已有管理员 token 校验与 `putObject` / `httpError` 工具）。
+原本计划"两条通道各加一个分支"，落地时改成 **云函数中转 + COS 分片兜底**：
+`cosCredential` 要下发的其实是**环境角色凭证**（`TENCENTCLOUD_SECRETID/KEY/SESSIONTOKEN`），
+权限是整个环境的权限，把它送到浏览器 —— 哪怕只在管理员 token 之后 —— 比原先估计的代价大得多，
+因此**没有实现**这条通道。云函数里实际落地的是 `switch (payload.action)` 下的 **5 个 action**
+（`cloudbase/functions/admin-upload/index.js`，沿用该函数已有的管理员 token 校验与
+`putObject` / `httpError` / `promisify` 工具）：
 
-### 通道 A（推荐）：`cosCredential` —— 浏览器直传
+| action | 作用 |
+| --- | --- |
+| `vaultUpload` | 单次上传整份密文，适合 ≤ `MAX_BYTES` |
+| `vaultInit` | 初始化分片上传，返回 `uploadId` |
+| `vaultPart` | 上传单个分片，返回 `etag` |
+| `vaultComplete` | 合并全部分片为一个对象 |
+| `vaultAbort` | 中止上传并清理残片 |
 
-```js
-// 把云函数运行时由平台注入的临时凭证交给浏览器，供 cos-js-sdk-v5 直传使用。
-// 这些凭证自带有效期，绝不要把长期 SecretId/SecretKey 下发到前端。
-case 'cosCredential': {
-  const now = Math.floor(Date.now() / 1000);
-  return {
-    ok: true,
-    credentials: {
-      tmpSecretId: process.env.TENCENTCLOUD_SECRETID,
-      tmpSecretKey: process.env.TENCENTCLOUD_SECRETKEY,
-      sessionToken: process.env.TENCENTCLOUD_SESSIONTOKEN,
-      startTime: now,
-      // 保守取 10 分钟：宁可让 SDK 多刷几次，也不要拿已过期的凭证去签名
-      expiredTime: now + 10 * 60,
-    },
-    bucket: BUCKET,
-    region: REGION,
-  };
-}
-```
+五个都只收**纯文本密文**，一律按 `text/plain; charset=utf-8` 存，
+**不接受客户端指定 ContentType**（密文是 Base64 文本，ContentType 不参与解密；
+一旦放开就等于给了"往任意 COS 对象写任意类型"的缺口）。
 
-> 更严谨的做法是用 CAM / STS `GetFederationToken` 下发**范围收敛**到 `comic_vault/` 前缀的凭证。
-> 上面这段复用平台凭证，权限是整个环境角色的权限 —— 只在管理台（管理员 token 之后）使用才成立。
-
-### 通道 B（降级）：`vaultUpload` —— 经云函数中转
+### 4.1 Key 收敛：前缀与后缀都固定
 
 ```js
-// 密文中转：只放行 comic_vault/ 下的 .txt，且必须是 Base64 文本。
-const VAULT_MAX_BYTES = 4 * 1024 * 1024;   // 见下方说明：受请求体上限约束，不要调大太多
-case 'vaultUpload': {
-  const key = String(payload.key || '').trim();
-  if (!/^comic_vault\/[A-Za-z0-9_-]+_secure\.txt$/.test(key)) throw httpError('非法的密文 Key', 400);
-
-  const b64 = String(payload.dataBase64 || '');
-  if (!/^[A-Za-z0-9+/=\s]+$/.test(b64)) throw httpError('密文必须是 Base64 文本', 400);
-
-  const size = Math.floor((b64.length * 3) / 4);
-  if (size > VAULT_MAX_BYTES) throw httpError(`密文超过 ${(VAULT_MAX_BYTES / 1024 / 1024).toFixed(1)}MB 上限`, 413);
-
-  const body = Buffer.from(b64, 'base64');
-  if (!body.length) throw httpError('密文为空', 400);
-
-  await putObject({
-    Bucket: BUCKET, Region: REGION, Key: key, Body: body,
-    ContentType: 'text/plain; charset=utf-8',
-    CacheControl: 'public, max-age=31536000',
-  });
-  return { ok: true, key, bytes: body.length };
-}
+const VAULT_PREFIX = 'comic_vault/';
+const VAULT_KEY_RE = /^comic_vault\/[A-Za-z0-9_-]{1,40}_secure\.txt$/;
+const VAULT_CIPHER_TYPE = 'text/plain; charset=utf-8';
+const MAX_PART_NUMBER = 10000;
+const VAULT_CACHE_CONTROL = 'public, max-age=31536000'; // 必须与前端 CONFIG.CacheControl 一致
 ```
 
-**通道选择**：`CONFIG.UPLOAD_MODE` 默认 `'auto'` —— 优先直传，凭证接口不可用时自动降级。
-- 直传没有请求体上限，适合几十 MB 的整本漫画；
-- 中转受该云函数已有的 `MAX_BODY = 6MB` 约束，Base64 还要再膨胀 33%，实际只能传小文件。
+`assertVaultKey()` 用这条正则拦住**一切**客户端自选路径：`/`、`.`、`..` 全在允许字符集之外，
+嵌套目录也进不来（`[A-Za-z0-9_-]{1,40}` 不含 `/`）。缓存策略这条常量在前端
+`secure-upload.js` 里镜像了一份 —— 两条通道只要有一条写得不一样，同一个 key
+就会因通道不同而拿到不同缓存行为，排查起来极难。
+
+### 4.2 真正的上限是 **3.0 MB**，不是 60 MB
+
+密文的体积链是 `PDF → AES-256-CBC + PKCS#7（≈ 同尺寸）→ Base64（×1.334）`：
+
+| 环节 | 量 |
+| --- | --- |
+| 云函数 `MAX_BYTES`（校验的是**解码后的密文字节**） | 4 MB |
+| ⇒ 对应 Base64 文本长度 | 4 × 1.334 ≈ **5.33 MB** |
+| 云函数 `MAX_BODY`（HTTP 访问服务的请求体硬上限） | 6 MB |
+| ⇒ **PDF 真正能走的体积上限** | 4 MB ÷ 1.334 ≈ **3.0 MB** |
+
+所以旧管理台那句「待处理总量 67.71 MB，超过上限 60.00 MB」是**量错了对象、并且宽了 20 倍**：
+它卡的是**输入图片字节之和**，而上传能不能成取决于**产出 PDF 的字节**。
+两者在两个方向上都会误判 —— 一堆小图加起来超 60MB 但 PDF 很小（**被误拦**），
+单张巨图 < 60MB 但产出 PDF 超 3MB（**放过去再失败**，用户白等一场）。
+现在的做法是**两段式**：先压缩、再按真实产出判定（4.4 节），上传则自动在单次/分片之间分流（4.3 节）。
+
+### 4.3 分片约束（突破 6MB 请求体）
+
+- COS 要求**除最后一个分片外每片 ≥1MB**，所以 `VAULT_PART_BYTES` 被钳在 `[1MB, MAX_BYTES]`，
+  默认 4MB（等于单请求体上限，往返次数最少）。
+- 分片按密文**文本字节**切分（不是先解码再切），各片原样拼接即为完整密文 —— 客户端零重组逻辑。
+- `vaultComplete` 会**排序分片、要求 ETag 齐全、并校验分片号从 1 起严格连续**：
+  空洞对象在 COS 侧不会立刻报错但读出来是坏的，宁可在合并前拦掉。
+- 任何一步失败，前端必须调 `vaultAbort` —— 残片占存储且不可见，不会自己消失。
+
+### 4.4 两段式：先压缩，再按真实产出判定
+
+| 阶段 | 做什么 | 代码 |
+| --- | --- | --- |
+| ① 压缩阶梯 | 从最无损的一档开始试，**降到够用为止**，并记下停在哪一档 | `runCompressLadder()` |
+| ② 判定 | 拿**产出 PDF 的字节**比 `CONFIG.MAX_OUTPUT_BYTES` | 同上 |
+| ③ 加密 | 原流程不变 | `encryptPdfToCipherPayload()` |
+| ④ 上传路由 | 密文文本 > `VAULT_PART_BYTES` 走分片，否则单次 | `uploadCipher()` |
+
+**图片路径的阶梯（`COMPRESS_LADDER`）** —— 顺序即"从无损到有损"：
+
+| 档 | 操作 | 前提 |
+| --- | --- | --- |
+| `lossless` | 空 patch，纯走 `buildPageImage()` 的 JPEG 原字节直通 | — |
+| `png2jpeg` | `PNG_POLICY:'auto'`（仅真含 alpha 才留 PNG） | 批次里**确有 PNG**（`batchHasPng()`），否则跳过 |
+| `side2400` / `side1600` / `side1200` | `IMAGE_LONG_SIDE_MAX` 依次收敛 | — |
+
+**PDF 路径另有一条阶梯（`PDF_LADDER`）**：输入本身是 PDF 时 `normalizeToPdfBytes()` 是**字节直通**，
+上面那些图片旋钮对它**完全无效** —— 内嵌图不会被解码，改 `PNG_POLICY` / `IMAGE_LONG_SIDE_MAX`
+一个字节都省不下来。要真的缩小只能重新渲染：
+
+| 档 | 操作 |
+| --- | --- |
+| `pdf-side2000` | pdf.js 逐页重渲染到长边 2000px，再拼回 PDF（`quality:0.85`） |
+| `pdf-side1400` | 同上，长边 1400px（`quality:0.8`） |
+
+渲染器由页面注入（`configure({ renderPdfPages })` → `runtime.renderPdfPages`），
+实现是 `index.html` 的 `renderPdfPagesForVault()`。合并重渲染结果时会**临时把
+`IMAGE_LONG_SIDE_MAX` 置 0**，否则"重渲染"会被再降采样一次，画质双重损失。
+
+⚠️ **pdf.js 坐标系陷阱（实测踩到，已修 + 已加回归）**：`getViewport({scale:1})` 返回的是
+**页面点（point）**，A4 = 595×842，**不是**内嵌图片的像素。最初按"只缩不放"写成
+`scale = Math.min(maxSide / baseLong, 1)`，结果 2000 与 1400 两档**都产出 595×842**（等于没渲染）。
+修法是显式放大并封顶：
+
+```js
+var PDF_VAULT_MAX_SCALE = 3;
+var scale = Math.min(maxSide / Math.max(base.width, base.height), PDF_VAULT_MAX_SCALE);
+```
+
+修后实测（源 13,062,803 B / 5 页）：`side2000` → 1413×2000 / 9,327,072 B；
+`side1400` → 989×1400 / 3,565,483 B。`tests/admin-pdf-expand-contract.test.cjs` 里
+有 4 项回归测试钉死这一点。
+
+**降级必须报出来**：`runCompressLadder()` 返回的 `ladder` 带
+`chosenId / chosenLabel / outputBytes / targetBytes / withinTarget / degraded / pdfRerendered / attempts`，
+`describeLadder()` 把它转成人话贴到两个成功面板上（`vaultLadderNote()`）。
+用户必须知道"降到了哪一档、是不是已经动了画质"，否则"压缩后画质变差"会变成一桩无头案。
 
 现有 `action:'upload'` **不能**复用：它的 `FILE_RE` 只允许图片后缀，传 `.txt` 会被 400 拦掉。
 
@@ -274,6 +364,10 @@ const doc = await pdfjsLib.getDocument({ data: pdfBytes, password }).promise;
 - **封面是这条链上唯一的明文出口**（见 5.2）。它落在 `{ID}/cover.<ext>`，与内页同一个桶、
   同一个公开域名，任何人拿到地址都能直接打开。它存在的唯一理由是让卡片不显示隔离占位图，
   **不承担任何保密职责** —— 把敏感画面放封面等于把它公开。
+- **没有浏览器直传通道**：密文一律经云函数中转，这意味着上传带宽走云函数出口、
+  并且大文件要分片多次往返（默认 4MB/片）。这是权衡后的选择 —— 直传需要把环境角色凭证下发到浏览器，
+  收益不足以抵消那道口子（见第四节开头）。给日后要做直传的人：**必须**换成 STS `GetFederationToken`
+  下发范围收敛到 `comic_vault/` 前缀的凭证，不能直接复用平台凭证。
 
 ---
 
@@ -292,29 +386,49 @@ const doc = await pdfjsLib.getDocument({ data: pdfBytes, password }).promise;
   用内页图片编辑器逐张处理（`edTarget === 'page'` 那条路径）。
 - **总页数**：`syncPages()` 会把「总页数」自动设成选中文件数。传 PDF 时这是 1，请手工改成真实页数
   （合并图片时则自动就是张数）。阅读端实际按 PDF 的真实页数渲染，所以这个值只影响卡片上显示的 "nP"。
-- **体积**：Base64 让密文比 PDF 大约 33%，再加上 AES 的 16 字节以内填充。
-  输入总量上限 `CONFIG.MAX_INPUT_BYTES`（默认 60MB）。
+- **体积（两个数字别搞混）**：
+  - `CONFIG.MAX_INPUT_BYTES` = **1GB**，只是"别把标签页拖死"的安全阀，**不是业务上限**。
+    旧值 60MB 曾在这里误杀过 67.71MB 的批次。
+  - `CONFIG.MAX_OUTPUT_BYTES` = **60MB**，两段式的**业务目标**（压缩阶梯以它为靶心逐档降画质）。
+    想完全不降画质就把 `AUTO_DOWNSCALE` 置 `false` 并把它调大。
+  - **物理上限是 3.0MB PDF**（4MB 密文 ÷ 1.334），已由分片上传解绑 —— 见 4.2 / 4.3。
 - **两份依赖需要 npm install**：`crypto-js` / `pdfjs-dist` 是本次新增的运行时依赖
   （外加 `@types/crypto-js`）。`pdfjs-dist` 被钉死在 `3.11.174`，因为阅读端 worker 用的是同版本的 CDN 文件，
   版本不一致 pdf.js 会直接报 "API version does not match Worker version"。改版本必须两边一起改。
+- **分片残留需要人工清**：`vaultAbort` 是唯一清理手段，前端在任一分片失败时会调它；
+  但浏览器若在**上传途中被关掉**，已上传的分片会留在 COS 上（不可见但占存储）。
+  定期清理是运维项，目前**没有**自动化。
+- **`MAX_OUTPUT_BYTES` 与物理上限是两件事**：前者是"单本多少算合理"的业务目标（60MB），
+  后者是"到底能不能上传"（3.0MB PDF，已由分片解绑）。
+  想让压缩阶梯尽量别动画质，把 `AUTO_DOWNSCALE` 置 `false` 即可 —— 那时超目标也不再降档。
 
 ---
 
 ## 九、测试
 
 ```bash
-# 全部安全相关测试（35 项）
+# 全部安全相关测试（70 项）
 npm run test:secure
+# 普通路径 PDF 拆页 + 渲染尺度回归（17 项）
+npm run test:admin
+# vault 分片上传的跨端契约（19 项）
+npm run test:vault
+# 管理台内联脚本静态检查（62 处裸赋值全部有声明）
+npm run check:admin
 ```
 
-四个文件各管一段，都不依赖浏览器：
+七个文件各管一段，都不依赖浏览器：
 
-| 文件 | 验什么 |
-| --- | --- |
-| `tests/secure-vault.test.cjs` | 加密本身。含**已知答案测试**：把 WebCrypto 的密文与 `node:crypto` 的 `createCipheriv('aes-256-cbc', sha256('levihan'), iv)` 逐字节比对，证明这是标准 AES-256-CBC + PKCS#7，不是自定义算法 |
-| `tests/secure-pdf-merge.test.cjs` | 图片合并 PDF。用最小 DOM 桩（canvas / createImageBitmap / document）在 Node 里验页数、页面尺寸、端到端往返 |
-| `tests/secure-reader-interop.test.cjs` | **一密双解**。用浏览器端同一个实现（crypto-js 解外层 + PDF.js 解内层），验跨实现能对上，并覆盖"必须给密码才能打开 / 同一密码透传即可解锁 / 密码错误明确报错" |
-| `tests/secure-cover-contract.test.cjs` | **敏感本封面的跨文件契约**（11 项）。命名规则从管理台真实实现里摘出来跑，钉住：文件名能过云函数 `FILE_RE`、固定 `cover.<ext>`、控件只在敏感模式下出现、**封面先于密文上传**、封面不进加密模块、归档载荷同时带 `secure` 与 `coverFile`、前台按 `coverFile` 判定、同步脚本保全清单含 `coverFile`。另把**封面裁切**的接线钉牢：`#secure-cover-crop` 入口存在且无封面时置灰、`openEditor` 必须把 `edTarget` 重置回 `'page'`、封面走 `idx:-1` 的合成对象、**`edDone` 的封面分支必须排在 `var f = files[i]` 之前**（排在后面会静默写错对象）、回写产物仍是 `cover.webp` 且清空 `uploadedName` 强制重传 |
+| 文件 | 项数 | 验什么 |
+| --- | --- | --- |
+| `tests/secure-vault.test.cjs` | 12 | 加密本身。含**已知答案测试**：把 WebCrypto 的密文与 `node:crypto` 的 `createCipheriv('aes-256-cbc', sha256('levihan'), iv)` 逐字节比对，证明这是标准 AES-256-CBC + PKCS#7，不是自定义算法 |
+| `tests/secure-pdf-merge.test.cjs` | 5 | 图片合并 PDF。用最小 DOM 桩（canvas / createImageBitmap / document）在 Node 里验页数、页面尺寸、端到端往返 |
+| `tests/secure-pdf-compress.test.cjs` | 17 | **内页压缩策略**。三块：① `readJpegHeader` 只扫标记段读宽高、非 JPEG 与截断输入安全返回 null；② `buildPageImage` 的路径判定（直通 / 降采样 / PNG 策略 / 有 alpha 保留 PNG / **JPEG 源即使降采样也不得被重编码成 PNG**）；③ 用真实 jsPDF 验直通：**在 PDF 字节流里搜到源 JPEG 的原始字节片段**（这是"零重编码"的硬证据）、体积只有源图 + 几 KB、MediaBox 来自 JPEG 头 |
+| `tests/secure-compress-ladder.test.cjs` | 18 | **两段式压缩阶梯**。假 jsPDF（产出体积 = 内嵌数据长度）+ 伪造编码长度，钉住：闸门已变成安全阀（不再按输入字节误杀）、判定看产出、无损档先跑且达标即停、降级必须在 `ladder.degraded` 里报出来、每档跑完 **CONFIG 必须原样还原**（含异常路径）、无 PNG 批次要跳过 png 档、JPEG 源降采样后仍是 JPEG、PDF 直通档不空转、没注入渲染器就跳过 PDF 档、重渲染时 `IMAGE_LONG_SIDE_MAX` 临时置 0、渲染不出页要明确报错 |
+| `tests/secure-reader-interop.test.cjs` | 7 | **一密双解**。用浏览器端同一个实现（crypto-js 解外层 + PDF.js 解内层），验跨实现能对上，并覆盖"必须给密码才能打开 / 同一密码透传即可解锁 / 密码错误明确报错" |
+| `tests/secure-cover-contract.test.cjs` | 11 | **敏感本封面的跨文件契约**。命名规则从管理台真实实现里摘出来跑，钉住：文件名能过云函数 `FILE_RE`、固定 `cover.<ext>`、控件只在敏感模式下出现、**封面先于密文上传**、封面不进加密模块、归档载荷同时带 `secure` 与 `coverFile`、前台按 `coverFile` 判定、同步脚本保全清单含 `coverFile`。另把**封面裁切**的接线钉牢：`#secure-cover-crop` 入口存在且无封面时置灰、`openEditor` 必须把 `edTarget` 重置回 `'page'`、封面走 `idx:-1` 的合成对象、**`edDone` 的封面分支必须排在 `var f = files[i]` 之前**（排在后面会静默写错对象）、回写产物仍是 `cover.webp` 且清空 `uploadedName` 强制重传 |
+| `tests/admin-pdf-expand-contract.test.cjs` | 17 | **普通路径 PDF 拆页的接线 + 敏感路径渲染尺度**（`npm run test:admin`）。前半：页名经 `pageName()` 后必须仍是 `.webp`、页序零填充 3 位、`addFiles` 必须按模式分流且普通模式不再丢弃 PDF、拆出的项必须带 `fromPdf` 元数据、失败要摘掉占位项、画质/格式变化要触发重渲染、**先铺白底再 `page.render`**（顺序反了转 WebP 会成黑块）、长边上限与 2 倍放大封顶、worker 兜底、文档缓存失败要清。后半（4 项回归）：`renderPdfPagesForVault` 必须渲染到**真实目标像素**（不得再塌到 595×842 的页面点尺寸）、两档必须产出不同尺寸、放大受 `PDF_VAULT_MAX_SCALE` 封顶、页名与 JPEG 类型 |
+| `tests/vault-multipart-contract.test.cjs` | 19 | **vault 分片的跨端契约**（`npm run test:vault`）。云函数侧（静态）：5 个 action 都存在、都需 token、两处白名单完全一致、`VAULT_KEY_RE` 拒绝穿越与嵌套、四处 promisify 到位、分片号限 1~10000、合并前校验连续性、失败路径真的调了 `abortMultipartUpload`、ContentType/缓存策略与前端一致。前端侧：`init → part×N → complete` 的顺序、**按文本子串重组必须能还原完整密文**、分片号连续且都带 etag、每个请求都带 token、任一分片失败要 abort 且**保留原始错误**、`uploadCipher` 按体积分流、字段名是 `dataText`（不是旧的 `dataBase64`） |
 
 依赖产物找不到时，各文件会显式 skip（不会伪装成通过）。也可以用环境变量指向从 CDN 取来的构建：
 
@@ -328,3 +442,31 @@ node --test tests/secure-reader-interop.test.cjs
 
 产物体积约：jsPDF UMD 364KB / crypto-js 60KB / pdfjs legacy 711KB + worker 2.1MB。
 `LH_PDFJS_LEGACY` 必须配同目录的 `pdf.worker.js`（Node 下 fake worker 是按相对路径找的）。
+
+---
+
+## 十、普通上传路径：PDF 逐页转 WebP（与加密无关）
+
+未勾选「含有敏感元素」时，拖进来的 PDF **不再被静默丢弃**（旧实现是 `if (isPdf) { if (!isSecureMode()) return; }`），
+而是用 pdf.js 逐页渲染成 WebP 图片，当作普通内页上传 —— 站点侧看到的就是标准的
+`{目录}/{前缀}{页码}.webp`，一页一个文件，与手工传图完全一致。
+
+| 环节 | 实现 |
+| --- | --- |
+| 分流 | `addFiles()` → 敏感模式保留整份 PDF；普通模式调 `expandPdfIntoPages()` |
+| 逐页渲染 | `renderPdfPageToFile()`，长边收敛到 `PDF_PAGE_MAX_SIDE`（2000），放大倍数封顶 2 倍 |
+| 命名 | `<主干>-p001.webp`，经 `pageName()` 后变成 `image01.webp` |
+| 文档缓存 | `getPdfDocument()` 按 File 对象缓存，改画质重渲染时不必重新解析 |
+
+**一个关键设计**：拆页发生在"加入列表时"，不是"点上传时"。这样 `files[]` 里永远是**真实的图片 File**，
+下游 `renderFiles()` / `uploadAll()` / `pageName()` / `syncPages()` / 敏感模式切换**一行都不用改**，
+缩略图、页数、排序也立刻正确。
+
+代价是渲染用的是"加入那一刻"的画质滑杆值。所以每一项都记了
+`fromPdf: { src, pageNo, quality, useWebp, stem }`；`uploadAll()` 在准备阶段会比对
+`fromPdf.quality !== quality`（或 WebP 开关变了），不一致就**按当前设置重渲染该页** ——
+这样"先加 PDF 再调画质"才真的生效。
+
+反向也要处理：**敏感模式下加的 PDF 是整份保留的**，如果用户随后取消勾选，
+`refreshSecureUI()` 会补一次拆页，否则会在 `createImageBitmap` 那一步炸。
+

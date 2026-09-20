@@ -113,6 +113,9 @@
   .file.done .st{background:var(--ok)}
   .file.err  .st{background:var(--danger)}
   .file.busy .st{background:var(--gold-2)}
+  /* PDF 页数角标：加入列表时异步识别后原地填上。放左上（右上被 .st 占了） */
+  .file .pg{position:absolute;top:3px;left:3px;font-size:10px;padding:1px 5px;border-radius:10px;
+            background:rgba(176,141,58,.92);color:#fff;font-family:'VT323',monospace;letter-spacing:.4px}
   .file .del{position:absolute;top:3px;left:3px;width:19px;height:19px;padding:0;border-radius:50%;
              font-size:11px;line-height:1;background:rgba(255,255,255,.9);border-color:var(--line);
              color:var(--danger);display:flex;align-items:center;justify-content:center}
@@ -734,31 +737,49 @@
       </div>
       <p class="muted" id="secure-hint" style="margin:8px 0 0">未勾选时按普通图片流程上传（每张一个文件，站点可直接预览）。</p>
 
-      <!-- 敏感本专用封面：单独一张、不参与加密。
+      <!-- 敏感本专用封面：明文、不参与加密。
            密文里没有可读图片，前台卡片要有封面只能另存一张公开图，
-           所以它走普通 upload 通道，落到 {ID}/cover.<ext>，前台按 coverFile 直接读。 -->
+           所以它走普通 upload 通道，落到 {ID}/cover.<ext>，前台按 coverFile 直接读。
+
+           默认**自动生成**：图片取列表第一张、PDF 取指定页（默认第 1 页）。
+           管理员不必再单独挑一张图；只有自动结果不合适时才展开「调整」改页码或换图 ——
+           这同时兜住了"PDF 第一页其实是正文"的情况。 -->
       <div id="secure-cover-box" class="hide" style="margin-top:14px;border:1.5px dashed var(--line);border-radius:10px;padding:14px;background:var(--card)">
         <div class="spread" style="margin-bottom:10px">
-          <label style="margin:0;font-weight:700">🖼 敏感本封面 <span class="tag">单独上传 · 不加密 · 前台卡片显示</span></label>
-          <div class="row" style="gap:8px">
-            <button class="btn-sm" id="secure-cover-crop" type="button" title="按站点卡片的 2:3 竖版裁切（也可顺手涂抹遮挡）">✂ 裁切</button>
-            <button class="btn-sm" id="secure-cover-remove" type="button">移除封面</button>
+          <label style="margin:0;font-weight:700">🖼 敏感本封面 <span class="tag">自动生成 · 明文 · 前台卡片显示</span></label>
+          <button class="btn-sm" id="secure-cover-toggle" type="button" title="改页码 / 换一张图 / 裁切">⚙ 调整 ▾</button>
+        </div>
+
+        <div id="secure-cover-info" style="display:flex;gap:12px;align-items:flex-start">
+          <img id="secure-cover-thumb" alt="封面预览" style="width:92px;aspect-ratio:2/3;object-fit:cover;border:1.5px solid var(--line);border-radius:6px;background:#FAF5E8">
+          <div class="muted" style="line-height:1.8;min-width:0">
+            <div id="secure-cover-name" style="color:var(--ink);word-break:break-all">尚未选择文件</div>
+            <div id="secure-cover-key" style="font-family:'VT323',monospace;font-size:15px"></div>
+            <div id="secure-cover-err" class="hide" style="color:#A32D2D;margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span id="secure-cover-err-text"></span>
+              <button class="btn-sm" id="secure-cover-retry" type="button">重试</button>
+            </div>
+            <div style="color:var(--gold-2);margin-top:2px">⚠ 封面不加密 —— 拿到地址的任何人都会看到这张图；内页仍是密文。别把敏感画面放封面。</div>
           </div>
         </div>
 
-        <div id="secure-cover-drop" class="drop" style="padding:16px 12px">
-          <div style="font-size:22px">🖼</div>
-          <div style="font-weight:700;color:var(--ink);margin-top:4px">把封面图拖到这里，或点击选择</div>
-          <div class="muted" style="margin-top:4px">jpg / png / webp · 建议竖版 2:3（选后可用 ✂ 裁切）· 单张 ≤ 4MB · <b>该图公开可访问</b></div>
-          <input type="file" id="secure-cover-picker" accept="image/*" class="hide">
-        </div>
+        <div id="secure-cover-more" class="hide" style="margin-top:12px;border-top:1px dashed var(--line);padding-top:12px">
+          <div id="secure-cover-page-row" class="row hide" style="gap:8px;align-items:center;margin-bottom:10px">
+            <label class="muted" for="secure-cover-page" style="margin:0">PDF 取第</label>
+            <input type="number" id="secure-cover-page" min="1" step="1" value="1" style="width:76px">
+            <span class="muted" id="secure-cover-page-max">页</span>
+            <button class="btn-sm" id="secure-cover-page-apply" type="button">重新生成</button>
+          </div>
 
-        <div id="secure-cover-info" class="hide" style="margin-top:10px;display:flex;gap:12px;align-items:flex-start">
-          <img id="secure-cover-thumb" alt="封面预览" style="width:92px;aspect-ratio:2/3;object-fit:cover;border:1.5px solid var(--line);border-radius:6px;background:#FAF5E8">
-          <div class="muted" style="line-height:1.8;min-width:0">
-            <div id="secure-cover-name" style="color:var(--ink);word-break:break-all"></div>
-            <div id="secure-cover-key" style="font-family:'VT323',monospace;font-size:15px"></div>
-            <div style="color:var(--gold-2);margin-top:2px">⚠ 封面不加密 —— 拿到地址的任何人都会看到这张图；内页仍是密文。别把敏感画面放封面。</div>
+          <div id="secure-cover-drop" class="drop" style="padding:14px 10px">
+            <div style="font-weight:700;color:var(--ink)">换一张图：拖到这里，或点击选择</div>
+            <div class="muted" style="margin-top:4px">jpg / png / webp · 建议竖版 2:3（选后可用 ✂ 裁切）· <b>该图公开可访问</b></div>
+            <input type="file" id="secure-cover-picker" accept="image/*" class="hide">
+          </div>
+
+          <div class="row" style="gap:8px;margin-top:10px">
+            <button class="btn-sm" id="secure-cover-crop" type="button" title="按站点卡片的 2:3 竖版裁切（也可顺手涂抹遮挡）">✂ 裁切</button>
+            <button class="btn-sm" id="secure-cover-remove" type="button">恢复自动生成</button>
           </div>
         </div>
       </div>
@@ -890,14 +911,17 @@
   </div>
 </div>
 
-<!-- 工具箱依赖：jsPDF（加密 PDF）/ pdf.js（拆页）/ JSZip（打包），仅在「文件工具箱」用到 -->
-<script src="https://cdn.staticfile.net/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdn.staticfile.net/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdn.staticfile.net/jszip/3.10.1/jszip.min.js"></script>
+<!-- 工具箱依赖：jsPDF（加密 PDF）/ pdf.js（拆页 + 敏感本封面）/ JSZip（打包）。
+     全部本地化到 ./vendor/ —— 这几个库原本从第三方 CDN 现拉，实测 pdf.min.js 单文件
+     就要 2.7～3s、worker 文件约 1MB 更慢，手机网络下经常超过封面生成的等待窗口，
+     表现为「PDF 封面一直卡在生成中」。改为同源托管后走 CloudBase CDN，从根上消除。 -->
+<script src="./vendor/jspdf.umd.min.js"></script>
+<script src="./vendor/pdf.min.js"></script>
+<script src="./vendor/jszip.min.js"></script>
 <script src="./pixiv-artists.js"></script>
 <script src="./tools.js"></script>
 <!-- cos-js-sdk-v5：浏览器直传 COS 用。加载失败不影响页面，secure-upload.js 会自动降级为中转上传 -->
-<script src="https://cdn.jsdelivr.net/npm/cos-js-sdk-v5@1.8.7/dist/cos-js-sdk-v5.min.js"></script>
+<script src="./vendor/cos-js-sdk-v5.min.js"></script>
 <script src="./secure-upload.js"></script>
 <script>
 'use strict';
@@ -1575,18 +1599,256 @@ var PDF_THUMB = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="200"><rect width="160" height="200" fill="#f4efe4" stroke="#c9bfa6"/><text x="80" y="112" font-size="54" text-anchor="middle">PDF</text></svg>'
 );
 
+function isPdfFile(f){
+  return /^application\/pdf$/i.test((f && f.type) || '') || /\.pdf$/i.test((f && f.name) || '');
+}
+function isImageFile(f){
+  return /^image\//.test((f && f.type) || '') || /\.(jpe?g|png|webp|gif|avif|bmp)$/i.test((f && f.name) || '');
+}
+
+/* ============ PDF 拆页（普通上传路径：每一页转成一张图片） ============ */
+
+/* 单页渲染后的长边上限。PDF 的页面在 scale=1 下常常有 2000～4000px，
+   直接渲染出来上传一方面体积失控，一方面站点也不需要那么大的图。 */
+var PDF_PAGE_MAX_SIDE = 2000;
+var pdfDocCache = new Map();
+
+function pdfJsReady(){
+  if (!window.pdfjsLib) return false;
+  // tools.js 正常加载时已经设过；这里兜一道，免得它没加载时 pdf.js 报
+  // "Setting up fake worker failed" 这种看不出根因的错。
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
+  }
+  return true;
+}
+
+function readFileBytes(file){
+  if (file && typeof file.arrayBuffer === 'function') return file.arrayBuffer();
+  return new Promise(function(res, rej){
+    var r = new FileReader();
+    r.onload = function(){ res(r.result); };
+    r.onerror = function(){ rej(new Error('读取文件失败：' + (file && file.name))); };
+    r.readAsArrayBuffer(file);
+  });
+}
+
+/** 同一个 PDF 只解析一次；失败时把缓存清掉，避免把 reject 的 Promise 一直挂着 */
+function getPdfDocument(file){
+  if (!pdfJsReady()) return Promise.reject(new Error('pdf.js 未加载，无法处理 PDF（vendor 依赖未加载完成，请刷新页面后重试）'));
+  if (pdfDocCache.has(file)) return pdfDocCache.get(file);
+  var pr = readFileBytes(file)
+    .then(function(buf){ return pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise; })
+    .catch(function(err){ pdfDocCache.delete(file); throw err; });
+  pdfDocCache.set(file, pr);
+  return pr;
+}
+
+function canvasToImageBlob(canvas, useWebp, quality){
+  return new Promise(function(res, rej){
+    var type = useWebp ? 'image/webp' : 'image/png';
+    canvas.toBlob(function(blob){
+      if (!blob) { rej(new Error('画布编码失败')); return; }
+      // 浏览器不支持 WebP 时会静默回退成 PNG，这里不当作错误，只是名字要跟着变
+      res(blob);
+    }, type, useWebp ? quality : undefined);
+  });
+}
+
+/**
+ * 把 PDF 的第 pageNo 页渲染成一张图片 File。
+ * 每次调用都走一遍 getPdfDocument（内部有缓存），所以「改画质后重渲染」不用重新解析 PDF。
+ */
+async function renderPdfPageToFile(srcFile, pageNo, quality, useWebp, stem, maxSide){
+  var doc = await getPdfDocument(srcFile);
+  if (pageNo < 1 || pageNo > doc.numPages) throw new Error('页码超出范围：' + pageNo + '/' + doc.numPages);
+
+  var page = await doc.getPage(pageNo);
+  try {
+    var base = page.getViewport({ scale: 1 });
+    // 长边收敛到 side（默认 PDF_PAGE_MAX_SIDE；封面传更小的档位）；
+    // 最多放大 2 倍，免得把小开本的页面糊成马赛克
+    var side = Number(maxSide) || PDF_PAGE_MAX_SIDE;
+    var scale = Math.min(side / Math.max(base.width, base.height), 2);
+    var vp = page.getViewport({ scale: scale });
+
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(vp.width));
+    canvas.height = Math.max(1, Math.round(vp.height));
+    var ctx = canvas.getContext('2d');
+    // PDF 页面本身没有"透明"概念，但渲染到 canvas 可能留透明底 —— 铺白，否则转 WebP 后是黑块
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+    var blob = await canvasToImageBlob(canvas, useWebp, quality);
+    var ext = blob.type === 'image/webp' ? '.webp' : '.png';
+    var name = stem + '-p' + String(pageNo).padStart(3, '0') + ext;
+    canvas.width = 0;
+    canvas.height = 0;
+    return new File([blob], name, { type: blob.type });
+  } finally {
+    if (page.cleanup) page.cleanup();
+  }
+}
+
+/**
+ * canvas → JPEG Blob。
+ * 与 canvasToImageBlob 分开：那个只出 WebP/PNG，而深度加密路径必须出 JPEG ——
+ * jsPDF 对 JPEG 走 DCTDecode 原字节直通，WebP 压根进不了 PDF。
+ */
+function canvasToJpegBlob(canvas, quality){
+  return new Promise(function(res, rej){
+    canvas.toBlob(function(blob){
+      if (!blob) { rej(new Error('画布编码失败')); return; }
+      res(blob);
+    }, 'image/jpeg', quality);
+  });
+}
+
+/**
+ * PDF 重渲染时允许的最大放大倍数。
+ *
+ * 为什么必须允许放大：pdf.js 的 getViewport({scale:1}) 返回的是**页面点尺寸**（≈72dpi），
+ * 不是内嵌图的像素尺寸。A4 漫画页 base 就是 595×842，而它内嵌的扫描图常有 1400×2000。
+ * 若按"只降不升"把 scale 封在 1，maxSide 无论给 2000 还是 1400 都会渲染成 595×842 ——
+ * 两档完全空转，还把原图分辨率白丢一大半。（实测：595×842 出图 216KB/页，
+ * 修正后 1413×2000 出图约 1MB/页，体积差异就是分辨率差异的体现。）
+ * 上限 3 是防"小开本矢量 PDF 被放大成巨型位图"，3× 对 A4 已足够到 2000px 长边。
+ */
+var PDF_VAULT_MAX_SCALE = 3;
+
+/**
+ * 把整份 PDF 逐页重渲染成 JPEG，供深度加密路径压缩 PDF 用（瘦身版，不走拆页上传那套）。
+ *
+ * 为什么不复用 renderPdfPageToFile：那个是"拆页上传"专用 —— 输出 WebP/PNG、
+ * 长边写死 PDF_PAGE_MAX_SIDE、每次只出一页。这里必须出 JPEG、长边随压缩档位变、
+ * 一次出全套。需求不同，硬共用只会互相牵制。
+ *
+ * @returns {Promise<File[]>} 每页一个 JPEG File，数组顺序即页序
+ */
+async function renderPdfPagesForVault(file, opts){
+  opts = opts || {};
+  if (!pdfJsReady()) throw new Error('pdf.js 未加载，无法压缩 PDF（vendor 依赖未加载完成，请刷新页面后重试）');
+  var maxSide = Number(opts.maxSide) || 2000;
+  var quality = Number(opts.quality) || 0.85;
+
+  var doc = await getPdfDocument(file);
+  var out = [];
+  for (var p = 1; p <= doc.numPages; p++){
+    var page = await doc.getPage(p);
+    try {
+      var base = page.getViewport({ scale: 1 });
+      // 让**长边**落到 maxSide（见 PDF_VAULT_MAX_SCALE 的说明：这里允许 >1，
+      // 否则 base 只有 595×842 的 A4 页会让所有档位退化成同一张低清图）
+      var scale = Math.min(maxSide / Math.max(base.width, base.height), PDF_VAULT_MAX_SCALE);
+      var vp = page.getViewport({ scale: scale });
+
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(vp.width));
+      canvas.height = Math.max(1, Math.round(vp.height));
+      var ctx = canvas.getContext('2d');
+      // PDF 页无透明概念，但渲染到 canvas 可能留透明底，不铺白转 JPEG 会变黑块
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+      var blob = await canvasToJpegBlob(canvas, quality);
+      canvas.width = 0;
+      canvas.height = 0;
+      out.push(new File([blob], 'vault-p' + String(p).padStart(3, '0') + '.jpg', { type: 'image/jpeg' }));
+    } finally {
+      if (page.cleanup) page.cleanup();
+    }
+  }
+  return out;
+}
+
+/**
+ * 把 PDF 拆成逐页图片项插进 files[]。
+ *
+ * 为什么在"加入列表时"就渲染，而不是等点上传时才渲染：
+ * files[] 里因此永远是真实的图片 File，下游 renderFiles / uploadAll / pageName /
+ * syncPages / 敏感模式切换**一行都不用改**，缩略图、页数、排序也立刻正确。
+ * 代价：渲染用的是"加入那一刻"的滑杆画质。若之后改了画质或 WebP 开关，
+ * uploadAll 会比对 fromPdf.quality 与当前值，不一致就按新设置重渲染该页。
+ *
+ * 注意：调用方负责在这之后 renderFiles() / syncPages()。
+ */
+function expandPdfIntoPages(file){
+  var stem = String(file.name || 'pdf').replace(/\.pdf$/i, '') || 'pdf';
+  var quality = (parseInt($('opt-q').value, 10) || 85) / 100;
+  var useWebp = $('opt-webp').checked;
+
+  var placeholder = {
+    file: file, originalFile: file,
+    url: PDF_THUMB, originalUrl: PDF_THUMB,
+    status: 'busy', err: '', pct: 0, name: file.name,
+    edited: false, op: null
+  };
+  files.push(placeholder);
+
+  getPdfDocument(file).then(function(doc){
+    var items = [];
+    var chain = Promise.resolve();
+    for (var p = 1; p <= doc.numPages; p++){
+      (function(pageNo){
+        chain = chain.then(function(){
+          return renderPdfPageToFile(file, pageNo, quality, useWebp, stem).then(function(pf){
+            items.push({
+              file: pf, originalFile: pf,
+              url: URL.createObjectURL(pf), originalUrl: URL.createObjectURL(pf),
+              status: 'idle', err: '', name: pf.name,
+              edited: false, op: null,
+              fromPdf: { src: file, pageNo: pageNo, quality: quality, useWebp: useWebp, stem: stem }
+            });
+            var at = files.indexOf(placeholder);
+            if (at >= 0) { placeholder.pct = Math.round(pageNo * 100 / doc.numPages); updateFileNode(at); }
+          });
+        });
+      })(p);
+    }
+    return chain.then(function(){
+      var at = files.indexOf(placeholder);
+      if (at < 0) return;   // 渲染期间用户已经把它移除了
+      files.splice.apply(files, [at, 1].concat(items));
+    });
+  }).catch(function(err){
+    var at = files.indexOf(placeholder);
+    if (at >= 0) files.splice(at, 1);
+    show($('main-msg'), 'err', '✗ 展开 PDF 失败（' + (file.name || '') + '）：' + ((err && err.message) || err));
+  }).then(function(){
+    renderFiles();
+    syncPages();
+  });
+}
+
 function addFiles(list){
   var incoming = Array.prototype.slice.call(list || []);
   incoming.sort(function(a, b){ return naturalSort(a.name, b.name); });
   incoming.forEach(function(f){
-    var isPdf = /^application\/pdf$/i.test(f.type || '') || /\.pdf$/i.test(f.name || '');
-    // PDF 只有「深度加密」流程能处理；普通流程只收图片，放进来会在转码阶段才炸
-    if (isPdf) { if (!isSecureMode()) return; }
-    else if (!/^image\//.test(f.type) && !/\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(f.name)) return;
+    if (isPdfFile(f)) {
+      if (isSecureMode()) {
+        // 敏感模式：整个 PDF 交给加密流程原样加密，不拆页
+        var prec = {
+          file: f, originalFile: f,
+          url: PDF_THUMB, originalUrl: PDF_THUMB,
+          status: 'idle', err: '', name: f.name,
+          edited: false, op: null, pages: 0
+        };
+        files.push(prec);
+        probePdfPages(prec);   // 加入即识别页数（卡片角标 + 顺便预热封面解析）
+      } else {
+        // 普通模式：拆成逐页图片，走下面的常规图片上传（每页一张 WebP）
+        expandPdfIntoPages(f);
+      }
+      return;
+    }
+    if (!isImageFile(f)) return;
 
     files.push({
       file: f, originalFile: f,
-      url: isPdf ? PDF_THUMB : URL.createObjectURL(f), originalUrl: isPdf ? PDF_THUMB : URL.createObjectURL(f),
+      url: URL.createObjectURL(f), originalUrl: URL.createObjectURL(f),
       status: 'idle', err: '', name: f.name,
       edited: false, op: null
     });
@@ -1613,7 +1875,37 @@ function fileClass(f, i){
   return c;
 }
 
+/**
+ * 加入列表后就识别 PDF 页数，把结果写到卡片左上角的 .pg 角标上。
+ * 为什么单独做：管理员要挑「用第几页当封面」，得先知道这本有多少页，
+ * 而这个数字此前只在展开「⚙ 调整」、且封面解析完成之后才出现。
+ * 顺便预热 pdfDocCache —— 随后生成封面时同一个 PDF 不用再解析一遍。
+ * 失败**不弹错**：页数只是个参考信息，不该挡上传（封面流程自己有报错通道）。
+ */
+function probePdfPages(rec){
+  getPdfDocument(rec.file).then(function(doc){
+    rec.pages = doc.numPages;
+    var i = files.indexOf(rec);
+    if (i < 0) return;
+    var badge = $('files').querySelector('[data-i="' + i + '"] .pg');
+    if (badge) badge.textContent = '共 ' + rec.pages + ' 页';
+    // 这本正好是封面来源时，把「⚙ 调整」里的「页 / 共 N 页」也提前填好
+    if (rec === files[0] && $('secure-cover-page-max') && $('secure-cover-page-row') &&
+        !$('secure-cover-page-row').classList.contains('hide')) {
+      $('secure-cover-page-max').textContent = '页 / 共 ' + rec.pages + ' 页';
+      var inp = $('secure-cover-page');
+      if (inp) inp.max = rec.pages;
+    }
+  }).catch(function(){
+    var i = files.indexOf(rec);
+    if (i < 0) return;
+    var badge = $('files').querySelector('[data-i="' + i + '"] .pg');
+    if (badge) badge.textContent = '页数未知';
+  });
+}
+
 function renderFiles(){
+  refreshAutoCover();   // 列表变了 → 自动封面预览跟着变（非敏感模式 / 源未变时内部直接返回）
   var box = $('files');
   if (!files.length) { box.innerHTML = ''; $('files-count').textContent = '未选择'; syncButtons(); return; }
   $('files-count').textContent = files.length + ' 张 · 合计 ' + fmtSize(files.reduce(function(s,f){ return s + f.file.size; }, 0));
@@ -1632,6 +1924,7 @@ function renderFiles(){
         '<button data-act="edit"' + (locked ? ' disabled' : '') + ' title="编辑">✎</button>' +
         '<button data-mv="1"' + (locked ? ' disabled' : '') + ' title="后移">▶</button>' +
       '</div>' +
+      (isPdfFile(f.file) ? '<span class="pg">' + (f.pages ? '共 ' + f.pages + ' 页' : '识别中…') + '</span>' : '') +
       '<div class="meta"><span>' + (i + 1) + '</span><span>' + fmtSize(f.file.size) + '</span></div>' +
     '</div>';
   }).join('');
@@ -1936,8 +2229,32 @@ $('author-export').onclick = function(){
 if (window.LeVihanVault) {
   LeVihanVault.configure({
     apiEndpoint: FN_URL,
-    getToken: function(){ return token; }
+    getToken: function(){ return token; },
+    // 把 pdf.js 渲染器注入给 vault 模块：PDF 输入在敏感模式下是原字节直通，
+    // 图像旋钮对它无效，只有逐页重渲染才能压缩 —— 而 pdf.js 已经在页面里了，
+    // 注入比让 secure-upload.js 自己再引一份依赖干净。
+    renderPdfPages: renderPdfPagesForVault
   });
+}
+
+/* 把压缩阶梯的结果讲成人话。
+   自动降画质是可以的，**静默**降画质不行 —— 管理员必须一眼看出画质有没有被动、动到了哪一档。 */
+function vaultLadderNote(result){
+  var lad = result && result.ladder;
+  if (!lad) return '';
+  var out = '压缩档：' + (lad.chosenLabel || '无损直通') +
+            '（产出 ' + fmtSize(lad.outputBytes) + '，目标 ' + fmtSize(lad.targetBytes) + '）' +
+            (lad.degraded ? '　⚠️ 已降画质' : '　（无损）');
+  if (!lad.withinTarget) {
+    out += '\n注意：已压至最低档仍超目标，已按分片上传' +
+           (result.parts ? '（' + result.parts + ' 片）' : '');
+  }
+  var skipped = (lad.attempts || []).filter(function(a){ return a.skipped; });
+  if (skipped.length) {
+    out += '\n跳过：' + skipped.map(function(a){ return a.label + '（' + a.skipped + '）'; }).join('；');
+  }
+  // 末尾补换行，调用点就能无脑拼接：没有阶梯信息时返回空串，也就不会多出一个空行
+  return out ? out + '\n' : '';
 }
 
 /* ============ 敏感本封面（单独一张，不参与加密） ============ */
@@ -1945,7 +2262,18 @@ if (window.LeVihanVault) {
    前台卡片要有封面就只能另存一张公开图 —— 它走普通 upload 通道，
    固定命名 {ID}/cover.<ext>，前台 getCoverUrl() 按 coverFile 直接读 CDN。 */
 var SECURE_COVER_STEM = 'cover';
-var secureCover = null;        // { file, url, name, byteSize, uploadedName }
+/**
+ * 封面的长边上限。卡片首屏图不需要原图分辨率；更关键的是它把画布面积锁在 ~1.4MP，
+ * 顺带避开了 canvas 面积上限那类静默空白（见 secure-upload.js 的 MAX_PAGE_AREA_PX）——
+ * 扫描件原图常有 48MP，直接画进画布在手机上会产出一张纯白封面。
+ */
+var SECURE_COVER_LONG_SIDE = 1200;
+var secureCover = null;        // 手动指定的封面 { file, url, name, byteSize, uploadedName }
+var autoCover = null;          // 自动生成的封面 { file, url, name, byteSize, srcFile, page }
+var autoCoverPage = 1;         // PDF 时取第几页（1 起）
+var autoCoverBusy = false;     // 生成中标记，避免连点重复渲染
+var autoCoverPending = false;  // 生成期间又来了新请求 → 结束后补跑，保证最后一次生效
+var autoCoverError = '';       // 最近一次生成失败的原因（空串 = 无错误）
 var coverFileWritten = '';     // 上一次由本控件写进 #f-coverFile 的值
 
 function coverExt(name){
@@ -1956,11 +2284,219 @@ function coverExt(name){
 function secureCoverName(name){
   return SECURE_COVER_STEM + '.' + coverExt(name);
 }
+/** 当前生效的封面：手动指定的优先，否则用自动生成的 */
+function activeCover(){ return secureCover || autoCover; }
+
+function releaseAutoCover(){
+  if (autoCover && autoCover.url) URL.revokeObjectURL(autoCover.url);
+  autoCover = null;
+}
+
+/** Blob → File。iOS 13 及更早没有 File 构造函数，退回给 Blob 挂个 name 属性 */
+function blobAsFile(blob, name){
+  try { return new File([blob], name, { type: blob.type }); }
+  catch (err) {
+    var f = blob;
+    try { Object.defineProperty(f, 'name', { value: name }); } catch (e2) {}
+    return f;
+  }
+}
+
+/** 解码成可绘制源。优先 createImageBitmap（省内存），不支持时退回 <img> + objectURL */
+function loadCoverImageSource(file){
+  function viaImg(){
+    return new Promise(function(res, rej){
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        res({ source: img, width: img.naturalWidth || img.width, height: img.naturalHeight || img.height, url: url });
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); rej(new Error('图片解码失败：' + ((file && file.name) || ''))); };
+      img.src = url;
+    });
+  }
+  if (typeof createImageBitmap === 'function') {
+    return createImageBitmap(file).then(function(bmp){
+      return { source: bmp, width: bmp.width, height: bmp.height, url: '' };
+    }).catch(viaImg);
+  }
+  return viaImg();
+}
+
+/** 封面编码：WebP 优先，浏览器不支持时静默回退 JPEG（与 toWebp 的处理保持一致） */
+function canvasToCoverBlob(canvas, quality){
+  return new Promise(function(res, rej){
+    canvas.toBlob(function(b){
+      if (b && b.type === 'image/webp') { res(b); return; }
+      canvas.toBlob(function(b2){
+        if (!b2) { rej(new Error('封面编码失败')); return; }
+        res(b2);
+      }, 'image/jpeg', quality);
+    }, 'image/webp', quality);
+  });
+}
+
+/**
+ * 把任意图片降采样成封面。
+ * 为什么一定要过一遍 canvas：扫描件原图常是 48MP，直接照原尺寸画会撞上画布面积
+ * 上限、静默产出空白封面（移动端必现）。压到长边 1200 后画布只有约 1.4MP，绝对安全。
+ */
+async function downscaleImageToCover(file){
+  var src = await loadCoverImageSource(file);
+  try {
+    var scale = Math.min(1, SECURE_COVER_LONG_SIDE / Math.max(src.width, src.height));
+    var w = Math.max(1, Math.round(src.width * scale));
+    var h = Math.max(1, Math.round(src.height * scale));
+    var c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    var ctx = c.getContext('2d');
+    // 先铺白：透明 PNG 转 JPEG 时不会变成黑块（顺序很关键，铺在图像之下）
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(src.source, 0, 0, w, h);
+    if (src.source && src.source.close) src.source.close();
+    var blob = await canvasToCoverBlob(c, 0.85);
+    c.width = 0; c.height = 0;
+    var name = SECURE_COVER_STEM + '.' + (blob.type === 'image/webp' ? 'webp' : 'jpg');
+    return blobAsFile(blob, name);
+  } finally {
+    if (src.url) URL.revokeObjectURL(src.url);
+  }
+}
+
+/**
+ * 自动生成敏感本封面：
+ *   图片 → 列表第一张（按当前顺序，也就是管理员看到的顺序）
+ *   PDF  → 用 pdf.js 渲染指定页，默认第 1 页
+ *
+ * 取 f.file 而不是 f.originalFile —— 管理员在编辑器里裁过的话，.file 才是当前要上传的版本。
+ * @returns {Promise<File|null>} 失败返回 null；调用方应降级为"无封面"而不是中断上传
+ */
+async function buildAutoCoverFile(){
+  var first = files[0];
+  if (!first || !first.file) return null;
+
+  if (isPdfFile(first.file)) {
+    // 等它就绪再动手：页面刚打开时 pdf.js 还在从 CDN 加载，那一刻判失败是误伤。
+    // 真的等不到（网络问题）才抛错，由调用方降级为"无封面"。
+    if (!await waitForPdfJs(8000)) {
+      throw new Error('pdf.js 加载超时，无法从 PDF 提取封面（vendor 依赖未加载完成，请刷新页面后重试）');
+    }
+    var doc = await getPdfDocument(first.file);
+    var page = Math.min(Math.max(1, autoCoverPage), doc.numPages);
+    // renderPdfPageToFile 默认按 PDF_PAGE_MAX_SIDE(2000) 出图，对卡片首屏图偏大，压到封面档
+    return await renderPdfPageToFile(first.file, page, 0.85, true, SECURE_COVER_STEM, SECURE_COVER_LONG_SIDE);
+  }
+  return await downscaleImageToCover(first.file);
+}
+
+/**
+ * 等 pdf.js 就绪。
+ *
+ * 它是 CDN 异步加载的，页面刚打开时几乎一定还没准备好 —— 那一刻就把 PDF 判成
+ * "提取不了封面"是错的，用户只会在刚进页面时踩到。轮询等一小会儿，
+ * 真加载不出来（网络问题）才返回 false，由调用方降级。
+ */
+function waitForPdfJs(timeoutMs){
+  return new Promise(function(res){
+    var started = Date.now();
+    (function tick(){
+      var ok = false;
+      try { ok = pdfJsReady(); } catch (e) { ok = false; }
+      if (ok) { res(true); return; }
+      if (Date.now() - started > timeoutMs) { res(false); return; }
+      setTimeout(tick, 400);
+    })();
+  });
+}
+
+/**
+ * 给封面生成加超时。
+ *
+ * 为什么必须加：pdf.js 的 worker 万一没起来（网络问题 / 某些环境下的加载限制），
+ * getDocument 返回的 Promise 可能既不 resolve 也不 reject —— 那样 autoCoverBusy
+ * 会永远为真，之后每一次刷新都被挡在门口，封面从此再也不会更新。
+ * 宁可超时后放弃这一张封面，也不能把整个入口锁死。
+ */
+function coverBuildWithTimeout(promise, ms){
+  return new Promise(function(res, rej){
+    var timer = setTimeout(function(){
+      rej(new Error('封面生成超时（' + ms + 'ms），可能是 pdf.js 未能就绪'));
+    }, ms);
+    promise.then(function(v){ clearTimeout(timer); res(v); },
+                 function(e){ clearTimeout(timer); rej(e); });
+  });
+}
+
+/**
+ * 刷新自动封面预览。**任何失败都不阻断流程** —— 封面本来就是可选项，
+ * 生成不出来最多是卡片显示占位图，不该把整本上传卡在这里。
+ */
+async function refreshAutoCover(){
+  if (!isSecureMode()) return;
+  var box = $('secure-cover-box');
+  if (!box || box.classList.contains('hide')) return;
+
+  var first = files[0];
+  var isPdf = !!(first && first.file && isPdfFile(first.file));
+  if ($('secure-cover-page-row')) $('secure-cover-page-row').classList.toggle('hide', !isPdf);
+
+  if (!first || !first.file) { releaseAutoCover(); autoCoverError = ''; renderSecureCover(); return; }
+
+  // 源没变（同一文件 + 同一页码）就不必重新渲染
+  if (autoCover && autoCover.srcFile === first.file && autoCover.page === autoCoverPage) {
+    renderSecureCover();
+    return;
+  }
+  // 大图的降采样 / PDF 页渲染都要花时间。生成期间若又换了文件，不能简单丢弃这次请求 ——
+  // 那样封面会永远停在上一份文件上（管理员看到的是"换了个文件，封面没跟着变"）。
+  // 记一个 pending，当前这轮跑完再补一次，保证最后一次的选择生效。
+  if (autoCoverBusy) { autoCoverPending = true; return; }
+
+  autoCoverBusy = true;
+  var wantFile = first.file;
+  var wantPage = autoCoverPage;
+  try {
+    var f = await coverBuildWithTimeout(buildAutoCoverFile(), 12000);
+    // 生成期间源可能又变了，这一份已经过期 → 丢掉，交给补跑的那次
+    if (wantFile !== (files[0] && files[0].file) || wantPage !== autoCoverPage) return;
+    releaseAutoCover();
+    if (f) {
+      autoCover = {
+        file: f, url: URL.createObjectURL(f), name: f.name,
+        byteSize: f.size, srcFile: wantFile, page: wantPage
+      };
+      autoCoverError = '';
+    }
+    if (isPdf) {
+      var doc = await getPdfDocument(wantFile);
+      if ($('secure-cover-page-max')) $('secure-cover-page-max').textContent = '页 / 共 ' + doc.numPages + ' 页';
+      var inp = $('secure-cover-page');
+      if (inp) {
+        inp.max = doc.numPages;
+        inp.value = String(Math.min(autoCoverPage, doc.numPages));
+      }
+    }
+    renderSecureCover();
+  } catch (err) {
+    releaseAutoCover();
+    // 记下来并显示出来：之前失败与"生成中"共用一句文案，用户只会一直等，
+    // 完全看不出是卡住了还是挂了 —— 这类静默失败最难排查。
+    autoCoverError = (err && (err.message || String(err))) || '未知错误';
+    renderSecureCover();
+    console.warn('[secure-cover] 自动封面生成失败：', autoCoverError);
+  } finally {
+    autoCoverBusy = false;
+    if (autoCoverPending) { autoCoverPending = false; refreshAutoCover(); }
+  }
+}
+
 /** 把封面名同步进「封面文件」字段；只在「字段里是我们自己写的值」时才回退，不踩管理员手填的内容 */
 function syncCoverFileField(){
   var f = $('f-coverFile');
   if (!f) return;
-  var next = secureCover ? secureCoverName(secureCover.name) : '';
+  var cur = activeCover();
+  var next = cur ? secureCoverName(cur.name) : '';
   if (next) { f.value = next; coverFileWritten = next; return; }
   if (f.value.trim() && f.value.trim() === coverFileWritten) f.value = '';
   coverFileWritten = '';
@@ -1990,22 +2526,27 @@ function clearSecureCover(keepMsg){
 }
 
 function renderSecureCover(){
-  var has = !!secureCover;
-  var info = $('secure-cover-info');
-  if (info) info.classList.toggle('hide', !has);
-  if ($('secure-cover-thumb')) $('secure-cover-thumb').src = has ? secureCover.url : '';
+  var cur = activeCover();
+  var has = !!cur;
+  var manual = !!secureCover;   // 手动指定的展示为「已选」，自动的展示为「自动取自」
+  if ($('secure-cover-thumb')) $('secure-cover-thumb').src = has ? cur.url : '';
   if ($('secure-cover-name')) {
     $('secure-cover-name').textContent = has
-      ? '已选：' + secureCover.name + '（' + fmtSize(secureCover.byteSize) + '）'
-      : '';
+      ? (manual ? '已选：' : '自动取自：') + cur.name + '（' + fmtSize(cur.byteSize) + '）'
+      : (autoCoverError ? '封面生成失败' : (files.length ? '封面生成中…' : '尚未选择文件'));
+  }
+  // 失败原因必须单独呈现：之前失败与"生成中"共用一句文案，用户只会一直等下去
+  if ($('secure-cover-err')) $('secure-cover-err').classList.toggle('hide', !autoCoverError);
+  if ($('secure-cover-err-text')) {
+    $('secure-cover-err-text').textContent = autoCoverError ? ('⚠ ' + autoCoverError) : '';
   }
   syncCoverFileField();
   if ($('secure-cover-key')) {
     var id = ($('f-id').value || '').trim() || 'lh-???';
     $('secure-cover-key').textContent = has
-      ? (secureCover.uploadedName
-          ? '已入库：' + id + '/' + secureCover.uploadedName
-          : '入库地址：' + id + '/' + secureCoverName(secureCover.name))
+      ? (cur.uploadedName
+          ? '已入库：' + id + '/' + cur.uploadedName
+          : '入库地址：' + id + '/' + secureCoverName(cur.name))
       : '';
   }
   syncButtons();
@@ -2076,12 +2617,27 @@ function refreshSecureUI(){
   // 加密流程不经过 WebP 转码 / 画质压缩，把这两项视觉上置灰，避免误解
   if ($('opt-webp') && $('opt-webp').parentNode) $('opt-webp').parentNode.style.opacity = on ? '0.45' : '';
 
-  if ($('picker')) $('picker').accept = on ? 'image/*,application/pdf' : 'image/*';
+  // 两条路径都收 PDF，只是处理方式不同：敏感模式原样加密，普通模式每页转成 WebP 图片
+  if ($('picker')) $('picker').accept = 'image/*,application/pdf';
   var dropHint = $('drop') && $('drop').querySelector('.muted');
   if (dropHint) {
     dropHint.textContent = on
       ? '支持多张图片（按文件名顺序在本地合并成 PDF），或直接拖入一个 PDF 文件'
-      : '支持 jpg / png / webp，将按顺序自动命名为 image01、image02…';
+      : '支持 jpg / png / webp；拖入 PDF 会按页转成 WebP 图片后逐页上传';
+  }
+
+  // 从敏感模式切回普通模式时，列表里可能还躺着"整份 PDF"的条目（敏感模式下它是原样交给加密流程的）。
+  // 普通模式没有能吞下 PDF 的通道，这里补一次拆页，免得等到上传阶段才炸在 createImageBitmap 上。
+  if (!on) {
+    files.slice().forEach(function(f){
+      if (f.fromPdf || f.status === 'busy') return;
+      if (isPdfFile(f.file)) {
+        var at = files.indexOf(f);
+        if (at >= 0) files.splice(at, 1);
+        releaseFile(f);
+        expandPdfIntoPages(f.file);
+      }
+    });
   }
 
   // 封面控件只在敏感模式下出现。取消勾选即丢弃这次选的封面（已传上桶的图不会删，
@@ -2090,6 +2646,8 @@ function refreshSecureUI(){
   if (coverBox) coverBox.classList.toggle('hide', !on);
   if (!on && secureCover) clearSecureCover(true);
   renderSecureCover();
+  // 勾选后立刻按当前 files 生成封面预览（源没变时内部会跳过，重复调用无开销）
+  refreshAutoCover();
 }
 
 // 把流水线的阶段进度映射到页面已有的进度条与文案
@@ -2103,11 +2661,31 @@ function secureProgress(info){
 /**
  * 敏感本封面的上传。走的是普通 upload 通道（明文图片），不是 COS 直传、也不进加密流水线。
  * 能转 WebP 就转（卡片首屏图，越小越好），浏览器不支持时原样上传。
- * @returns {Promise<string|null>} 落库的文件名，未选封面时为 null
+ *
+ * 封面来源：手动指定优先；没有手选时**自动生成**（图片取第一张、PDF 取指定页）。
+ * 自动生成失败只记 warn 并返回 null —— 密文才是这次上传的主目的，
+ * 不能因为一张封面把整本挡在门外（前台会退化成「资源隔离」占位图）。
+ *
+ * @returns {Promise<string|null>} 落库的文件名，无封面可传时为 null
  */
-function uploadSecureCover(bookId){
-  if (!secureCover) return Promise.resolve(null);
-  var file = secureCover.file;
+async function uploadSecureCover(bookId){
+  var cur = secureCover;
+  var isAuto = false;
+  if (!cur) {
+    var generated = null;
+    try {
+      // 预览已生成且源没变 → 直接复用，省掉一次 PDF 页渲染
+      generated = (autoCover && autoCover.srcFile === (files[0] && files[0].file) && autoCover.page === autoCoverPage)
+        ? autoCover.file
+        : await buildAutoCoverFile();
+    } catch (err) {
+      console.warn('[secure-cover] 自动封面生成失败，本次不带封面：', err && (err.message || err));
+    }
+    if (!generated) return null;
+    cur = { file: generated, name: generated.name, byteSize: generated.size, uploadedName: '' };
+    isAuto = true;
+  }
+  var file = cur.file;
   $('prog-text').textContent = '上传封面（不加密）…';
   return toWebp(file, 0.85)
     .catch(function(){ return { blob:file, name:file.name }; })   // 无法编 WebP 时原样传
@@ -2123,11 +2701,41 @@ function uploadSecureCover(bookId){
           contentType: blob.type || ('image/' + (ext === 'jpg' ? 'jpeg' : ext))
         });
       }).then(function(){
-        secureCover.uploadedName = name;
+        cur.uploadedName = name;
+        if (isAuto && autoCover) autoCover.uploadedName = name;
         renderSecureCover();
         return name;
       });
     });
+}
+
+/**
+ * 是否移动端浏览器。iPadOS 13+ 的 UA 伪装成 Macintosh，只能靠触摸点数量区分。
+ */
+function isMobileBrowser(){
+  var ua = navigator.userAgent || '';
+  var touch = (navigator.maxTouchPoints || 0) > 0;
+  return /iPhone|iPad|iPod|Android|Mobile/i.test(ua) || (touch && /Macintosh/.test(ua));
+}
+
+/**
+ * 移动端加密上传的提前告知。**不硬拦，交给管理员自己决定。**
+ *
+ * 手机上整本（几十 MB）加密上传有两个绕不过去的坎：
+ *   ① 内存 —— PDF→密文→Base64 的峰值是源图的数倍，iOS Safari 会直接终止标签页；
+ *   ② 后台 —— 锁屏或切走 App 后 Safari 冻结 JS，十几分钟的分片链路断在半路，
+ *      而密文可能已经传了一半。
+ * 小批量（几张图）不受这两条影响，所以低于阈值直接放行，不打扰。
+ */
+function confirmMobileVaultUpload(){
+  var total = files.reduce(function(s, f){ return s + ((f.file && f.file.size) || 0); }, 0);
+  if (total < 20 * 1024 * 1024) return true;
+  return confirm(
+    '检测到你在移动设备上操作，本次共 ' + fmtSize(total) + '。\n\n' +
+    '整本加密上传在手机上容易失败：内存峰值是源图的数倍（iOS Safari 会被系统直接终止），' +
+    '且锁屏或切走 App 后 Safari 会冻结页面，导致长传中断、密文只传了一半。\n\n' +
+    '建议改用桌面端上传。仍要继续吗？'
+  );
 }
 
 /**
@@ -2141,6 +2749,7 @@ function handleSecureUpload(){
   var form = readForm();
   if (!validate(form, false)) return;
   if (!files.length) { show($('main-msg'), 'err', '加密上传需要先选择图片或 PDF。'); return; }
+  if (isMobileBrowser() && !confirmMobileVaultUpload()) return;
 
   var sources = files.map(function(f){ return f.file; }).filter(Boolean);
   hide($('main-msg'));
@@ -2156,8 +2765,9 @@ function handleSecureUpload(){
       return LeVihanVault.handleComicUpload(sources, { bookId: form.id, onProgress: secureProgress });
     })
     .then(function(result){
-      // 密文已经落在 COS 上。归档记录写不写、由管理员当场决定：
-      // 站点阅读端目前还没有「.txt 密文 → 解密 → 渲染」的分支，写早了会看到空内页。
+      // 密文已经落在 COS 上。归档记录写不写、由管理员当场决定。
+      // 阅读端 SecureComicReader 已上线：前台点开 secure 本子 → 403 伪装页 →
+      // 输校验码（levihan）→ 内存解密渲染，不走这条链路的话卡片不会出现在粮仓。
       var coverLine = form.coverFile
         ? '封面：' + form.coverFile + '（公开可读，前台卡片用它）\n'
         : '⚠ 未上传封面：站点卡片只会显示「资源隔离」占位图。\n';
@@ -2168,7 +2778,7 @@ function handleSecureUpload(){
         '体积：PDF ' + fmtSize(result.bytes.source) + ' → 密文 ' + fmtSize(result.bytes.cipher) +
         '（通道 ' + result.channel + '，耗时 ' + (result.elapsedMs / 1000).toFixed(1) + 's）\n\n' +
         '是否同时写入归档记录？\n' +
-        '注意：站点阅读端尚未接解密分支，写入后这本的内页会暂时显示为空。'
+        '建议写入：写入后粮仓出现 🔒 卡片，读者点开输入校验码即可解密阅读。'
       );
 
       var after = writeArchive
@@ -2182,8 +2792,9 @@ function handleSecureUpload(){
             show($('main-msg'), 'ok',
               '🔒 加密上传并发布成功：' + form.id + ' · ' + form.titleZh + '（归档共 ' + d.count + ' 本）\n' +
               '密文 Key：' + result.key + '\n' +
+              vaultLadderNote(result) +
               (form.coverFile ? '封面：' + form.coverFile : '封面：未上传（卡片显示隔离占位图）') + '\n' +
-              '阅读端上线前，请先用 LeVihanVault.decryptVaultToPdfBlob() 接好解密分支。'
+              '阅读端：粮仓点开这本 → 输入校验码即可解密阅读。'
             );
             resetForm();
             loadBooks();
@@ -2191,8 +2802,9 @@ function handleSecureUpload(){
           })
         : Promise.resolve().then(function(){
             show($('main-msg'), 'ok',
-              '🔒 密文已上传，未写入归档。\n密文 Key：' + result.key +
-              (form.coverFile ? '\n封面：' + form.coverFile : '') + '\n（这条 Key 请自行留存）'
+              '🔒 密文已上传，未写入归档。\n密文 Key：' + result.key + '\n' +
+              vaultLadderNote(result) +
+              (form.coverFile ? '封面：' + form.coverFile : '') + '\n（这条 Key 请自行留存）'
             );
           });
 
@@ -2240,7 +2852,20 @@ function uploadAll(){
   files.forEach(function(f, i){
     chain = chain.then(function(){
       f.status = 'busy'; f.pct = 0; updateFileNode(i);
-      var p = convert ? toWebp(f.file, quality) : Promise.resolve({ blob:f.file, name:f.name });
+      var p;
+      if (f.fromPdf && (f.fromPdf.quality !== quality || f.fromPdf.useWebp !== convert)) {
+        // PDF 拆页时的画质/格式与当前设置不一致 → 按当前设置重渲染这一页，
+        // 这样"加入 PDF 之后再调画质滑杆"才真的生效（否则滑杆对已拆的页是哑的）
+        p = renderPdfPageToFile(f.fromPdf.src, f.fromPdf.pageNo, quality, convert, f.fromPdf.stem)
+          .then(function(nf){
+            f.file = nf; f.name = nf.name;
+            f.fromPdf.quality = quality; f.fromPdf.useWebp = convert;
+            return { blob: nf, name: nf.name };
+          });
+      } else {
+        // 已经是 WebP 的（含 PDF 拆出来的页）toWebp 会原样返回，不会二次编码
+        p = convert ? toWebp(f.file, quality) : Promise.resolve({ blob:f.file, name:f.name });
+      }
       return p.then(function(r){
         if (r.blob.size > envMax) throw new Error('转换后仍超过 ' + fmtSize(envMax));
         return toBase64(r.blob).then(function(b64){
@@ -2937,7 +3562,22 @@ $('secure-cover-drop').addEventListener('drop', function(e){
   if (f) setSecureCover(f);
 });
 $('secure-cover-crop').onclick = openSecureCoverEditor;
-$('secure-cover-remove').onclick = function(){ clearSecureCover(); };
+// 「恢复自动生成」= 丢弃手选的图，回到按首页 / 指定页自动生成
+$('secure-cover-remove').onclick = function(){ clearSecureCover(); refreshAutoCover(); };
+
+/* ---- 敏感本封面：自动生成的微调入口（默认折叠，日常不用点） ---- */
+$('secure-cover-toggle').onclick = function(){
+  var more = $('secure-cover-more');
+  if (!more) return;
+  var hidden = more.classList.toggle('hide');
+  $('secure-cover-toggle').textContent = hidden ? '⚙ 调整 ▾' : '⚙ 收起 ▴';
+};
+$('secure-cover-page-apply').onclick = function(){
+  autoCoverPage = Math.max(1, parseInt($('secure-cover-page').value, 10) || 1);
+  refreshAutoCover();
+};
+// 失败后手动重试（例如 pdf.js 当时还没加载完、网络刚恢复）
+$('secure-cover-retry').onclick = function(){ autoCoverError = ''; refreshAutoCover(); };
 $('files').addEventListener('click', function(e){
   var b = e.target.closest('button');
   if (!b) return;

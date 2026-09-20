@@ -28,6 +28,17 @@
  *   recs          (token) {items: RecommendItem[]} → { count }   // 落桶 recs.json
  *   submitContact {kind,content,...} (公开)        → 联络来信写入云端收件箱（type=contact）
  *   authorLib     (token) {authors?}              → 作者链接登记表（不传=读取；传=整表覆盖）
+ *
+ * 深度加密密文（vault）专用，全部需要 token；key 固定为 comic_vault/<标识>_secure.txt：
+ *   vaultUpload   (token) {key,dataText}                        → 单次上传（密文 ≤ 4MB）
+ *   vaultInit     (token) {key}                                 → {uploadId} 开分片
+ *   vaultPart     (token) {key,uploadId,partNumber,dataText}    → {etag}
+ *   vaultComplete (token) {key,uploadId,parts:[{partNumber,etag}]} → 合并为一个对象
+ *   vaultAbort    (token) {key,uploadId}                        → 中止并清理残片
+ *
+ * 为什么密文要单独开一套 action：现有 action:'upload' 的 FILE_RE 只收图片后缀，
+ * 而密文按 .txt 存；且客户端从不明文构造 COS 路径，前缀必须由服务端固定，
+ * 免得表单一改就能往桶里任意位置写。
  */
 'use strict';
 
@@ -44,6 +55,10 @@ const ANNOUNCEMENTS_KEY = 'announcements.json'; // 首页公告栏（公开读�
 const ANNOUNCEMENT_DIR = 'announcements/';
 const FORUM_KEY = 'restaurant-forum.json';
 const FORUM_DIR = 'restaurant-forum/';
+const MARKET_KEY = 'potato-market.json';   // 土豆市集商品索引（MarketItem[]）
+const MARKET_DIR = 'potato-market/';       // 市集商品图片：potato-market/{itemId}-{n}.webp
+const MAX_MARKET_ITEMS = 500;
+const MARKET_MAX_IMAGES = 3;               // 单个商品最多 3 张图
 const MAX_AUTHORS = 500;
 const INBOX_COLLECTION = 'submission_inbox';
 const NOVELS_KEY = 'novels.json';   // 在线小说索引（GroupNovel[]）
@@ -51,6 +66,28 @@ const NOVEL_DIR = 'novels/';        // 在线小说正文：novels/{id}.txt（�
 const MAX_NOVEL_CHARS = 500000;     // 单篇正文字数上限
 const MAX_BYTES = 4 * 1024 * 1024; // 单文件上限 4MB
 const MAX_BODY = 6 * 1024 * 1024; // 请求体上限 6MB（HTTP 访问服务 / API 网关的硬上限）
+
+/**
+ * 深度加密密文（vault）专用约束。
+ *
+ * 与前台上传台的约定见 vercel-version/docs/SECURE_UPLOAD.md：
+ *   密文 key 形如 comic_vault/<bookId|时间戳>_secure.txt，前缀与后缀都固定，
+ *   因此这里可以用一条极严的正则收敛住，杜绝客户端自选前缀造成的越权写入。
+ *
+ * 分片上传用于突破单请求 6MB 的传输上限：每个分片携带的密文文本不超过
+ * VAULT_PART_BYTES，最后一个分片可以更小。分片号从 1 开始，上限 10000，
+ * 与 COS CompleteMultipartUpload 的约束一致。
+ */
+const VAULT_PREFIX = 'comic_vault/';
+const VAULT_KEY_RE = /^comic_vault\/[A-Za-z0-9_-]{1,40}_secure\.txt$/;
+const VAULT_CIPHER_TYPE = 'text/plain; charset=utf-8';
+const MAX_PART_NUMBER = 10000;
+/**
+ * 密文缓存策略，必须与前端 CONFIG.CacheControl 完全一致（secure-upload.js:108）。
+ * 两条上传通道（浏览器直传 / 云函数中转）只要有一条写得不同，
+ * 同一个 key 就会因通道不同而拿到不同的缓存行为，排查起来极难。
+ */
+const VAULT_CACHE_CONTROL = 'public, max-age=31536000';
 const TOKEN_TTL = 2 * 60 * 60; // 令牌有效期 2 小时
 const PORT = process.env.PORT || 9000;
 
@@ -72,6 +109,19 @@ const putObject = promisify(cos.putObject.bind(cos));
 const getObject = promisify(cos.getObject.bind(cos));
 const getBucket = promisify(cos.getBucket.bind(cos));
 const deleteMultipleObject = promisify(cos.deleteMultipleObject.bind(cos));
+// 分片上传四件套：初始化 → 传分片 → 合并 → （失败时）中止清理
+//
+// 方法名务必与 **Node 端** cos-nodejs-sdk-v5 对齐。浏览器端 cos-js-sdk-v5 叫
+// createMultipartUpload / uploadPart / completeMultipartUpload / abortMultipartUpload，
+// 两边命名**不同** —— 曾按浏览器那套写，结果 cos.createMultipartUpload 是 undefined，
+// 顶层 .bind() 直接抛 TypeError，模块加载失败、进程以 145 退出，
+// 表现为整个函数 FUNCTIONS_INVOCATION_FAILED（所有 action 全挂，不只是分片）。
+// node --check 只查语法、契约测试只做字符串匹配，都抓不到这种错 —— 见
+// tests/fn-deps-smoke.test.cjs 的"方法名必须存在于真 SDK"断言。
+const multipartInit = promisify(cos.multipartInit.bind(cos));
+const multipartUpload = promisify(cos.multipartUpload.bind(cos));
+const multipartComplete = promisify(cos.multipartComplete.bind(cos));
+const multipartAbort = promisify(cos.multipartAbort.bind(cos));
 
 const adminPassword = () => process.env.ADMIN_PASSWORD || '';
 
@@ -104,6 +154,53 @@ const ID_RE = /^lh-\d{1,4}$/;
 const FILE_RE = /^[A-Za-z0-9_-]+\.(webp|jpg|jpeg|png|gif|avif)$/i;
 
 const httpError = (message, status) => Object.assign(new Error(message), { httpStatus: status });
+
+/* ------------------------------ 密文（vault）校验 ------------------------------ */
+
+/**
+ * 密文 key 校验。前缀固定 comic_vault/，段内只允许 [A-Za-z0-9_-]，
+ * 后缀固定 _secure.txt —— 不放行任何嵌套斜杠与点号，
+ * 因此 ".."、"comic_vault/../" 这类穿越串一律过不了。
+ */
+function assertVaultKey(raw) {
+  const key = String(raw == null ? '' : raw).trim();
+  if (!VAULT_KEY_RE.test(key)) {
+    throw httpError('非法密文路径（只允许 comic_vault/<标识>_secure.txt，标识限字母数字下划线连字符）', 400);
+  }
+  return key;
+}
+
+/**
+ * 单次请求携带的密文文本校验。
+ * 密文本身已是 Base64 文本（ASCII），故 utf8 字节数即字符数。
+ * 上限沿用 MAX_BYTES：超出的批次必须走 vaultInit/vaultPart 分片。
+ */
+function assertCipherText(raw) {
+  const text = String(raw == null ? '' : raw);
+  if (!text) throw httpError('密文内容为空', 400);
+  const bytes = Buffer.byteLength(text, 'utf8');
+  if (bytes > MAX_BYTES) {
+    throw httpError(`单次密文超过 ${(MAX_BYTES / 1024 / 1024).toFixed(1)}MB 上限，请改用分片上传`, 413);
+  }
+  return text;
+}
+
+function assertUploadId(raw) {
+  const id = String(raw == null ? '' : raw).trim();
+  if (!id || id.length > 512) throw httpError('缺少或非法 UploadId', 400);
+  return id;
+}
+
+function assertPartNumber(raw, partCount) {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_PART_NUMBER) {
+    throw httpError(`分片号必须是 1~${MAX_PART_NUMBER} 的整数`, 400);
+  }
+  if (partCount !== undefined && n > partCount) {
+    throw httpError(`分片号 ${n} 超出声明的分片数 ${partCount}`, 400);
+  }
+  return n;
+}
 
 /* ------------------------------ 归档读写 ------------------------------ */
 
@@ -163,6 +260,108 @@ async function readForum() {
 }
 async function writeForum(items) {
   await putObject({ Bucket: BUCKET, Region: REGION, Key: FORUM_KEY,
+    Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'), ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache' });
+}
+
+/**
+ * 将单个故事接龙帖子编译成在线小说合订本元数据（GroupNovel）。
+ * 与前端 `relayNovels.ts` 的 compileRelayPostToNovel 保持一致；
+ * 这里由服务端在「建立接力 / 接棒」时自动调用，确保合订本持久化到 novels.json，
+ * 而不是依赖前端手动点「合订本」按钮的临时编译。
+ *
+ * 合订本 id 稳定取 `relay-<postId>`，符合 NOVEL_ID_RE（[a-z0-9-]{3,}）。
+ */
+function compileRelayToNovel(post) {
+  const comments = Array.isArray(post.comments)
+    ? post.comments.filter((c) => c && (typeof c.relayStep === 'number' || (c.body && c.body.length > 0)))
+    : [];
+  const allAuthorsInOrder = [post.author].concat(comments.map((c) => c.author));
+  const distinctAuthors = Array.from(new Set(allAuthorsInOrder.filter(Boolean)));
+
+  let totalChars = (post.body || '').length;
+  comments.forEach((c) => { totalChars += (c.body || '').length; });
+
+  const sections = [];
+  if (post.prompt) sections.push(`【起笔设定】\n${post.prompt}`);
+  sections.push(`【第 1 棒 · 执笔：${post.author}】\n${post.body || ''}`);
+  comments.forEach((c, idx) => {
+    const diceInfo = c.diceRoll && c.diceRoll.value ? ` · 🎲 1D100=${c.diceRoll.value}${c.diceRoll.verdict ? ` (${c.diceRoll.verdict})` : ''}` : '';
+    sections.push(`【第 ${idx + 2} 棒 · 执笔：${c.author}${diceInfo}】\n${c.body || ''}`);
+  });
+  sections.push(`──────────────────────────────────\n【兵团同好手稿联合署名】\n${distinctAuthors.join('  ✖️  ')}`);
+  const compiledBody = sections.join('\n\n');
+
+  const id = `relay-${String(post.id || '').replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  return {
+    id,
+    title: String(post.title || '').trim(),
+    author: `${post.author} 等 ${distinctAuthors.length} 位同好`,
+    chars: totalChars,
+    createdAt: post.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    isRelayCompiled: true,
+    relayAuthors: distinctAuthors,
+    relayStepsCount: comments.length + 1,
+    prompt: post.prompt,
+    bodyContent: compiledBody,
+    originalPostId: post.id,
+    authorNote: post.prompt ? `起笔设定：${post.prompt}` : undefined,
+    tags: ['故事接龙', '合订本', `${comments.length + 1}棒连缀`],
+  };
+}
+
+/** 把编译好的合订本写回 novels.json（按 id upsert，并写正文 txt） */
+async function saveRelayNovel(novel) {
+  if (!novel.id || !novel.title) return;
+  // 正文落桶
+  await putObject({
+    Bucket: BUCKET,
+    Region: REGION,
+    Key: `${NOVEL_DIR}${novel.id}.txt`,
+    Body: Buffer.from(String(novel.bodyContent || ''), 'utf8'),
+    ContentType: 'text/plain; charset=utf-8',
+    CacheControl: 'no-cache',
+  });
+  // 元数据 upsert 进 novels.json（保持 updatedAt 排序）
+  const novels = await readNovels();
+  const idx = novels.findIndex((n) => n && n.id === novel.id);
+  if (idx >= 0) {
+    novel.createdAt = novels[idx].createdAt || novel.createdAt;
+    novels[idx] = novel;
+  } else {
+    novels.unshift(novel);
+  }
+  novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+  await writeNovels(novels);
+  return novel;
+}
+
+/** 删除某接力帖子对应的合订本（若存在） */
+async function deleteRelayNovel(postId) {
+  const id = `relay-${String(postId || '').replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const novels = await readNovels();
+  const next = novels.filter((n) => n && n.id !== id);
+  if (next.length === novels.length) return; // 本就没有合订本
+  await deleteMultipleObject({
+    Bucket: BUCKET,
+    Region: REGION,
+    Objects: [{ Key: `${NOVEL_DIR}${id}.txt` }],
+  });
+  await writeNovels(next);
+}
+
+async function readMarket() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: MARKET_KEY });
+    const parsed = JSON.parse(Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+async function writeMarket(items) {
+  await putObject({ Bucket: BUCKET, Region: REGION, Key: MARKET_KEY,
     Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'), ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache' });
 }
 
@@ -507,6 +706,26 @@ function inboxDb() {
   return tcb.init({ env: 'levihan-tudou-d0g7jivue1ccc4a35', accessKey }).rdb({ database: 'public' });
 }
 
+/**
+ * 校验前端 CloudBase 登录态（access_token），返回当前用户 uid。
+ * 用于「发布/删除需登录 + 只能操作自己内容」的身份绑定。
+ * access_token 由前端 cloudbase.auth().getAccessToken() 提供，经
+ * node-sdk 的 getUserInfoByAccessToken 验证（网关级，前端无法伪造 uid）。
+ */
+async function authUid(bearer) {
+  const token = String(bearer || '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) return null;
+  try {
+    const tcb = require('@cloudbase/node-sdk');
+    const app = tcb.init({ env: 'levihan-tudou-d0g7jivue1ccc4a35', accessKey: process.env.CLOUDBASE_APIKEY });
+    const auth = app.auth();
+    const info = await auth.getUserInfoByAccessToken(token);
+    return (info && info.uid) ? String(info.uid) : null;
+  } catch (err) {
+    return null; // token 无效/过期 → 视为未登录
+  }
+}
+
 function assertDbResult(result) {
   if (result.error) throw httpError('云端收件箱数据库请求失败：' + result.error.message, 503);
   return result.data;
@@ -618,6 +837,21 @@ async function reviewInbox(payload) {
   return { ok: true, id, status: decision === 'approve' ? 'published' : 'rejected' };
 }
 
+/* ------------------------------ 鉴权动作集合 ------------------------------ */
+// 完全公开：无需登录、无需管理员 token（健康检查 / 读操作 / 匿名投递）
+const PUBLIC_ACTIONS = new Set([
+  'status', 'login',
+  'submitNovel', 'submitContact', 'submitAnnouncement', 'submitRecommend',
+  'announcementList', 'announcementImageUpload',
+  'forumList', 'marketList',
+]);
+// 需用户登录（CloudBase access_token 换 uid）：发布/互动/删除自己的内容
+const USER_ACTIONS = new Set([
+  'forumPublish', 'forumComment', 'forumPotato', 'forumClaim', 'forumReleaseClaim',
+  'forumDelete', 'forumCommentDelete',
+  'marketPublish', 'marketDelete',
+]);
+
 async function handle(action, payload) {
   switch (action) {
     case 'submitNovel': return submitToInbox('novel', payload);
@@ -698,10 +932,16 @@ async function handle(action, payload) {
     case 'forumList': return { ok: true, posts: await readForum() };
 
     case 'forumPublish': {
+      const category = String(payload.category || 'chat').trim();
+      if (!['chat', 'relay', 'roleplay', 'market'].includes(category)) throw httpError('帖子分类无效', 400);
       const title = String(payload.title || '').trim().slice(0, 100);
-      const body = String(payload.body || '').trim().slice(0, 3000);
+      const body = String(payload.body || '').trim().slice(0, 5000);
       const author = String(payload.author || '').trim().slice(0, 40);
-      if (!title || (!body && !payload.imageBase64) || !author) throw httpError('标题、昵称及正文或图片不能为空', 400);
+      const prompt = String(payload.prompt || '').trim().slice(0, 2000);
+      const characterName = String(payload.characterName || '').trim().slice(0, 40);
+      // 发帖门槛：茶歇/接龙/语C 都要求正文或图片，昵称必填
+      if (!author) throw httpError('昵称不能为空', 400);
+      if (!body && !payload.imageBase64) throw httpError('正文或图片不能为空', 400);
       const id = `post-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
       let image = '';
       const b64 = String(payload.imageBase64 || '');
@@ -712,34 +952,176 @@ async function handle(action, payload) {
         image = `https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${key}`;
       }
       const posts = await readForum();
-      const post = { id, author, title, body, image, potatoes: 0, createdAt: new Date().toISOString(), comments: [] };
+      const post = {
+        id, category, author, title, body,
+        uid: payload.__uid,
+        prompt: prompt || undefined,
+        characterName: characterName || undefined,
+        characterImage: String(payload.characterImage || '').trim().slice(0, 500) || undefined,
+        image, potatoes: 0, potatoGiven: false,
+        createdAt: new Date().toISOString(), comments: [],
+      };
       posts.unshift(post); await writeForum(posts.slice(0, 300));
+      // 故事接龙：建立接力即自动建立合订本，收入在线小说 novels.json
+      if (category === 'relay') {
+        try { await saveRelayNovel(compileRelayToNovel(post)); }
+        catch (e) { console.error('[relay] 建立合订本失败', e && e.message); }
+      }
       return { ok: true, post, posts };
     }
 
     case 'forumComment': {
       const postId = String(payload.postId || '').trim();
-      const body = String(payload.body || '').trim().slice(0, 1000);
+      const body = String(payload.body || '').trim().slice(0, 2000);
       const author = String(payload.author || '').trim().slice(0, 40);
       if (!postId || !body || !author) throw httpError('评论内容和昵称不能为空', 400);
       const posts = await readForum(); const post = posts.find((p) => p && p.id === postId);
       if (!post) throw httpError('帖子不存在', 404);
       post.comments = Array.isArray(post.comments) ? post.comments : [];
-      post.comments.push({ id: `comment-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`, author, body, createdAt: new Date().toISOString(), potatoes: 0 });
+      const comment = {
+        id: `comment-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`,
+        author, body, uid: payload.__uid, createdAt: new Date().toISOString(), potatoes: 0, potatoGiven: false,
+      };
+      if (payload.characterName) comment.characterName = String(payload.characterName).trim().slice(0, 40);
+      if (payload.characterAvatar) comment.characterAvatar = String(payload.characterAvatar).trim().slice(0, 500);
+      if (payload.isHost) comment.isHost = true;
+      if (payload.relayStep) comment.relayStep = Number(payload.relayStep) || undefined;
+      if (payload.wordCount) comment.wordCount = Number(payload.wordCount) || undefined;
+      if (payload.diceRoll && typeof payload.diceRoll === 'object') {
+        const dr = payload.diceRoll;
+        comment.diceRoll = { sides: Number(dr.sides) || 6, value: Number(dr.value) || 0, verdict: String(dr.verdict || '').trim().slice(0, 200) || undefined };
+      }
+      post.comments.push(comment);
+      await writeForum(posts);
+      // 故事接龙：接棒后自动重编译，把最新一棒并入合订本
+      if (post.category === 'relay') {
+        try { await saveRelayNovel(compileRelayToNovel(post)); }
+        catch (e) { console.error('[relay] 更新合订本失败', e && e.message); }
+      }
+      return { ok: true, posts };
+    }
+
+    case 'forumPotato': {
+      const target = String(payload.target || '').trim();   // 'post' | 'comment'
+      const id = String(payload.id || '').trim();
+      const give = payload.give !== false;                   // 默认是给土豆，false = 取消
+      if (!id || !['post', 'comment'].includes(target)) throw httpError('参数无效', 400);
+      const posts = await readForum();
+      let hit = false;
+      for (const p of posts) {
+        if (target === 'post' && p && p.id === id) {
+          p.potatoes = Math.max(0, (Number(p.potatoes) || 0) + (give ? 1 : -1));
+          if (give) p.potatoGiven = true;
+          hit = true; break;
+        }
+        if (target === 'comment' && p && Array.isArray(p.comments)) {
+          const c = p.comments.find((x) => x && x.id === id);
+          if (c) {
+            c.potatoes = Math.max(0, (Number(c.potatoes) || 0) + (give ? 1 : -1));
+            if (give) c.potatoGiven = true;
+            hit = true; break;
+          }
+        }
+      }
+      if (!hit) throw httpError('目标不存在', 404);
+      await writeForum(posts); return { ok: true, posts };
+    }
+
+    case 'forumClaim': {
+      const postId = String(payload.postId || '').trim();
+      const claimedBy = String(payload.claimedBy || '').trim().slice(0, 40);
+      if (!postId || !claimedBy) throw httpError('参数无效', 400);
+      const posts = await readForum(); const post = posts.find((p) => p && p.id === postId);
+      if (!post) throw httpError('帖子不存在', 404);
+      const nextStep = (Array.isArray(post.comments) ? post.comments.length : 0) + 2;
+      post.quillClaim = {
+        claimedBy, claimedAt: Date.now(),
+        expiresAt: Date.now() + Number(payload.claimDurationMs || 86400000),
+        relayStep: nextStep,
+      };
+      await writeForum(posts); return { ok: true, posts };
+    }
+
+    case 'forumReleaseClaim': {
+      const postId = String(payload.postId || '').trim();
+      const posts = await readForum(); const post = posts.find((p) => p && p.id === postId);
+      if (!post) throw httpError('帖子不存在', 404);
+      post.quillClaim = undefined;
       await writeForum(posts); return { ok: true, posts };
     }
 
     case 'forumDelete': {
       const id = String(payload.id || '').trim(); const posts = await readForum();
+      const target = posts.find((p) => p && p.id === id);
+      if (!target) throw httpError('帖子不存在', 404);
+      if (target.uid && target.uid !== payload.__uid) throw httpError('只能删除自己发布的帖子', 403);
       const next = posts.filter((p) => p && p.id !== id); await writeForum(next);
+      // 删除故事接龙帖子时，同步删除对应合订本
+      if (target.category === 'relay') {
+        try { await deleteRelayNovel(target.id); }
+        catch (e) { console.error('[relay] 删除合订本失败', e && e.message); }
+      }
       return { ok: true, posts: next };
     }
 
     case 'forumCommentDelete': {
       const posts = await readForum(); const post = posts.find((p) => p && p.id === String(payload.postId || ''));
       if (!post) throw httpError('帖子不存在', 404);
+      const comment = (post.comments || []).find((c) => c && c.id === String(payload.commentId || ''));
+      if (!comment) throw httpError('评论不存在', 404);
+      if (comment.uid && comment.uid !== payload.__uid) throw httpError('只能删除自己发布的评论', 403);
       post.comments = (post.comments || []).filter((c) => c && c.id !== String(payload.commentId || ''));
       await writeForum(posts); return { ok: true, posts };
+    }
+
+    case 'marketList': return { ok: true, items: await readMarket() };
+
+    case 'marketPublish': {
+      const title = String(payload.title || '').trim().slice(0, 100);
+      const price = Number(payload.price);
+      const link = String(payload.link || '').trim().slice(0, 500);
+      const description = String(payload.description || '').trim().slice(0, 2000);
+      const nickname = String(payload.nickname || '').trim().slice(0, 40) || '匿名同好';
+      if (!title) throw httpError('商品名称不能为空', 400);
+      if (Number.isNaN(price) || price < 0) throw httpError('价格不合法', 400);
+      if (!/^https?:\/\//i.test(link)) throw httpError('购买链接必须以 http(s) 开头', 400);
+      const images = Array.isArray(payload.images) ? payload.images.map((x) => String(x)).filter(Boolean).slice(0, MARKET_MAX_IMAGES) : [];
+      if (!images.length) throw httpError('至少需要一张商品图片', 400);
+      const id = `item-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+      const urls = [];
+      for (let i = 0; i < images.length; i++) {
+        const src = images[i];
+        if (src.startsWith('data:')) {
+          const b64 = src.includes(',') ? src.slice(src.indexOf(',') + 1) : '';
+          if (!b64) continue;
+          if (Math.floor((b64.length * 3) / 4) > MAX_BYTES) throw httpError('商品图片超过 4MB', 413);
+          const key = `${MARKET_DIR}${id}-${i}.webp`;
+          await putObject({ Bucket: BUCKET, Region: REGION, Key: key, Body: Buffer.from(b64, 'base64'), ContentType: 'image/webp', CacheControl: 'public, max-age=31536000' });
+          urls.push(`https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${key}`);
+        } else {
+          urls.push(src);
+        }
+      }
+      const item = {
+        id, type: String(payload.type || '').trim().slice(0, 20) || undefined,
+        title, price, image: urls[0] || '', images: urls, link, description,
+        nickname, uid: payload.__uid, date: new Date().toISOString().split('T')[0],
+      };
+      const items = await readMarket();
+      items.unshift(item); await writeMarket(items.slice(0, MAX_MARKET_ITEMS));
+      return { ok: true, item, items };
+    }
+
+    case 'marketDelete': {
+      const id = String(payload.id || '').trim();
+      if (!id) throw httpError('商品 ID 无效', 400);
+      const items = await readMarket();
+      const target = items.find((x) => x && x.id === id);
+      if (!target) throw httpError('商品不存在', 404);
+      if (target.uid && target.uid !== payload.__uid) throw httpError('只能删除自己发布的商品', 403);
+      const next = items.filter((x) => x && x.id !== id);
+      await writeMarket(next);
+      return { ok: true, items: next };
     }
 
     case 'catalog': {
@@ -920,6 +1302,109 @@ async function handle(action, payload) {
       return { ok: true, count: recs.length, items: recs };
     }
 
+    /* -------- 深度加密密文（comic_vault/）：前缀后缀固定，只收纯文本密文 -------- */
+
+    /**
+     * 单次上传密文。适合 ≤ MAX_BYTES 的密文，无需分片。
+     * 与 action:'upload' 的差别：只放行 comic_vault/ + *_secure.txt，
+     * 不接受客户端指定 ContentType（密文一律按纯文本存，附带属性不参与解密）。
+     */
+    case 'vaultUpload': {
+      const key = assertVaultKey(payload.key);
+      const body = Buffer.from(assertCipherText(payload.dataText), 'utf8');
+      await putObject({
+        Bucket: BUCKET,
+        Region: REGION,
+        Key: key,
+        Body: body,
+        ContentType: VAULT_CIPHER_TYPE,
+        CacheControl: VAULT_CACHE_CONTROL,
+      });
+      return { ok: true, key, bytes: body.length, mode: 'single' };
+    }
+
+    /** 初始化分片上传，返回 UploadId 供后续 vaultPart / vaultComplete 使用 */
+    case 'vaultInit': {
+      const key = assertVaultKey(payload.key);
+      const data = await multipartInit({
+        Bucket: BUCKET,
+        Region: REGION,
+        Key: key,
+        ContentType: VAULT_CIPHER_TYPE,
+        CacheControl: VAULT_CACHE_CONTROL,
+      });
+      const uploadId = data && (data.UploadId || data.uploadId);
+      if (!uploadId) throw httpError('COS 未返回 UploadId，分片初始化失败', 502);
+      return { ok: true, key, uploadId, mode: 'multipart' };
+    }
+
+    /**
+     * 上传单个分片。分片按密文**文本字节**切分（不是先解密再切），
+     * 因此各分片原样拼接即为完整密文，客户端无需任何重组逻辑。
+     * COS 要求除最后一个分片外每片 ≥1MB，由前端 VAULT_PART_BYTES 保证。
+     */
+    case 'vaultPart': {
+      const key = assertVaultKey(payload.key);
+      const uploadId = assertUploadId(payload.uploadId);
+      const partNumber = assertPartNumber(payload.partNumber);
+      const body = Buffer.from(assertCipherText(payload.dataText), 'utf8');
+      const data = await multipartUpload({
+        Bucket: BUCKET,
+        Region: REGION,
+        Key: key,
+        UploadId: uploadId,
+        PartNumber: partNumber,
+        Body: body,
+      });
+      const etag = data && (data.ETag || data.etag);
+      if (!etag) throw httpError(`分片 ${partNumber} 上传后未返回 ETag`, 502);
+      return { ok: true, key, uploadId, partNumber, etag, bytes: body.length };
+    }
+
+    /** 合并全部分片为一个对象 */
+    case 'vaultComplete': {
+      const key = assertVaultKey(payload.key);
+      const uploadId = assertUploadId(payload.uploadId);
+      const raw = Array.isArray(payload.parts) ? payload.parts : null;
+      if (!raw || !raw.length) throw httpError('parts 必须是非空数组', 400);
+
+      const parts = raw
+        .map((p) => ({ PartNumber: assertPartNumber(p && p.partNumber), ETag: String((p && p.etag) || '').trim() }))
+        .sort((a, b) => a.PartNumber - b.PartNumber);
+
+      if (parts.some((p) => !p.ETag)) throw httpError('每个分片都必须带 etag', 400);
+      // 分片号必须从 1 起且连续，否则 COS 会拒绝或产出空洞对象
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i].PartNumber !== i + 1) throw httpError('分片号必须从 1 开始且连续', 400);
+      }
+
+      const data = await multipartComplete({
+        Bucket: BUCKET,
+        Region: REGION,
+        Key: key,
+        UploadId: uploadId,
+        Parts: parts,
+      });
+      return {
+        ok: true,
+        key,
+        mode: 'multipart',
+        parts: parts.length,
+        etag: (data && (data.ETag || data.etag)) || '',
+      };
+    }
+
+    /**
+     * 中止分片上传并清理已上传的分片。
+     * 分片失败若不清理，残片会一直占存储且不可见，所以前端必须兜住这一步。
+     */
+    case 'vaultAbort': {
+      const key = assertVaultKey(payload.key);
+      const uploadId = assertUploadId(payload.uploadId);
+      await multipartAbort({ Bucket: BUCKET, Region: REGION, Key: key, UploadId: uploadId });
+      return { ok: true, key, aborted: true };
+    }
+
     default:
       throw httpError(`未知操作：${action || '(空)'}`, 400);
   }
@@ -999,9 +1484,14 @@ const server = http.createServer(async (req, res) => {
 
   const action = String(payload.action || '').trim();
   const token = payload.token || req.headers['x-admin-token'] || '';
+  const bearer = req.headers['authorization'] || req.headers['Authorization'] || '';
 
   try {
-    if (!['status', 'login', 'submitNovel', 'submitContact', 'submitAnnouncement', 'submitRecommend', 'announcementList', 'announcementImageUpload', 'forumList', 'forumPublish', 'forumComment'].includes(action) && !verifyToken(token)) {
+    // 论坛/市集：发布/评论/点赞/认领/删除需登录（用户身份），读操作公开
+    if (USER_ACTIONS.has(action)) {
+      payload.__uid = await authUid(bearer);
+      if (!payload.__uid) throw httpError('请先登录账号', 401);
+    } else if (!PUBLIC_ACTIONS.has(action) && !verifyToken(token)) {
       throw httpError('未授权或登录已过期，请重新登录', 401);
     }
     send(res, 200, await handle(action, payload), origin);
@@ -1045,6 +1535,7 @@ exports.main = async (event) => {
   const action = String(payload.action || '').trim();
   const headers = event.headers || {};
   const token = payload.token || headers['x-admin-token'] || headers['X-Admin-Token'] || '';
+  const bearer = headers['authorization'] || headers['Authorization'] || '';
 
   const respond = (status, data) => ({
     statusCode: status,
@@ -1058,7 +1549,10 @@ exports.main = async (event) => {
   }
 
   try {
-    if (!['status', 'login', 'submitNovel', 'submitContact', 'submitAnnouncement', 'submitRecommend', 'announcementList', 'announcementImageUpload', 'forumList', 'forumPublish', 'forumComment'].includes(action) && !verifyToken(token)) {
+    if (USER_ACTIONS.has(action)) {
+      payload.__uid = await authUid(bearer);
+      if (!payload.__uid) throw httpError('请先登录账号', 401);
+    } else if (!PUBLIC_ACTIONS.has(action) && !verifyToken(token)) {
       throw httpError('未授权或登录已过期，请重新登录', 401);
     }
     return respond(200, await handle(action, payload));

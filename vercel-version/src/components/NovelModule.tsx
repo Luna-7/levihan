@@ -1,17 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { Feather, BookOpen } from 'lucide-react';
 import { RecommendItem, GroupNovel } from '../types/doujinArchive';
 import { soundManager } from '../utils/audio';
 import { NovelReader } from './NovelReader';
 import { AuthorWithLink } from '../utils/authorLink';
 import { newestNovelsFirst, newestRecsFirst } from '../utils/workSort';
 import { submitToInbox } from '../utils/submissionInbox';
+import { CardPatternOverlay } from './CardPatternOverlay';
+import { PopupSketchOverlay } from './PopupSketchOverlay';
 
 interface Props {
   searchQuery: string;
   recs: RecommendItem[];
   novels: GroupNovel[];
   onShowToast: (msg: string) => void;
+  initialSeg?: string;
+  initialReadingNovel?: GroupNovel | null;
 }
 
 /** 从链接域名解析网站名（不做标签，放卡片最右侧） */
@@ -59,11 +64,18 @@ const copyToClipboard = async (text: string): Promise<boolean> => {
  * 小说本模块：段切换（全部 / 在线小说 / 站外推荐）+ 题材筛选（含评级，单排扁平）
  * 第一段 在线小说 = 竖版卡片瀑布流；第二段 站外推荐 = 横向信息卡瀑布流
  */
-export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShowToast }) => {
-  const [seg, setSeg] = useState<string>('全部'); // 全部 | 在线小说 | 站外推荐
+export const NovelModule: React.FC<Props> = ({
+  searchQuery,
+  recs,
+  novels,
+  onShowToast,
+  initialSeg,
+  initialReadingNovel,
+}) => {
+  const [seg, setSeg] = useState<string>(initialSeg || '全部'); // 全部 | 在线小说 | 站外推荐
   const [genre, setGenre] = useState<string>('全部');
   const [openRec, setOpenRec] = useState<RecommendItem | null>(null);
-  const [reading, setReading] = useState<GroupNovel | null>(null);
+  const [reading, setReading] = useState<GroupNovel | null>(initialReadingNovel || null);
   const [showUpload, setShowUpload] = useState(false);
   const [uploadKind, setUploadKind] = useState<'novel' | 'recommend'>('novel');
   const [uploadTitle, setUploadTitle] = useState('');
@@ -79,6 +91,18 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
   const [recAuthor, setRecAuthor] = useState('');
   const [recReason, setRecReason] = useState('');
   const [recCategory, setRecCategory] = useState('原作向');
+
+  useEffect(() => {
+    if (initialSeg) {
+      setSeg(initialSeg);
+    }
+  }, [initialSeg]);
+
+  useEffect(() => {
+    if (initialReadingNovel) {
+      setReading(initialReadingNovel);
+    }
+  }, [initialReadingNovel]);
 
   // 题材 = 数据里 (type ∪ rating) 去重，不写死（R / 清水 与现PA / 原作同级）
   const genreList = useMemo(
@@ -138,13 +162,13 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
   const genreDisabled = seg === '在线小说';
 
   const openRecModal = (rec: RecommendItem) => {
-    soundManager.playBlip();
+    soundManager.playEnvelopeOpen();
     setOpenRec(rec);
   };
 
   const handleJump = (rec: RecommendItem) => {
     if (!rec.url) return;
-    soundManager.playBlip();
+    soundManager.playWarpJump();
     // 弹窗保持打开：用户看完可能回来继续复制名称
     window.open(rec.url, '_blank', 'noopener,noreferrer');
   };
@@ -152,6 +176,7 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
   const handleCopyTitle = async (rec: RecommendItem) => {
     const ok = await copyToClipboard(rec.title);
     if (ok) {
+      soundManager.playCopySuccess();
       onShowToast(`已复制标题《${rec.title.slice(0, 18)}${rec.title.length > 18 ? '…' : ''}》📋`);
       setOpenRec(null); // 复制成功后自动关弹窗
     } else {
@@ -241,7 +266,7 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
   const segCls = (active: boolean) =>
     `px-2 py-0.5 rounded-xs border transition-all cursor-pointer text-[11px] font-retro-jp ${
       active
-        ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-xs'
+        ? 'bg-[#1E4334] text-white border-[#1E4334] font-bold shadow-xs'
         : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
     }`;
 
@@ -250,17 +275,20 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
 
   return (
     <div className="space-y-3">
-      {/* 模块筛选条：段切换 + 题材（含评级，扁平单排） */}
-      <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-md p-2.5 space-y-2">
+      {/* 模块筛选条：段切换 + 题材（无粗糙边框，半透明毛玻璃） */}
+      <div className="bg-[#FFFEEF]/80 backdrop-blur-md rounded-xl p-2.5 space-y-2 relative overflow-hidden shadow-2xs">
+        <CardPatternOverlay opacity={0.12} mode="multiply" />
+        <div className="relative z-10 space-y-2">
         <div className="flex flex-wrap items-center gap-1.5 text-xs font-retro-jp">
           <span className="text-[10px] font-pixel text-[#8C7A68] mr-1">段:</span>
           {['全部', '在线小说', '站外推荐'].map((s) => (
             <button
               key={s}
               onClick={() => {
-                soundManager.playBlip();
+                soundManager.playFilterClick();
                 setSeg(s);
               }}
+              onMouseEnter={() => soundManager.playCardHover()}
               className={segCls(seg === s)}
             >
               {s}
@@ -278,144 +306,153 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
             <button
               key={g}
               onClick={() => {
-                soundManager.playBlip();
+                soundManager.playFilterClick();
                 setGenre(g);
               }}
+              onMouseEnter={() => soundManager.playCardHover()}
               className={chipCls(genre === g)}
             >
               {g}
             </button>
           ))}
         </div>
+        </div>
       </div>
 
-      {/* 第一段：在线小说（竖版卡片瀑布流，手机 2 列） */}
+      {/* 第一段：在线小说与接龙合订本（2列瀑布流） */}
       {showNovels && (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="font-pixel text-xs font-bold text-[#1E3A2B]">在线小说 · 共 {filteredNovels.length} 篇</h3>
-            <button
-              type="button"
-              onClick={() => setShowUpload(true)}
-              className="px-3 py-1.5 bg-[#1E4334] text-[#F9E79F] border border-[#153025] font-pixel text-[10px] font-bold cursor-pointer active:scale-95 transition-transform whitespace-nowrap"
-            >
-              ↑ 上传小说 / 推荐
-            </button>
+            <div className="inline-flex items-center gap-2 bg-[#1E4334]/90 backdrop-blur-md border border-[#1E4334]/70 rounded-lg px-3 py-1.5 shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-[#F9E79F] animate-pulse" />
+              <h3 className="font-pixel text-xs font-bold text-white tracking-wide">
+                在线小说 & 合订本 · 共 {filteredNovels.length} 篇
+              </h3>
+            </div>
           </div>
           {filteredNovels.length === 0 ? (
-            <div className="p-6 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
+            <div className="p-6 text-center bg-[#FFFEEF]/75 backdrop-blur-xs border border-dashed border-[#D5C9AF] rounded-xl text-xs font-retro-jp text-[#8C7A68]">
               还没有在线小说，敬请期待～
             </div>
           ) : (
-            <div className="columns-2 md:columns-3 lg:columns-4 gap-2 sm:gap-3">
-              {filteredNovels.map((novel) => (
-                <div
-                  key={novel.id}
-                  className="mb-2 sm:mb-3 break-inside-avoid group cursor-pointer select-none"
-                  title="点击在线阅读"
-                  onClick={() => {
-                    soundManager.playBlip();
-                    setReading(novel);
-                    onShowToast(`正在打开《${novel.title}》📖`);
-                  }}
-                >
-                  <div className="bg-[#FFFEEF] border border-[#D5C9AF] hover:border-[#1E4334] hover:shadow-md rounded-md p-3 space-y-2 transition-all">
-                    {/* 徽章行：在线 + 字数 */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-pixel text-[9px] px-1.5 py-0.2 bg-[#1E4334] text-[#F9E79F] rounded-xs font-bold">
-                        在线
-                      </span>
-                      <span className="text-[10px] font-retro-jp text-[#8C7A68]">{fmtChars(novel.chars || 0)}字</span>
-                    </div>
-
-                    <h4 className="font-pixel text-xs sm:text-[13px] font-bold text-[#1E3A2B] group-hover:text-[#B7791F] break-words leading-snug transition-colors">
-                      {novel.title}
-                    </h4>
-
-                    {/* 字段块：作者 / 字数 / 更新 */}
-                    <div className="bg-[#FAF5E8] border border-[#EBE3D0] rounded-xs p-2 space-y-1 text-[11px] font-retro-jp">
-                      <div className="flex items-start gap-1">
-                        <span className="font-bold text-[#8C6B38] shrink-0 w-10 text-right">作者:</span>
-                        <span className="text-[#3E342B] font-bold flex-1 break-words"><AuthorWithLink author={novel.author} customUrl={novel.authorUrl} /></span>
-                      </div>
-                      <div className="flex items-start gap-1">
-                        <span className="font-bold text-[#7A6958] shrink-0 w-10 text-right">字数:</span>
-                        <span className="text-[#5B4636] flex-1">{fmtChars(novel.chars || 0)}</span>
-                      </div>
-                      {novel.updatedAt && (
-                        <div className="flex items-start gap-1">
-                          <span className="font-bold text-[#7A6958] shrink-0 w-10 text-right">更新:</span>
-                          <span className="text-[#5B4636] flex-1">{novel.updatedAt.slice(0, 10)}</span>
+            <div className="columns-2 gap-3.5 sm:gap-4.5 w-full">
+              {filteredNovels.map((novel) => {
+                const isRelay = Boolean(novel.isRelayCompiled);
+                return (
+                  <div
+                    key={novel.id}
+                    onClick={() => {
+                      soundManager.playCardClick();
+                      soundManager.playPageTurn();
+                      setReading(novel);
+                      onShowToast(`正在打开《${novel.title}》📖`);
+                    }}
+                    onMouseEnter={() => soundManager.playCardHover()}
+                    className="mb-3.5 sm:mb-4.5 break-inside-avoid relative overflow-hidden bg-[#FFFEEF]/85 backdrop-blur-md border border-[#D5C9AF]/70 hover:border-[#8C6B38] rounded-xl p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-lg hover:bg-[#FFFEEF]/95 group select-none cursor-pointer space-y-3 w-full"
+                    title={isRelay ? "点击在线阅读接龙合订本" : "点击在线阅读小说"}
+                  >
+                    <CardPatternOverlay opacity={0.10} mode="multiply" />
+                    <div className="relative z-10 flex flex-col flex-1 justify-between space-y-3">
+                      {/* 顶部标题与分类徽章 */}
+                      <div className="flex items-start justify-between gap-1.5 pb-2 border-b border-dashed border-[#E0D5BE]">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`font-pixel text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap shadow-2xs ${
+                                isRelay
+                                  ? 'bg-[#B45309] text-white'
+                                  : 'bg-[#1E4334] text-white'
+                              }`}
+                            >
+                              {isRelay ? '故事接龙合订本' : '在线小说'}
+                            </span>
+                            <span className="text-xs font-retro-jp text-[#8C7A68] whitespace-nowrap">
+                              {fmtChars(novel.chars || 0)}字
+                            </span>
+                          </div>
+                          <h3 className="font-pixel text-base sm:text-lg font-bold text-[#2C2016] group-hover:text-[#B7791F] mt-1.5 break-words leading-snug transition-colors">
+                            {novel.title}
+                          </h3>
                         </div>
-                      )}
-                    </div>
-
-                    {/* 标签行：空则整行不渲染 */}
-                    {!!(novel.tags && novel.tags.length) && (
-                      <div className="flex flex-wrap gap-1">
-                        {novel.tags.map((tag, i) => (
-                          <span key={i} className={tagChipCls}>
-                            #{tag}
-                          </span>
-                        ))}
                       </div>
-                    )}
 
-                    {/* 内容预警：未填写不渲染 */}
-                    {novel.warning && (
-                      <div className="flex items-start gap-1.5 bg-[#FDF0E3] border border-[#E8B04B] rounded-xs px-2 py-1.5">
-                        <span className="shrink-0 text-[11px] leading-none mt-px">⚠</span>
-                        <span className="text-[10px] font-retro-jp text-[#8A5A12] break-words leading-snug">{novel.warning}</span>
+                      {/* 关键信息区：执笔 */}
+                      <div className="bg-[#FAF5E8]/60 backdrop-blur-xs border border-[#EBE3D0]/70 rounded-lg p-3 my-auto space-y-2.5 text-xs sm:text-[13px] font-retro-jp">
+                        {/* 执笔 */}
+                        <div className="space-y-1">
+                          <div className="font-bold text-[#8C6B38] text-[11px] sm:text-xs">
+                            ✍️ 执笔：
+                          </div>
+                          <div className="font-bold text-[#3E342B] break-words pl-1">
+                            {isRelay && novel.relayAuthors && novel.relayAuthors.length > 1
+                              ? `${novel.author} (${novel.relayAuthors.length}位调查兵接力)`
+                              : (
+                                <AuthorWithLink
+                                  author={novel.author}
+                                  customUrl={novel.authorUrl}
+                                  defaultColorClass="text-[#3E342B]"
+                                  orangeColorClass="text-[#D35400]"
+                                />
+                              )}
+                          </div>
+                        </div>
+
+                        {/* 如果有自定义起笔设定（非通用背景），清晰列出 */}
+                        {novel.prompt && !novel.prompt.includes('突发暴雨') && (
+                          <>
+                            <div className="h-px bg-[#E0D5BE]/60" />
+                            <div className="space-y-1">
+                              <div className="font-bold text-[#8C5D23] text-[11px] sm:text-xs">
+                                ✍️ 起笔设定：
+                              </div>
+                              <div className="text-[#5B4636] leading-relaxed break-words text-xs pl-1">
+                                {novel.prompt}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
-                    )}
-
-                    {/* 作者说的话：未填写不渲染 */}
-                    {novel.authorNote && (
-                      <div className="border-l-3 border-[#C29641] bg-[#FAF5E8] rounded-r-xs p-2">
-                        <span className="font-retro-jp text-[10px] font-bold text-[#8C6B38]">作者说：</span>
-                        <span className="font-retro-jp text-[10px] text-[#5B4636] break-words leading-snug line-clamp-3">
-                          {novel.authorNote}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* 底栏 */}
-                    <div className="pt-2 border-t border-dashed border-[#E0D5BE] flex items-center justify-between text-[10px] font-retro-jp text-[#8C7A68]">
-                      <span>共 {fmtChars(novel.chars || 0)} 字</span>
-                      <span className="text-[#1E4334] font-pixel text-[10px] group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
-                        <span>在线阅读</span>
-                        <span>→</span>
-                      </span>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
-      {/* 第二段：站外推荐（横向信息卡瀑布流，手机 1 列） */}
+      {/* 第二段：站外推荐（2列瀑布流） */}
       {showRecs && recs.length > 0 && (
         <div className="space-y-2">
-          <h3 className="font-pixel text-xs font-bold text-[#1E3A2B]">站外推荐 · 共 {filteredRecs.length} 篇</h3>
+          <div className="inline-flex items-center gap-2 bg-[#1E4334]/90 backdrop-blur-md border border-[#1E4334]/70 rounded-lg px-3 py-1.5 shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-[#F9E79F] animate-pulse" />
+            <h3 className="font-pixel text-xs font-bold text-white tracking-wide">
+              站外推荐 · 共 {filteredRecs.length} 篇
+            </h3>
+          </div>
           {filteredRecs.length === 0 ? (
             <div className="p-6 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
               没有符合筛选的推荐，可以换个题材试试～
             </div>
           ) : (
-            <div className="columns-1 sm:columns-2 gap-2 sm:gap-3">
+            <div className="columns-2 gap-3 sm:gap-4 w-full">
               {filteredRecs.map((rec) => {
                 const reason = reasonText(rec);
                 const site = siteName(rec.url);
                 return (
                   <div
                     key={rec.id}
-                    className="mb-2 sm:mb-3 break-inside-avoid group cursor-pointer select-none"
+                    className="mb-3 sm:mb-4 break-inside-avoid group cursor-pointer select-none"
                     title="点击选择打开方式"
-                    onClick={() => openRecModal(rec)}
+                    onMouseEnter={() => soundManager.playCardHover()}
+                    onClick={() => {
+                      soundManager.playCardClick();
+                      openRecModal(rec);
+                    }}
                   >
-                    <div className="bg-[#FFFEEF] border border-[#D5C9AF] hover:border-[#1E4334] hover:shadow-md rounded-md p-3 space-y-2 transition-all">
+                    <div className="relative overflow-hidden bg-[#FFFEEF]/85 backdrop-blur-md border border-[#D5C9AF]/70 hover:border-[#8C6B38] hover:shadow-lg rounded-xl p-3 sm:p-3.5 space-y-2 transition-all">
+                      <CardPatternOverlay opacity={0.10} mode="multiply" />
+                      <div className="relative z-10 space-y-2">
                       {/* 顶部行：题材/评级标签（同级同款） + 网站名（最右，非标签） */}
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex flex-wrap gap-1">
@@ -427,7 +464,7 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
                         )}
                       </div>
 
-                      <h4 className="font-pixel text-xs sm:text-[13px] font-bold text-[#1E3A2B] group-hover:text-[#B7791F] break-words leading-snug transition-colors line-clamp-2">
+                      <h4 className="font-pixel text-xs sm:text-[13px] font-bold text-[#2C2016] group-hover:text-[#B7791F] break-words leading-snug transition-colors line-clamp-2">
                         {rec.title}
                       </h4>
 
@@ -439,6 +476,7 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
                           </span>
                         </div>
                       )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -457,9 +495,11 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
           onClick={() => setOpenRec(null)}
         >
           <div
-            className="bg-[#FFFEEF] border-2 border-[#1E4334] rounded-lg w-full max-w-md p-4 space-y-3 shadow-xl"
+            className="relative overflow-hidden bg-[#FFFEEF] border-2 border-[#1E4334] rounded-lg w-full max-w-md p-4 space-y-3 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
+            <CardPatternOverlay opacity={0.12} mode="multiply" />
+            <div className="relative z-10 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-pixel text-xs font-bold text-[#1E4334]">打开方式</span>
               <button
@@ -497,7 +537,7 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
                 disabled={!openRec.url}
                 className={`flex-1 px-3 py-2.5 rounded-xs font-pixel text-xs transition-all ${
                   openRec.url
-                    ? 'bg-[#1E4334] text-[#F9E79F] hover:bg-[#2B5E4A] cursor-pointer shadow-xs'
+                    ? 'bg-[#1E4334] text-white hover:bg-[#2B5E4A] cursor-pointer shadow-xs font-bold'
                     : 'bg-[#EFE8D6] text-[#B4A68F] cursor-not-allowed'
                 }`}
               >
@@ -510,6 +550,7 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
                 ⧉ 复制名称
               </button>
             </div>
+            </div>
           </div>
         </div>
       )}
@@ -519,8 +560,10 @@ export const NovelModule: React.FC<Props> = ({ searchQuery, recs, novels, onShow
 
       {showUpload && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[100] bg-black/65 flex items-center justify-center p-3" onMouseDown={(e) => e.target === e.currentTarget && setShowUpload(false)}>
-          <form onSubmit={handleNovelSubmit} className="w-full max-w-lg max-h-[90dvh] overflow-y-auto bg-[#FFFEEF] border-2 border-[#1E4334] rounded-lg p-4 sm:p-5 space-y-3 font-retro-jp text-[#2C241D] shadow-2xl">
-            <div className="flex items-center justify-between gap-3 border-b border-[#D5C9AF] pb-2">
+          <form onSubmit={handleNovelSubmit} className="relative overflow-hidden w-full max-w-lg max-h-[90dvh] overflow-y-auto bg-[#FFFEEF] border-2 border-[#1E4334] rounded-lg p-4 sm:p-5 space-y-3 font-retro-jp text-[#2C241D] shadow-2xl">
+            <CardPatternOverlay opacity={0.12} mode="multiply" />
+            <PopupSketchOverlay />
+            <div className="relative flex items-center justify-between gap-3 border-b border-[#D5C9AF] pb-2">
               <div>
                 <h3 className="font-pixel text-sm font-bold text-[#1E4334]">上传小说 / 推荐</h3>
                 <p className="text-[10px] text-[#7A6958] mt-1">投稿将进入待审收件箱，通过后公开展示。</p>

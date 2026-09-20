@@ -5,6 +5,7 @@ import {
   getCommentsByBookId,
   addCommentToBook,
 } from '../data/mangaComments';
+import { CardPatternOverlay } from './CardPatternOverlay';
 
 interface Props {
   bookId: string;
@@ -53,7 +54,8 @@ export const MangaCommentSection: React.FC<Props> = ({
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto mt-8 bg-[#FAF5E8] border border-[#1E4334] rounded-md p-4 sm:p-5 space-y-4 text-[#2C241D] select-text">
+    <div className="relative overflow-hidden w-full max-w-2xl mx-auto mt-8 bg-[#FAF5E8] border border-[#1E4334] rounded-md p-4 sm:p-5 space-y-4 text-[#2C241D] select-text">
+      <CardPatternOverlay opacity={0.10} mode="multiply" />
       {/* 标题 */}
       <div className="border-b border-[#1E4334]/30 pb-2 flex items-center justify-between">
         <h3 className="font-serif-title font-bold text-sm sm:text-base text-[#1E3A2B]">

@@ -79,7 +79,7 @@ export default defineConfig(({ mode }) => {
         'icons/icon-192x192.png',
         'icons/icon-512x512.png',
         'icons/icon-maskable-512x512.png',
-        'images/archive-maintenance.png',
+        'images/archive-maintenance.webp',
         'sounds/bgm.mp3',
       ],
       workbox: {
@@ -125,12 +125,47 @@ export default defineConfig(({ mode }) => {
     }),
   ],
   resolve: { alias: { '@': path.resolve(__dirname, '.') } },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React 核心库
+          'react-vendor': ['react', 'react-dom'],
+          // PDF.js 相关（大文件，单独分割）
+          'pdfjs-vendor': ['pdfjs-dist'],
+          // CloudBase SDK
+          'cloudbase-vendor': ['@cloudbase/js-sdk'],
+          // 加密库
+          'crypto-vendor': ['crypto-js'],
+          // AWS SDK
+          'aws-vendor': ['@aws-sdk/client-s3'],
+          // 其他第三方库
+          'vendor': ['lucide-react', 'qrcode', 'html-to-image', 'react-pinch-zoom-pan'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000, // 提高警告阈值到 1MB
+  },
   server: {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
     // Do not modify—file watching is disabled to prevent flickering during agent edits.
     hmr: process.env.DISABLE_HMR !== 'true',
     // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
     watch: process.env.DISABLE_HMR === 'true' ? null : {},
+    // 云函数（admin-upload / registerWithPassword / loginWithPassword）的 CORS 白名单
+    // 只认 levihan.asia / www / admin / localhost:5173 / localhost:4173，
+    // 而本地 dev 跑在 localhost:3000（--host=0.0.0.0 时还有局域网 IP），跨域会被浏览器拦掉，
+    // 表现为「后台有公告、前台空白」且登录注册一并失效。
+    // 开发态改由 dev server 服务端转发（转发无 Origin，不受白名单影响）。
+    // 前端地址收敛在 src/utils/cloudbaseEndpoint.ts，两处前缀必须一致。
+    proxy: {
+      '/__cf': {
+        target: 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/__cf/, ''),
+      },
+    },
   },
   });
 });

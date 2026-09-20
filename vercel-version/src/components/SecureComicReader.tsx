@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as CryptoJsNamespace from 'crypto-js';
 import * as pdfjsLib from 'pdfjs-dist';
+// ?url 让 Vite 把 1MB 的 worker 原样 emit 成 assets/ 下的一个文件并返回其 URL（同源，走站点自己的 CDN）
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 import type { DoujinBookItem } from '../types/doujinArchive';
 import { cosService } from '../services/cosClient';
 
@@ -30,12 +32,15 @@ const IV_UTF8 = 'levihan-vault-iv';
 const VAULT_DIR = 'comic_vault';
 
 /**
- * PDF.js 的 worker：版本必须与依赖里的 pdfjs-dist 严格一致，否则会解析错乱。
- * 走 CDN 是刻意的选择 —— 免去在 Vite 里配 ?url 与打包 1MB worker，
- * 且与项目管理台用的 pdf.js 版本（3.11.174）保持同一来源。
- * 若想改成随包发布：import workerSrc from 'pdfjs-dist/build/pdf.worker.min.js?url'
+ * PDF.js 的 worker：版本必须与依赖里的 pdfjs-dist 严格一致，否则会解析错乱
+ * （?url 直接指向 node_modules 里那个 3.11.174 的 worker，天然同步）。
+ *
+ * 曾经**刻意**走第三方 CDN 以免在 Vite 里配 ?url —— 实测这个取舍是错的：
+ * 那家 CDN 上 1MB 的 worker 单请求就要数秒（320KB 的 pdf.min.js 尚需 2.7~3.0s），
+ * 手机网络下更慢，而 worker 没下载完这本就打不开，症状是「一直卡在解密/加载中」。
+ * 改成随包发布后：同源、走站点自己的 CDN，且与 CloudBase 管理台用的是同一份字节。
  */
-const PDFJS_WORKER_SRC = 'https://cdn.staticfile.net/pdf.js/3.11.174/pdf.worker.min.js';
+const PDFJS_WORKER_SRC = pdfWorkerUrl;
 
 /**
  * CJS/ESM 互操作兜底。

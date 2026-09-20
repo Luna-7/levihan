@@ -312,9 +312,9 @@ function solve(difficulty: Difficulty, verbose: boolean): SolveResult {
 
 /** 需求给出的建议区间：仅作参考输出，不参与通过/失败判定 */
 const SUGGESTED_RANGES: Record<Difficulty, [number, number]> = {
-  easy: [6, 8],
-  normal: [9, 12],
-  hard: [13, 18],
+  easy: [15, 25],
+  normal: [30, 50],
+  hard: [60, 100],
 };
 
 function main(): void {

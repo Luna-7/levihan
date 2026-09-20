@@ -1,10 +1,10 @@
-const ENDPOINT = 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/admin-upload';
+import { ADMIN_UPLOAD_ENDPOINT } from './cloudbaseEndpoint';
 
 export async function submitToInbox(
   action: 'submitNovel' | 'submitContact' | 'submitAnnouncement' | 'submitRecommend',
   fields: Record<string, unknown>
 ) {
-  const response = await fetch(ENDPOINT, {
+  const response = await fetch(ADMIN_UPLOAD_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
     body: JSON.stringify({ action, ...fields }),

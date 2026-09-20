@@ -12,9 +12,14 @@ interface Props {
   onExit?: () => void;
 }
 
-// 塔塔开大厅保持静音；利了个韩对局沿用其专属音乐。
-const LIHAN_BGM_SRC = '/sounds/lihan-bgm.mp3';
+// 塔塔开（合成大西皮）原版专属背景音乐：经典街机像素主题曲（同时保留利韩战歌供切换）
+const BGM_TRACKS = [
+  { id: 'classic', label: '塔塔开经典', fullName: '塔塔开·合成大西皮原版街机曲', src: '/sounds/bgm.mp3' },
+  { id: 'lihan', label: '利韩战歌', fullName: '利韩专属对局曲', src: '/sounds/lihan-bgm.mp3' },
+] as const;
+
 const BGM_PREF_KEY = 'tatakaru-bgm-enabled';
+const BGM_TRACK_KEY = 'tatakaru-bgm-track';
 
 type TatakaruGameKey = 'daxigua' | 'hange' | 'lihan';
 
@@ -37,6 +42,7 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
 
   // 直入利了个韩（原生组件）时无需加载骨架屏
   const [isLoading, setIsLoading] = useState<boolean>(initialKey !== null && initialKey !== 'lihan');
+  const [iframeError, setIframeError] = useState<string | null>(null);
 
   // Notify parent component whether immersive game is currently active
   useEffect(() => {
@@ -48,7 +54,7 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
 
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  // ---- 利了个韩对局音乐 ----
+  // ---- 对局背景音乐（合成大西皮、利了个韩） ----
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [bgmOn, setBgmOn] = useState<boolean>(() => {
     try {
@@ -58,24 +64,73 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
     }
   });
 
+  const [trackIdx, setTrackIdx] = useState<number>(() => {
+    try {
+      // 若是合成大西皮（初始或默认），以原版经典音乐为准
+      const saved = window.localStorage.getItem(BGM_TRACK_KEY);
+      if (saved) {
+        const idx = BGM_TRACKS.findIndex((t) => t.id === saved);
+        if (idx >= 0) return idx;
+      }
+      // 默认合成大西皮使用原版塔塔开街机曲 classic
+      return 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  // 当在合成大西皮和利了个韩之间切换时，如果当前是合成大西皮且未特别选择过利韩战歌，确保播原版经典曲
   useEffect(() => {
-    const el = new Audio(LIHAN_BGM_SRC);
+    if (selectedGame === 'daxigua') {
+      try {
+        const saved = window.localStorage.getItem(BGM_TRACK_KEY);
+        // 如果此前未手动选过，或者保存的是原先写死的 lihan，纠正回合成大西皮原本的塔塔开音乐 classic
+        if (!saved || saved === 'lihan') {
+          setTrackIdx(0);
+          window.localStorage.setItem(BGM_TRACK_KEY, 'classic');
+        }
+      } catch {}
+    }
+  }, [selectedGame]);
+
+  // Reset loading state when switching to hange game
+  useEffect(() => {
+    if (selectedGame === 'hange') {
+      setIsLoading(true);
+      setIframeError(null);
+    } else {
+      // Reset error when switching away from hange
+      setIframeError(null);
+    }
+  }, [selectedGame]);
+
+  useEffect(() => {
+    const track = BGM_TRACKS[trackIdx] || BGM_TRACKS[0];
+    const el = new Audio(track.src);
     el.loop = true;
     el.volume = 0.35;
     el.preload = 'auto';
     audioRef.current = el;
+
+    if ((selectedGame === 'daxigua' || selectedGame === 'lihan') && bgmOn) {
+      el.play().catch(() => {});
+    }
+
     return () => {
       el.pause();
       el.removeAttribute('src');
       audioRef.current = null;
     };
-  }, []);
+  }, [trackIdx]);
 
   useEffect(() => {
     const el = audioRef.current;
     if (el) {
-      if (selectedGame === 'lihan' && bgmOn) el.play().catch(() => {});
-      else el.pause();
+      if ((selectedGame === 'daxigua' || selectedGame === 'lihan') && bgmOn) {
+        el.play().catch(() => {});
+      } else {
+        el.pause();
+      }
     }
     try {
       window.localStorage.setItem(BGM_PREF_KEY, bgmOn ? '1' : '0');
@@ -85,10 +140,29 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
   // 直接在用户手势中播放，避免浏览器拦截对局音乐。
   const handleToggleBgm = () => {
     const next = !bgmOn;
-    if (next) audioRef.current?.play().catch(() => {});
-    else audioRef.current?.pause();
+    if (next) {
+      soundManager.playActionClick();
+      if (audioRef.current && (selectedGame === 'daxigua' || selectedGame === 'lihan')) {
+        audioRef.current.play().catch(() => {});
+      }
+    } else {
+      soundManager.playSoftSwoosh();
+      audioRef.current?.pause();
+    }
     setBgmOn(next);
-    onShowToast(next ? '🎵 对局音乐已开启' : '🔇 对局音乐已关闭');
+    onShowToast(next ? `🎵 对局音乐已开启（${BGM_TRACKS[trackIdx].label}）` : '🔇 对局音乐已关闭');
+  };
+
+  // 切换背景音乐曲目
+  const handleSwitchTrack = () => {
+    soundManager.playFilterClick();
+    const nextIdx = (trackIdx + 1) % BGM_TRACKS.length;
+    setTrackIdx(nextIdx);
+    const nextTrack = BGM_TRACKS[nextIdx];
+    try {
+      window.localStorage.setItem(BGM_TRACK_KEY, nextTrack.id);
+    } catch {}
+    onShowToast(`🎵 切换音乐：${nextTrack.fullName}`);
   };
 
   // 本局成绩暂存：退出对局时统一提交到头号玩家
@@ -109,6 +183,13 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
     const onMessage = (event: MessageEvent) => {
       const data = event.data as Incoming | null;
       if (!data || typeof data !== 'object') return;
+
+      if (data.type === 'daxigua-user-interaction') {
+        if (bgmOn && audioRef.current && audioRef.current.paused && (selectedGame === 'daxigua' || selectedGame === 'lihan')) {
+          audioRef.current.play().catch(() => {});
+        }
+        return;
+      }
 
       if (data.type === 'daxigua-result') {
         const score = Number(data.score) || 0;
@@ -159,7 +240,7 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
 
   // 退出对局：提交成绩并直接关闭整个游戏弹层（STAGE 选择大厅页已删除）
   const handleBackToLobby = () => {
-    soundManager.playBlip();
+    soundManager.playWoodTap();
     flushScores();
     audioRef.current?.pause();
     setIsFullscreen(false);
@@ -214,21 +295,32 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
           </span>
         </div>
 
-        {/* 工具栏: 街机式 BGM + 全屏 */}
+        {/* 工具栏: 街机式 BGM + 切歌 + 全屏 */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-          {selectedGame === 'lihan' && (
-            <button
-              onClick={handleToggleBgm}
-              className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-none transition-transform flex items-center gap-1 text-[10px] sm:text-xs font-pixel border-2 ${
-                bgmOn
-                  ? 'bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] border-[#37755c] shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
-                  : 'bg-[#142B21] text-[#8A7968] border-[#2B5E4A] shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
-              }`}
-              title={bgmOn ? '关闭对局音乐' : '开启对局音乐'}
-            >
-              <span>{bgmOn ? '🔊' : '🔇'}</span>
-              <span className="hidden xs:inline">{bgmOn ? 'BGM' : '静音'}</span>
-            </button>
+          {(selectedGame === 'daxigua' || selectedGame === 'lihan') && (
+            <>
+              <button
+                onClick={handleToggleBgm}
+                className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-none transition-transform flex items-center gap-1 text-[10px] sm:text-xs font-pixel border-2 ${
+                  bgmOn
+                    ? 'bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] border-[#37755c] shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
+                    : 'bg-[#142B21] text-[#8A7968] border-[#2B5E4A] shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
+                }`}
+                title={bgmOn ? '关闭对局音乐' : '开启对局音乐'}
+              >
+                <span>{bgmOn ? '🔊' : '🔇'}</span>
+                <span className="hidden xs:inline">{bgmOn ? 'BGM' : '静音'}</span>
+              </button>
+
+              <button
+                onClick={handleSwitchTrack}
+                className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-none bg-[#142B21] hover:bg-[#1E4334] text-[#F9E79F] border-2 border-[#2B5E4A] shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer transition-transform flex items-center gap-1 text-[10px] sm:text-xs font-pixel select-none"
+                title={`当前曲目：${BGM_TRACKS[trackIdx].fullName}（点击切换）`}
+              >
+                <span>🎶</span>
+                <span className="hidden sm:inline">{BGM_TRACKS[trackIdx].label}</span>
+              </button>
+            </>
           )}
 
           <button
@@ -247,8 +339,8 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
         className={
           isFullscreen
             ? selectedGame === 'lihan'
-            ? 'fixed inset-0 z-50 flex flex-col overflow-hidden lihan-themed-root pt-[var(--sat)] pb-[var(--sab)]'
-            : 'fixed inset-0 z-50 bg-[#050B08] flex flex-col pt-[var(--sat)] pb-[var(--sab)]'
+              ? 'fixed inset-0 z-50 flex flex-col overflow-hidden lihan-themed-root'
+              : 'fixed inset-0 z-50 bg-[#050B08] flex flex-col'
             : 'relative z-10 w-full flex justify-center py-0'
         }
       >
@@ -259,14 +351,26 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
               <span>塔塔开 · 街机全屏对局</span>
             </div>
             <div className="flex items-center gap-2">
-              {selectedGame === 'lihan' && (
-                <button
-                  onClick={handleToggleBgm}
-                  className="px-2 py-0.5 border-2 rounded-none text-xs font-pixel bg-[#1E4334] text-[#F9E79F] border-[#3B7E64] cursor-pointer"
-                  title={bgmOn ? '关闭对局音乐' : '开启对局音乐'}
-                >
-                  {bgmOn ? '🔊' : '🔇'}
-                </button>
+              {(selectedGame === 'daxigua' || selectedGame === 'lihan') && (
+                <>
+                  <button
+                    onClick={handleToggleBgm}
+                    className="px-2 py-0.5 border-2 rounded-none text-xs font-pixel bg-[#1E4334] text-[#F9E79F] border-[#3B7E64] cursor-pointer flex items-center gap-1"
+                    title={bgmOn ? '关闭对局音乐' : '开启对局音乐'}
+                  >
+                    <span>{bgmOn ? '🔊' : '🔇'}</span>
+                    <span className="hidden xs:inline">{bgmOn ? 'BGM' : '静音'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleSwitchTrack}
+                    className="px-2 py-0.5 border-2 rounded-none text-xs font-pixel bg-[#142B21] hover:bg-[#1E4334] text-[#F9E79F] border-[#2B5E4A] cursor-pointer flex items-center gap-1"
+                    title={`当前曲目：${BGM_TRACKS[trackIdx].fullName}（点击切换）`}
+                  >
+                    <span>🎶</span>
+                    <span className="hidden sm:inline">{BGM_TRACKS[trackIdx].label}</span>
+                  </button>
+                </>
               )}
 
               <button
@@ -319,6 +423,10 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
               src="/daxigua/index.html"
               title="利韩合成大西皮"
               onLoad={() => setIsLoading(false)}
+              onError={() => {
+                setIsLoading(false);
+                setIframeError('游戏加载失败，请检查网络连接或稍后重试');
+              }}
               allow="autoplay; fullscreen"
               className="border-0 bg-[#07140E] block"
               style={{
@@ -334,22 +442,69 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
 
           {/* 原生内嵌游戏 Iframe 二：拯救韩吉 (尺寸最大化) */}
           {selectedGame === 'hange' && (
-            <iframe
-              ref={iframeRef}
-              src="/save-hange/index.html"
-              title="利韩·拯救韩吉"
-              onLoad={() => setIsLoading(false)}
-              allow="autoplay"
-              className="border-0 bg-[#07140E] block"
-              style={{
-                aspectRatio: '9 / 16',
-                height: 'auto',
-                width: isFullscreen
-                  ? 'min(100vw, calc((100dvh - 38px) * 9 / 16))'
-                  : 'min(calc(100vw - 8px), calc((100dvh - 104px) * 9 / 16), 560px)',
-                maxHeight: isFullscreen ? 'calc(100dvh - 38px)' : 'calc(100dvh - 104px)',
-              }}
-            />
+            <>
+              {isLoading && (
+                <div className="flex flex-col items-center justify-center bg-[#07140E] text-[#f2f7f4]"
+                     style={{
+                       aspectRatio: '9 / 16',
+                       height: 'auto',
+                       width: isFullscreen
+                         ? 'min(100vw, calc((100dvh - 38px) * 9 / 16))'
+                         : 'min(calc(100vw - 8px), calc((100dvh - 104px) * 9 / 16), 560px)',
+                       maxHeight: isFullscreen ? 'calc(100dvh - 38px)' : 'calc(100dvh - 104px)',
+                     }}>
+                  <div className="animate-spin text-4xl mb-4">🎮</div>
+                  <div className="text-sm">加载游戏中...</div>
+                </div>
+              )}
+              {iframeError && (
+                <div className="flex flex-col items-center justify-center bg-[#07140E] text-red-400"
+                     style={{
+                       aspectRatio: '9 / 16',
+                       height: 'auto',
+                       width: isFullscreen
+                         ? 'min(100vw, calc((100dvh - 38px) * 9 / 16))'
+                         : 'min(calc(100vw - 8px), calc((100dvh - 104px) * 9 / 16), 560px)',
+                       maxHeight: isFullscreen ? 'calc(100dvh - 38px)' : 'calc(100dvh - 104px)',
+                     }}>
+                  <div className="text-4xl mb-4">⚠️</div>
+                  <div className="text-sm text-center px-4">{iframeError}</div>
+                  <button 
+                    onClick={() => {
+                      setIframeError(null);
+                      setIsLoading(true);
+                    }}
+                    className="mt-4 px-4 py-2 bg-[#1E4334] text-white rounded hover:bg-[#2d5d3d] transition-colors"
+                  >
+                    重试
+                  </button>
+                </div>
+              )}
+              <iframe
+                ref={iframeRef}
+                src="/save-hange/index.html"
+                title="利韩·拯救韩吉"
+                onLoad={() => {
+                  setIsLoading(false);
+                  setIframeError(null);
+                }}
+                onError={() => {
+                  setIsLoading(false);
+                  setIframeError('游戏加载失败，请检查网络连接或稍后重试');
+                }}
+                allow="autoplay"
+                className="border-0 bg-[#07140E] block"
+                style={{
+                  aspectRatio: '9 / 16',
+                  height: 'auto',
+                  width: isFullscreen
+                    ? 'min(100vw, calc((100dvh - 38px) * 9 / 16))'
+                    : 'min(calc(100vw - 8px), calc((100dvh - 104px) * 9 / 16), 560px)',
+                  maxHeight: isFullscreen ? 'calc(100dvh - 38px)' : 'calc(100dvh - 104px)',
+                  display: isLoading || iframeError ? 'none' : 'block',
+                }}
+              />
+            </>
           )}
 
           {/* 原生组件游戏 三：利了个韩 (羊了个羊卡牌堆叠三消 - 9:16 最大化) */}

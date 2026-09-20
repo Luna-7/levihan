@@ -23,13 +23,19 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
   const [progress, setProgress] = useState<number>(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 按需加载正文（novels/{id}.txt）
+  // 按需加载正文（本地编译内容直接使用，否则请求 novels/{id}.txt）
   useEffect(() => {
     let alive = true;
-    setBody(null);
     setFailed(false);
     setProgress(0);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
+
+    if (novel.bodyContent) {
+      setBody(novel.bodyContent);
+      return;
+    }
+
+    setBody(null);
     fetch(cosService.getNovelBodyUrl(novel.id), { cache: 'default' })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -44,7 +50,7 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
     return () => {
       alive = false;
     };
-  }, [novel.id]);
+  }, [novel.id, novel.bodyContent]);
 
   // Esc 关闭 + 锁定背景滚动
   useEffect(() => {
@@ -86,7 +92,7 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => {
-              soundManager.playBlip();
+              soundManager.playWoodTap();
               onClose();
             }}
             className="px-2.5 py-1 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs rounded-xs hover:bg-[#2B5E4A] cursor-pointer transition-all shrink-0 shadow-xs"
@@ -125,6 +131,34 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
       {/* 正文滚动区 */}
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
         <div className="max-w-[42rem] mx-auto px-4 py-5 space-y-4">
+          {/* 接龙合订本专属头衔与创作者全名单 */}
+          {novel.isRelayCompiled && (
+            <div className="bg-[#F8EFE0] border-2 border-[#C99C53] rounded-md p-3.5 space-y-2 shadow-xs">
+              <div className="flex items-center justify-between gap-2 border-b border-[#DFC593] pb-2">
+                <span className="font-pixel text-xs text-[#7A4F1D] font-bold">
+                  🪶 故事接龙合订本 · 共 {novel.relayStepsCount || 1} 棒连缀
+                </span>
+                <span className="text-[10px] font-retro-jp text-[#8C6B38]">
+                  {novel.chars || 0} 字
+                </span>
+              </div>
+              <div className="space-y-1">
+                <span className="font-retro-jp text-[10px] font-bold text-[#7A4F1D]">接力执笔同好：</span>
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  {(novel.relayAuthors || [novel.author]).map((authorName, aIdx) => (
+                    <span
+                      key={aIdx}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xs bg-[#FAF5E8] border border-[#DFC593] text-[#3B2818] font-retro-jp text-[11px] font-bold"
+                    >
+                      <span className="text-[#7A4F1D]">#{aIdx + 1}</span>
+                      <span>{authorName}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {novel.warning && (
             <div className="flex items-start gap-1.5 bg-[#FDF0E3] border border-[#E8B04B] rounded-xs px-2 py-1.5">
               <span className="shrink-0 text-[11px] leading-none mt-px">⚠</span>

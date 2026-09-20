@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { SvgBaroqueCorner } from './PopUpShopDecorations';
 import { soundManager } from '../utils/audio';
 import { UiSprite } from './UiSprite';
+import { PopupSketchOverlay } from './PopupSketchOverlay';
 import { submitToInbox } from '../utils/submissionInbox';
+import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
+import { CardPatternOverlay } from './CardPatternOverlay';
 
 export interface AnnouncementItem {
   id: string;
@@ -23,8 +26,6 @@ export interface AnnouncementItem {
   image?: string;
   link?: string;
 }
-
-const ANNOUNCEMENT_ENDPOINT = 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/admin-upload';
 
 // 公告内容完全由管理员后台提供；云端为空时展示“暂无公告”。
 export const ANNOUNCEMENTS: AnnouncementItem[] = [];
@@ -62,11 +63,36 @@ export const PopUpShopBanner: React.FC<Props> = ({
   const [proposalPreview, setProposalPreview] = useState('');
   const [proposalCrop, setProposalCrop] = useState({ x: 50, y: 50, zoom: 1 });
 
+  // 使用 ResizeObserver 动态获取公告栏卡片高度，确保趴趴始终位于卡片底部的 1/3 处
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [boardHeight, setBoardHeight] = useState<number>(0);
+
   const currentItem = announcements[currentIndex];
 
   useEffect(() => {
+    if (!cardRef.current) return;
+    const element = cardRef.current;
+    
+    // 初始高度
+    setBoardHeight(element.offsetHeight || element.clientHeight || 0);
+
+    // 监听容器高度自适应变化（包含图片加载、文本折叠、屏幕缩放等）
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const height = entry.contentRect.height;
+        if (height > 0) {
+          setBoardHeight(height);
+        }
+      }
+    });
+
+    ro.observe(element);
+    return () => ro.disconnect();
+  }, [currentItem]);
+
+  useEffect(() => {
     const controller = new AbortController();
-    fetch(ANNOUNCEMENT_ENDPOINT, {
+    fetch(ADMIN_UPLOAD_ENDPOINT, {
       method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body: JSON.stringify({ action: 'announcementList' }), signal: controller.signal,
     }).then((response) => response.ok ? response.json() : Promise.reject(new Error('公告读取失败')))
@@ -134,7 +160,7 @@ export const PopUpShopBanner: React.FC<Props> = ({
         const cropped = await new Promise<string>((resolve, reject) => {
           const img = new Image(); img.onload = () => { try { const ratio=16/9; let sw=img.naturalWidth,sh=sw/ratio;if(sh>img.naturalHeight){sh=img.naturalHeight;sw=sh*ratio;}sw/=proposalCrop.zoom;sh/=proposalCrop.zoom;const sx=(img.naturalWidth-sw)*proposalCrop.x/100,sy=(img.naturalHeight-sh)*proposalCrop.y/100;const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=675;canvas.getContext('2d')!.drawImage(img,sx,sy,sw,sh,0,0,1200,675);resolve(canvas.toDataURL('image/webp',.86).split(',')[1]||''); } catch(error){reject(error);} }; img.onerror=reject; img.src=proposalPreview;
         });
-        const response = await fetch(ANNOUNCEMENT_ENDPOINT,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({action:'announcementImageUpload',imageBase64:cropped})});
+        const response = await fetch(ADMIN_UPLOAD_ENDPOINT,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({action:'announcementImageUpload',imageBase64:cropped})});
         const result=await response.json(); if(!response.ok||!result.ok)throw new Error(result.error||'图片上传失败'); image=result.url;
       }
       await submitToInbox('submitAnnouncement', { ...proposal, image, tag: '利韩企划' });
@@ -148,45 +174,79 @@ export const PopUpShopBanner: React.FC<Props> = ({
   };
 
   return (
-    <div className="relative w-full h-full min-h-0 select-none">
-      {/* 典雅古金与深蓝巴洛克画框主体 */}
+    <div className="relative w-full h-full min-h-0 select-none flex flex-col justify-end">
+      {/* 复古银金属与晶莹玻璃公告画卷主体 */}
       <div
-        className="relative w-full h-full rounded-2xl overflow-hidden bg-[#FAF6ED]/68 backdrop-blur-[3px] popup-frame-border transition-all duration-300"
+        className="relative w-full h-full rounded-2xl overflow-hidden silver-retro-frame glass-reflection-overlay transition-all duration-300 flex flex-col justify-between"
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
         onTouchStart={() => setIsPaused(true)}
         onTouchEnd={() => setIsPaused(false)}
       >
-        <div className="absolute inset-0 opacity-20 pointer-events-none bg-cover bg-center" style={{ backgroundImage: 'url(/images/parchment-texture.jpg)' }} />
-        <div className="absolute top-1.5 left-1.5 z-20 pointer-events-none"><SvgBaroqueCorner position="top-left" size={28} /></div>
-        <div className="absolute top-1.5 right-1.5 z-20 pointer-events-none"><SvgBaroqueCorner position="top-right" size={28} /></div>
-        <div className="absolute bottom-1.5 left-1.5 z-20 pointer-events-none"><SvgBaroqueCorner position="bottom-left" size={28} /></div>
-        <div className="absolute bottom-1.5 right-1.5 z-20 pointer-events-none"><SvgBaroqueCorner position="bottom-right" size={28} /></div>
-        <div className="absolute inset-2 sm:inset-2.5 border border-[#C5A059] pointer-events-none rounded-xl" />
-        <div className="absolute inset-3 sm:inset-3.5 border border-[#E8D5A7] border-dashed opacity-75 pointer-events-none rounded-lg" />
+        <CardPatternOverlay opacity={0.12} mode="multiply" />
+        
+        {/* 四角复古银金属雕花角饰与金属铆钉 */}
+        <div className="absolute top-1 left-1 z-20 pointer-events-none"><SvgBaroqueCorner position="top-left" size={22} theme="silver" /></div>
+        <div className="absolute top-1 right-1 z-20 pointer-events-none"><SvgBaroqueCorner position="top-right" size={22} theme="silver" /></div>
+        <div className="absolute bottom-1 left-1 z-20 pointer-events-none"><SvgBaroqueCorner position="bottom-left" size={22} theme="silver" /></div>
+        <div className="absolute bottom-1 right-1 z-20 pointer-events-none"><SvgBaroqueCorner position="bottom-right" size={22} theme="silver" /></div>
 
         {/* ====================================================
-            公告宣传画卷核心信息栏 (卡片式精致展出)
+            公告宣传画卷核心信息栏 (透光玻璃微磨砂层)
            ==================================================== */}
-        <div className="relative z-10 h-full min-h-0 p-3 sm:p-4 pt-5 sm:pt-6 flex flex-col">
-          {/* 公告栏顶部趴趴：两个人物均来自统一雪碧图。 */}
-          <div className="h-14 sm:h-16 shrink-0 -mb-5 relative z-20 flex items-end justify-center gap-2 sm:gap-3 pointer-events-none" aria-label="LEVI 与 HANS 趴趴装饰">
-            <UiSprite name="levi-peek" width={48} role="img" label="利威尔趴趴" className="-translate-y-0.5 drop-shadow-[0_2px_2px_rgba(0,0,0,0.2)]" />
-            <span className="mb-4 sm:mb-5 px-3 py-1 rounded-full bg-[#E8F2E7]/95 border border-[#C5A059] text-[#1E4334] font-serif-title text-xs sm:text-sm font-black tracking-[0.12em] shadow-sm whitespace-nowrap">
-              LEVI<span className="mx-1 text-[#8C6226]">✖</span>HANS
-            </span>
-            <UiSprite name="hange-peek" width={46} role="img" label="韩吉趴趴" className="-translate-y-0.5 drop-shadow-[0_2px_2px_rgba(0,0,0,0.2)]" />
-          </div>
+        <div className="relative z-10 h-full min-h-0 p-2 sm:p-2.5 pt-2 sm:pt-2.5 flex flex-col justify-between">
+          <div
+            ref={cardRef}
+            onClick={() => {
+              if (currentItem) {
+                soundManager.playWoodTap();
+                setShowDetailModal(currentItem);
+              }
+            }}
+            className="flex-1 min-h-0 relative bg-white/70 backdrop-blur-md rounded-xl p-2.5 sm:p-3 border border-white/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9)] flex flex-col justify-between cursor-pointer group"
+          >
+            <CardPatternOverlay opacity={0.08} mode="multiply" />
 
-          <div className="flex-1 min-h-0 bg-[#FFFFFF]/84 backdrop-blur-[2px] border-2 border-[#1E4334] rounded-xl p-3 sm:p-3.5 shadow-[0_4px_12px_rgba(0,0,0,0.12)] flex flex-col justify-between">
-            {!currentItem ? <div className="flex-1 flex flex-col items-center justify-center text-center text-[#8C7A65]"><span className="text-2xl">📜</span><p className="mt-2 font-serif-title font-bold">暂无公告</p></div> : <>
-            <div className="flex-1 min-h-0 flex flex-col gap-1.5 sm:gap-2">
+            {/* ====================================================
+                韩吉与利威尔趴趴：使用 ResizeObserver 实时计算高度，严格对齐在公告栏底部的 1/3 处
+               ==================================================== */}
+            <div
+              className="pwa-peek-anchor-third"
+              style={{
+                bottom: boardHeight > 0 ? `${boardHeight / 3}px` : '33.333%',
+                transform: 'translate(-50%, 50%)',
+              }}
+              aria-label="LEVI 与 HANS 1/3 边框趴趴装饰"
+            >
+              <div className="pwa-peek-dock">
+                <UiSprite
+                  name="levi-peek"
+                  width={42}
+                  role="img"
+                  label="利威尔趴趴"
+                  className="pwa-peek-sprite-levi"
+                />
+                <span className="pwa-peek-badge">
+                  LEVI<span className="mx-1 text-[#8C6226]">✖</span>HANS
+                </span>
+                <UiSprite
+                  name="hange-peek"
+                  width={40}
+                  role="img"
+                  label="韩吉趴趴"
+                  className="pwa-peek-sprite-hange"
+                />
+              </div>
+            </div>
+
+            {!currentItem ? <div className="flex-1 flex flex-col items-center justify-center text-center text-[#8C7A65]"><span className="text-xl">📜</span><p className="mt-1 font-serif-title font-bold text-xs">暂无公告</p></div> : <>
+            <div className="flex-1 min-h-0 flex flex-col gap-1 sm:gap-1.5">
               {currentItem.image && (
-                <img src={currentItem.image} alt="" className="w-full aspect-video max-h-28 object-cover rounded-lg border border-[#D5C19A] shadow-sm" />
+                <img src={currentItem.image} alt="" className="w-full aspect-video max-h-20 sm:max-h-24 object-cover rounded-lg border border-[#D5C19A] shadow-xs" />
               )}
               {/* 企划标题与分类标签 */}
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="font-serif-title text-[10px] sm:text-[11px] font-black text-[#16273B] bg-[#F4EADB] border border-[#C5A059] px-2 py-0.5 rounded-sm">
+                <span className="font-serif-title text-[9px] sm:text-[10px] font-black text-[#16273B] bg-[#F4EADB] border border-[#C5A059] px-1.5 py-0.5 rounded-xs">
                   {currentItem.badge}
                 </span>
                 <span className="font-mincho text-xs sm:text-sm font-bold text-[#1A1817] truncate">
@@ -195,7 +255,7 @@ export const PopUpShopBanner: React.FC<Props> = ({
               </div>
 
               {/* 展期与地点提示 */}
-              <div className="flex items-center gap-2 text-[10px] sm:text-[11px] text-[#715431]">
+              <div className="flex items-center gap-2 text-[9px] sm:text-[10px] text-[#715431]">
                 <span className="flex items-center gap-0.5">
                   <Calendar className="w-3 h-3 text-[#A67C33]" />
                   <span>{currentItem.period || '常设公告'}</span>
@@ -205,25 +265,48 @@ export const PopUpShopBanner: React.FC<Props> = ({
               </div>
 
               {/* 简短描述：弹性占据剩余高度，文字自然铺满 */}
-              {currentItem.description && <p className="text-[11px] sm:text-xs text-[#4A4036] line-clamp-3 sm:line-clamp-4 leading-relaxed font-sans flex-1 min-h-0">{currentItem.description}</p>}
+              {currentItem.description && <p className="text-[10px] sm:text-[11px] text-[#4A4036] line-clamp-2 leading-relaxed font-sans flex-1 min-h-0">{currentItem.description}</p>}
 
               {/* 展出细则 + 投递企划小字 */}
-              <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center justify-between pt-0.5">
                 <button
                   type="button"
-                  onClick={() => setShowDetailModal(currentItem)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    soundManager.playWoodTap();
+                    setShowDetailModal(currentItem);
+                  }}
                   className="text-[10px] sm:text-[11px] text-[#8C6226] hover:text-[#16273B] hover:underline cursor-pointer flex items-center gap-1 transition-colors whitespace-nowrap font-bold"
                   title="查看展出细则"
                 >
-                  <Info className="w-3.5 h-3.5 text-[#8C6226]" />
+                  <Info className="w-3 h-3 text-[#8C6226]" />
                   <span>展出细则 📖</span>
                 </button>
-                {currentItem.link ? <button type="button" onClick={() => handleActionClick(currentItem)} className="px-3 py-1 bg-[#1E4334] text-[#F9E79F] border border-[#C5A059] rounded-md text-[10px] font-bold">立即推门阅览 ➜</button> : <span className="font-retro-jp text-[9px] sm:text-[10px] text-[#285A46]/70 tracking-wider whitespace-nowrap">发布人：{currentItem.author || currentItem.location}</span>}
+                {currentItem.link ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      soundManager.playWoodTap();
+                      handleActionClick(currentItem);
+                    }}
+                    className="px-2.5 py-0.5 bg-[#1E4334] text-[#F9E79F] border border-[#C5A059] rounded-md text-[9px] sm:text-[10px] font-bold"
+                  >
+                    立即推门阅览 ➜
+                  </button>
+                ) : (
+                  <span className="font-retro-jp text-[8px] sm:text-[9px] text-[#285A46]/70 tracking-wider whitespace-nowrap">
+                    发布人：{currentItem.author || currentItem.location}
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* 轮播底部分页控制器与左右微按键 */}
-            <div className="flex items-center justify-between pt-2 mt-2 border-t border-[#EAE0CD]">
+            {/* 轮播底部分页控制器与左右微按键 (卡片下方 1/3 边框分界线) */}
+            <div
+              className="flex items-center justify-between pt-1 mt-1 border-t border-[#EAE0CD]"
+              onClick={(e) => e.stopPropagation()}
+            >
               {/* 轮播点状指示器 */}
               <div className="flex items-center gap-1.5">
                 {announcements.map((item, idx) => (
@@ -234,10 +317,10 @@ export const PopUpShopBanner: React.FC<Props> = ({
                       soundManager.playWoodTap();
                       setCurrentIndex(idx);
                     }}
-                    className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                    className={`h-1.5 sm:h-2 rounded-full transition-all duration-300 cursor-pointer ${
                       currentIndex === idx
-                        ? 'w-6 bg-[#16273B] shadow-xs'
-                        : 'w-2 bg-[#D5C19A] hover:bg-[#B39362]'
+                        ? 'w-5 sm:w-6 bg-[#16273B] shadow-xs'
+                        : 'w-1.5 sm:w-2 bg-[#D5C19A] hover:bg-[#B39362]'
                     }`}
                     title={item.title}
                   />
@@ -254,23 +337,33 @@ export const PopUpShopBanner: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={handlePrev}
-                  className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#F4EADB] hover:bg-[#EAE0CD] text-[#16273B] border border-[#C5A059] flex items-center justify-center cursor-pointer active:scale-90 transition-all shadow-2xs"
+                  className="w-5 h-5 rounded-full bg-[#F4EADB] hover:bg-[#EAE0CD] text-[#16273B] border border-[#C5A059] flex items-center justify-center cursor-pointer active:scale-90 transition-all shadow-2xs"
                   title="上一篇"
                 >
-                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <ChevronLeft className="w-3 h-3" />
                 </button>
                 <button
                   type="button"
                   onClick={handleNext}
-                  className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#F4EADB] hover:bg-[#EAE0CD] text-[#16273B] border border-[#C5A059] flex items-center justify-center cursor-pointer active:scale-90 transition-all shadow-2xs"
+                  className="w-5 h-5 rounded-full bg-[#F4EADB] hover:bg-[#EAE0CD] text-[#16273B] border border-[#C5A059] flex items-center justify-center cursor-pointer active:scale-90 transition-all shadow-2xs"
                   title="下一篇"
                 >
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  <ChevronRight className="w-3 h-3" />
                 </button>
               </div>
             </div>
             </>}
-            <button type="button" onClick={() => setShowProposal(true)} className="mt-1 self-end text-[10px] text-[#8C7A65] hover:text-[#1E4334] cursor-pointer">投递利韩企划</button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                soundManager.playWoodTap();
+                setShowProposal(true);
+              }}
+              className="mt-0.5 self-end text-[9px] sm:text-[10px] text-[#8C7A65] hover:text-[#1E4334] cursor-pointer"
+            >
+              投递利韩企划
+            </button>
           </div>
         </div>
       </div>
@@ -281,7 +374,10 @@ export const PopUpShopBanner: React.FC<Props> = ({
       {typeof document !== 'undefined' && showDetailModal && createPortal(
         <div
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3"
-          onClick={() => setShowDetailModal(null)}
+          onClick={() => {
+            soundManager.playWoodTap();
+            setShowDetailModal(null);
+          }}
         >
           <div
             className="relative w-full max-w-md text-[#1E4334] drop-shadow-2xl select-none"
@@ -290,7 +386,10 @@ export const PopUpShopBanner: React.FC<Props> = ({
             {/* 关闭按钮（固定在卷轴外层，不随纸面滚动） */}
             <button
               type="button"
-              onClick={() => setShowDetailModal(null)}
+              onClick={() => {
+                soundManager.playWoodTap();
+                setShowDetailModal(null);
+              }}
               className="absolute top-4 right-3 z-30 w-7 h-7 bg-[#1E4334] text-[#F4EADB] rounded-full flex items-center justify-center text-xs font-bold hover:bg-[#2C5C46] cursor-pointer shadow-xs"
               title="收起卷轴"
             >
@@ -302,7 +401,8 @@ export const PopUpShopBanner: React.FC<Props> = ({
 
             {/* 卷轴纸面：自上而下展开 */}
             <div className="rules-scroll-paper relative z-10 mx-3 px-4 sm:px-5 pt-4 pb-5 max-h-[70dvh] overflow-y-auto">
-              <div className="flex items-center gap-2 border-b-2 border-[#C5A059] pb-2 mb-3 pr-8">
+              <PopupSketchOverlay />
+              <div className="relative flex items-center gap-2 border-b-2 border-[#C5A059] pb-2 mb-3 pr-8">
                 <span className="text-xl">✨</span>
                 <span className="font-serif-title font-bold text-sm sm:text-base">
                   {showDetailModal.title}
@@ -319,7 +419,7 @@ export const PopUpShopBanner: React.FC<Props> = ({
               </div>
 
               {/* 底部彩蛋：韩吉端茶简笔画 + 台词气泡 + 跳转按钮（所有公告展开后的默认界面） */}
-              <figure className="rules-scroll-hange mt-4 pt-3 border-t border-dashed border-[#C5A059] flex items-center justify-center gap-3 flex-wrap">
+              <figure className="rules-scroll-hange relative mt-4 pt-3 border-t border-dashed border-[#C5A059] flex items-center justify-center gap-3 flex-wrap">
                 <img
                   src="/images/rules-hange-tea.png"
                   alt="端着茶杯淡定喝茶的像素简笔画"
@@ -338,6 +438,7 @@ export const PopUpShopBanner: React.FC<Props> = ({
                 {(showDetailModal.link || showDetailModal.jumpTab) && <button
                   type="button"
                   onClick={() => {
+                    soundManager.playWoodTap();
                     const target = showDetailModal;
                     setShowDetailModal(null);
                     handleActionClick(target);
@@ -356,9 +457,33 @@ export const PopUpShopBanner: React.FC<Props> = ({
         document.body
       )}
       {typeof document !== 'undefined' && showProposal && createPortal(
-        <div className="fixed inset-0 z-[110] bg-black/55 flex items-center justify-center p-3" onMouseDown={(e) => e.target === e.currentTarget && setShowProposal(false)}>
-          <form onSubmit={submitProposal} className="w-full max-w-lg rounded-xl border-2 border-[#1E4334] bg-[#FBF7EC] p-4 space-y-3 shadow-2xl">
-            <div className="flex justify-between"><div><h3 className="font-serif-title font-bold text-[#1E4334]">投递利韩企划</h3><p className="text-xs text-[#8C7A65]">投递范围包括但不限于，only展、接力活动、庆生活动等等。</p></div><button type="button" onClick={() => setShowProposal(false)}>✕</button></div>
+        <div
+          className="fixed inset-0 z-[110] bg-black/55 flex items-center justify-center p-3"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              soundManager.playWoodTap();
+              setShowProposal(false);
+            }
+          }}
+        >
+          <form onSubmit={submitProposal} className="relative w-full max-w-lg rounded-xl border-2 border-[#1E4334] bg-[#FBF7EC] p-4 space-y-3 shadow-2xl overflow-hidden">
+            <PopupSketchOverlay />
+            <div className="relative flex justify-between">
+              <div>
+                <h3 className="font-serif-title font-bold text-[#1E4334]">投递利韩企划</h3>
+                <p className="text-xs text-[#8C7A65]">投递范围包括但不限于，only展、接力活动、庆生活动等等。</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  soundManager.playWoodTap();
+                  setShowProposal(false);
+                }}
+                className="cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
             <label className="block text-xs font-bold">标签<input value="利韩企划" disabled className="mt-1 w-full p-2 border rounded bg-[#EEE8D8]" /></label>
             <label className="block text-xs font-bold">标题 *<input value={proposal.title} onChange={(e) => setProposal({...proposal,title:e.target.value})} maxLength={100} className="mt-1 w-full p-2 border rounded" required /></label>
             <div className="grid grid-cols-2 gap-3"><label className="block text-xs font-bold">时间（选填）<input type="date" value={proposal.time} onChange={(e) => setProposal({...proposal,time:e.target.value})} className="mt-1 w-full p-2 border rounded" /></label><label className="block text-xs font-bold">发布人 *<input value={proposal.author} onChange={(e) => setProposal({...proposal,author:e.target.value})} className="mt-1 w-full p-2 border rounded" required /></label></div>

@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cloudbase } from '../utils/cloudbase';
+import { CLOUDBASE_API_BASE } from '../utils/cloudbaseEndpoint';
 import { UiSprite } from './UiSprite';
+import { PopupSketchOverlay } from './PopupSketchOverlay';
 
 type View = 'login' | 'register' | 'account';
 type Account = { uid: string; nickname: string; role?: string; createdAt?: string };
@@ -12,7 +14,6 @@ type Props = { onShowToast: (message: string) => void };
  * 这两步必然发生在拿到登录态之前，而网关鉴权默认只放行已登录用户。
  * 与其对应的云函数是 registerWithPassword / loginWithPassword。
  */
-const ACCOUNT_API_BASE = 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com';
 const NICKNAME_MIN = 2;
 const NICKNAME_MAX = 20;
 const PASSWORD_MIN = 6;
@@ -36,7 +37,7 @@ const errorMessage = (error: unknown) => {
 
 /** 用 text/plain 发送，避开浏览器对 application/json 的 CORS 预检 */
 const postAccountApi = async (path: string, body: Record<string, unknown>) => {
-  const response = await fetch(`${ACCOUNT_API_BASE}/${path}`, {
+  const response = await fetch(`${CLOUDBASE_API_BASE}/${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
     body: JSON.stringify(body),
@@ -140,13 +141,20 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   const title = account ? account.nickname : view === 'register' ? '加入 LeviHan' : '欢迎回来';
 
   return <>
-    <button type="button" onClick={showEntry} className="relative w-[108px] h-[39px] bg-transparent border-0 font-retro-jp text-xs sm:text-sm font-bold cursor-pointer whitespace-nowrap active:scale-95 transition-transform overflow-hidden" aria-label="打开用户入口">
-      <UiSprite name="button-wide" width={108} className="absolute inset-0 pointer-events-none" />
-      <span className="absolute top-[18px] bottom-0 left-2 right-8 flex items-center justify-center text-[#F9E79F] drop-shadow-[0_1px_1px_#1C1611]">{account?.nickname || '登录'}</span>
-    </button>
+    {account ? (
+      <button type="button" onClick={showEntry} className="relative w-[80px] h-[29px] bg-transparent border-0 font-retro-jp text-xs sm:text-sm font-bold cursor-pointer whitespace-nowrap active:scale-95 transition-transform overflow-hidden" aria-label="打开用户入口">
+        <UiSprite name="button-wide" width={80} className="absolute inset-0 pointer-events-none" />
+        <span className="absolute top-[13px] bottom-0 left-1.5 right-6 flex items-center justify-center text-[#F9E79F] drop-shadow-[0_1px_1px_#1C1611]">{account.nickname}</span>
+      </button>
+    ) : (
+      <button type="button" onClick={showEntry} className="bg-transparent border-0 cursor-pointer active:scale-95 transition-transform p-0" aria-label="打开用户入口">
+        <UiSprite name="login-key" width={72} role="img" label="登录" className="pointer-events-none drop-shadow-md" />
+      </button>
+    )}
     {open && typeof document !== 'undefined' && createPortal(<div className="fixed inset-0 z-[100] min-h-[var(--app-h)] bg-black/65 flex items-center justify-center p-3 overflow-hidden" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
       <section role="dialog" aria-modal="true" aria-label="LeviHan 用户入口" className="relative w-full max-w-md max-h-[88dvh] overflow-y-auto bg-[#FAF0D7] border-[3px] border-[#1C1611] shadow-[7px_7px_0_#1C1611] p-4 sm:p-5 text-[#2C241D] font-retro-jp">
-        <button type="button" onClick={() => setOpen(false)} className="absolute right-3 top-3 w-8 h-8 bg-[#4A2D16] text-[#F9E79F] border-2 border-[#1C1611] cursor-pointer">×</button>
+        <PopupSketchOverlay />
+        <button type="button" onClick={() => setOpen(false)} className="absolute right-3 top-3 w-8 h-8 bg-[#4A2D16] text-[#F9E79F] border-2 border-[#1C1611] cursor-pointer z-20">×</button>
         <p className="font-pixel text-[10px] text-[#8C5828] tracking-widest mb-1">LEVIHAN MEMBER</p>
         <h2 className="font-pixel text-lg text-[#1E4334] mb-4 pr-10">{title}</h2>
 

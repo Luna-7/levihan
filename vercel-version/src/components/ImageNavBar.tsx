@@ -20,35 +20,35 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: 'home',
     label: '兵团驻地',
-    imageSrc: '/images/nav/home.png',
+    imageSrc: '/images/nav/home.webp',
     alt: '兵团驻地 - 自由之翼',
     quote: '献出心脏',
   },
   {
     id: 'resources',
     label: '资源外链',
-    imageSrc: '/images/nav/resources.png',
+    imageSrc: '/images/nav/resources.webp',
     alt: '资源外链 - 利威尔趴趴',
     quote: '做不会后悔的选择',
   },
   {
     id: 'doujinshi',
     label: '土豆粮仓',
-    imageSrc: '/images/nav/doujin.png',
+    imageSrc: '/images/nav/doujin.webp',
     alt: '土豆粮仓 - 韩吉趴趴',
     quote: '来研究巨人吧',
   },
   {
     id: 'tatakaru',
     label: '塔塔开',
-    imageSrc: '/images/nav/tatakaru.png',
+    imageSrc: '/images/nav/tatakaru.webp',
     alt: '塔塔开 - 超硬质双刃',
     quote: '不战斗就无法胜利',
   },
   {
     id: 'dispatch',
     label: '联络',
-    imageSrc: '/images/nav/dispatch.png',
+    imageSrc: '/images/nav/dispatch.webp',
     alt: '联络 - 像素花草',
     quote: '同好交流',
   },
@@ -56,7 +56,9 @@ const NAV_ITEMS: NavItem[] = [
 
 export const ImageNavBar: React.FC<Props> = ({ activeTab, onSelectTab, isMobile = false }) => {
   const handleClick = (id: NavigationTab) => {
-    soundManager.playBlip();
+    // 导航栏统一定制音效（单一清爽木质敲击反馈）
+    soundManager.playWoodTap();
+
     if (activeTab === id && isMobile) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {

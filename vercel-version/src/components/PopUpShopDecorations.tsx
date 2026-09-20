@@ -1,19 +1,26 @@
 import React from 'react';
 
 // ====================================================
-// 1. 典雅古金洛可可/巴洛克雕花角饰 (Corner Filigree Flourish)
+// 1. 复古银金属 / 典雅金洛可可雕花角饰 (Corner Filigree Flourish)
 // ====================================================
 export const SvgBaroqueCorner: React.FC<{
   position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   className?: string;
   size?: number;
-}> = ({ position = 'top-left', className = '', size = 32 }) => {
+  theme?: 'silver' | 'gold';
+}> = ({ position = 'top-left', className = '', size = 32, theme = 'silver' }) => {
   const transform = {
     'top-left': '',
     'top-right': 'scale(-1, 1)',
     'bottom-left': 'scale(1, -1)',
     'bottom-right': 'scale(-1, -1)',
   }[position];
+
+  const isSilver = theme === 'silver';
+  const strokeColor = isSilver ? '#8FA69D' : '#C5A059';
+  const fillColor = isSilver ? '#E6EFEA' : '#E8D5A7';
+  const gemColor = isSilver ? '#C5A059' : '#D4AF37';
+  const cornerDot = isSilver ? '#1E4334' : '#16273B';
 
   return (
     <svg
@@ -25,31 +32,31 @@ export const SvgBaroqueCorner: React.FC<{
       style={{ transform, transformOrigin: 'center' }}
       className={`shrink-0 pointer-events-none ${className}`}
     >
-      {/* 典雅复古金铜卷草花纹 */}
+      {/* 复古金属雕花卷草纹 */}
       <path
         d="M2 2 L18 2 C22 2, 26 4, 26 8 C26 12, 22 14, 18 14 C12 14, 10 10, 10 6"
-        stroke="#C5A059"
+        stroke={strokeColor}
         strokeWidth="1.8"
         strokeLinecap="round"
         fill="none"
       />
       <path
         d="M2 2 L2 18 C2 22, 4 26, 8 26 C12 26, 14 22, 14 18 C14 12, 10 10, 6 10"
-        stroke="#C5A059"
+        stroke={strokeColor}
         strokeWidth="1.8"
         strokeLinecap="round"
         fill="none"
       />
       <path
         d="M6 6 C12 6, 20 10, 24 24 C10 20, 6 12, 6 6 Z"
-        fill="#E8D5A7"
-        opacity="0.6"
+        fill={fillColor}
+        opacity="0.75"
       />
-      <circle cx="28" cy="8" r="1.5" fill="#D4AF37" />
-      <circle cx="8" cy="28" r="1.5" fill="#D4AF37" />
-      <polygon points="5,5 9,7 7,9" fill="#16273B" />
+      <circle cx="28" cy="8" r="1.5" fill={gemColor} />
+      <circle cx="8" cy="28" r="1.5" fill={gemColor} />
+      <polygon points="5,5 9,7 7,9" fill={cornerDot} />
       {/* 小星芒 */}
-      <polygon points="18,18 20,15 22,18 25,20 22,22 20,25 18,22 15,20" fill="#D4AF37" />
+      <polygon points="18,18 20,15 22,18 25,20 22,22 20,25 18,22 15,20" fill={gemColor} />
     </svg>
   );
 };
@@ -192,8 +199,8 @@ export const SvgDevilHange: React.FC<{ size?: number; className?: string }> = ({
     <line x1="47" y1="37" x2="53" y2="37" stroke="#C5A059" strokeWidth="1.8" />
 
     {/* 9. 兴奋大眼睛与元气大笑嘴 */}
-    <ellipse cx="42" cy="37" rx="2.5" ry="3" fill="#3B82F6" />
-    <ellipse cx="58" cy="37" rx="2.5" ry="3" fill="#3B82F6" />
+    <ellipse cx="42" cy="37" rx="2.5" ry="3" fill="#4C1D95" />
+    <ellipse cx="58" cy="37" rx="2.5" ry="3" fill="#4C1D95" />
     <circle cx="43" cy="36" r="0.9" fill="#FFFFFF" />
     <circle cx="59" cy="36" r="0.9" fill="#FFFFFF" />
     {/* 开心咧嘴大笑 */}

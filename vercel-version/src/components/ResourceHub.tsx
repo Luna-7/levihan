@@ -3,6 +3,7 @@ import { ResourceLink } from '../types';
 import { RESOURCE_LINKS } from '../data/initialData';
 import { soundManager } from '../utils/audio';
 import { AuNovelReader } from './AuNovelReader';
+import { CardPatternOverlay } from './CardPatternOverlay';
 
 interface Props {
   onCopyCode: (code: string) => void;
@@ -19,8 +20,8 @@ export const ResourceHub: React.FC<Props> = ({
   const allCategories = ['动漫原片', '漫画与手稿', '二创剪辑/素材', '官方AU小说'];
 
   const handleAutoJump = (url: string, code?: string) => {
-    soundManager.playCoin();
     if (code) {
+      soundManager.playCopySuccess();
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(code).then(
           () => onShowToast(`已自动复制提取码【${code}】并为你跳转网盘！📋`),
@@ -30,6 +31,7 @@ export const ResourceHub: React.FC<Props> = ({
         onShowToast(`提取码为：${code}`);
       }
     } else {
+      soundManager.playWarpJump();
       onShowToast('正在为您打开网盘... ↗');
     }
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -69,10 +71,12 @@ export const ResourceHub: React.FC<Props> = ({
         <div
           key={item.id}
           onClick={() => handleAutoJump(item.url, item.code)}
-          className="bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full"
+          onMouseEnter={() => soundManager.playCardHover()}
+          className="relative overflow-hidden bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full"
           title="点击即可自动复制提取码并打开网盘"
         >
-          <div className="space-y-2">
+          <CardPatternOverlay opacity={0.10} mode="multiply" />
+          <div className="relative z-10 space-y-2">
             {/* Top Badges */}
             <div className="flex items-center justify-between gap-1.5 flex-wrap">
               <span
@@ -138,7 +142,8 @@ export const ResourceHub: React.FC<Props> = ({
       </div>
 
       {/* 筛选与搜索栏 (与土豆粮仓保持完全一致的样式) */}
-      <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-md p-2.5 sm:p-3 space-y-2">
+      <div className="relative overflow-hidden bg-[#FFFEEF] border border-[#D5C9AF] rounded-md p-2.5 sm:p-3 space-y-2">
+        <CardPatternOverlay opacity={0.12} mode="multiply" />
         {/* 分类按钮栏 (多行跟随设备动态切换) */}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-xs font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">分类:</span>
@@ -146,9 +151,10 @@ export const ResourceHub: React.FC<Props> = ({
             <button
               key={cat}
               onClick={() => {
-                soundManager.playBlip();
+                soundManager.playFilterClick();
                 setSelectedCategory(cat);
               }}
+              onMouseEnter={() => soundManager.playCardHover()}
               className={`px-3 py-1.5 rounded-xs border transition-all cursor-pointer text-xs sm:text-sm shrink-0 whitespace-nowrap select-none active:scale-95 ${
                 selectedCategory === cat
                   ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-xs'

@@ -4,6 +4,7 @@ import { Sparkles, Calendar, ArrowRight, ExternalLink, ChevronRight, X } from 'l
 import { ActivityItem, INITIAL_LEVIHAN_ACTIVITIES } from '../data/activityData';
 import { SvgPotatoBannerIcon, SvgLeviSitAvatar, SvgHangeSmileAvatar } from './HomeSvgDecorations';
 import { soundManager } from '../utils/audio';
+import { PopupSketchOverlay } from './PopupSketchOverlay';
 
 const STORAGE_KEY = 'levihan_custom_activities_v1';
 
@@ -45,12 +46,12 @@ export const WoodenActivityBoard: React.FC<Props> = ({
   const current = activities[activeIdx] || activities[0];
 
   const handleOpenDetail = (act: ActivityItem) => {
-    soundManager.playBlip();
+    soundManager.playScrollOpen();
     setModalActivity(act);
   };
 
   const handleActionClick = (act: ActivityItem) => {
-    soundManager.playCoin();
+    soundManager.playWarpJump();
     if (!act.linkUrl) return;
     if (act.linkUrl.startsWith('/') || act.linkUrl.startsWith('http')) {
       window.open(act.linkUrl, '_blank', 'noopener,noreferrer');
@@ -68,9 +69,10 @@ export const WoodenActivityBoard: React.FC<Props> = ({
           <button
             type="button"
             onClick={() => {
-              soundManager.playBlip();
+              soundManager.playPageTurn();
               setActiveIdx(0);
             }}
+            onMouseEnter={() => soundManager.playCardHover()}
             className={`px-3 py-1 font-pixel text-[10px] sm:text-xs font-bold rounded-t-lg border-2 border-b-0 transition-all cursor-pointer whitespace-nowrap shadow-2xs ${
               activeIdx === 0
                 ? 'bg-[#4E8A6F] text-white border-[#5F977E] -translate-y-0.5'
@@ -82,9 +84,10 @@ export const WoodenActivityBoard: React.FC<Props> = ({
           <button
             type="button"
             onClick={() => {
-              soundManager.playBlip();
+              soundManager.playPageTurn();
               setActiveIdx(1 % activities.length);
             }}
+            onMouseEnter={() => soundManager.playCardHover()}
             className={`px-3 py-1 font-pixel text-[10px] sm:text-xs font-bold rounded-t-lg border-2 border-b-0 transition-all cursor-pointer whitespace-nowrap shadow-2xs ${
               activeIdx === 1
                 ? 'bg-[#FBD38D] text-[#744210] border-[#F6AD55] -translate-y-0.5'
@@ -96,13 +99,14 @@ export const WoodenActivityBoard: React.FC<Props> = ({
           <button
             type="button"
             onClick={() => {
-              soundManager.playBlip();
+              soundManager.playPageTurn();
               setActiveIdx(2 % activities.length);
             }}
+            onMouseEnter={() => soundManager.playCardHover()}
             className={`px-3 py-1 font-pixel text-[10px] sm:text-xs font-bold rounded-t-lg border-2 border-b-0 transition-all cursor-pointer whitespace-nowrap shadow-2xs ${
               activeIdx === 2
-                ? 'bg-[#67E8F9] text-[#0E7490] border-[#38BDF8] -translate-y-0.5'
-                : 'bg-[#E0F2FE] text-[#0284C7] border-[#38BDF8]/60 hover:bg-[#BAE6FD]'
+                ? 'bg-[#3B0764] text-[#F3E8FF] border-[#5B21B6] -translate-y-0.5'
+                : 'bg-[#5B21B6] text-[#E9D5FF] border-[#3B0764]/80 hover:bg-[#3B0764]'
             }`}
           >
             🎮 塔塔开
@@ -246,6 +250,7 @@ export const WoodenActivityBoard: React.FC<Props> = ({
       {typeof document !== 'undefined' && modalActivity && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="relative w-full max-w-lg my-auto bg-[#FFFDF9] border-3 border-[#5F977E] rounded-2xl shadow-[0_12px_32px_rgba(255,168,188,0.4)] p-4 sm:p-6 text-[#374151] overflow-hidden">
+            <PopupSketchOverlay />
             {/* 关闭按键 */}
             <div className="absolute top-3 right-3">
               <button
@@ -261,7 +266,7 @@ export const WoodenActivityBoard: React.FC<Props> = ({
               </button>
             </div>
 
-            <div className="flex items-center gap-2 mb-2">
+            <div className="relative flex items-center gap-2 mb-2">
               <span className="px-2 py-0.5 rounded-full font-bold text-xs bg-[#FEF3C7] text-[#B45309] border border-[#FCD34D]">
                 {modalActivity.badge}
               </span>
@@ -270,7 +275,7 @@ export const WoodenActivityBoard: React.FC<Props> = ({
               </span>
             </div>
 
-            <h2 className="font-pixel text-base sm:text-lg font-black text-[#1F2937] leading-snug">
+            <h2 className="relative font-pixel text-base sm:text-lg font-black text-[#1F2937] leading-snug">
               {modalActivity.title}
             </h2>
 

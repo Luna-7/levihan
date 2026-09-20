@@ -1,0 +1,1921 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="rjU1bVhGShF0FxLBMuHk0J">
+<head data-page-node-id="Hh1IFbZhxionMGeOXJZCcd">
+<meta charset="utf-8" data-page-node-id="8odtqxaxJfx7nPAaPTKlzD">
+<meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="fiAg2Wd3R9iG0bj0HRCuhI">
+<title>压缩阶梯实验台 — 深度加密上传</title>
+<style>
+  :root{
+    --ink:#1a1a18; --muted:#5F5E5A; --line:#e2e0d8; --paper:#fff; --bg:#f7f6f1;
+    --gold:#8a6d1f; --green:#0F6E56; --red:#A32D2D; --blue:#1F4E79; --slot:#efece3;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;padding:36px 24px 72px;background:var(--bg);color:var(--ink);
+    font:15px/1.7 -apple-system,"PingFang SC","Helvetica Neue",sans-serif;
+  }
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:25px;font-weight:600;margin:0 0 6px;letter-spacing:-.2px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 18px}
+  .meta{
+    font:12px/1.9 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);
+    background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:24px;
+  }
+  .meta b{color:var(--ink);font-weight:600}
+  .meta .warn{color:var(--gold)}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:18px}
+  .card h2{font-size:15px;font-weight:600;margin:0 0 14px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+
+  .drop{
+    border:1.5px dashed #c9c5b6;border-radius:10px;padding:34px 20px;text-align:center;
+    color:var(--muted);font-size:14px;cursor:pointer;transition:.15s;background:#fbfaf6;
+  }
+  .drop:hover,.drop.over{border-color:var(--gold);background:#faf7ec;color:var(--ink)}
+  .drop b{color:var(--ink)}
+  .drop small{display:block;margin-top:6px;font-size:12px;opacity:.75}
+
+  .files{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+  .frow{
+    display:flex;gap:10px;align-items:baseline;font-size:13px;
+    padding:7px 11px;background:#fbfaf6;border:1px solid var(--line);border-radius:7px;
+  }
+  .frow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .frow .sz{color:var(--muted);font:12px ui-monospace,Menlo,monospace}
+  .tag{font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--muted)}
+
+  .params{display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin:18px 0 4px;font-size:13.5px}
+  .params label{display:flex;align-items:center;gap:7px}
+  .params input[type=number]{
+    width:78px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;
+    font:13px ui-monospace,Menlo,monospace;background:#fff;color:var(--ink)
+  }
+  .params input[type=checkbox]{width:16px;height:16px;accent-color:var(--green)}
+  .quick{border:1px solid var(--line);background:#fff;border-radius:20px;padding:2px 10px;font-size:12px;cursor:pointer;color:var(--muted)}
+  .quick:hover{border-color:var(--gold);color:var(--ink)}
+
+  .actions{display:flex;gap:10px;margin-top:18px}
+  button.main{
+    background:var(--ink);color:#fff;border:0;border-radius:8px;padding:11px 24px;
+    font-size:14px;font-weight:500;cursor:pointer;font-family:inherit
+  }
+  button.main:hover:not(:disabled){background:#000}
+  button.main:disabled{opacity:.35;cursor:not-allowed}
+  button.ghost{
+    background:#fff;color:var(--muted);border:1px solid var(--line);border-radius:8px;
+    padding:11px 18px;font-size:14px;cursor:pointer;font-family:inherit
+  }
+  button.ghost:hover{color:var(--ink);border-color:#c9c5b6}
+
+  .bar{height:6px;background:var(--slot);border-radius:4px;overflow:hidden;margin:14px 0 8px}
+  .bar i{display:block;height:100%;width:0;background:var(--gold);transition:width .25s}
+  .ptext{font-size:13px;color:var(--muted);min-height:22px}
+
+  .verdict{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px}
+  .v{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#fbfaf6}
+  .v .k{font-size:11.5px;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin-bottom:5px}
+  .v .n{font-size:22px;font-weight:600;letter-spacing:-.4px;line-height:1.25}
+  .v .d{font-size:12px;color:var(--muted);margin-top:3px}
+  .v.ok .n{color:var(--green)}
+  .v.bad .n{color:var(--red)}
+  .v.warn .n{color:var(--gold)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{
+    text-align:left;font-weight:600;font-size:11.5px;color:var(--muted);
+    letter-spacing:.4px;text-transform:uppercase;padding:0 10px 8px 0;border-bottom:1px solid var(--line)
+  }
+  td{padding:9px 10px 9px 0;border-bottom:1px solid #f1efe7;vertical-align:middle}
+  tr.chosen td{background:#f7faf7}
+  tr:last-child td{border-bottom:0}
+  .mono{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace}
+  .mark{font-size:12px;color:var(--muted)}
+  .mark.skip{color:var(--muted);font-style:italic}
+  .mark.pick{color:var(--green);font-weight:600}
+
+  .track{height:16px;background:var(--slot);border-radius:4px;overflow:hidden;min-width:60px}
+  .track i{display:block;height:100%;background:#c8c3b0}
+  tr.chosen .track i{background:var(--green)}
+  .track.dim i{background:#ded9c9}
+
+  .upl{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:6px}
+  .upl .r{display:flex;justify-content:space-between;gap:16px;padding:10px 14px;font-size:13px;border-bottom:1px solid #f1efe7}
+  .upl .r:last-child{border-bottom:0}
+  .upl .r:nth-child(odd){background:#fbfaf6}
+  .upl .k{color:var(--muted)}
+  .upl .v{font:12.5px ui-monospace,Menlo,monospace;text-align:right}
+  .pill{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:20px;border:1px solid}
+  .pill.single{color:var(--green);border-color:#bfd9cf;background:#f2f8f5}
+  .pill.multi{color:var(--blue);border-color:#c2d3e3;background:#f3f7fb}
+
+  .quote{
+    margin-top:14px;padding:12px 16px;border-left:3px solid var(--gold);background:#fbf8ef;
+    font-size:13.5px;color:var(--ink)
+  }
+  .quote em{font-style:normal;color:var(--muted);display:block;font-size:12px;margin-top:4px}
+
+  .err{border-left:3px solid var(--red);background:#fdf4f4;padding:12px 16px;border-radius:0 8px 8px 0;font-size:13.5px}
+  .err pre{margin:8px 0 0;font-size:12px;white-space:pre-wrap;color:var(--muted)}
+  .caveat{font-size:12.5px;color:var(--muted);margin-top:14px;line-height:1.75}
+  .caveat code{font:12px ui-monospace,Menlo,monospace;background:#f1efe7;padding:1px 5px;border-radius:4px}
+  footer{font-size:12px;color:var(--muted);margin-top:32px;line-height:1.9}
+  @media(max-width:720px){.verdict{grid-template-columns:1fr}}
+</style>
+</head>
+<body data-page-node-id="eFkiDOY1tDFr347Vyhpfno">
+<div class="wrap" data-page-node-id="MaF7pnsvGhxQ3OsyUZ3lNP">
+
+  <h1 data-page-node-id="Th9pMESocAdLWlFpAvN0mR">压缩阶梯实验台</h1>
+  <p class="sub" data-page-node-id="Ca9FaRWEcKxsHdMxalCccL">
+    拖入图片（可多张）或一个 PDF，<b data-page-node-id="BIHl8JLsTJuNOA40e2nZ7i">只跑压缩、不加密、不上传</b>。
+    告诉你：停在哪一档、产出多大、有没有降画质、真上传时会走单次还是分片。
+  </p>
+
+  <div class="meta" data-page-node-id="6Fb9IAEdJqBGw0ONES1eNT">
+    生产源码快照 —
+    <b data-page-node-id="BCL9PA73oYD0xFWiD22SrC">secure-upload.js</b> @ 7fd521e3（1352 行 / 60 KB）&nbsp;·&nbsp;
+    <b data-page-node-id="cYkwSbx5jWNvxjqzdQb1pE">index.html</b> @ 1ab38076（3461 行）<br data-page-node-id="XG9EIwBHS5WqeRzfZksQq5">
+    生成于 2026-09-19 16:32 ——
+    <span class="warn" data-page-node-id="q2EcXttEhi7TSKw9hXeVGw">若生产已改动而本页未重新生成，下面的 hash 会对不上，请跑 <b data-page-node-id="jALnpwVWGALHOZiRbQi2w0">npm run build:lab</b></span>
+  </div>
+
+  <section class="card" data-page-node-id="krvlsswbLBhwtFYl2Eb4dK">
+    <h2 data-page-node-id="HjEOxdEr8ExJqReoHtYwfN">1 · 选择文件</h2>
+    <div class="drop" id="drop" data-page-node-id="2KODR0qZxYkiXMs8lKx16W">
+      把 <b data-page-node-id="mhlqlTJEG3fshFoUAUtEm5">图片</b>（可多张，将按文件名自然序合并成 PDF）或 <b data-page-node-id="OsTG4V3RTxSfZ2FcW0Ib2r">一个 PDF</b> 拖到这里
+      <small data-page-node-id="3VjdBM9XiZClAdmgjBZNMP">或点击此区域选择文件</small>
+    </div>
+    <input type="file" id="picker" multiple accept="image/*,application/pdf" hidden data-page-node-id="XakvfjVXn4DGTzl4cRCdP2">
+    <div class="files" id="files" data-page-node-id="03kNqYD1DrWXIJHTEnpESK"></div>
+
+    <div class="params" data-page-node-id="85gs1Htc7KdvFY3gOQgBGv">
+      <label data-page-node-id="jx8XCp1OKORroeR6Mcyfgp">目标体积
+        <input type="number" id="target" value="60" min="0.05" max="2048" step="0.05" data-page-node-id="yw1ftDPMsIfXBNBJ2njnyC"> MB
+      </label>
+      <button class="quick" data-mb="3" data-page-node-id="CtHi0YhZpXcU9GbrWLI2K2">3（物理单次上限）</button>
+      <button class="quick" data-mb="60" data-page-node-id="f9W2TNnxzqwrWNulyX7dGw">60（业务目标）</button>
+      <label data-page-node-id="at5fUlTtN6g4MujxfdT6Yp"><input type="checkbox" id="autodown" checked data-page-node-id="uqVoSATz6sUWQdzenyusr1"> 自动降到够用为止</label>
+    </div>
+
+    <div class="actions" data-page-node-id="dggCIxU4c7abBlizmO3ENz">
+      <button class="main" id="run" disabled data-page-node-id="qQDEpO55jBclU0mQ8EVTCW">跑压缩阶梯</button>
+      <button class="ghost" id="reset" data-page-node-id="AqewQhHESp6Zfm92OA1eXt">清空</button>
+    </div>
+  </section>
+
+  <section class="card" id="progressCard" hidden data-page-node-id="zu0TEGl3yhBVger3CcR0oE">
+    <h2 data-page-node-id="sHA03aiCvFhPMZNxrZMsxj">2 · 进度</h2>
+    <div class="bar" data-page-node-id="s2jTDTGAlYsnMrA27ZY9Mw"><i id="pbar" data-page-node-id="sjmyjALjWjBDFWbP8lfJFE"></i></div>
+    <div class="ptext" id="ptext" data-page-node-id="VwcIKTAq2QqOxDrvjlQBgT">等待开始…</div>
+  </section>
+
+  <section class="card" id="resultCard" hidden data-page-node-id="aEjUHhpfY0jfvSRbVn7mhS">
+    <h2 data-page-node-id="77jv93p1R9MCnQersc1UwJ">3 · 结果</h2>
+    <div class="verdict" id="verdict" data-page-node-id="bKmjdPk0DUTbdtEc7BHEFz"></div>
+    <div id="ladderQuote" data-page-node-id="WA6HGqdsC4WcDWw5RaS3kQ"></div>
+    <div id="attempts" data-page-node-id="ADbBG4Wxjfrmp3z9BO9HXF"></div>
+    <h2 style="margin-top:26px" data-page-node-id="R1I1h6u7SCFj02KmwYoO41">真上传会怎么走</h2>
+    <div class="upl" id="upload" data-page-node-id="Yer6z6rYuCqyjrkpPQDadX"></div>
+    <div class="caveat" id="caveat" data-page-node-id="BQtEAL8oSyDDxciG82nPBe"></div>
+  </section>
+
+  <section class="card" id="errCard" hidden data-page-node-id="IbBQpQBJPscFEW3MO2gxbj">
+    <h2 data-page-node-id="kFFJXW0pxf3t6qLY2yv6Pp">出错了</h2>
+    <div class="err" id="err" data-page-node-id="AB7r0H02cCrMFTz2J64QeD"></div>
+  </section>
+
+  <footer data-page-node-id="nzEAJ0WEuLYFy1Ec6VwbcT">
+    本页不是生产管理台：它**不做加密、不连云函数、不写 COS**，只把 <code data-page-node-id="X9GJgKJzAFDCq0aK1DiMNE">runCompressLadder()</code>
+    这一段的真实行为暴露出来。<br data-page-node-id="UEIE7f1MyRYN6ft7H56ou9">
+    依赖两个 CDN：jsPDF 2.5.1（与生产同版本）、pdf.js 3.11.174（与生产同版本、含 worker）——
+    首次打开需要联网。
+  </footer>
+
+</div>
+
+<!-- 两个运行时依赖：与 public/admin/index.html 用的 URL、版本完全一致 -->
+<script src="https://cdn.staticfile.net/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.staticfile.net/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- ============================================================
+     生产模块：public/admin/secure-upload.js（原样内联，未改动）
+     ============================================================ -->
+<script>
+/*!
+ * ============================================================================
+ * secure-upload.js — 漫画 / 文档「深度加密直传腾讯云 COS」业务流水线
+ * ----------------------------------------------------------------------------
+ * 落点：vercel-version/public/admin/index.html（管理台上传台）
+ * 依赖：jspdf（页面已从 CDN 引入，用于图片合并 PDF）
+ *       cos-js-sdk-v5（需新增，用于浏览器直传 COS；缺失时自动降级为中转上传）
+ *
+ * 流水线四步（与产品需求一一对应）：
+ *   ① 交互：勾选「含有敏感元素」→ 走本模块；未勾选 → 走原有 uploadAll()
+ *   ② 预处理：多张图片 →（纯浏览器内存）合并成一份标准 PDF；输入本就是 PDF 则跳过
+ *   ③ 强拦截 + 强加密：在调用 COS 接口之前拦下 PDF 数据流，
+ *      AES-256-CBC（key = SHA-256("levihan")，固定 IV）→ Base64
+ *      → new Blob([base64], { type: 'text/plain' })，%PDF- 文件头被彻底打碎
+ *   ④ 伪装 + 上传：Key 抹掉 .pdf/.jpg 后缀、强改为 .txt；
+ *      Body 换成密文 Blob → cos.putObject
+ *
+ * 【等价的 CyberChef Recipe】——可直接粘进 https://gchq.github.io/CyberChef/ 复核
+ *   1) SHA2          (Size: 256)                                  ← 派生 32 字节密钥
+ *   2) AES Encrypt   (Mode: CBC, Key: Hex, IV: UTF8, Input: Raw, Output: Raw)
+ *   3) To Base64
+ *   密钥 Hex = SHA-256("levihan") 的十六进制；IV = "levihan-vault-iv"（16 字节 ASCII）
+ *
+ * 【安全边界，务必知悉】
+ *   - 这是一个"固定外壳密码"方案：密码、密钥派生方式与 IV 都写在前端代码里，
+ *     任何拿到本文件的人都能解密。它的真实作用是：让对象存储里的文件**不可直接预览、不可被
+ *     爬虫/静态目录识别、脱离本站无法阅读**，而不是抵御有心的攻击者。
+ *     若要真正的机密性，密钥必须来自服务端（每本一密、随管理员登录态下发）。
+ *   - 固定 IV + 固定密钥 ⇒ 相同明文前缀会产生相同密文前缀。漫画 PDF 之间差异极大，
+ *     实际泄露可以忽略；如要彻底消除，把 CONFIG.RANDOM_IV 打开（见下方注释，届时不再与
+ *     CyberChef 的固定 IV 配方等价）。
+ * ============================================================================
+ */
+(function (root) {
+  'use strict';
+
+  // 内层工厂直接闭包引用 root —— 早期写法把 root 作为外层 IIFE 的形参、
+  // 却在工厂函数体里使用它，浏览器运行时会在 getJsPdfCtor() 处抛 root is not defined。
+  var api = (function () {
+
+  /* ==========================================================================
+   * 0. 常量与配置
+   * ======================================================================== */
+  var CONFIG = {
+    /** 全局统一的外壳加密密码（需求指定，固定字符串） */
+    SHELL_PASSWORD: 'levihan',
+    /** 统一 IV 向量：必须是 16 字节 ASCII（AES 分组长度），改这里会破坏与旧密文的兼容 */
+    IV_UTF8: 'levihan-vault-iv',
+    /** 密文落库的"伪装目录" */
+    VAULT_PREFIX: 'comic_vault',
+    /** 强改后缀：抹掉一切图片 / .pdf 后缀，统一伪装成纯文本 */
+    KEY_SUFFIX: '_secure.txt',
+    /**
+     * Key 是否带时间戳。
+     *   true  → comic_vault/1758252800000_secure.txt（需求原文示例；每次上传产生新对象，旧对象成孤儿）
+     *   false → comic_vault/lh-123_secure.txt（同名覆盖，幂等重传；且阅读端可仅凭 bookId 反推 Key，
+     *           无需改动 archive 表结构 —— 现有云函数 normalizeBook() 是字段白名单，透传不了 vaultKey）
+     * 默认取 false 就是这个原因；需要按需求原文行为时置 true 即可。
+     */
+    VERSIONED_KEY: false,
+    /** 是否使用"每文件随机 IV"（前 16 字节随密文一起存，非 CyberChef 固定 IV 配方） */
+    RANDOM_IV: false,
+    /**
+     * 输入总量硬阀。**这不是业务上限，只是防标签页被拖死的安全阀**，
+     * 因此定得远高于任何真实批次（旧值 60MB 曾在这里误杀过 67.71MB 的批次）。
+     * 真正的判定看 MAX_OUTPUT_BYTES —— 也就是"先压缩、再判定"里的第二段。
+     */
+    MAX_INPUT_BYTES: 1024 * 1024 * 1024,
+    /**
+     * 产出 PDF 的目标体积（两段式的判定依据）。
+     *
+     * 刻意与上传通道的物理能力解耦：接入分片上传后通道已无硬上限，
+     * 这个数字表达的是**业务目标**（单本多少算合理），压缩阶梯以它为靶心逐档降画质。
+     * 想完全不降画质就把阶梯关掉（AUTO_DOWNSCALE=false）并把这里调大。
+     */
+    MAX_OUTPUT_BYTES: 60 * 1024 * 1024,
+    /** 单页像素长边上限，超长图（如 webtoon 条漫）会被等比缩小以避开 PDF 尺寸限制 */
+    MAX_PAGE_PX: 12000,
+
+    /* ---------------------- 压缩策略（"不损伤画质"优先） ---------------------- */
+
+    /**
+     * 是否启用压缩阶梯。开启后：从"无损"档开始逐档实测产出，一旦达标立即停手，
+     * 绝不为了达标而多降一档 —— 无损能过就永远走无损。
+     * 关闭后只跑第一档（无损），产出超目标也不再降画质。
+     */
+    AUTO_DOWNSCALE: true,
+    /**
+     * 压缩阶梯档位。每档是覆盖 CONFIG 的一组 patch，跑完即还原。
+     * 顺序即"从无损到有损"，第一档必须是空 patch（无损直通）。
+     *
+     *   png 档：不透明 PNG 转 JPEG。对网点漫画属视觉无损，但对黑白线稿是有损，
+     *           故排在长边档之前 —— 先不动分辨率，实在不够再缩。
+     * 长边档：唯一真正减体积的硬手段（实测缩到长边 1200 只剩 55%），
+     *           但那是实打实降分辨率，所以排在最后。
+     */
+    COMPRESS_LADDER: [
+      { id: 'lossless', label: '无损直通',           patch: {} },
+      { id: 'png2jpeg', label: '不透明 PNG 转 JPEG', patch: { PNG_POLICY: 'auto' }, needsPng: true },
+      { id: 'side2400', label: '长边 ≤ 2400px',      patch: { PNG_POLICY: 'auto', IMAGE_LONG_SIDE_MAX: 2400 } },
+      { id: 'side1600', label: '长边 ≤ 1600px',      patch: { PNG_POLICY: 'auto', IMAGE_LONG_SIDE_MAX: 1600 } },
+      { id: 'side1200', label: '长边 ≤ 1200px',      patch: { PNG_POLICY: 'auto', IMAGE_LONG_SIDE_MAX: 1200 } },
+    ],
+    /**
+     * PDF 输入走图像旋钮是无效的（PDF 是原字节直通，不解码内嵌图），
+     * 所以 PDF 另有独立档位：逐页重渲染成 JPEG 再拼回 PDF。
+     * 仅在注入了 renderPdfPages 渲染器、且直通档超目标时启用。
+     */
+    PDF_LADDER: [
+      { id: 'pdf-side2000', maxSide: 2000, quality: 0.85, label: 'PDF 逐页重渲染 · 长边 ≤ 2000px' },
+      { id: 'pdf-side1400', maxSide: 1400, quality: 0.8,  label: 'PDF 逐页重渲染 · 长边 ≤ 1400px' },
+    ],
+    /**
+     * 分片上传的单个分片大小（按密文文本字节计）。
+     * 必须 ≤ 云函数 MAX_BYTES(4MB)，否则分片本身会被 413 挡回来。
+     */
+    VAULT_PART_BYTES: 4 * 1024 * 1024,
+
+    /**
+     * 内页可选的降采样长边上限。**这是唯一真正改变画质的旋钮**，所以默认 0 = 不限制。
+     * 设为 1600 / 1200 能显著减体积（实测 1379×1667 的页缩到长边 1200 后只剩 55%），
+     * 但那是"缩小分辨率"，不再是无损 —— 需要时再开。
+     */
+    IMAGE_LONG_SIDE_MAX: 0,
+    /**
+     * PNG 源的处理策略：
+     *   'keep' → 始终保持 PNG 无损。严格零画质损失，但**体积可能是源图的 3 倍以上**
+     *            （网点 / 噪点这类高频纹理的熵极高，PNG 的 Flate 字典压缩几乎无效）。
+     *   'auto' → 只有真的含 alpha 通道（透明像素）才保留 PNG，其余转 JPEG。
+     *            对黑白网点漫画属于视觉无损（实测 q0.92 与原图肉眼不可分辨），体积回到 1.0 倍。
+     *   'jpeg' → 一律转 JPEG（透明区会被铺成白底）。
+     * 默认取 'keep'：需求是"不损伤画质"，不能替用户做有损决定。要压体积再改这一行。
+     */
+    PNG_POLICY: 'keep',
+    /**
+     * 重编码质量。注意两个坑：
+     *   ① 它只作用于"走 canvas 重编码"的图；JPEG 源在尺寸合格时是**原字节直通**，不经过它。
+     *   ② 定得比源图质量高会**让体积变大** —— 源图多为 q80 左右，
+     *      用 q0.92 重编码实测会把 646 KB 的源图变成 743 KB（+15%，还白丢一次画质）。
+     */
+    JPEG_QUALITY: 0.9,
+    /**
+     * 上传通道：
+     *   'auto'  → 优先 cos-js-sdk-v5 浏览器直传；凭证接口不可用时降级为中转上传
+     *   'sdk'   → 强制浏览器直传（需要云函数提供 action:'cosCredential'）
+     *   'proxy' → 强制走云函数中转（需要云函数提供 action:'vaultUpload'）
+     */
+    UPLOAD_MODE: 'auto',
+    /** COS 桶信息（与管理台 / doujinArchiveData.ts 保持一致） */
+    COS: {
+      Bucket: 'levihan-1325571558',
+      Region: 'ap-nanjing',
+      CdnBase: 'https://levihan-1325571558.cos-website.ap-nanjing.myqcloud.com',
+    },
+    /** 密文对象的 Content-Type：伪装成纯文本 */
+    CIPHER_CONTENT_TYPE: 'text/plain; charset=utf-8',
+    CacheControl: 'public, max-age=31536000',
+  };
+
+  /** 运行时注入项（由页面在启动时调用 configure 填入） */
+  var runtime = {
+    /** 云函数 HTTP 访问地址；留空则读取 window.LEVIHAN_FN_URL */
+    apiEndpoint: '',
+    /** 返回管理员 token 的函数（中转上传需要） */
+    getToken: function () { return ''; },
+    /**
+     * PDF 逐页渲染器，签名 (file, { maxSide, quality }) => Promise<File[]>。
+     * 由管理台注入（复用 index.html 里已有的 pdf.js 拆页能力），
+     * 本模块因此**不必自己引 pdf.js** —— 没注入就自动跳过 PDF 压缩档。
+     */
+    renderPdfPages: null,
+  };
+
+  var cosInstance = null;      // cos-js-sdk-v5 实例（懒加载，凭证自动续期）
+  var cachedCredential = null; // 最近一次拿到的临时凭证
+
+  /* ==========================================================================
+   * 1. 基础设施：运行时注入、断言、字节 / Base64 互转
+   * ======================================================================== */
+
+  /** 注入页面上下文（避免本模块硬编码云函数地址与 token 变量名） */
+  function configure(options) {
+    options = options || {};
+    if (options.apiEndpoint) runtime.apiEndpoint = String(options.apiEndpoint);
+    if (typeof options.getToken === 'function') runtime.getToken = options.getToken;
+    if (typeof options.renderPdfPages === 'function') runtime.renderPdfPages = options.renderPdfPages;
+    if (options.cos) Object.assign(CONFIG.COS, options.cos);
+    ['VERSIONED_KEY', 'RANDOM_IV', 'UPLOAD_MODE', 'MAX_INPUT_BYTES', 'MAX_OUTPUT_BYTES',
+     'AUTO_DOWNSCALE', 'COMPRESS_LADDER', 'PDF_LADDER', 'VAULT_PART_BYTES',
+     'VAULT_PREFIX', 'KEY_SUFFIX',
+     'IMAGE_LONG_SIDE_MAX', 'PNG_POLICY', 'JPEG_QUALITY'].forEach(function (k) {
+      if (options[k] !== undefined) CONFIG[k] = options[k];
+    });
+    return CONFIG;
+  }
+
+  /** WebCrypto 只能在安全上下文（https / localhost）里用；file:// 打开管理台会拿不到 */
+  function getSubtle() {
+    var c = (typeof globalThis !== 'undefined' ? globalThis : {}).crypto;
+    if (!c || !c.subtle) {
+      throw new Error('当前上下文没有可用的 WebCrypto（crypto.subtle）。请通过 https 或 localhost 打开管理台，不要用 file:// 直接双击打开。');
+    }
+    return c.subtle;
+  }
+
+  function utf8Bytes(str) {
+    if (typeof TextEncoder === 'function') return new TextEncoder().encode(str);
+    throw new Error('缺少 TextEncoder，浏览器版本过低。');
+  }
+
+  /** 人类可读的体积文案（用于进度提示） */
+  function fmtSize(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' KB';
+    return (n / 1024 / 1024).toFixed(2) + ' MB';
+  }
+
+  /**
+   * Uint8Array → Base64。
+   * 必须分块做：几十 MB 的文件直接 String.fromCharCode.apply(null, bytes)
+   * 会撑爆调用栈（RangeError: Maximum call stack size exceeded）。
+   */
+  function bytesToBase64(bytes) {
+    var CHUNK = 0x8000; // 32KB，兼顾速度与栈安全
+    var parts = [];
+    for (var i = 0; i < bytes.length; i += CHUNK) {
+      parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
+    }
+    return btoa(parts.join(''));
+  }
+
+  /** Base64 → Uint8Array（容忍换行 / 空格，便于从 COS 直接读 txt 回解） */
+  function base64ToBytes(b64) {
+    var bin = atob(String(b64 || '').replace(/[\s\r\n]+/g, ''));
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  /** ArrayBuffer / TypedArray 统一成 Uint8Array */
+  function toU8(buf) {
+    if (buf instanceof Uint8Array) return buf;
+    return new Uint8Array(buf);
+  }
+
+  /** 把任意二进制包成可下载 / 可上传的 Blob */
+  function bytesToBlob(bytes, type) {
+    return new Blob([bytes], { type: type || 'application/octet-stream' });
+  }
+
+  /** 统一风格的错误，便于调用方按阶段提示 */
+  function fail(stage, message) {
+    var e = new Error(message);
+    e.stage = stage;
+    return e;
+  }
+
+  /* ==========================================================================
+   * 2. 密码学核心：SHA-256 派生密钥 + AES-256-CBC 加解密
+   *    等价 CyberChef 的 SHA2(256) → AES Encrypt(CBC) → To Base64
+   * ======================================================================== */
+
+  /** 缓存派生结果：同一个会话里密码不变，没必要每次上传都重新 digest */
+  var derivedKeyPromise = null;
+
+  /**
+   * 用固定密码 "levihan" 做 SHA-256，得到 32 字节 → 正好是 AES-256 的密钥长度。
+   * SHA-256 输出恒为 32 字节，所以这里不需要截断 / 拉伸。
+   */
+  async function deriveKeyBytes() {
+    var digest = await getSubtle().digest('SHA-256', utf8Bytes(CONFIG.SHELL_PASSWORD));
+    return new Uint8Array(digest);
+  }
+
+  /** CryptoKey 也缓存起来，AES 加解密每次 importKey 会有额外开销 */
+  async function getVaultKey() {
+    if (!derivedKeyPromise) {
+      derivedKeyPromise = (async function () {
+        var keyBytes = await deriveKeyBytes();
+        return getSubtle().importKey('raw', keyBytes, { name: 'AES-CBC' }, false, ['encrypt', 'decrypt']);
+      })();
+    }
+    return derivedKeyPromise;
+  }
+
+  function ivBytes() {
+    var iv = utf8Bytes(CONFIG.IV_UTF8);
+    if (iv.length !== 16) {
+      throw new Error('CONFIG.IV_UTF8 必须是 16 字节（当前 ' + iv.length + ' 字节），AES 分组长度固定为 128 位。');
+    }
+    return iv;
+  }
+
+  /**
+   * AES-256-CBC 加密（PKCS#7 填充由 WebCrypto 自动完成，与 CyberChef 默认一致）。
+   * @param {Uint8Array} plainBytes
+   * @returns {Promise<Uint8Array>} 密文
+   */
+  async function aesEncrypt(plainBytes) {
+    var key = await getVaultKey();
+    var iv;
+    if (CONFIG.RANDOM_IV) {
+      // 每文件独立 IV：取 16 字节强随机，明文前缀相同的隐患即可消除
+      iv = new Uint8Array(16);
+      (typeof globalThis !== 'undefined' ? globalThis : {}).crypto.getRandomValues(iv);
+    } else {
+      iv = ivBytes();
+    }
+    var cipher = await getSubtle().encrypt({ name: 'AES-CBC', iv: iv }, key, plainBytes);
+    var cipherBytes = new Uint8Array(cipher);
+    if (!CONFIG.RANDOM_IV) return cipherBytes;
+    // 随机 IV 模式下把 IV 前置到密文头部，密文自描述，解密端无需额外配置
+    var merged = new Uint8Array(iv.length + cipherBytes.length);
+    merged.set(iv, 0);
+    merged.set(cipherBytes, iv.length);
+    return merged;
+  }
+
+  /**
+   * AES-256-CBC 解密（阅读端 / 自测用）。
+   * @param {Uint8Array} cipherBytes
+   * @returns {Promise<Uint8Array>} 明文
+   */
+  async function aesDecrypt(cipherBytes) {
+    var key = await getVaultKey();
+    var iv = ivBytes();
+    var payload = cipherBytes;
+    if (CONFIG.RANDOM_IV) {
+      if (cipherBytes.length < 17) throw new Error('密文长度异常，无法取出前置 IV。');
+      iv = cipherBytes.subarray(0, 16);           // 随机 IV 模式：前 16 字节就是 IV
+      payload = cipherBytes.subarray(16);
+    }
+    var plain = await getSubtle().decrypt({ name: 'AES-CBC', iv: iv }, key, payload);
+    return new Uint8Array(plain);
+  }
+
+  /* ==========================================================================
+   * 3. 步骤 2：数据预处理 —— 图片按顺序合并成 PDF（纯内存，不落盘）
+   * ======================================================================== */
+
+  /** 读出文件的 ArrayBuffer（FileReader 包装成 Promise） */
+  function readFileAsArrayBuffer(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(reader.result); };
+      reader.onerror = function () { reject(new Error('读取文件失败：' + (file && file.name))); };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  /**
+   * 读出文件的文本内容（用于回读密文 .txt）。
+   * 优先用 Blob.text()：同为浏览器原生、不占额外内存，且在没有 FileReader 的环境
+   * （Node 侧单测、Web Worker 之外的运行时）也能跑；老浏览器退回 FileReader。
+   */
+  function readFileAsText(file) {
+    if (file && typeof file.text === 'function') return file.text();
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(String(reader.result || '')); };
+      reader.onerror = function () { reject(new Error('读取文件失败：' + (file && file.name))); };
+      reader.readAsText(file);
+    });
+  }
+
+  /** 判断一份输入是不是 PDF：只看文件头魔数，不看扩展名（用户可以改名） */
+  function isPdfBytes(bytes) {
+    // "%PDF-" = 0x25 0x50 0x44 0x46 0x2D
+    return bytes.length > 5 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2D;
+  }
+
+  /** 按文件名自然排序（image2 排在 image10 前面），与管理台其它入口保持一致 */
+  function naturalSortByName(a, b) {
+    return String(a.name).localeCompare(String(b.name), 'zh-Hans-CN', { numeric: true, sensitivity: 'base' });
+  }
+
+  /** 拿到可绘制的图像源：优先 createImageBitmap（快且省内存），退化到 <img> + objectURL */
+  async function loadImageSource(file) {
+    if (typeof createImageBitmap === 'function') {
+      var bitmap = await createImageBitmap(file);
+      return { source: bitmap, width: bitmap.width, height: bitmap.height, release: function () { bitmap.close && bitmap.close(); } };
+    }
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        resolve({
+          source: img,
+          width: img.naturalWidth || img.width,
+          height: img.naturalHeight || img.height,
+          release: function () { URL.revokeObjectURL(url); },
+        });
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('图片解码失败：' + file.name)); };
+      img.src = url;
+    });
+  }
+
+  /** 取页面里已从 CDN 引入的 jsPDF 构造函数 */
+  function getJsPdfCtor() {
+    var lib = root.jspdf || (root.window && root.window.jspdf);
+    if (!lib || typeof lib.jsPDF !== 'function') {
+      throw fail('merge', 'jsPDF 未加载（管理台依赖 https://cdn.staticfile.net/jspdf/2.5.1/jspdf.umd.min.js）。请检查网络后刷新页面。');
+    }
+    return lib.jsPDF;
+  }
+
+  /* ---------------------- 压缩策略用到的判定辅助 ---------------------- */
+
+  /**
+   * 只扫 JPEG 的标记段读出真实宽高与分量数，**不解码任何像素**。
+   * 需要它的理由：走"原字节直通"时既不经过 canvas，就拿不到宽高，
+   * 而 PDF 页面尺寸又必须按真实像素算（96dpi 像素 × 0.75 = pt）。
+   * 解析头部只有几 KB 开销，比整图解码便宜好几个数量级。
+   * 返回 null 表示不是可识别的 JPEG。
+   */
+  function readJpegHeader(bytes) {
+    if (!bytes || bytes.length < 12 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) return null;
+    var i = 2;
+    while (i < bytes.length - 9) {
+      if (bytes[i] !== 0xFF) { i++; continue; }
+      var marker = bytes[i + 1];
+      // 无载荷的标记：SOI / TEM / RSTn
+      if (marker === 0xD8 || marker === 0x01 || (marker >= 0xD0 && marker <= 0xD7)) { i += 2; continue; }
+      // SOS 之后是熵编码数据（里面可能有 0xFF00 填充），标记段到此为止；SOF 必然在它之前
+      if (marker === 0xD9 || marker === 0xDA) break;
+      var len = (bytes[i + 2] << 8) | bytes[i + 3];
+      if (len < 2) return null;
+      // SOF0..SOF15，排除 DHT(0xC4) / JPG(0xC8) / DAC(0xCC)
+      if (marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC) {
+        return {
+          height: (bytes[i + 5] << 8) | bytes[i + 6],
+          width: (bytes[i + 7] << 8) | bytes[i + 8],
+          components: bytes[i + 9],
+        };
+      }
+      i += 2 + len;
+    }
+    return null;
+  }
+
+  /**
+   * 这个文件值不值得读字节去试 JPEG 直通？
+   * 明确是别的格式（png / webp…）就没必要白读一遍几十 MB 的字节。
+   * 类型与扩展名都缺失时（拖拽来源五花八门）才值得读一下魔数。
+   */
+  function mayBeJpeg(file) {
+    var type = String((file && file.type) || '');
+    var name = String((file && file.name) || '');
+    if (/jpe?g/i.test(type)) return true;
+    if (/\.jpe?g$/i.test(name)) return true;
+    if (type || /\.\w+$/.test(name)) return false;
+    return true;
+  }
+
+  /**
+   * 尽力读出文件的原始字节。
+   * 读不出来（无 arrayBuffer 也无 FileReader）返回 null，调用方退回 canvas 重编码 ——
+   * 这是给 Node 侧单测的桩环境留的退路，不是正常的线上路径。
+   */
+  async function readBytesIfPossible(file) {
+    try {
+      if (file && typeof file.arrayBuffer === 'function') return new Uint8Array(await file.arrayBuffer());
+      if (typeof FileReader === 'function') return new Uint8Array(await readFileAsArrayBuffer(file));
+    } catch (e) {
+      return null;
+    }
+    return null;
+  }
+
+  /**
+   * canvas 里是否真的存在透明像素。
+   * 只对"原则上可能带 alpha"的格式调用；JPEG 一定没有，直接跳过省一次全图扫描。
+   * 取不到像素（画布被跨域污染等）时**保守地当作有 alpha**，宁可体积大也不丢透明信息。
+   */
+  function canvasHasAlpha(canvas) {
+    try {
+      var data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      for (var i = 3; i < data.length; i += 4) {
+        if (data[i] !== 255) return true;
+      }
+      return false;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  /** 把单个输入文件变成"一页 PDF 素材"。返回 { data, format, width, height, passthrough, downscaled, ... } */
+  async function buildPageImage(file, maxSide) {
+    var name = (file && file.name) || '';
+
+    // ① JPEG 源且不需要降采样 → 原字节直通。
+    //    实测：661,677 B 的源图产出 664,966 B 的 PDF（开销仅 3,289 B），
+    //    而"过 canvas 用 q0.92 重编码"会涨到 761,348 B —— 既涨体积又白丢一次画质。
+    if (mayBeJpeg(file)) {
+      var bytes = await readBytesIfPossible(file);
+      var head = bytes ? readJpegHeader(bytes) : null;
+      if (head && head.width > 0 && head.height > 0) {
+        var longSide = Math.max(head.width, head.height);
+        if (!maxSide || longSide <= maxSide) {
+          return {
+            data: 'data:image/jpeg;base64,' + bytesToBase64(bytes),
+            format: 'JPEG',
+            width: head.width,
+            height: head.height,
+            passthrough: true,
+            downscaled: false,
+            sourceBytes: bytes.length,
+            release: null,
+          };
+        }
+      }
+    }
+
+    // ② 其余情况：解码到 canvas（必要时降采样），再按 PNG 策略编码
+    var src = await loadImageSource(file);
+    var canvas = null;
+    try {
+      var scale = 1;
+      if (maxSide) scale = Math.min(scale, maxSide / Math.max(src.width, src.height));
+      // MAX_PAGE_PX 只负责防"超长条漫撑爆 PDF 尺寸上限"，不承担压缩职责
+      if (CONFIG.MAX_PAGE_PX) scale = Math.min(scale, CONFIG.MAX_PAGE_PX / Math.max(src.width, src.height));
+
+      var drawW = Math.max(1, Math.round(src.width * scale));
+      var drawH = Math.max(1, Math.round(src.height * scale));
+
+      canvas = document.createElement('canvas');
+      canvas.width = drawW;
+      canvas.height = drawH;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(src.source, 0, 0, drawW, drawH);
+
+      // 判定这一页要不要保留无损 PNG。
+      // 关键：**PNG 策略只该管 PNG 源**。JPEG 源即便因为要降采样而走 canvas，
+      // 也必须继续输出 JPEG —— 把一张有损 JPEG 重编码成无损 PNG 只会让体积暴涨，
+      // 而且救不回任何已经丢掉的信息。
+      var policy = CONFIG.PNG_POLICY || 'keep';
+      var srcSig = String((file && file.type) || '') + ' ' + String((file && file.name) || '');
+      var sourceIsPng = /png/i.test(srcSig);
+      var sourceMayHaveAlpha = !/jpe?g/i.test(srcSig);
+
+      // policy='jpeg' 是用户明确要求一律转 JPEG，就不用白扫一遍像素了
+      var hasAlpha = (policy !== 'jpeg' && sourceMayHaveAlpha) ? canvasHasAlpha(canvas) : false;
+
+      var keepPng;
+      if (policy === 'jpeg') keepPng = false;
+      else if (sourceIsPng) keepPng = (policy === 'keep') ? true : hasAlpha;
+      // PDF 装不下 webp / gif / avif，这类源只能二选一：
+      // 带 alpha 就用 PNG 兜住透明，否则转 JPEG
+      else keepPng = hasAlpha;
+
+      if (!keepPng) {
+        // JPEG 不支持透明：用 destination-over 在白底**之下**铺一层，
+        // 免得像先 fillRect 再 drawImage 那样把原图的透明信息盖掉（那个顺序下没法再判 alpha）
+        ctx.globalCompositeOperation = 'destination-over';
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, drawW, drawH);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+
+      var out = {
+        data: canvas.toDataURL(keepPng ? 'image/png' : 'image/jpeg', CONFIG.JPEG_QUALITY),
+        format: keepPng ? 'PNG' : 'JPEG',
+        width: drawW,
+        height: drawH,
+        passthrough: false,
+        downscaled: scale < 1,
+        sourceBytes: (file && file.size) || 0,
+        release: null,
+      };
+      canvas.width = 0;
+      canvas.height = 0;
+      canvas = null;
+      return out;
+    } finally {
+      if (canvas) { canvas.width = 0; canvas.height = 0; }
+      src.release();
+    }
+  }
+
+  /**
+   * 【核心辅助逻辑】把多张图片按顺序合并成一个标准 PDF 文件流（ArrayBuffer）。
+   *
+   * 在"不损伤画质"前提下的三层压缩（详见 CONFIG 里各旋钮的注释）：
+   *   ① JPEG 源 + 尺寸合格 → 原字节直通，jsPDF 走 DCTDecode 嵌入，不二次重编码
+   *   ② PNG 源 → 按 CONFIG.PNG_POLICY 决定保留无损还是转 JPEG
+   *   ③ 默认不降采样（IMAGE_LONG_SIDE_MAX = 0），这是唯一真正改画质的操作
+   *
+   * - 一图一页，页面尺寸 = 图片像素尺寸（按 96dpi→72pt 换算，保持原始长宽比）
+   * - 逐张串行处理，处理完立即释放 canvas 与 bitmap，避免整本漫画同时驻留内存
+   *
+   * @param {File[]} files
+   * @param {{onProgress?:Function, onStats?:Function}} [options]
+   *   onStats 会收到 { pages, passthrough, reencoded, downscaled, sourceBytes, pdfBytes }
+   * @returns {Promise<ArrayBuffer>} 返回值签名不变（对外导出的 API，测试与调用方都依赖它）
+   */
+  async function imagesToPdfBytes(files, options) {
+    options = options || {};
+    var onProgress = typeof options.onProgress === 'function' ? options.onProgress : function () {};
+    var onStats = typeof options.onStats === 'function' ? options.onStats : function () {};
+    var list = Array.prototype.slice.call(files).sort(naturalSortByName);
+    if (!list.length) throw fail('merge', '没有可合并的图片。');
+
+    var JsPDF = getJsPdfCtor();
+    var doc = null;
+    var PX_TO_PT = 0.75; // 96dpi 像素 → 72dpi 点
+    var maxSide = Number(CONFIG.IMAGE_LONG_SIDE_MAX) || 0;
+    var stats = { pages: list.length, passthrough: 0, reencoded: 0, downscaled: 0, sourceBytes: 0, pdfBytes: 0 };
+
+    for (var i = 0; i < list.length; i++) {
+      var file = list[i];
+      onProgress({ stage: 'merge', ratio: i / list.length, text: '合并图片 → PDF（' + (i + 1) + '/' + list.length + '）：' + file.name });
+
+      var placed = await buildPageImage(file, maxSide);
+      var pageW = placed.width * PX_TO_PT;
+      var pageH = placed.height * PX_TO_PT;
+      var orientation = pageW > pageH ? 'landscape' : 'portrait';
+
+      if (!doc) {
+        doc = new JsPDF({ unit: 'pt', format: [pageW, pageH], orientation: orientation, compress: true });
+      } else {
+        doc.addPage([pageW, pageH], orientation);
+      }
+      doc.addImage(placed.data, placed.format, 0, 0, pageW, pageH, undefined, 'FAST');
+
+      stats.sourceBytes += placed.sourceBytes || 0;
+      if (placed.passthrough) stats.passthrough++; else stats.reencoded++;
+      if (placed.downscaled) stats.downscaled++;
+    }
+
+    onProgress({ stage: 'merge', ratio: 1, text: 'PDF 合并完成（' + list.length + ' 页）' });
+    var buffer = doc.output('arraybuffer');
+    stats.pdfBytes = buffer.byteLength;
+    onStats(stats);
+    return buffer;
+  }
+
+  /**
+   * 【步骤 2】把输入规整成"一份 PDF 字节流"。
+   * - 输入是 PDF（哪怕扩展名被改过）→ 原样通过，跳过合并
+   * - 输入是一张或多张图片 → 在内存里合并
+   *
+   * 注意：这里**不做体积判定**。判定已移到产出侧（runCompressLadder），
+   * 因为输入体积与产出体积没有单调关系 —— 在压缩前判定会两头出错。
+   * 本函数只留一道"防标签页被拖死"的安全阀，值远高于任何真实批次。
+   *
+   * @param {File[]} files
+   * @param {Function} [onProgress]
+   * @param {Function} [onStats] 合并统计（仅图片路径有；PDF 直通路径收到 { passthrough:true, ... }）
+   */
+  async function normalizeToPdfBytes(files, onProgress, onStats) {
+    var list = Array.prototype.slice.call(files);
+    if (!list.length) throw fail('read', '请先选择要上传的文件。');
+
+    var totalBytes = list.reduce(function (sum, f) { return sum + (f.size || 0); }, 0);
+    if (totalBytes > CONFIG.MAX_INPUT_BYTES) {
+      throw fail(
+        'read',
+        '输入总量 ' + fmtSize(totalBytes) + '，超过安全阀 ' + fmtSize(CONFIG.MAX_INPUT_BYTES) + '。请减少文件数量。'
+      );
+    }
+
+    // 单个文件且是 PDF → 直接读取，不做任何转码（保真且最快）
+    var firstBytes = new Uint8Array(await readFileAsArrayBuffer(list[0]));
+    if (list.length === 1 && isPdfBytes(firstBytes)) {
+      if (onProgress) onProgress({ stage: 'read', ratio: 1, text: '检测到 PDF 原文件，跳过图片合并' });
+      if (typeof onStats === 'function') {
+        onStats({ pages: null, passthrough: true, reencoded: 0, downscaled: 0, sourceBytes: firstBytes.length, pdfBytes: firstBytes.length, wholePdf: true });
+      }
+      return { pdfBytes: firstBytes, pageCount: null, mergedFromImages: false };
+    }
+
+    // 多文件里混进 PDF：PDF 无法参与图片合并，直接拦下并说明原因
+    for (var i = 0; i < list.length; i++) {
+      var isPdf = isPdfBytes(new Uint8Array(await readFileAsArrayBuffer(list[i])));
+      if (isPdf) {
+        throw fail('merge', '第 ' + (i + 1) + ' 个文件是 PDF，与图片混合无法合并。请只传 PDF，或只传图片。');
+      }
+    }
+
+    var stats = null;
+    var pdf = await imagesToPdfBytes(list, {
+      onProgress: onProgress,
+      onStats: function (s) { stats = s; if (typeof onStats === 'function') onStats(s); },
+    });
+    var pdfBytes = new Uint8Array(pdf);
+    if (!isPdfBytes(pdfBytes)) throw fail('merge', 'PDF 生成结果异常（缺少 %PDF- 文件头）。');
+    return { pdfBytes: pdfBytes, pageCount: list.length, mergedFromImages: true, stats: stats };
+  }
+
+  /* ==========================================================================
+   * 2.5 两段式：先压缩，再用产出的实测体积判定
+   * ======================================================================== */
+
+  /** 批量里是否存在 PNG 源（PNG 策略档只对它们有意义，否则整档白跑一次） */
+  function batchHasPng(files) {
+    return Array.prototype.some.call(files, function (f) {
+      return /\.png$/i.test((f && f.name) || '');
+    });
+  }
+
+  /**
+   * 在某一档的参数下跑一次规整，跑完**必定还原** CONFIG。
+   * 用 finally 而不是 try/catch：中途抛错也必须还原，
+   * 否则一次失败的压缩会把降采样设置残留给后续所有上传。
+   */
+  async function tryLadderTier(files, patch, onProgress, onStats) {
+    var keys = Object.keys(patch || {});
+    var saved = {};
+    keys.forEach(function (k) { saved[k] = CONFIG[k]; CONFIG[k] = patch[k]; });
+    try {
+      return await normalizeToPdfBytes(files, onProgress, onStats);
+    } finally {
+      keys.forEach(function (k) { CONFIG[k] = saved[k]; });
+    }
+  }
+
+  /**
+   * PDF 专用压缩档：逐页重渲染成 JPEG 再拼回 PDF。
+   *
+   * 为什么必须单独一条路：PDF 输入在 normalizeToPdfBytes 里是**原字节直通**，
+   * 不解码内嵌图，所以 IMAGE_LONG_SIDE_MAX / PNG_POLICY 对它一丝作用都没有，
+   * 让图像档去压 PDF 只会空转 N 次。
+   * 渲染器由管理台注入（复用其已有的 pdf.js），本模块不引 pdf.js 依赖。
+   */
+  async function tryPdfTier(pdfFile, tier, onProgress) {
+    var pages = await runtime.renderPdfPages(pdfFile, { maxSide: tier.maxSide, quality: tier.quality });
+    if (!Array.isArray(pages) || !pages.length) throw fail('compress', 'PDF 逐页渲染没有产出任何页面。');
+
+    // 页面已按目标尺寸出图，这里再叠一次降采样等于连缩两次，必须临时归零
+    var saved = CONFIG.IMAGE_LONG_SIDE_MAX;
+    CONFIG.IMAGE_LONG_SIDE_MAX = 0;
+    try {
+      var buffer = await imagesToPdfBytes(pages, { onProgress: onProgress });
+      return {
+        pdfBytes: new Uint8Array(buffer),
+        pageCount: pages.length,
+        mergedFromImages: true,
+        stats: null,
+        pdfRerendered: true,
+      };
+    } finally {
+      CONFIG.IMAGE_LONG_SIDE_MAX = saved;
+    }
+  }
+
+  /**
+   * 两段式的完整实现：按档压缩 → 实测产出 → 达标即停。
+   *
+   * 为什么不能拿输入体积判定（旧实现就是这么错的，且两头都错）：
+   *   误杀 —— 67.71MB 的 PNG 批次压完可能只剩十几 MB，压缩前就拒绝等于连试都没试；
+   *   误放 —— 59MB 输入走无损 PNG 可能产出 100MB+，压缩前放行，后面才炸。
+   * 所以判定必须落在"真正要上传的那个东西"上：产出的 PDF。
+   *
+   * 梯子是"够用即停"，不是"一路压到底"：第一档是无损，能过就永远走无损。
+   *
+   * @returns {Promise<{pdfBytes:Uint8Array, pageCount:number|null, mergedFromImages:boolean,
+   *                    stats:Object|null, ladder:Object}>} ladder 为本次的选档与逐档实测记录
+   */
+  async function runCompressLadder(files, onProgress, onStats) {
+    var onP = typeof onProgress === 'function' ? onProgress : function () {};
+    var onS = typeof onStats === 'function' ? onStats : function () {};
+    var target = Number(CONFIG.MAX_OUTPUT_BYTES) || 0;
+
+    var all = (Array.isArray(CONFIG.COMPRESS_LADDER) && CONFIG.COMPRESS_LADDER.length)
+      ? CONFIG.COMPRESS_LADDER
+      : [{ id: 'lossless', label: '无损直通', patch: {} }];
+    // 关掉自动降画质时只跑第一档，产出超目标也不再往下压
+    var ladder = CONFIG.AUTO_DOWNSCALE ? all : [all[0]];
+
+    var attempts = [];
+    var best = null;
+    var bestAttempt = null;
+    var touchedPdf = false;
+
+    for (var i = 0; i < ladder.length; i++) {
+      var tier = ladder[i] || {};
+      if (tier.needsPng && !batchHasPng(files)) {
+        attempts.push({ id: tier.id, label: tier.label, bytes: null, skipped: '本批没有 PNG 源' });
+        continue;
+      }
+
+      onP({
+        stage: 'compress',
+        ratio: 0,
+        text: '压缩档 ' + (attempts.length + 1) + '/' + ladder.length + '：' + tier.label + '…',
+      });
+
+      var lastStats = null;
+      var produced = await tryLadderTier(files, tier.patch || {}, onP, function (s) { lastStats = s; });
+      var bytes = produced.pdfBytes.length;
+      attempts.push({ id: tier.id, label: tier.label, bytes: bytes });
+      touchedPdf = !produced.mergedFromImages;
+
+      // 取实测最小者：档位顺序理论上单调递减，但不假设它，宁可留个保险
+      if (!best || bytes < best.pdfBytes.length) { best = produced; bestAttempt = attempts[attempts.length - 1]; }
+
+      if (!target || produced.pdfBytes.length <= target) break;
+
+      // PDF 直通：图像旋钮对它无效，继续跑图像档纯属空转，交给 PDF 专用档
+      if (touchedPdf) break;
+    }
+
+    var over = target > 0 && best && best.pdfBytes.length > target;
+
+    // PDF 专用档：仅在"输入是 PDF 且直通超目标"时才有意义
+    if (over && touchedPdf) {
+      var pdfLadder = (CONFIG.AUTO_DOWNSCALE && Array.isArray(CONFIG.PDF_LADDER)) ? CONFIG.PDF_LADDER : [];
+      if (files.length !== 1) {
+        attempts.push({ id: 'pdf-render', label: 'PDF 逐页重渲染', bytes: null, skipped: '非单文件 PDF 输入' });
+      } else if (!runtime.renderPdfPages) {
+        attempts.push({
+          id: 'pdf-render',
+          label: 'PDF 逐页重渲染',
+          bytes: null,
+          skipped: '页面未注入 renderPdfPages 渲染器，PDF 无法压缩',
+        });
+      } else {
+        for (var j = 0; j < pdfLadder.length; j++) {
+          var t = pdfLadder[j] || {};
+          onP({
+            stage: 'compress',
+            ratio: 0,
+            text: 'PDF 压缩档 ' + (j + 1) + '/' + pdfLadder.length + '：' + t.label + '…',
+          });
+          var rendered = await tryPdfTier(files[0], t, onP);
+          var rBytes = rendered.pdfBytes.length;
+          attempts.push({ id: t.id, label: t.label, bytes: rBytes });
+          if (rBytes < best.pdfBytes.length) { best = rendered; bestAttempt = attempts[attempts.length - 1]; }
+          if (rBytes <= target) break;
+        }
+      }
+    }
+
+    var firstId = all[0] && all[0].id;
+    var ladderInfo = {
+      targetBytes: target,
+      outputBytes: best ? best.pdfBytes.length : 0,
+      attempts: attempts,
+      chosenId: bestAttempt ? bestAttempt.id : null,
+      chosenLabel: bestAttempt ? bestAttempt.label : null,
+      withinTarget: !target || (best ? best.pdfBytes.length <= target : false),
+      // 第一档即无损；选了别的档就说明确实动过画质，必须如实上报而不是悄悄降
+      degraded: !!(bestAttempt && firstId && bestAttempt.id !== firstId),
+      pdfRerendered: !!(best && best.pdfRerendered),
+      rendererAvailable: !!runtime.renderPdfPages,
+    };
+
+    onS({ ladder: ladderInfo, pdfBytes: ladderInfo.outputBytes, pages: best ? best.pageCount : null });
+    best.ladder = ladderInfo;
+    return best;
+  }
+
+  /** 把阶梯结果压成一句人话，供进度条与结果面板复用 */
+  function describeLadder(ladder) {
+    if (!ladder) return '';
+    var used = ladder.chosenLabel || '无损直通';
+    var head = '产出 ' + fmtSize(ladder.outputBytes);
+    if (ladder.withinTarget) {
+      return ladder.degraded
+        ? head + '（已降至「' + used + '」以满足 ' + fmtSize(ladder.targetBytes) + ' 目标）'
+        : head + '（无损，' + used + '）';
+    }
+    return head + '（已压至最低档「' + used + '」仍超目标 ' + fmtSize(ladder.targetBytes) + '，将按分片上传）';
+  }
+
+  /* ==========================================================================
+   * 4. 步骤 3：数据强拦截 + 深度加密 + Base64 重包装
+   * ======================================================================== */
+
+  /**
+   * 把 PDF 字节流加密成纯 Base64 密文字符串（CyberChef 配方输出）。
+   * 这一步之后，%PDF- 文件头已经不存在了。
+   */
+  async function encryptPdfBytesToBase64(pdfBytes) {
+    var cipherBytes = await aesEncrypt(toU8(pdfBytes));
+    var base64 = bytesToBase64(cipherBytes);
+
+    // 自检：密文里绝不能出现 PDF 文件头的痕迹，这是"打碎文件头"的验收标准
+    if (base64.indexOf('JVBERi') === 0 || /^%PDF/.test(base64)) {
+      throw fail('encrypt', '加密结果异常：仍能识别出 PDF 文件头，已中止上传。');
+    }
+    return base64;
+  }
+
+  /**
+   * 把 Base64 密文重新包装成 纯文本 Blob —— 即将交给 COS 的 Body。
+   * 注意 Base64 会使体积膨胀约 33%，大文件请留意上限。
+   */
+  function wrapBase64AsTextBlob(base64) {
+    return new Blob([base64], { type: CONFIG.CIPHER_CONTENT_TYPE });
+  }
+
+  /** 完整加密段：PDF 字节 → { base64, blob } */
+  async function encryptPdfToCipherPayload(pdfBytes, onProgress) {
+    if (onProgress) onProgress({ stage: 'encrypt', ratio: 0.5, text: 'AES-256-CBC 强加密中…' });
+    var base64 = await encryptPdfBytesToBase64(pdfBytes);
+    if (onProgress) {
+      onProgress({
+        stage: 'wrap',
+        ratio: 1,
+        text: '密文已包装为 text/plain Blob（' + fmtSize(base64.length) + '）',
+      });
+    }
+    return { base64: base64, blob: wrapBase64AsTextBlob(base64) };
+  }
+
+  /**
+   * 【阅读端】密文 → PDF 字节流。
+   * 支持三种输入：Blob(text/plain) / File / 字符串形式的 Base64。
+   */
+  async function decryptVaultToPdfBytes(input) {
+    var base64;
+    if (input instanceof Blob) {
+      base64 = await readFileAsText(input);
+    } else if (typeof input === 'string') {
+      base64 = input;
+    } else {
+      throw new Error('decryptVaultToPdfBytes 只接受 Blob / File / Base64 字符串。');
+    }
+    var plain = await aesDecrypt(base64ToBytes(base64));
+    if (!isPdfBytes(plain)) {
+      throw new Error('解密后不是有效的 PDF。可能是密码 / IV 配置不匹配，或文件已损坏。');
+    }
+    return plain;
+  }
+
+  /**
+   * 【阅读端便捷方法】密文 → 可下载的 PDF Blob。
+   * 阅读器可以直接 URL.createObjectURL() 后塞进 iframe / pdf.js。
+   */
+  async function decryptVaultToPdfBlob(input) {
+    var pdfBytes = await decryptVaultToPdfBytes(input);
+    return bytesToBlob(pdfBytes, 'application/pdf');
+  }
+
+  /* ==========================================================================
+   * 5. 步骤 4：Key 伪装 + COS 接口对接
+   * ======================================================================== */
+
+  /**
+   * 清洗 Key 里的命名段：
+   *   1) 先剥掉尾部的 .pdf / .jpg / .webp 等后缀 —— 这是需求里"抹除一切原后缀"的落点
+   *   2) 再清掉斜杠、点号等一切可能造成路径穿越的字符（bookId 来自表单，不可信）
+   */
+  function sanitizeKeySegment(raw) {
+    var cleaned = String(raw || '')
+      .replace(/\.[A-Za-z0-9]{1,8}$/, '')
+      .replace(/[^A-Za-z0-9_-]/g, '')
+      .slice(0, 40);
+    return cleaned || 'doc_' + Date.now();
+  }
+
+  /**
+   * 生成 Key：抹掉一切图片 / PDF 后缀，强行改成 .txt
+   *   VERSIONED_KEY=false → comic_vault/lh-123_secure.txt
+   *   VERSIONED_KEY=true  → comic_vault/1758252800000_secure.txt
+   */
+  function buildVaultKey(bookId, options) {
+    options = options || {};
+    var prefix = String(options.prefix || CONFIG.VAULT_PREFIX).replace(/^\/+|\/+$/g, '');
+    var suffix = options.suffix || CONFIG.KEY_SUFFIX;
+    var segment = options.versioned === undefined ? CONFIG.VERSIONED_KEY : !!options.versioned;
+    var bare = segment ? String(Date.now()) : sanitizeKeySegment(bookId);
+    return prefix + '/' + bare + suffix;
+  }
+
+  /** 由 Key 反推公开访问 URL（走 COS 静态网站域名） */
+  function keyToPublicUrl(key) {
+    return CONFIG.COS.CdnBase.replace(/\/+$/, '') + '/' + String(key).replace(/^\/+/, '');
+  }
+
+  /** 读管理台注入的云函数地址 */
+  function apiEndpoint() {
+    return runtime.apiEndpoint || (root && root.LEVIHAN_FN_URL) || '';
+  }
+
+  /**
+   * 与管理台同一套约定：text/plain 发送以避开 CORS 预检。
+   * 这里保留一份独立实现，让本模块可以脱离管理台单独使用。
+   */
+  async function postApi(payload) {
+    var endpoint = apiEndpoint();
+    if (!endpoint) throw new Error('未配置云函数地址（请调用 LeVihanVault.configure({ apiEndpoint }) 或用 window.LEVIHAN_FN_URL 声明）。');
+    var body = Object.assign({}, payload);
+    var token = runtime.getToken();
+    if (token && body.action !== 'login') body.token = token;
+
+    var res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: JSON.stringify(body),
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (data && data.ok === false) throw new Error(data.error || ('请求失败（HTTP ' + res.status + '）'));
+    if (!res.ok) throw new Error('请求失败（HTTP ' + res.status + '）');
+    return data;
+  }
+
+  /* ---------------------- 通道 A：cos-js-sdk-v5 浏览器直传 ---------------------- */
+
+  /** 有缓存的临时凭证且未接近过期就直接复用，避免每次上传都打一次云函数 */
+  function credentialUsable(cred) {
+    if (!cred || !cred.tmpSecretId || !cred.tmpSecretKey) return false;
+    if (!cred.expiredTime) return true;
+    return cred.expiredTime - Math.floor(Date.now() / 1000) > 60;
+  }
+
+  /**
+   * 取 COS 临时凭证（TmpSecretId / TmpSecretKey / SessionToken）。
+   * 期望云函数新增一个 action:'cosCredential' 分支，返回范围收敛到 comic_vault/ 前缀的最小权限凭证。
+   * 也支持页面直接注入 window.LEVIHAN_COS_CREDENTIAL（内网 / 自用场景）。
+   */
+  async function fetchCosCredential() {
+    if (credentialUsable(cachedCredential)) return cachedCredential;
+
+    if (root && credentialUsable(root.LEVIHAN_COS_CREDENTIAL)) {
+      cachedCredential = root.LEVIHAN_COS_CREDENTIAL;
+      return cachedCredential;
+    }
+
+    var data = await postApi({ action: 'cosCredential', prefix: CONFIG.VAULT_PREFIX + '/' });
+    var raw = data.credentials || data;
+    var cred = {
+      tmpSecretId: raw.tmpSecretId || raw.TmpSecretId,
+      tmpSecretKey: raw.tmpSecretKey || raw.TmpSecretKey,
+      sessionToken: raw.sessionToken || raw.SessionToken,
+      startTime: raw.startTime || raw.StartTime || Math.floor(Date.now() / 1000),
+      expiredTime: raw.expiredTime || raw.ExpiredTime,
+    };
+    if (!credentialUsable(cred)) throw new Error('云函数返回的 COS 临时凭证不完整。');
+    cachedCredential = cred;
+    return cred;
+  }
+
+  /**
+   * 懒加载 cos-js-sdk-v5 实例。
+   * 用官方推荐的 getAuthorization 回调（返回 Promise）→ SDK 会在凭证过期时自动重新拉取，
+   * 不会出现长时间挂着页面上传失败在最后一刻报签名错误的情况。
+   */
+  function getCosInstance() {
+    var COS = root && root.COS;
+    if (typeof COS !== 'function') {
+      throw fail('upload', 'cos-js-sdk-v5 未加载（需要 <script src=".../cos-js-sdk-v5.min.js">）。');
+    }
+    if (cosInstance) return cosInstance;
+    cosInstance = new COS({
+      getAuthorization: function () {
+        return fetchCosCredential().then(function (cred) {
+          return {
+            TmpSecretId: cred.tmpSecretId,
+            TmpSecretKey: cred.tmpSecretKey,
+            XCosSecurityToken: cred.sessionToken,
+            StartTime: cred.startTime,
+            ExpiredTime: cred.expiredTime,
+          };
+        });
+      },
+    });
+    return cosInstance;
+  }
+
+  /**
+   * 【步骤 4 核心】Body 传密文 Blob、Key 传伪装后的 .txt 路径。
+   * 用 putObject 而不是 uploadFile：Body 是内存里的 Blob，没有本地路径，
+   * putObject 单请求即可；若密文特别大（>100MB）可换 sliceUploadFile 走分片。
+   */
+  function putCipherToCos(blob, key, onProgress) {
+    var cos = getCosInstance();
+    return new Promise(function (resolve, reject) {
+      cos.putObject(
+        {
+          Bucket: CONFIG.COS.Bucket,
+          Region: CONFIG.COS.Region,
+          Key: key,                                  // ← Key 改造：comic_vault/xxx_secure.txt
+          Body: blob,                                // ← Body 改造：text/plain 密文 Blob
+          ContentType: CONFIG.CIPHER_CONTENT_TYPE,   // 伪装成纯文本，便于 CDN/浏览器直接当文本处理
+          CacheControl: CONFIG.CacheControl,
+          onProgress: function (info) {
+            if (typeof onProgress === 'function') {
+              onProgress({
+                stage: 'upload',
+                ratio: info && info.percent ? info.percent / 100 : 0,
+                text: '直传 COS：' + (info && info.percent ? Math.round(info.percent) + '%' : '上传中'),
+              });
+            }
+          },
+        },
+        function (err, data) {
+          if (err) { reject(err); return; }
+          resolve({ key: key, url: keyToPublicUrl(key), etag: data && data.ETag, channel: 'sdk' });
+        }
+      );
+    });
+  }
+
+  /* ---------------------- 通道 B：云函数中转（无需 SDK / 无凭证时的降级） ---------------------- */
+
+  /**
+   * 分片大小的安全取值。
+   * 下界 1MB 是 COS 对"非末片"的硬要求（低于它 CompleteMultipartUpload 会失败）；
+   * 上界 4MB 是云函数 MAX_BYTES 的单次上限 —— 取更大会被 413 挡回来。
+   */
+  function vaultPartSize() {
+    var want = Number(CONFIG.VAULT_PART_BYTES) || 4 * 1024 * 1024;
+    return Math.min(4 * 1024 * 1024, Math.max(1024 * 1024, want));
+  }
+
+  /**
+   * 通道 B · 单次上传：把密文文本交给云函数，由云函数用自身凭证 putObject。
+   * 走 action:'vaultUpload'（只放开 comic_vault/ 前缀 + 只收 *_secure.txt）。
+   *
+   * 字段名是 dataText 而非 dataBase64：这个值**本身就是**密文（已是 Base64 文本），
+   * 不是"某个二进制对象的 base64"。叫 dataBase64 会让人误以为还要再解一层。
+   * ContentType 由服务端强制，客户端传了也不作数，故不传。
+   */
+  async function uploadCipherViaProxy(base64, key, onProgress) {
+    if (onProgress) onProgress({ stage: 'upload', ratio: 0.1, text: '经云函数中转上传…' });
+    var res = await postApi({ action: 'vaultUpload', key: key, dataText: base64 });
+    if (onProgress) onProgress({ stage: 'upload', ratio: 1, text: '中转上传完成' });
+    return { key: res.key || key, url: keyToPublicUrl(res.key || key), etag: res.etag, channel: 'proxy' };
+  }
+
+  /**
+   * 通道 B · 分片上传：突破单请求 body 6MB 的上限。
+   *
+   * 切分方式：密文本身已是 Base64 **文本**，所以直接按文本下标切子串即可，
+   * 各片原样拼接就是完整密文 —— 客户端与服务端都不需要任何重组逻辑。
+   * **绝不能再套一层 base64**：那会让每片的传输体积多 33%，
+   * 4MB 的片会顶到 5.33MB，紧贴 6MB body 上限且毫无收益。
+   *
+   * 失败必须 abort：残片会一直占存储且在控制台不可见，是最难发现的一类泄漏。
+   */
+  async function uploadCipherViaMultipart(base64, key, onProgress) {
+    var onP = typeof onProgress === 'function' ? onProgress : function () {};
+    var text = String(base64 || '');
+    if (!text) throw fail('upload', '密文为空，无法分片上传。');
+
+    var partSize = vaultPartSize();
+    var total = Math.ceil(text.length / partSize);
+    if (total > 10000) throw fail('upload', '分片数 ' + total + ' 超过 COS 的 10000 上限，请减小目标体积。');
+
+    onP({ stage: 'upload', ratio: 0, text: '密文 ' + fmtSize(text.length) + '，准备分 ' + total + ' 片上传…' });
+    var init = await postApi({ action: 'vaultInit', key: key });
+    var uploadId = init && init.uploadId;
+    if (!uploadId) throw fail('upload', '云函数未返回 UploadId，分片初始化失败。');
+
+    var parts = [];
+    try {
+      for (var i = 0; i < total; i++) {
+        var seg = text.substr(i * partSize, partSize);
+        var res = await postApi({
+          action: 'vaultPart',
+          key: key,
+          uploadId: uploadId,
+          partNumber: i + 1,
+          dataText: seg,
+        });
+        if (!res || !res.etag) throw fail('upload', '第 ' + (i + 1) + ' 片上传后未返回 ETag。');
+        parts.push({ partNumber: i + 1, etag: res.etag });
+        onP({
+          stage: 'upload',
+          ratio: (i + 1) / total,
+          text: '分片上传 ' + (i + 1) + '/' + total + '：' + fmtSize(seg.length) + '（累计 ' + Math.round(((i + 1) / total) * 100) + '%）',
+        });
+      }
+
+      var done = await postApi({ action: 'vaultComplete', key: key, uploadId: uploadId, parts: parts });
+      onP({ stage: 'upload', ratio: 1, text: '分片合并完成（共 ' + total + ' 片）' });
+      return {
+        key: (done && done.key) || key,
+        url: keyToPublicUrl((done && done.key) || key),
+        etag: done && done.etag,
+        channel: 'proxy-multipart',
+        parts: total,
+      };
+    } catch (err) {
+      // 清理失败不能盖掉真正的错误，所以单独吞掉并只留一条告警
+      try {
+        await postApi({ action: 'vaultAbort', key: key, uploadId: uploadId });
+        console.warn('[LeVihanVault] 分片上传失败，已中止并清理残片：', err && err.message);
+      } catch (abortErr) {
+        console.warn('[LeVihanVault] 中止分片失败，可能存在残留分片，key=' + key, abortErr && abortErr.message);
+      }
+      throw err;
+    }
+  }
+
+  /** 依 UPLOAD_MODE 选择通道；auto 模式下 SDK 不可用 / 凭证接口缺失会自动降级 */
+  async function uploadCipher(base64, blob, key, onProgress) {
+    var mode = CONFIG.UPLOAD_MODE;
+    var canUseSdk = mode !== 'proxy' && root && typeof root.COS === 'function';
+    if (canUseSdk) {
+      try {
+        return await putCipherToCos(blob, key, onProgress);
+      } catch (err) {
+        if (mode === 'sdk') throw err;
+        console.warn('[LeVihanVault] 浏览器直传失败，降级为中转上传：', err && err.message);
+      }
+    }
+    // 中转通道按体积分流：小的单次，大的必须分片，否则必然撞 6MB body 上限
+    return String(base64 || '').length > vaultPartSize()
+      ? uploadCipherViaMultipart(base64, key, onProgress)
+      : uploadCipherViaProxy(base64, key, onProgress);
+  }
+
+  /* ==========================================================================
+   * 6. 主函数：handleComicUpload() —— 直接绑定在「上传并发布」按钮上
+   * ======================================================================== */
+
+  /**
+   * 漫画 / 文档深度加密直传主函数。
+   *
+   * @param {FileList|File[]|File} input 管理员选中的文件（图片若干张，或一个 PDF）
+   * @param {Object} [options]
+   * @param {string} [options.bookId]     本子 ID（lh-数字）；决定 Key 的命名段
+   * @param {boolean} [options.versioned] 是否给 Key 加时间戳（覆盖 CONFIG.VERSIONED_KEY）
+   * @param {Function} [options.onProgress] ({ stage, ratio, text }) => void
+   * @returns {Promise<{key:string,url:string,channel:string,parts:number|null,
+   *                    bytes:Object,pageCount:number|null,ladder:Object}>}
+   *          ladder 记录本次选中的压缩档与逐档实测体积，供结果面板如实展示画质是否被动过
+   */
+  async function handleComicUpload(input, options) {
+    options = options || {};
+    var onProgress = typeof options.onProgress === 'function' ? options.onProgress : function () {};
+    var startedAt = Date.now();
+
+    var files = input instanceof FileList || Array.isArray(input) ? Array.prototype.slice.call(input) : [input];
+    files = files.filter(Boolean);
+    if (!files.length) throw fail('read', '请先选择要上传的图片或 PDF。');
+
+    onProgress({ stage: 'read', ratio: 0, text: '读取文件（' + files.length + ' 个）…' });
+
+    /* ---- 步骤 2（两段式）：先压缩，再用产出的实测体积判定 ---- */
+    var normalized = await runCompressLadder(files, onProgress, null);
+    var pdfBytes = normalized.pdfBytes;
+    var mergeStats = normalized.stats;
+    var ladder = normalized.ladder;
+
+    var origin = normalized.pdfRerendered
+      ? '（由 ' + normalized.pageCount + ' 页 PDF 逐页重渲染）'
+      : (normalized.mergedFromImages ? '（由 ' + normalized.pageCount + ' 张图片合并）' : '（原文件直通）');
+    onProgress({
+      stage: 'read',
+      ratio: 1,
+      text: 'PDF 就绪：' + fmtSize(pdfBytes.length) + origin + '　·　' + describeLadder(ladder),
+    });
+
+    /* ---- 步骤 3：强拦截 + 加密 + Base64 重包装 ---- */
+    var payload = await encryptPdfToCipherPayload(pdfBytes, onProgress);
+
+    /* ---- 步骤 4：Key 伪装 + 上传 ---- */
+    var key = buildVaultKey(options.bookId, { versioned: options.versioned });
+    var uploaded = await uploadCipher(payload.base64, payload.blob, key, onProgress);
+
+    var result = {
+      key: uploaded.key,
+      url: uploaded.url,
+      channel: uploaded.channel,
+      parts: uploaded.parts || null,
+      etag: uploaded.etag,
+      pageCount: normalized.pageCount,
+      mergeStats: mergeStats,
+      ladder: ladder,
+      bytes: {
+        source: (mergeStats && mergeStats.sourceBytes) || pdfBytes.length,
+        pdf: pdfBytes.length,
+        cipher: payload.blob.size,
+        base64: payload.base64.length,
+      },
+      elapsedMs: Date.now() - startedAt,
+    };
+
+    onProgress({
+      stage: 'done',
+      ratio: 1,
+      text:
+        '✅ 深度加密上传完成：' + result.key +
+        '（PDF ' + fmtSize(result.bytes.pdf) + ' → 密文 ' + fmtSize(result.bytes.cipher) + '，' +
+        (result.elapsedMs / 1000).toFixed(1) + 's，通道 ' + result.channel +
+        (result.parts ? ' ×' + result.parts + ' 片' : '') + '）',
+    });
+    return result;
+  }
+
+  /**
+   * 【阅读端便捷方法】从 COS 拉取 .txt 密文并解密成可预览的 PDF Blob URL。
+   * 返回的 objectURL 用完记得 URL.revokeObjectURL()，否则会漏内存。
+   */
+  async function openDecryptedPdfFromUrl(keyOrUrl) {
+    var url = /^https?:\/\//i.test(keyOrUrl) ? keyOrUrl : keyToPublicUrl(keyOrUrl);
+    var res = await fetch(url, { mode: 'cors' });
+    if (!res.ok) throw new Error('拉取密文失败（HTTP ' + res.status + '）');
+    var text = await res.text();
+    var pdfBlob = await decryptVaultToPdfBlob(text);
+    return URL.createObjectURL(pdfBlob);
+  }
+
+  /* ==========================================================================
+   * 7. 导出
+   * ======================================================================== */
+  return {
+    CONFIG: CONFIG,
+    configure: configure,
+
+    // 主流程
+    handleComicUpload: handleComicUpload,
+
+    // 分步能力（便于单测 / 复用到其它上传入口）
+    normalizeToPdfBytes: normalizeToPdfBytes,
+    imagesToPdfBytes: imagesToPdfBytes,
+    buildPageImage: buildPageImage,
+    readJpegHeader: readJpegHeader,
+    encryptPdfBytesToBase64: encryptPdfBytesToBase64,
+    encryptPdfToCipherPayload: encryptPdfToCipherPayload,
+    wrapBase64AsTextBlob: wrapBase64AsTextBlob,
+    buildVaultKey: buildVaultKey,
+    keyToPublicUrl: keyToPublicUrl,
+    uploadCipher: uploadCipher,
+
+    // 两段式：压缩阶梯与产出判定
+    runCompressLadder: runCompressLadder,
+    describeLadder: describeLadder,
+    tryLadderTier: tryLadderTier,
+    tryPdfTier: tryPdfTier,
+    batchHasPng: batchHasPng,
+    // 分片上传（大密文走这条路，逐片可测）
+    uploadCipherViaMultipart: uploadCipherViaMultipart,
+    uploadCipherViaProxy: uploadCipherViaProxy,
+    vaultPartSize: vaultPartSize,
+
+    // 密码学原语（自测与跨端复用）
+    deriveKeyBytes: deriveKeyBytes,
+    aesEncrypt: aesEncrypt,
+    aesDecrypt: aesDecrypt,
+    bytesToBase64: bytesToBase64,
+    base64ToBytes: base64ToBytes,
+
+    // 阅读端
+    decryptVaultToPdfBytes: decryptVaultToPdfBytes,
+    decryptVaultToPdfBlob: decryptVaultToPdfBlob,
+    openDecryptedPdfFromUrl: openDecryptedPdfFromUrl,
+    isPdfBytes: isPdfBytes,
+  };
+  })();
+
+  // 浏览器：<script src> 之后从 window.LeVihanVault 取用
+  if (root) root.LeVihanVault = api;
+  // Node 侧（含 tests/ 里的 CJS 用例）走 CJS 导出
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+
+<!-- ============================================================
+     生产页面片段：从 public/admin/index.html 原样抽取
+     ============================================================ -->
+<script>
+var PDF_VAULT_MAX_SCALE = 3;
+
+var pdfDocCache = new Map();
+
+function canvasToJpegBlob(canvas, quality){
+  return new Promise(function(res, rej){
+    canvas.toBlob(function(blob){
+      if (!blob) { rej(new Error('画布编码失败')); return; }
+      res(blob);
+    }, 'image/jpeg', quality);
+  });
+}
+
+function pdfJsReady(){
+  if (!window.pdfjsLib) return false;
+  // tools.js 正常加载时已经设过；这里兜一道，免得它没加载时 pdf.js 报
+  // "Setting up fake worker failed" 这种看不出根因的错。
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.staticfile.net/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  return true;
+}
+
+function readFileBytes(file){
+  if (file && typeof file.arrayBuffer === 'function') return file.arrayBuffer();
+  return new Promise(function(res, rej){
+    var r = new FileReader();
+    r.onload = function(){ res(r.result); };
+    r.onerror = function(){ rej(new Error('读取文件失败：' + (file && file.name))); };
+    r.readAsArrayBuffer(file);
+  });
+}
+
+function getPdfDocument(file){
+  if (!pdfJsReady()) return Promise.reject(new Error('pdf.js 未加载，无法处理 PDF（请检查网络后刷新页面）'));
+  if (pdfDocCache.has(file)) return pdfDocCache.get(file);
+  var pr = readFileBytes(file)
+    .then(function(buf){ return pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise; })
+    .catch(function(err){ pdfDocCache.delete(file); throw err; });
+  pdfDocCache.set(file, pr);
+  return pr;
+}
+
+async function renderPdfPagesForVault(file, opts){
+  opts = opts || {};
+  if (!pdfJsReady()) throw new Error('pdf.js 未加载，无法压缩 PDF（请检查网络后刷新页面）');
+  var maxSide = Number(opts.maxSide) || 2000;
+  var quality = Number(opts.quality) || 0.85;
+
+  var doc = await getPdfDocument(file);
+  var out = [];
+  for (var p = 1; p <= doc.numPages; p++){
+    var page = await doc.getPage(p);
+    try {
+      var base = page.getViewport({ scale: 1 });
+      // 让**长边**落到 maxSide（见 PDF_VAULT_MAX_SCALE 的说明：这里允许 >1，
+      // 否则 base 只有 595×842 的 A4 页会让所有档位退化成同一张低清图）
+      var scale = Math.min(maxSide / Math.max(base.width, base.height), PDF_VAULT_MAX_SCALE);
+      var vp = page.getViewport({ scale: scale });
+
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(vp.width));
+      canvas.height = Math.max(1, Math.round(vp.height));
+      var ctx = canvas.getContext('2d');
+      // PDF 页无透明概念，但渲染到 canvas 可能留透明底，不铺白转 JPEG 会变黑块
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+      var blob = await canvasToJpegBlob(canvas, quality);
+      canvas.width = 0;
+      canvas.height = 0;
+      out.push(new File([blob], 'vault-p' + String(p).padStart(3, '0') + '.jpg', { type: 'image/jpeg' }));
+    } finally {
+      if (page.cleanup) page.cleanup();
+    }
+  }
+  return out;
+}
+</script>
+
+<!-- ============================================================
+     实验台驱动逻辑（本文件独有）
+     ============================================================ -->
+<script>
+(function(){
+  'use strict';
+
+  var V = window.LeVihanVault;
+  var drop = document.getElementById('drop');
+  var picker = document.getElementById('picker');
+  var filesBox = document.getElementById('files');
+  var runBtn = document.getElementById('run');
+  var resetBtn = document.getElementById('reset');
+  var targetEl = document.getElementById('target');
+  var autoEl = document.getElementById('autodown');
+  var progressCard = document.getElementById('progressCard');
+  var pbar = document.getElementById('pbar');
+  var ptext = document.getElementById('ptext');
+  var resultCard = document.getElementById('resultCard');
+  var errCard = document.getElementById('errCard');
+  var picked = [];
+
+  if (!V || typeof V.runCompressLadder !== 'function') {
+    fail('生产模块未加载', 'window.LeVihanVault 取不到，或该版本还没有 runCompressLadder（两段式是后加的）。');
+    return;
+  }
+  // PDF 档要靠页面注入渲染器，与生产管理台的接线方式完全一致
+  V.configure({ renderPdfPages: renderPdfPagesForVault });
+
+  // 启动自检：依赖没到就别让人拖完文件才发现。缺 jsPDF 连无损档都跑不了；
+  // 缺 pdf.js 只是 PDF 档会被跳过，图片仍可测，所以分开说。
+  (function(){
+    var missing = [];
+    if (!(window.jspdf && typeof window.jspdf.jsPDF === 'function')) missing.push('jsPDF 2.5.1');
+    if (!window.pdfjsLib) missing.push('pdf.js 3.11.174');
+    if (!missing.length) return;
+    fail('运行时依赖没加载：' + missing.join('、'),
+      '这两个库从 cdn.staticfile.net 取（与生产管理台同一个 URL、同一个版本），请确认网络后刷新。\n' +
+      '· 缺 jsPDF → 连「无损直通」档都跑不了，任何输入都会失败。\n' +
+      '· 缺 pdf.js → 只有 PDF 输入受影响（PDF 档会被跳过），图片仍可正常测。');
+  })();
+
+  function fmt(n){
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' KB';
+    return (n / 1024 / 1024).toFixed(2) + ' MB';
+  }
+  function esc(s){
+    return String(s).replace(/[&<>"]/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c];
+    });
+  }
+  function fail(title, detail){
+    errCard.hidden = false;
+    document.getElementById('err').innerHTML =
+      '<b>' + esc(title) + '</b>' + (detail ? '<pre>' + esc(detail) + '</pre>' : '');
+  }
+  function clearErr(){ errCard.hidden = true; }
+  function isPdf(f){ return /\.pdf$/i.test(f.name || '') || f.type === 'application/pdf'; }
+
+  /* ---------------- 选文件 ---------------- */
+
+  function accept(list){
+    var arr = Array.prototype.slice.call(list || []).filter(Boolean);
+    if (!arr.length) return;
+    var pdfs = arr.filter(isPdf);
+    var imgs = arr.filter(function(f){ return !isPdf(f); });
+    if (pdfs.length && imgs.length) {
+      clearErr();
+      fail('不能混着来', '一次只能测一种：要么多张图片，要么一个 PDF。生产管线本身也是二选一。');
+      return;
+    }
+    if (pdfs.length > 1) {
+      clearErr();
+      fail('只能一个 PDF', '收到 ' + pdfs.length + ' 个 PDF。压缩阶梯的 PDF 档只处理单文件输入。');
+      return;
+    }
+    clearErr();
+    picked = arr;
+    renderFiles();
+  }
+
+  function renderFiles(){
+    filesBox.innerHTML = picked.map(function(f){
+      return '<div class="frow">' +
+        '<span class="tag">' + (isPdf(f) ? 'PDF' : 'IMG') + '</span>' +
+        '<span class="nm">' + esc(f.name) + '</span>' +
+        '<span class="sz">' + fmt(f.size) + '</span>' +
+      '</div>';
+    }).join('');
+    runBtn.disabled = !picked.length;
+  }
+
+  drop.addEventListener('click', function(){ picker.click(); });
+  picker.addEventListener('change', function(){ accept(picker.files); picker.value = ''; });
+  ['dragenter','dragover'].forEach(function(ev){
+    drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('over'); });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('over'); });
+  });
+  drop.addEventListener('drop', function(e){
+    if (e.dataTransfer && e.dataTransfer.files) accept(e.dataTransfer.files);
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.quick'), function(b){
+    b.addEventListener('click', function(){ targetEl.value = b.getAttribute('data-mb'); });
+  });
+
+  resetBtn.addEventListener('click', function(){
+    picked = []; renderFiles(); clearErr();
+    resultCard.hidden = true; progressCard.hidden = true; pbar.style.width = '0';
+  });
+
+  /* ---------------- 跑 ---------------- */
+
+  runBtn.addEventListener('click', async function(){
+    if (!picked.length) return;
+    var mb = Number(targetEl.value);
+    if (!(mb > 0)) { fail('目标体积不合法', '目标必须是正数 MB。'); return; }
+
+    clearErr();
+    resultCard.hidden = true;
+    progressCard.hidden = false;
+    pbar.style.width = '0';
+    ptext.textContent = '准备中…';
+    runBtn.disabled = true;
+    runBtn.textContent = '跑着…';
+
+    // 与生产同样的注入方式；这两个旋钮就是两段式的判定靶心与降档开关
+    V.configure({
+      renderPdfPages: renderPdfPagesForVault,
+      MAX_OUTPUT_BYTES: Math.round(mb * 1024 * 1024),
+      AUTO_DOWNSCALE: !!autoEl.checked,
+    });
+
+    var inputBytes = picked.reduce(function(s, f){ return s + f.size; }, 0);
+    var t0 = performance.now();
+    try {
+      var res = await V.runCompressLadder(picked, function(p){
+        if (!p) return;
+        ptext.textContent = p.text || p.stage || '';
+        if (typeof p.ratio === 'number' && p.ratio > 0 && p.ratio <= 1) {
+          pbar.style.width = Math.round(p.ratio * 100) + '%';
+        }
+      }, function(){});
+      pbar.style.width = '100%';
+      ptext.textContent = '完成。';
+      render(res, inputBytes, performance.now() - t0);
+    } catch (e) {
+      ptext.textContent = '失败。';
+      fail('压缩没跑通', (e && e.message) || String(e));
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = '跑压缩阶梯';
+    }
+  });
+
+  /* ---------------- 展示 ---------------- */
+
+  function render(res, inputBytes, ms){
+    var L = res.ladder || {};
+    var outBytes = res.pdfBytes ? res.pdfBytes.length : 0;
+    var degraded = !!L.degraded;
+    var within = !!L.withinTarget;
+
+    /* 三块大字：停在哪档 / 产出多少 / 画质动没动 */
+    var v = [];
+    v.push('<div class="v"><div class="k">停在哪一档</div>' +
+           '<div class="n">' + esc(L.chosenLabel || '—') + '</div>' +
+           '<div class="d">' + esc(L.chosenId || '') + (L.pdfRerendered ? ' · 逐页重渲染' : '') + '</div></div>');
+    v.push('<div class="v ' + (within ? 'ok' : 'warn') + '"><div class="k">产出 PDF</div>' +
+           '<div class="n">' + fmt(outBytes) + '</div>' +
+           '<div class="d">目标 ' + fmt(L.targetBytes || 0) +
+           ' · 占源图 ' + (inputBytes ? (outBytes / inputBytes * 100).toFixed(0) + '%' : '—') + '</div></div>');
+    v.push('<div class="v ' + (degraded ? 'bad' : 'ok') + '"><div class="k">画质</div>' +
+           '<div class="n">' + (degraded ? '已降档' : '无损') + '</div>' +
+           '<div class="d">' + (degraded ? '为了让体积达标动了画质' : '原始字节直通，零重编码') + '</div></div>');
+    document.getElementById('verdict').innerHTML = v.join('');
+
+    document.getElementById('ladderQuote').innerHTML =
+      '<div class="quote">' + esc(V.describeLadder(L)) +
+      '<em>上面这句由生产模块的 describeLadder() 生成，与真实上传完成后面板上看到的完全一致。</em></div>';
+
+    /* 逐档实测表 */
+    var attempts = L.attempts || [];
+    var maxBytes = attempts.reduce(function(m, a){ return Math.max(m, a.bytes || 0); }, 0);
+    var measured = attempts.filter(function(a){ return a.bytes != null; });
+    var lastMeasured = -1;
+    attempts.forEach(function(a, i){ if (a.bytes != null) lastMeasured = i; });
+
+    var rows = attempts.map(function(a, i){
+      var chosen = a.id === L.chosenId && a.bytes != null;
+      var bytes = a.bytes == null ? null : a.bytes;
+      var pct = bytes != null && maxBytes ? Math.max(2, Math.round(bytes / maxBytes * 100)) : 0;
+
+      var cls = '', txt = '';
+      if (a.skipped) { cls = 'skip'; txt = '跳过：' + a.skipped; }
+      else if (chosen) { cls = 'pick'; txt = '✓ 采用'; }
+      else if (bytes != null) {
+        // 到底了就不能再说"继续降" —— 后面没有档了，说继续降是骗人
+        if (i === lastMeasured) { cls = 'skip'; txt = within ? '' : '未达标（已到底）'; }
+        else { txt = '未达标，继续降'; }
+      }
+
+      return '<tr class="' + (chosen ? 'chosen' : '') + '">' +
+        '<td><b>' + esc(a.label || a.id) + '</b><br><span class="mono" style="color:#5F5E5A">' + esc(a.id) + '</span></td>' +
+        '<td class="mono" style="white-space:nowrap">' + (bytes == null ? '—' : fmt(bytes)) + '</td>' +
+        '<td style="width:34%">' + (bytes == null ? '' :
+          '<div class="track' + (chosen ? '' : ' dim') + '"><i style="width:' + pct + '%"></i></div>') + '</td>' +
+        '<td class="mark ' + cls + '">' + esc(txt) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    // 一个容易被误读的结果：所有档都没达标、而第一档产出反而最小 →
+    // 按"取实测最小者"回到无损档。这不是 bug，但不解释的话用户会以为降档白跑了。
+    var backToFirst = !within && measured.length > 1 && attempts.length &&
+                      L.chosenId === attempts[0].id;
+    var note = backToFirst
+      ? '<div class="caveat"><b>为什么停在第一档？</b>这次所有档都没达到目标，而' +
+        '<b>第一档产出反而最小</b>（重渲染/降采样之后体积变大了），于是按「取实测最小者」回到' +
+        '无损直通 —— 既然都到不了目标，就没必要白降画质。' +
+        '对内容很少或矢量为主的 PDF 很容易出现这种情况。</div>'
+      : '';
+
+    document.getElementById('attempts').innerHTML =
+      '<h2 style="margin-top:26px">逐档实测' + (attempts.length ? '（' + attempts.length + ' 档）' : '') + '</h2>' +
+      '<table><thead><tr><th>档位</th><th>产出</th><th>相对体积</th><th>判定</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table>' + note +
+      '<div class="caveat">每档都会把 patch 临时写进 CONFIG、跑完立刻还原（异常路径也还原）——' +
+      '所以上面这些数字是各档独立跑出来的，不是累加降级的结果。总耗时 ' + Math.round(ms) + ' ms。</div>';
+
+    /* 上传预演 */
+    renderUpload(outBytes, L);
+
+    resultCard.hidden = false;
+    resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function renderUpload(outBytes, L){
+    var CIPHER_RATIO = 1.3334;                 // AES-256-CBC 密文 ≈ 同尺寸，Base64 后 ×4/3
+    var VAULT_SINGLE_MAX_PDF = 4 * 1024 * 1024 / CIPHER_RATIO;  // 云函数 MAX_BYTES(4MB) 反推的 PDF 上限
+    var cipherBytes = Math.ceil(outBytes * CIPHER_RATIO);
+    var partSize = (typeof V.vaultPartSize === 'function') ? V.vaultPartSize() : 4 * 1024 * 1024;
+    var parts = cipherBytes > partSize ? Math.ceil(cipherBytes / partSize) : 0;
+
+    var rows = [];
+    rows.push(['产出 PDF', fmt(outBytes)]);
+    rows.push(['加密后密文', fmt(cipherBytes) + ' &nbsp;<span style="color:#5F5E5A">(≈ PDF × 1.3334)</span>']);
+    rows.push(['单次上限反推的 PDF 天花板', fmt(VAULT_SINGLE_MAX_PDF) + ' &nbsp;<span style="color:#5F5E5A">(云函数 MAX_BYTES 4MB ÷ 1.3334)</span>']);
+    rows.push(['通道', parts
+      ? '<span class="pill multi">COS 分片</span> 共 ' + parts + ' 片（每片 ' + fmt(partSize) + '）'
+      : '<span class="pill single">单次上传</span> vaultUpload']);
+    if (parts) {
+      rows.push(['为何免于 413', '分片按密文文本字节切，各片原样拼接即完整密文 ' +
+        '<span style="color:#5F5E5A">（这是分片上传解绑 6MB 请求体上限的地方）</span>']);
+    }
+    if (!L.withinTarget) {
+      rows.push(['注意', '<span style="color:#8a6d1f">已压到最低档仍超业务目标 ' + fmt(L.targetBytes) +
+        '。上传本身不受影响（分片兜底），超的只是"单本多大算合理"这条业务线。</span>']);
+    }
+
+    document.getElementById('upload').innerHTML = rows.map(function(r){
+      return '<div class="r"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>';
+    }).join('');
+
+    document.getElementById('caveat').innerHTML =
+      '<code>' + Number(targetEl.value) + ' MB</code> 是业务目标（压缩阶梯以它为靶心）；' +
+      '真正卡住上传的是 <code>MAX_BYTES = 4MB</code>，反推回 PDF 约 3.0 MB —— 超过就走分片。' +
+      (autoEl.checked
+        ? (L.withinTarget
+            ? '本页开着自动降档，但它<b>达标即停</b>：既然已经达标，就不会再多降一档。'
+            : '本页开着自动降档，阶梯已跑到底仍超目标 —— 上传本身不受影响（分片兜底），' +
+              '超的只是「单本多大算合理」这条业务线。')
+        : '本页<b>关掉了</b>自动降档，所以只跑第一档，产出超目标也不再往下压 —— 这正是关掉它的意义。');
+  }
+})();
+</script>
+</body>
+</html>
