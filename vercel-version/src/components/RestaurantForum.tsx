@@ -434,9 +434,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   // Comments & Relay Replies
   const [openComments, setOpenComments] = useState<string | null>(null);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
-  // Seeded from the default 拟音人物 so the composer never opens with the
-  // nickname and the selected portrait telling different stories.
-  const [nickname, setNickname] = useState(PRESET_CHARACTERS[0].name);
+  // 发帖署名默认留空，待账号档案加载后由 mount 副作用填入「账号昵称」。
+  // 语C 分类不发署名（身份=所选拟音人物），其余分类的署名输入框默认显示账号昵称。
+  // 注意：选角动作不再改写 nickname，避免把拟音人物名带进闲聊/接龙/市集的署名。
+  const [nickname, setNickname] = useState('');
   const [commenterChars, setCommenterChars] = useState<Record<string, RoleplayCharacter>>({});
 
   // Share Modal & Deep Link Highlights
@@ -525,8 +526,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   const handleSelectCharacter = (char: RoleplayCharacter) => {
     soundManager.playCoin();
     setSelectedChar(char);
-    setNickname(char.name);
-    onShowToast(`已选择【${char.name}】，发帖昵称已替换`);
+    onShowToast(`已选定拟音形象【${char.name}】`);
   };
 
   const handleCustomCharFile = (file?: File) => {
@@ -561,7 +561,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       /* storage fallback */
     }
     setSelectedChar(newChar);
-    setNickname(newChar.name);
     setPendingCustomImage(null);
     setPendingCharName('');
     soundManager.playCoin();
@@ -606,7 +605,8 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       try {
         const profile = await getCurrentProfile();
         if (!profile) return;
-        if (profile.nickname && composeCategory !== 'roleplay') {
+        // 发帖署名默认取账号昵称；空昵称则保留空串，由发布兜底('调查兵'/'匿名同好')
+        if (profile.nickname) {
           setNickname(profile.nickname);
         }
       } catch {
@@ -1878,6 +1878,16 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       </div>
 
                       <span className="text-[#8C7A65] text-[10px]">{post.createdAt}</span>
+                      {currentUid && post.uid === currentUid && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); void handleDeletePost(post.id); }}
+                          className="ml-1 text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
+                          title="删除我发布的帖子"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -2156,6 +2166,16 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                     </div>
                     <span className="text-[#2C2016] font-bold text-xs">{post.author}</span>
                     <span className="text-[#8C7A65] text-[10px]">{post.createdAt}</span>
+                    {currentUid && post.uid === currentUid && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); void handleDeletePost(post.id); }}
+                        className="ml-1 text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
+                        title="删除我发布的帖子"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -2441,9 +2461,8 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           type="text"
                           value={nickname}
                           onChange={(e) => setNickname(e.target.value)}
-                          placeholder="您的昵称"
+                          placeholder="账号昵称（默认）"
                           className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-[#C5B498] text-xs font-bold outline-none bg-white focus:border-[#8C5828]"
-                          required
                         />
                       </div>
                     </div>
@@ -2724,7 +2743,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           type="text"
                           value={nickname}
                           onChange={(e) => setNickname(e.target.value)}
-                          placeholder="发帖昵称…"
+                          placeholder="账号昵称（默认）"
                           className="w-full px-3 py-1.5 rounded-lg border border-[#C5B498] text-xs font-bold outline-none bg-white focus:border-[#235340]"
                         />
                       </div>
