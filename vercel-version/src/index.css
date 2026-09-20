@@ -42,6 +42,20 @@
     scrollbar-width: none;
   }
 
+  /* 首页 Header 图（1242×871，宽高比 1.43）：
+     满宽展示时在桌面宽度下高达 538px，短窗口里会把下面的入口按钮整个挤出可视区。
+     矮屏（≤780px）改为按视口高度扣边裁切，保留人物所在的中上段。 */
+  .home-header-art {
+    object-position: center 32%;
+  }
+
+  @media (max-height: 780px) {
+    .home-header-art {
+      max-height: 34dvh;
+      object-fit: cover;
+    }
+  }
+
   /* Height-based adjustments to prevent scroll on short screens
      （导航栏改为文档流占位后内容区变矮约一个导航栏高度，阈值同步下调） */
   @media (max-height: 690px) {

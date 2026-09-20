@@ -57,7 +57,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
   return (
     <div
       id="view-main"
-      className="relative w-full h-full select-none flex flex-col justify-between overflow-hidden bg-[#FFFEEF]/55 backdrop-blur-md"
+      className="relative w-full h-full select-none flex flex-col justify-between overflow-y-auto no-scrollbar overscroll-contain bg-[#FFFEEF]/55 backdrop-blur-md"
     >
       {/* ====================================================
           1. 顶部 Header 横幅（不再使用卡片容器）
@@ -68,7 +68,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
         <img
           src="/images/header.webp"
           alt="LEVI × HANS WAREHOUSE 调查兵团特别驻地 · 情报与粮草整备"
-          className="w-full h-auto max-w-full block"
+          className="home-header-art w-full h-auto max-w-full block"
           referrerPolicy="no-referrer"
           fetchPriority="high"
         />
