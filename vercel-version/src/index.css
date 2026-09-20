@@ -698,28 +698,14 @@ body.immersive-on .retro-frame-card > .absolute {
 }
 
 /* ============================================================
-   首页公告栏卡片：羊皮纸木板底图（1177×337，含回形针与虚线内框）
-   - background-size 100% 100%：卡片高度由内容决定，底图随卡片拉伸；
-     卡片高度与底图比例偏差实测 ≤15%，肉眼不可辨。
-   - border-radius 用百分比：横向 2.38% ≈ 底图圆角 28/1177，
-     纵向 10.09% ≈ 34/337。这样圆角半径与底图同步缩放，
-     刚好把底图自带的肤色直角背景裁掉，露出圆角木板。
-   - padding 百分比按**宽度**计算：上方 6% 让内容落到回形针下方
-     （回形针纵向占到宽度 5.3% 处），左右 3.4% / 下 3.4% 落在虚线框内。
+   首页公告栏卡片（2026-09-20 重做）：不再用 announcement-board.webp
+   木板底图，改为主题纸色纯 CSS 卡片，与全站配色一致。
    ============================================================ */
 .announcement-board {
-  background-image: url('/images/announcement-board.webp');
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
-  background-position: center;
-  border-radius: 2.38% / 10.09%;
-  padding: 6% 3.4% 3.4%;
-}
-
-@media (max-height: 690px) {
-  .announcement-board {
-    padding: 5.9% 3.2% 3.1%;
-  }
+  background-color: #F8F1DE;
+  border: 1.5px solid #E0D2B4;
+  border-radius: 12px;
+  padding: 12px 14px;
 }
 
 @media (min-width: 640px) {

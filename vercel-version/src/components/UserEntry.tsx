@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { CLOUDBASE_API_BASE } from '../utils/cloudbaseEndpoint';
 import { getSessionToken, setSessionToken, type AuthProfile } from '../utils/cloudbaseToken';
 import { UiSprite } from './UiSprite';
-import { PopupSketchOverlay } from './PopupSketchOverlay';
 
 type View = 'login' | 'register' | 'quiz' | 'account';
 type Props = { onShowToast: (message: string) => void };
@@ -244,7 +243,6 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     )}
     {open && typeof document !== 'undefined' && createPortal(<div className="fixed inset-0 z-[100] min-h-[var(--app-h)] bg-black/65 flex items-center justify-center p-3 overflow-hidden" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
       <section role="dialog" aria-modal="true" aria-label="LeviHan 用户入口" className="relative w-full max-w-md max-h-[88dvh] overflow-y-auto bg-[#FAF0D7] border-[3px] border-[#1C1611] shadow-[7px_7px_0_#1C1611] p-4 sm:p-5 text-[#2C241D] font-retro-jp">
-        <PopupSketchOverlay />
         <button type="button" onClick={() => setOpen(false)} className="absolute right-3 top-3 w-8 h-8 bg-[#4A2D16] text-[#F9E79F] border-2 border-[#1C1611] cursor-pointer z-20">×</button>
         <p className="font-pixel text-[10px] text-[#8C5828] tracking-widest mb-1">LEVIHAN MEMBER</p>
         <h2 className="font-pixel text-lg text-[#1E4334] mb-4 pr-10">{title}</h2>

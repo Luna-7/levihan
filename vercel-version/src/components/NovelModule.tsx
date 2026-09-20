@@ -8,7 +8,6 @@ import { AuthorWithLink } from '../utils/authorLink';
 import { newestNovelsFirst, newestRecsFirst } from '../utils/workSort';
 import { submitToInbox } from '../utils/submissionInbox';
 import { CardPatternOverlay } from './CardPatternOverlay';
-import { PopupSketchOverlay } from './PopupSketchOverlay';
 
 interface Props {
   searchQuery: string;
@@ -562,7 +561,6 @@ export const NovelModule: React.FC<Props> = ({
         <div className="fixed inset-0 z-[100] bg-black/65 flex items-center justify-center p-3" onMouseDown={(e) => e.target === e.currentTarget && setShowUpload(false)}>
           <form onSubmit={handleNovelSubmit} className="relative overflow-hidden w-full max-w-lg max-h-[90dvh] overflow-y-auto bg-[#FFFEEF] border-2 border-[#1E4334] rounded-lg p-4 sm:p-5 space-y-3 font-retro-jp text-[#2C241D] shadow-2xl">
             <CardPatternOverlay opacity={0.12} mode="multiply" />
-            <PopupSketchOverlay />
             <div className="relative flex items-center justify-between gap-3 border-b border-[#D5C9AF] pb-2">
               <div>
                 <h3 className="font-pixel text-sm font-bold text-[#1E4334]">上传小说 / 推荐</h3>

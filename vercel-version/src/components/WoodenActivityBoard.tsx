@@ -4,7 +4,6 @@ import { Sparkles, Calendar, ArrowRight, ExternalLink, ChevronRight, X } from 'l
 import { ActivityItem, INITIAL_LEVIHAN_ACTIVITIES } from '../data/activityData';
 import { SvgPotatoBannerIcon, SvgLeviSitAvatar, SvgHangeSmileAvatar } from './HomeSvgDecorations';
 import { soundManager } from '../utils/audio';
-import { PopupSketchOverlay } from './PopupSketchOverlay';
 
 const STORAGE_KEY = 'levihan_custom_activities_v1';
 
@@ -250,7 +249,6 @@ export const WoodenActivityBoard: React.FC<Props> = ({
       {typeof document !== 'undefined' && modalActivity && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="relative w-full max-w-lg my-auto bg-[#FFFDF9] border-3 border-[#5F977E] rounded-2xl shadow-[0_12px_32px_rgba(255,168,188,0.4)] p-4 sm:p-6 text-[#374151] overflow-hidden">
-            <PopupSketchOverlay />
             {/* 关闭按键 */}
             <div className="absolute top-3 right-3">
               <button

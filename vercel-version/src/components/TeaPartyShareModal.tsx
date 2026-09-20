@@ -15,7 +15,6 @@ import { toPng } from 'html-to-image';
 import { soundManager } from '../utils/audio';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { CharacterArt, externalArtworkUrl } from './CharacterArt';
-import { PopupSketchOverlay } from './PopupSketchOverlay';
 import { ForumPost, PostCategory } from './RestaurantForum';
 import { MarketItem } from './PotatoMarket';
 
@@ -272,7 +271,6 @@ export const TeaPartyShareModal: React.FC<Props> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <CardPatternOverlay opacity={0.05} mode="multiply" />
-        <PopupSketchOverlay />
 
         {/* 极简顶栏 */}
         <div className="relative z-10 px-4 py-3 bg-[#1E4334] text-[#F9E79F] flex items-center justify-between">

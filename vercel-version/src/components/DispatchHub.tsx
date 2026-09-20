@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { soundManager } from '../utils/audio';
 import { submitToInbox } from '../utils/submissionInbox';
 import { CardPatternOverlay } from './CardPatternOverlay';
-import { PopupSketchOverlay } from './PopupSketchOverlay';
 
 interface Props {
   onShowToast: (msg: string) => void;
@@ -593,7 +592,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <div className="w-full max-w-md bg-[#FFFDF6] border-2 border-[#1E4334] rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.35)] flex flex-col relative overflow-hidden animate-in fade-in zoom-in duration-200">
               <CardPatternOverlay opacity={0.08} mode="multiply" />
-              <PopupSketchOverlay />
 
               {/* 弹窗头部 */}
               <div className="relative bg-[#1E4334] p-3.5 flex items-center justify-between">
@@ -1289,7 +1287,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
         >
           <div className="relative w-full max-w-[440px] bg-[#FFFDF6] border-2 border-[#1E4334] rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.35)] overflow-hidden select-none animate-fadeIn">
             <CardPatternOverlay opacity={0.08} mode="multiply" />
-            <PopupSketchOverlay />
             <div className="relative bg-[#1E4334] text-[#F9E79F] px-4 py-2.5 flex items-center justify-between">
               <div className="font-bold text-xs flex items-center gap-1.5">
                 <span>🛠️</span>

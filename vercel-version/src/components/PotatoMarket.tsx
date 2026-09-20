@@ -4,7 +4,6 @@ import { soundManager } from '../utils/audio';
 import { getAccessToken, getCurrentProfile } from '../utils/cloudbaseToken';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
-import { PopupSketchOverlay } from './PopupSketchOverlay';
 import { Upload, Link as LinkIcon, DollarSign, User as UserIcon, AlertTriangle, Search, PlusCircle, X, ShieldAlert, CheckCircle2, Plus, Trash2, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 export interface MarketItem {
@@ -832,7 +831,6 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
           >
             {/* 羊皮纸背景纹理 */}
             <CardPatternOverlay opacity={0.65} />
-            <PopupSketchOverlay />
 
             {/* 头部标题与徽章 */}
             <div className="relative z-10 flex items-start justify-between gap-3 border-b-2 border-[#3F291B] pb-3">

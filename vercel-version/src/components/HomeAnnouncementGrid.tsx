@@ -4,7 +4,6 @@ import { Calendar, Megaphone, FileText, AlertCircle, ArrowRight } from 'lucide-r
 import { soundManager } from '../utils/audio';
 import { submitToInbox } from '../utils/submissionInbox';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
-import { PopupSketchOverlay } from './PopupSketchOverlay';
 
 /** 与后台 announcementSave 的字段契约保持一致（id/tag/title/author/time/link/description/image） */
 export interface AnnouncementItem {
@@ -319,7 +318,6 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
 
             {/* 卷轴纸面 */}
             <div className="rules-scroll-paper relative z-10 mx-3 px-4 sm:px-5 pt-4 pb-5 max-h-[70dvh] overflow-y-auto">
-              <PopupSketchOverlay />
               <div className="relative flex items-center justify-between border-b-2 border-[#C5A059] pb-2 mb-2.5 pr-8">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xl">✨</span>
@@ -434,7 +432,6 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
             onSubmit={submitProposal}
             className="relative overflow-hidden w-full max-w-lg rounded-2xl border-2 border-[#1E4334] bg-[#FBF7EC] p-4 sm:p-5 space-y-3 shadow-2xl"
           >
-            <PopupSketchOverlay />
             <div className="relative flex justify-between items-start">
               <div>
                 <h3 className="font-serif-title font-bold text-[#1E4334] text-base">

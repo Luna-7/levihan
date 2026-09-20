@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Heart } from 'lucide-react';
 import { NavigationTab } from '../types';
 import { soundManager } from '../utils/audio';
@@ -13,70 +13,30 @@ interface Props {
 
 interface StageItem {
   id: NavigationTab;
-  stageNumber: number;
   stageName: string;
-  stageSub: string;
   sprite: UiSpriteName;
-  landmark: string;
   arrivalText: string;
 }
 
 const STAGES: StageItem[] = [
-  {
-    id: 'home',
-    stageNumber: 1,
-    stageName: '兵团驻地',
-    stageSub: '',
-    sprite: 'home',
-    landmark: '🏰',
-    arrivalText: '📍 到达兵团驻地！',
-  },
-  {
-    id: 'resources',
-    stageNumber: 2,
-    stageName: '巨树餐厅',
-    stageSub: '',
-    sprite: 'restaurant',
-    landmark: '🍽️',
-    arrivalText: '🍽️ 到达巨树餐厅！',
-  },
-  {
-    id: 'doujinshi',
-    stageNumber: 3,
-    stageName: '兵长茶会',
-    stageSub: '',
-    sprite: 'tea-party',
-    landmark: '☕',
-    arrivalText: '☕ 到达兵长茶会！',
-  },
-  {
-    id: 'dispatch',
-    stageNumber: 4,
-    stageName: '联络',
-    stageSub: '',
-    sprite: 'dispatch',
-    landmark: '🕊️',
-    arrivalText: '✉️ 到达联络处！',
-  },
+  { id: 'home', stageName: '兵团驻地', sprite: 'home', arrivalText: '📍 到达兵团驻地！' },
+  { id: 'resources', stageName: '巨树餐厅', sprite: 'restaurant', arrivalText: '🍽️ 到达巨树餐厅！' },
+  { id: 'doujinshi', stageName: '兵长茶会', sprite: 'tea-party', arrivalText: '☕ 到达兵长茶会！' },
+  { id: 'dispatch', stageName: '联络', sprite: 'dispatch', arrivalText: '✉️ 到达联络处！' },
 ];
 
 /**
- * 导航栏波浪羊皮纸（public/images/nav-bar.webp，1242×331）的行军路线。
+ * 纯 CSS 主题色导航栏（2026-09-20 重做）：
+ *  - 不再用 nav-bar.webp 波浪美术图，改为主题纸色平铺条；
+ *  - 进度条小人走直线：四个节点均分（tab 中心 12.5%..87.5%），
+ *    红色已走进度为一条水平直线，随切tab平移；
+ *  - 不设阴影 / 缩放 / 悬停抬升等特殊效果。
  *
- * 路线由素材的 alpha 顶缘轮廓向纸内偏移 16px（正好落在美术自带的虚线
- * 缝线上）平滑而来：x ∈ [155, 1087]，对应 4 个 tab 中心的 12.5%..87.5%。
- * SVG 使用 preserveAspectRatio="none" 与背景图同步拉伸，所以任意宽度下
- * 线都贴合图片边缘。
+ * 容器高度保持 min(26.65vw, 179.2px)，与 index.css 的
+ * .clear-adventure-nav 让位间距一致，正文不会被导航栏盖住。
  */
-const VB_W = 1242;
-const VB_H = 331;
-const ROUTE_D =
-  'M 155.0 88.9 C 161.2 86.8 179.5 78.3 192.0 75.9 C 204.5 73.5 217.5 72.6 230.0 74.5 C 242.5 76.5 254.7 82.2 267.0 87.6 C 279.3 93.0 291.7 103.1 304.0 106.8 C 316.3 110.5 328.5 110.4 341.0 109.8 C 353.5 109.2 366.5 106.7 379.0 103.4 C 391.5 100.1 403.7 94.5 416.0 89.9 C 428.3 85.3 440.5 79.5 453.0 75.8 C 465.5 72.0 478.5 68.6 491.0 67.5 C 503.5 66.3 515.7 66.9 528.0 68.8 C 540.3 70.8 552.7 75.6 565.0 79.3 C 577.3 83.0 589.5 89.3 602.0 91.1 C 614.5 92.9 627.5 92.8 640.0 90.3 C 652.5 87.8 664.7 80.0 677.0 76.2 C 689.3 72.4 701.7 68.8 714.0 67.5 C 726.3 66.3 738.5 67.0 751.0 68.7 C 763.5 70.5 776.5 74.3 789.0 78.2 C 801.5 82.2 813.7 88.0 826.0 92.4 C 838.3 96.8 850.5 101.9 863.0 104.8 C 875.5 107.8 888.5 109.8 901.0 109.9 C 913.5 110.1 925.7 109.8 938.0 105.7 C 950.3 101.7 962.7 91.1 975.0 85.8 C 987.3 80.5 999.5 75.7 1012.0 74.1 C 1024.5 72.5 1037.5 73.6 1050.0 76.4 C 1062.5 79.1 1080.8 88.2 1087.0 90.6';
-
-/** 4 个里程碑节点的 viewBox 坐标（x 对齐 tab 中心，y 为路径采样值） */
-const NODE_X = [155, 466, 776, 1087];
-const NODE_Y = [88.9, 72.1, 74.2, 90.6];
-
+const NODE_X = [12.5, 37.5, 62.5, 87.5]; // 4 个节点横向位置（%）
+const LINE_Y = 24; // 行军直线纵向位置（%）
 const WALK_DURATION = 650;
 
 export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }) => {
@@ -88,62 +48,22 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
   const [facingDirection, setFacingDirection] = useState<'left' | 'right'>('right');
   const [speechBubbleText, setSpeechBubbleText] = useState<string | null>(null);
 
-  // 导航栏常驻展示（2026-09-20 起取消「收起 / 滑到底部弹出」行为）
   const speechTimerRef = useRef<number | null>(null);
   const walkRafRef = useRef<number | null>(null);
 
-  // SVG 路径总长与 4 个节点的弧长（挂载后测量一次）
-  const routePathRef = useRef<SVGPathElement | null>(null);
-  const [totalLen, setTotalLen] = useState<number | null>(null);
-  const nodeLenRef = useRef<number[]>([0, 0, 0, 0]);
-
-  // 小人当前位置（容器百分比；沿路径动画由 getPointAtLength 驱动）
-  const [heroPos, setHeroPos] = useState<{ xp: number; yp: number }>(() => ({
-    xp: (NODE_X[0] / VB_W) * 100,
-    yp: (NODE_Y[0] / VB_H) * 100,
-  }));
+  // 小人当前横向位置（容器百分比；沿直线动画）
+  const [heroX, setHeroX] = useState<number>(NODE_X[0]);
 
   const currentIndex = STAGES.findIndex((s) => s.id === activeTab);
   const safeIndex = currentIndex >= 0 ? currentIndex : 0;
 
-  // 挂载后：测路径总长 + 二分找 4 个节点 x 对应的弧长
-  useEffect(() => {
-    const pathEl = routePathRef.current;
-    if (!pathEl) return;
-    const total = pathEl.getTotalLength();
-    setTotalLen(total);
-
-    const lenAtX = (targetX: number) => {
-      let lo = 0;
-      let hi = total;
-      for (let i = 0; i < 24; i++) {
-        const mid = (lo + hi) / 2;
-        if (pathEl.getPointAtLength(mid).x < targetX) lo = mid;
-        else hi = mid;
-      }
-      return (lo + hi) / 2;
-    };
-    nodeLenRef.current = NODE_X.map(lenAtX);
-
-    // 校正小人初始位置到路径上的准确点
-    const p0 = pathEl.getPointAtLength(nodeLenRef.current[safeIndex]);
-    setHeroPos({ xp: (p0.x / VB_W) * 100, yp: (p0.y / VB_H) * 100 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // tab 切换：小人沿 SVG 路径从上一节点走到新节点（rAF 插值）
+  // tab 切换：小人沿直线从上一节点走到新节点（rAF 插值）
   useEffect(() => {
     if (safeIndex === prevIndex) return;
-    const pathEl = routePathRef.current;
-    if (!pathEl || totalLen === null) {
-      // 路径未就绪时直接落位
-      setPrevIndex(safeIndex);
-      return;
-    }
 
-    const fromLen = nodeLenRef.current[prevIndex];
-    const toLen = nodeLenRef.current[safeIndex];
-    setFacingDirection(toLen >= fromLen ? 'right' : 'left');
+    const fromX = NODE_X[prevIndex];
+    const toX = NODE_X[safeIndex];
+    setFacingDirection(toX >= fromX ? 'right' : 'left');
     setIsWalking(true);
     setSpeechBubbleText(null);
 
@@ -151,9 +71,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
     const step = (now: number) => {
       const t = Math.min(1, (now - start) / WALK_DURATION);
       const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
-      const len = fromLen + (toLen - fromLen) * eased;
-      const pt = pathEl.getPointAtLength(len);
-      setHeroPos({ xp: (pt.x / VB_W) * 100, yp: (pt.y / VB_H) * 100 });
+      setHeroX(fromX + (toX - fromX) * eased);
       if (t < 1) {
         walkRafRef.current = requestAnimationFrame(step);
       } else {
@@ -170,7 +88,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
       if (walkRafRef.current) cancelAnimationFrame(walkRafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [safeIndex, totalLen]);
+  }, [safeIndex]);
 
   const handleSelectTab = (tab: NavigationTab) => {
     soundManager.playNavClick();
@@ -181,118 +99,55 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
     onNavigateTab(tab);
   };
 
-  // 已走进度：红色实线画到当前节点（dashoffset 过渡与小人工时一致）
-  const walkedLen = totalLen === null ? 0 : nodeLenRef.current[safeIndex];
-
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-40 select-none">
-      <div className="relative w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto">
-        {/* ====================================================
-            波浪羊皮纸导航栏背景（上缘自带深棕描边与虚线缝线）
-           ==================================================== */}
-        <img
-          src="/images/nav-bar.webp"
-          alt=""
-          draggable={false}
-          className="w-full h-auto block pointer-events-none select-none drop-shadow-[0_-4px_16px_rgba(44,30,20,0.14)]"
+      <div
+        className="relative w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto"
+        style={{ height: 'min(26.65vw, 179.2px)' }}
+      >
+        {/* 主题纸色平铺条 */}
+        <div className="absolute inset-0 rounded-t-2xl border-t-2 border-[#C9B58C] bg-gradient-to-b from-[#FAF3E0] to-[#F1E2C4]" />
+
+        {/* 行军直线：虚线为全程缝线，红色实线为已走进度 */}
+        <div
+          className="absolute left-[12.5%] right-[12.5%] border-t-2 border-dashed border-[#8C6D4F]/55"
+          style={{ top: `${LINE_Y}%` }}
+          aria-hidden="true"
+        />
+        <div
+          className="absolute left-[12.5%] h-[3px] -mt-px bg-[#C52B2B] rounded-full transition-all duration-[650ms] ease-out"
+          style={{
+            top: `${LINE_Y}%`,
+            width: `${(safeIndex / (STAGES.length - 1)) * 75}%`,
+          }}
+          aria-hidden="true"
         />
 
-        {/* ====================================================
-            行军路线 SVG：虚线为全程缝线，红色实线为已走进度，
-            二者都沿图片顶缘轮廓绘制（preserveAspectRatio=none 与
-            背景图同步拉伸）
-           ==================================================== */}
-        <svg
-          viewBox={`0 0 ${VB_W} ${VB_H}`}
-          preserveAspectRatio="none"
-          className="absolute inset-0 w-full h-full pointer-events-none overflow-visible"
-          aria-hidden="true"
-        >
-          <path
-            d={ROUTE_D}
-            fill="none"
-            stroke="#8C6D4F"
-            strokeWidth={4}
-            strokeLinecap="round"
-            strokeDasharray="11 9"
-            opacity={0.55}
-          />
-          <path
-            ref={routePathRef}
-            d={ROUTE_D}
-            fill="none"
-            stroke="#C52B2B"
-            strokeWidth={5}
-            strokeLinecap="round"
-            style={
-              totalLen === null
-                ? { strokeDasharray: 0, strokeDashoffset: 0 }
-                : {
-                    strokeDasharray: totalLen,
-                    strokeDashoffset: totalLen - walkedLen,
-                    transition: 'stroke-dashoffset 650ms ease-out',
-                    filter: 'drop-shadow(0 1px 1px rgba(140,29,29,0.35))',
-                  }
-            }
-          />
-          {/* 中央装饰爱心：素材在缝线 V 谷挂了一颗棕色爱心（中心约 617,104），
-              原位叠一颗红色爱心盖住它，与里程碑爱心同色系 */}
-          <path
-            d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"
-            transform="translate(598 85) scale(1.6)"
-            fill="#C52B2B"
-            stroke="#8C1D1D"
-            strokeWidth={1.4}
-            style={{ filter: 'drop-shadow(0 1px 1px rgba(140,29,29,0.4))' }}
-          />
-        </svg>
-
-        {/* 4 个爱心里程碑节点（y 跟随路径在对应 x 处的高度） */}
+        {/* 4 个爱心里程碑节点 */}
         {STAGES.map((s, nodeIdx) => {
           const isCompleted = nodeIdx <= safeIndex;
-          const isReachable = totalLen !== null;
           return (
             <div
               key={s.id}
-              className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none z-10 transition-all duration-300"
-              style={{
-                left: `${(NODE_X[nodeIdx] / VB_W) * 100}%`,
-                top: `${(NODE_Y[nodeIdx] / VB_H) * 100}%`,
-              }}
+              className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none z-10"
+              style={{ left: `${NODE_X[nodeIdx]}%`, top: `${LINE_Y}%` }}
             >
               <Heart
-                size={14}
-                className={`transition-all duration-300 ${
-                  isCompleted && isReachable
-                    ? 'fill-[#C52B2B] text-[#8C1D1D] drop-shadow-2xs scale-110'
+                size={13}
+                className={
+                  isCompleted
+                    ? 'fill-[#C52B2B] text-[#8C1D1D]'
                     : 'text-[#8C6D4F] fill-white/80 opacity-60'
-                }`}
+                }
               />
             </div>
           );
         })}
 
-        {/* 最右侧：靠墙伙伴小人 + NEXT 提示牌（路径终点右侧的纸面坡下） */}
-        <div className="absolute right-[1.5%] top-[24%] -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none">
-          <UiSprite
-            name="nav-companion"
-            width={16}
-            role="img"
-            label="进度条靠墙角色"
-            className="drop-shadow-xs shrink-0"
-          />
-          <span className="px-1 py-[0.5px] text-[7px] font-black bg-[#C52B2B] text-white rounded-xs leading-none shadow-2xs tracking-wider shrink-0 -mt-0.5">
-            NEXT
-          </span>
-        </div>
-
-        {/* 行走中的像素小人：位置沿 SVG 路径插值，脚底贴线 */}
+        {/* 行走中的像素小人：沿直线插值，脚底贴线 */}
         <div
           className="absolute -translate-x-1/2 -translate-y-full z-30 pointer-events-none"
-          style={{
-            left: `${heroPos.xp}%`,
-            top: `${heroPos.yp}%`,
-          }}
+          style={{ left: `${heroX}%`, top: `${LINE_Y}%` }}
         >
           <AdventureHeroSprite
             isWalking={isWalking}
@@ -302,10 +157,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
           />
         </div>
 
-        {/* ====================================================
-            4 格核心跳转按键（覆盖在纸面下半部）
-            兵团驻地 | 巨树餐厅 | 兵长茶会 | 联络
-           ==================================================== */}
+        {/* 4 格核心跳转按键 */}
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between px-3 sm:px-4 pt-1 pb-[7%] sm:pb-[5%]">
           {STAGES.map((s, idx) => {
             const isActive = safeIndex === idx;
@@ -314,10 +166,8 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
                 <button
                   type="button"
                   onClick={() => handleSelectTab(s.id)}
-                  className={`flex-1 flex flex-col items-center justify-center py-1 px-1 relative transition-all cursor-pointer whitespace-nowrap rounded-lg min-h-[40px] ${
-                    isActive
-                      ? 'text-[#1E4334]'
-                      : 'text-[#5D4733] hover:text-[#1E4334]'
+                  className={`flex-1 flex flex-col items-center justify-center py-1 px-1 relative cursor-pointer whitespace-nowrap rounded-lg min-h-[40px] ${
+                    isActive ? 'text-[#1E4334]' : 'text-[#5D4733]'
                   }`}
                 >
                   {/* 道具槽图标 */}
@@ -327,9 +177,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
                       width={isActive ? 22 : 20}
                       role="img"
                       label={s.stageName}
-                      className={`pointer-events-none drop-shadow-2xs transition-all ${
-                        isActive ? 'scale-110' : 'opacity-85'
-                      }`}
+                      className="pointer-events-none"
                     />
                   </div>
 
@@ -353,9 +201,9 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
         </div>
       </div>
 
-      {/* 安全区垫条：颜色取自导航栏纸面底缘 */}
+      {/* 安全区垫条：与导航栏底缘同色 */}
       <div
-        className="w-full max-w-xl mx-auto bg-[#F7DDAF]"
+        className="w-full max-w-xl mx-auto bg-[#F1E2C4]"
         style={{ height: 'max(env(safe-area-inset-bottom, 0px), 6px)' }}
       />
     </footer>

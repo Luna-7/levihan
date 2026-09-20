@@ -4,7 +4,6 @@ import { Calendar, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { SvgBaroqueCorner } from './PopUpShopDecorations';
 import { soundManager } from '../utils/audio';
 import { UiSprite } from './UiSprite';
-import { PopupSketchOverlay } from './PopupSketchOverlay';
 import { submitToInbox } from '../utils/submissionInbox';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
@@ -401,7 +400,6 @@ export const PopUpShopBanner: React.FC<Props> = ({
 
             {/* 卷轴纸面：自上而下展开 */}
             <div className="rules-scroll-paper relative z-10 mx-3 px-4 sm:px-5 pt-4 pb-5 max-h-[70dvh] overflow-y-auto">
-              <PopupSketchOverlay />
               <div className="relative flex items-center gap-2 border-b-2 border-[#C5A059] pb-2 mb-3 pr-8">
                 <span className="text-xl">✨</span>
                 <span className="font-serif-title font-bold text-sm sm:text-base">
@@ -467,7 +465,6 @@ export const PopUpShopBanner: React.FC<Props> = ({
           }}
         >
           <form onSubmit={submitProposal} className="relative w-full max-w-lg rounded-xl border-2 border-[#1E4334] bg-[#FBF7EC] p-4 space-y-3 shadow-2xl overflow-hidden">
-            <PopupSketchOverlay />
             <div className="relative flex justify-between">
               <div>
                 <h3 className="font-serif-title font-bold text-[#1E4334]">投递利韩企划</h3>

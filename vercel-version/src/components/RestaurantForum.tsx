@@ -11,7 +11,6 @@ import { getAccessToken, getCurrentUid, getCurrentProfile } from '../utils/cloud
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { CharacterArt, spriteRef } from './CharacterArt';
-import { PopupSketchOverlay } from './PopupSketchOverlay';
 import { TeaPartyInteractiveZipline } from './TeaPartyInteractiveZipline';
 import { compileRelayPostToNovel, jumpToCompiledNovelInDoujinArchive } from '../utils/relayNovels';
 import { MarketItem, INITIAL_MARKET_ITEMS } from './PotatoMarket';
@@ -2338,7 +2337,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
               className="w-full max-w-lg bg-[#FAF6EE] popup-frame-border rounded-2xl shadow-2xl p-4 sm:p-5 space-y-3 max-h-[90vh] overflow-y-auto relative my-auto shrink-0"
             >
               <CardPatternOverlay opacity={0.1} mode="multiply" />
-              <PopupSketchOverlay />
 
               <div className="relative z-10 flex items-center justify-between pb-2 border-b border-[#D8C7AA]">
                 <h2 className="font-serif-title text-sm font-black text-[#2D1F13]">
@@ -2781,7 +2779,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
               className="w-full max-w-lg bg-[#FAF6EE] popup-frame-border rounded-2xl shadow-2xl p-4 sm:p-5 space-y-3.5 max-h-[90vh] overflow-y-auto relative my-auto shrink-0 text-[#2D1F13]"
             >
               <CardPatternOverlay opacity={0.08} mode="multiply" />
-              <PopupSketchOverlay />
 
               {/* 弹窗顶栏 */}
               <div className="relative z-10 flex items-center justify-between pb-2 border-b border-[#D8C7AA]">

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { soundManager } from '../utils/audio';
 import { UiSprite } from './UiSprite';
-import { PopupSketchOverlay } from './PopupSketchOverlay';
 
 interface Props {
   onOpenGameModal: () => void;
@@ -165,7 +164,6 @@ export const MiniProgramJumpGrid: React.FC<Props> = ({
             className="relative w-full max-w-xs bg-[#FBF7EC] border-[3px] border-[#1C1611] shadow-[7px_7px_0_#1C1611] p-5 text-center overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <PopupSketchOverlay />
             {/* 顶部胶带装饰 */}
             <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-14 h-4 bg-[#E8DCBF]/90 border border-[#D0C09E]/80 -rotate-2 shadow-2xs rounded-2xs pointer-events-none" />
 

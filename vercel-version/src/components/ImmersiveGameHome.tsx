@@ -15,7 +15,6 @@ import { GROUP_INFO } from '../data/initialData';
 import { UserEntry } from './UserEntry';
 import { UiSprite } from './UiSprite';
 import { CardPatternOverlay } from './CardPatternOverlay';
-import { PopupSketchOverlay } from './PopupSketchOverlay';
 import { LEVIHAN_OPEN_DOUJIN_EVENT } from '../utils/relayNovels';
 
 interface Props {
@@ -171,7 +170,6 @@ export const ImmersiveGameHome: React.FC<Props> = ({
             >
               {/* 玻璃斜向高光 */}
               <div className="absolute inset-0 bg-gradient-to-br from-white/50 via-transparent to-transparent pointer-events-none" />
-              <PopupSketchOverlay />
               <CardPatternOverlay
                 opacity={0.08}
                 mode="multiply"
@@ -361,7 +359,6 @@ export const ImmersiveGameHome: React.FC<Props> = ({
             className="relative w-full max-w-sm max-h-[86dvh] bg-[#FAF6ED] popup-frame-border rounded-2xl shadow-2xl p-4 sm:p-5 text-[#16273B] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <PopupSketchOverlay />
             <CardPatternOverlay opacity={0.14} mode="multiply" />
             <div className="relative z-10 flex items-center justify-between pb-2 mb-1">
               <div className="flex items-center gap-2">
@@ -430,7 +427,6 @@ export const ImmersiveGameHome: React.FC<Props> = ({
             className="w-full max-w-lg bg-[#FAF6ED] popup-frame-border rounded-2xl p-4 text-[#16273B] shadow-2xl relative overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <PopupSketchOverlay />
             <CardPatternOverlay opacity={0.14} mode="multiply" />
             <div className="relative z-10 flex items-center justify-between border-b border-[#C5A059] pb-2 mb-3">
               <div className="flex items-center gap-2">
@@ -544,7 +540,6 @@ export const ImmersiveGameHome: React.FC<Props> = ({
             className="w-full max-w-2xl max-h-[92dvh] bg-[#FAF5EA] popup-frame-border rounded-2xl shadow-2xl flex flex-col overflow-hidden relative"
             onClick={(e) => e.stopPropagation()}
           >
-            <PopupSketchOverlay />
             <CardPatternOverlay opacity={0.12} mode="multiply" />
 
             {/* 弹窗顶部标题栏 */}
@@ -599,7 +594,6 @@ export const ImmersiveGameHome: React.FC<Props> = ({
             className="w-full max-w-2xl max-h-[92dvh] bg-[#FAF5EA] popup-frame-border rounded-2xl shadow-2xl flex flex-col overflow-hidden relative"
             onClick={(e) => e.stopPropagation()}
           >
-            <PopupSketchOverlay />
             <CardPatternOverlay opacity={0.12} mode="multiply" />
 
             {/* 弹窗顶部标题栏 */}
