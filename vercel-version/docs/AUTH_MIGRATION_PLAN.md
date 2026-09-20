@@ -64,12 +64,36 @@
 
 > 注：codex 分支有现成的 `src/features/auth/api.ts` + `UserEntry.test.tsx`，可参考其 API 契约，但需适配中文昵称 + 你的现有 UI。
 
-### 3.4 产品内容（你手动出）
+### 3.4 产品内容（题库已定 + 冷却规则）
 
-| 内容 | 说明 |
+**题库（5 题，已由用户提供，答案序列 C B D C D）**
+
+| # | prompt | options（A/B/C/D） | 正确答案 |
+|---|---|---|---|
+| 1 | 公式书上，利威尔、韩吉两人分别什么属性（格斗/行动/脑力/协调/…）是 11？ | 格斗、脑力 / 洁癖、脑力 / 格斗、智慧 / 洁癖、智慧 | **C（格斗、智慧）** |
+| 2 | 漫画王政篇中，利威尔、韩吉两人的接头外号分别是？ | Titan killer; Glasses / Moppel; Engelchen / Black tea; Glasses / Baby face; Little angel | **B（Moppel; Engelchen）** |
+| 3 | 「ifkk」在漫画中是第几话？章节名「矜持」正确的中文翻译是？ | 115话；支撑 / 115话；角色 / 126话；火种 / 126话；自尊 | **D（126话；自尊）** |
+| 4 | 「akkk」是什么的缩写？ | 分からないものがあれば… / いっそう二人で… / 相変わらず巨人とは片想いのまま… / じゃあな、ハンジ。見ててくれ。 | **C（相変わらず巨人とは片想いのまま…）** |
+| 5 | 巨人中学校里，韩吉找利威尔对试卷分数谁更高，用什么做赌注？ | 紅茶 / 巨人のエサ / さっちゃんイカ / 焼きそばパン | **D（焼きそばパン）** |
+
+> ✅ 答案序列最终为 **C B D C D**（第 1 题 = C 格斗、智慧；第 4 题 = C 相変わらず巨人とは片想い…）。
+
+**答题规则（最终决策）**
+
+- **抽题方式**：5 题随机抽 1 题（`sampling_weight` 全为 1，等权重），答对 1 题即过关（`passing_score = 1`）。
+- **冷却规则**：单次挑战内 `max_attempts = 3`，答错 3 次（`status='failed'`）后，同一 IP 哈希 24h 内禁止新建挑战。
+  - 实现位置：`createChallenge` 前加一步 `SELECT count(*) FROM registration_challenges WHERE ip_hash=$1 AND status='failed' AND updated_at > now()-interval '24 hours'`，≥ 1 则抛错（返回冷却剩余时间）。
+  - 冷却阈值 = **1 次失败**（即一次挑战 3 次机会用尽，锁 24h）。
+
+**环境变量**
+
+| 变量 | 说明 |
 |---|---|
-| **题库题目** | 答题注册需要至少 1 道题（`question_bank` 表），含 prompt + options + accepted_answer_hashes + normalization_rule。codex 没给题，需你出题。 |
-| **环境变量** | `PEPPER`（≥32 字符，HMAC domain hash 用）、`SESSION_COOKIE_DOMAIN`、`SESSION_COOKIE_NAME`、`CSRF_COOKIE_NAME` |
+| `PEPPER` | ≥32 字符，HMAC-SHA256 domain hash 用（算 `accepted_answer_hashes` 也用它） |
+| `SESSION_COOKIE_DOMAIN` | 会话 Cookie 域名 |
+| `SESSION_COOKIE_NAME` / `CSRF_COOKIE_NAME` | Cookie 名 |
+
+**题库种子 SQL 的哈希计算**：`accepted_answer_hashes` = `HMAC-SHA256(pepper, "question-answer\0" + normalized_answer)`，normalization_rule 建议 `trim_lowercase`（中文答案不区分大小写/空格）。pepper 定下来后跑一个 node 脚本批量算 5 题哈希，生成 INSERT。
 
 ---
 
