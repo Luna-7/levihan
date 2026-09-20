@@ -83,6 +83,9 @@ export const NovelModule: React.FC<Props> = ({
   const [uploadAuthorUrl, setUploadAuthorUrl] = useState('');
   const [uploadBody, setUploadBody] = useState('');
   const [uploadNotes, setUploadNotes] = useState('');
+  const [uploadTags, setUploadTags] = useState('');
+  const [uploadWarnOn, setUploadWarnOn] = useState(false);
+  const [uploadWarning, setUploadWarning] = useState('');
   const [uploadFileName, setUploadFileName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [recTitle, setRecTitle] = useState('');
@@ -221,6 +224,10 @@ export const NovelModule: React.FC<Props> = ({
       onShowToast('请填写标题、作者、邮箱和小说正文');
       return;
     }
+    if (uploadWarnOn && !uploadWarning.trim()) {
+      onShowToast('已勾选内容预警，请填写预警内容');
+      return;
+    }
     setIsUploading(true);
     try {
       await submitToInbox('submitNovel', {
@@ -230,6 +237,8 @@ export const NovelModule: React.FC<Props> = ({
         authorUrl: uploadAuthorUrl.trim(),
         body: uploadBody.trim(),
         notes: uploadNotes.trim(),
+        tags: uploadTags.trim(),
+        warning: uploadWarnOn ? uploadWarning.trim() : '',
       });
       setShowUpload(false);
       setUploadTitle('');
@@ -238,6 +247,9 @@ export const NovelModule: React.FC<Props> = ({
       setUploadAuthorUrl('');
       setUploadBody('');
       setUploadNotes('');
+      setUploadTags('');
+      setUploadWarnOn(false);
+      setUploadWarning('');
       setUploadFileName('');
       onShowToast('小说已提交，审核通过后会进入在线粮仓 📚');
     } catch (error) {
@@ -328,6 +340,14 @@ export const NovelModule: React.FC<Props> = ({
                 在线小说 & 合订本 · 共 {filteredNovels.length} 篇
               </h3>
             </div>
+            {/* 上传入口：与后台「小说管理」同款格式投稿 */}
+            <button
+              type="button"
+              onClick={() => { soundManager.playWoodTap(); setUploadKind('novel'); setShowUpload(true); }}
+              className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#B7791F] border border-[#9A6519] text-[#FFFEEF] font-pixel text-[11px] font-bold cursor-pointer transition-colors hover:bg-[#9A6519]"
+            >
+              ✍️ 上传小说
+            </button>
           </div>
           {filteredNovels.length === 0 ? (
             <div className="p-6 text-center bg-[#FFFEEF]/75 backdrop-blur-xs border border-dashed border-[#D5C9AF] rounded-xl text-xs font-retro-jp text-[#8C7A68]">
@@ -423,11 +443,20 @@ export const NovelModule: React.FC<Props> = ({
       {/* 第二段：站外推荐（2列瀑布流） */}
       {showRecs && recs.length > 0 && (
         <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 bg-[#1E4334]/90 backdrop-blur-md border border-[#1E4334]/70 rounded-lg px-3 py-1.5 shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-[#F9E79F] animate-pulse" />
-            <h3 className="font-pixel text-xs font-bold text-white tracking-wide">
-              站外推荐 · 共 {filteredRecs.length} 篇
-            </h3>
+          <div className="flex items-center justify-between gap-2">
+            <div className="inline-flex items-center gap-2 bg-[#1E4334]/90 backdrop-blur-md border border-[#1E4334]/70 rounded-lg px-3 py-1.5 shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-[#F9E79F] animate-pulse" />
+              <h3 className="font-pixel text-xs font-bold text-white tracking-wide">
+                站外推荐 · 共 {filteredRecs.length} 篇
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => { soundManager.playWoodTap(); setUploadKind('recommend'); setShowUpload(true); }}
+              className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#B7791F] border border-[#9A6519] text-[#FFFEEF] font-pixel text-[11px] font-bold cursor-pointer transition-colors hover:bg-[#9A6519]"
+            >
+              ✎ 推荐外链
+            </button>
           </div>
           {filteredRecs.length === 0 ? (
             <div className="p-6 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
@@ -587,8 +616,20 @@ export const NovelModule: React.FC<Props> = ({
               <input type="file" accept=".txt,.md,text/plain,text/markdown" className="hidden" onChange={(e) => void handleNovelFile(e.target.files?.[0])} />
             </label>
 
+            <label className="block text-xs font-bold">标签 <span className="font-normal text-[#7A6958]">英文逗号分隔，如：原作向,R</span><input value={uploadTags} onChange={(e) => setUploadTags(e.target.value)} maxLength={120} placeholder="例如：原作向,R" className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
+
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
+                <input type="checkbox" checked={uploadWarnOn} onChange={(e) => setUploadWarnOn(e.target.checked)} className="w-auto accent-[#1E4334]" />
+                ⚠ 内容预警 <span className="font-normal text-[#7A6958]">勾选后填写，站点卡片会显示</span>
+              </label>
+              {uploadWarnOn && (
+                <textarea value={uploadWarning} onChange={(e) => setUploadWarning(e.target.value)} rows={2} maxLength={100} className="w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334] resize-y" />
+              )}
+            </div>
+
             <label className="block text-xs font-bold">小说正文<textarea value={uploadBody} onChange={(e) => setUploadBody(e.target.value)} rows={10} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334] resize-y leading-relaxed" /></label>
-            <label className="block text-xs font-bold">给审核员的备注（选填）<textarea value={uploadNotes} onChange={(e) => setUploadNotes(e.target.value)} rows={2} maxLength={2000} className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334] resize-y" /></label>
+            <label className="block text-xs font-bold">作者说的话（选填）<span className="font-normal text-[#7A6958]">审核通过后以引用块展示在卡片上</span><textarea value={uploadNotes} onChange={(e) => setUploadNotes(e.target.value)} rows={2} maxLength={2000} className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334] resize-y" /></label>
 
             </> : <div className="space-y-2">
               <label className="block text-xs font-bold">作品名称<input value={recTitle} onChange={(e) => setRecTitle(e.target.value)} required className="mt-1 w-full p-2 bg-white border border-[#BFA985]" /></label>

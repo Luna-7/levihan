@@ -787,9 +787,17 @@ async function submitToInbox(type, payload) {
       try { parsed = new URL(authorUrl); } catch { throw httpError('作者主页链接不是有效网址', 400); }
       if (!['https:', 'http:'].includes(parsed.protocol)) throw httpError('作者主页链接只支持 HTTP(S)', 400);
     }
+    // 与后台「小说管理」发布格式对齐：标签（逗号分隔，≤20 个）+ 内容预警（≤100 字）
+    const rawTags = Array.isArray(payload.tags)
+      ? payload.tags
+      : String(payload.tags || '').split(/[,，]/);
+    const tags = rawTags.map((t) => String(t == null ? '' : t).trim()).filter(Boolean).slice(0, 20);
+    const warning = String(payload.warning || '').trim().slice(0, 100);
     item = { title, author, email, body,
       authorUrl: authorUrl.slice(0, 300),
       notes: String(payload.notes || '').trim().slice(0, 2000) };
+    if (tags.length) item.tags = tags;
+    if (warning) item.warning = warning;
   } else if (type === 'announcement') {
     const title = String(payload.title || '').trim().slice(0, 100);
     const author = String(payload.author || '').trim().slice(0, 40);
@@ -827,7 +835,8 @@ async function reviewInbox(payload) {
     if (item.type === 'novel') {
       const novelId = 'nv-' + id.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 32);
       await handle('novelSave', { id: novelId, title: item.title, author: item.author,
-        authorUrl: item.authorUrl, body: item.body, authorNote: item.notes });
+        authorUrl: item.authorUrl, body: item.body, authorNote: item.notes,
+        tags: item.tags, warning: item.warning });
     } else if (item.type === 'announcement') {
       await handle('announcementSave', { item: { tag: '利韩企划', title: item.title, time: item.time,
         author: item.author, link: item.link, image: item.image, description: item.description } });
