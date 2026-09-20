@@ -37,7 +37,7 @@ const STAGES: StageItem[] = [
  * .clear-adventure-nav 让位间距一致，正文不会被导航栏盖住。
  */
 const NODE_X = [12.5, 37.5, 62.5, 87.5]; // 4 个节点横向位置（%）
-const LINE_Y = 24; // 行军直线纵向位置（%）
+const LINE_Y = 0; // 行军直线纵向位置（%）：0 = 压在导航栏顶缘上，小人与进度条都「站在栏上」
 const WALK_DURATION = 650;
 
 export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }) => {
@@ -158,8 +158,11 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
           />
         </div>
 
-        {/* 最右侧：靠墙伙伴小人 + NEXT 提示牌（进度线终点右侧，站在导航栏上段） */}
-        <div className="absolute right-[1.5%] top-[24%] -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none">
+        {/* 最右侧：靠墙伙伴小人 + NEXT 提示牌（站在导航栏顶缘上，与进度线同高） */}
+        <div
+          className="absolute right-[1.5%] -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none"
+          style={{ top: `${LINE_Y}%` }}
+        >
           <UiSprite
             name="nav-companion"
             width={16}
