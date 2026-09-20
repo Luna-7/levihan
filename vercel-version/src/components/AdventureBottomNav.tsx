@@ -26,10 +26,11 @@ const STAGES: StageItem[] = [
 ];
 
 /**
- * 纯 CSS 主题色导航栏（2026-09-20 重做）：
- *  - 不再用 nav-bar.webp 波浪美术图，改为主题纸色平铺条；
+ * 纯 CSS 主题色导航栏（2026-09-20 重做，同日修正）：
+ *  - 不再用 nav-bar.webp 波浪美术图，改为主题纸色平铺条（纯色，不用渐变）；
  *  - 进度条小人走直线：四个节点均分（tab 中心 12.5%..87.5%），
  *    红色已走进度为一条水平直线，随切tab平移；
+ *  - 进度线右端保留「靠墙伙伴小人 + NEXT」提示牌（nav-companion，勿删）；
  *  - 不设阴影 / 缩放 / 悬停抬升等特殊效果。
  *
  * 容器高度保持 min(26.65vw, 179.2px)，与 index.css 的
@@ -105,8 +106,8 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
         className="relative w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto"
         style={{ height: 'min(26.65vw, 179.2px)' }}
       >
-        {/* 主题纸色平铺条 */}
-        <div className="absolute inset-0 rounded-t-2xl border-t-2 border-[#C9B58C] bg-gradient-to-b from-[#FAF3E0] to-[#F1E2C4]" />
+        {/* 主题纸色平铺条（纯色，不用渐变） */}
+        <div className="absolute inset-0 rounded-t-2xl border-t-2 border-[#C9B58C] bg-[#F6EDD7]" />
 
         {/* 行军直线：虚线为全程缝线，红色实线为已走进度 */}
         <div
@@ -157,6 +158,20 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
           />
         </div>
 
+        {/* 最右侧：靠墙伙伴小人 + NEXT 提示牌（进度线终点右侧，站在导航栏上段） */}
+        <div className="absolute right-[1.5%] top-[24%] -translate-y-1/2 flex flex-col items-center z-20 pointer-events-none">
+          <UiSprite
+            name="nav-companion"
+            width={16}
+            role="img"
+            label="进度条靠墙角色"
+            className="drop-shadow-xs shrink-0"
+          />
+          <span className="px-1 py-[0.5px] text-[7px] font-black bg-[#C52B2B] text-white rounded-xs leading-none shadow-2xs tracking-wider shrink-0 -mt-0.5">
+            NEXT
+          </span>
+        </div>
+
         {/* 4 格核心跳转按键 */}
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between px-3 sm:px-4 pt-1 pb-[7%] sm:pb-[5%]">
           {STAGES.map((s, idx) => {
@@ -203,7 +218,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
 
       {/* 安全区垫条：与导航栏底缘同色 */}
       <div
-        className="w-full max-w-xl mx-auto bg-[#F1E2C4]"
+        className="w-full max-w-xl mx-auto bg-[#F6EDD7]"
         style={{ height: 'max(env(safe-area-inset-bottom, 0px), 6px)' }}
       />
     </footer>
