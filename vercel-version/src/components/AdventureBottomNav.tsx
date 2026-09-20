@@ -88,44 +88,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
   const [facingDirection, setFacingDirection] = useState<'left' | 'right'>('right');
   const [speechBubbleText, setSpeechBubbleText] = useState<string | null>(null);
 
-  // ====================================================
-  // 伸缩款导航栏（首页除外）：
-  // 默认收起，鼠标/手指滑到屏幕底部才弹出；离开底部自动收起。
-  // 首页保持常驻展示，不受此逻辑影响。
-  // ====================================================
-  const isHome = activeTab === 'home';
-  const [isExpanded, setIsExpanded] = useState(false);
-  /** 距视口底部多少像素内视为「滑到底部」 */
-  const BOTTOM_HINT_PX = 64;
-
-  useEffect(() => {
-    if (isHome) {
-      setIsExpanded(false);
-      return;
-    }
-    const updateByPointerY = (clientY: number) => {
-      setIsExpanded(clientY >= window.innerHeight - BOTTOM_HINT_PX);
-    };
-    const onMouseMove = (e: MouseEvent) => updateByPointerY(e.clientY);
-    const onTouch = (e: TouchEvent) => {
-      const t = e.touches[0];
-      if (t) updateByPointerY(t.clientY);
-    };
-    window.addEventListener('mousemove', onMouseMove, { passive: true });
-    window.addEventListener('touchstart', onTouch, { passive: true });
-    window.addEventListener('touchmove', onTouch, { passive: true });
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('touchstart', onTouch);
-      window.removeEventListener('touchmove', onTouch);
-    };
-  }, [isHome]);
-
-  // 切换页面后先收起（让内容优先呈现），鼠标再次移动到底部时才重新弹出
-  useEffect(() => {
-    setIsExpanded(false);
-  }, [activeTab]);
-
+  // 导航栏常驻展示（2026-09-20 起取消「收起 / 滑到底部弹出」行为）
   const speechTimerRef = useRef<number | null>(null);
   const walkRafRef = useRef<number | null>(null);
 
@@ -221,21 +184,8 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
   // 已走进度：红色实线画到当前节点（dashoffset 过渡与小人工时一致）
   const walkedLen = totalLen === null ? 0 : nodeLenRef.current[safeIndex];
 
-  // 非首页且未展开 = 收起态：整体下移，仅露出上缘一小条羊皮纸边作为提示
-  const isCollapsed = !isHome && !isExpanded;
-
   return (
-    <footer
-      className={`fixed bottom-0 left-0 right-0 z-40 select-none transition-transform duration-300 ease-out ${
-        isCollapsed ? 'translate-y-[calc(100%-18px)]' : 'translate-y-0'
-      }`}
-      onMouseEnter={() => {
-        if (!isHome) setIsExpanded(true);
-      }}
-      onTouchStart={() => {
-        if (!isHome) setIsExpanded(true);
-      }}
-    >
+    <footer className="fixed bottom-0 left-0 right-0 z-40 select-none">
       <div className="relative w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto">
         {/* ====================================================
             波浪羊皮纸导航栏背景（上缘自带深棕描边与虚线缝线）
@@ -364,8 +314,6 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
                 <button
                   type="button"
                   onClick={() => handleSelectTab(s.id)}
-                  tabIndex={isCollapsed ? -1 : undefined}
-                  aria-hidden={isCollapsed}
                   className={`flex-1 flex flex-col items-center justify-center py-1 px-1 relative transition-all cursor-pointer whitespace-nowrap rounded-lg min-h-[40px] ${
                     isActive
                       ? 'text-[#1E4334]'
