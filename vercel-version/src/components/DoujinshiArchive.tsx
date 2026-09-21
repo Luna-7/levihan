@@ -15,7 +15,7 @@ import { DoujinMaintenanceGate } from './DoujinMaintenanceGate';
 import { AuthorWithLink } from '../utils/authorLink';
 import { MangaCommentSection } from './MangaCommentSection';
 import { getCommentCountByBookId } from '../data/mangaComments';
-import { getSessionToken } from '../utils/cloudbaseToken';
+import { useAuthStore } from '../stores/authStore';
 
 interface Props {
   onCopyCode?: (code: string) => void;
@@ -37,8 +37,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   // 排序方式：'pages' = 从页数多到页数少（默认），'new' = 从新到旧
   const [sortBy, setSortBy] = useState<'pages' | 'new'>('pages');
   const previewLoggedIn = import.meta.env.DEV && new URLSearchParams(window.location.search).get('previewAuth') === '1';
-  const [isMangaUnlocked, setIsMangaUnlocked] = useState<boolean>(previewLoggedIn);
-  const [isCheckingLogin, setIsCheckingLogin] = useState<boolean>(true);
+  const hasSession = useAuthStore((state) => state.hasSession);
+  const isMangaUnlocked = previewLoggedIn || hasSession;
 
   // 当前正在无缝长图阅读的书籍
   const [readingBook, setReadingBook] = useState<DoujinBookItem | null>(null);
@@ -93,26 +93,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     return () => {
       window.removeEventListener('levihan-novels-changed', reloadNovels);
       window.removeEventListener('levihan-open-novel-category', openNovelCat);
-    };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    const refreshLogin = async () => {
-      try {
-        const hasSession = Boolean(getSessionToken());
-        if (active) setIsMangaUnlocked(previewLoggedIn || hasSession);
-      } catch {
-        if (active) setIsMangaUnlocked(previewLoggedIn);
-      } finally {
-        if (active) setIsCheckingLogin(false);
-      }
-    };
-    void refreshLogin();
-    window.addEventListener('levihan-auth-changed', refreshLogin);
-    return () => {
-      active = false;
-      window.removeEventListener('levihan-auth-changed', refreshLogin);
     };
   }, []);
 

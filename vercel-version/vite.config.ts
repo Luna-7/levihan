@@ -87,7 +87,19 @@ export default defineConfig(({ mode }) => {
         globPatterns: ['index.html', 'assets/**/*.{js,css}'],
         // 加密阅读器（pdfjs-dist + crypto-js，约 414 KB）只服务「含有敏感元素」的本子，
         // 且它本身就必须联网取密文，离线预缓存没有意义 —— 别让每个访客都在后台拖它。
-        globIgnores: ['assets/SecureComicReader-*.js'],
+        globIgnores: [
+          'assets/SecureComicReader-*.js',
+          'assets/RestaurantForum-*.js',
+          'assets/DoujinshiArchive-*.js',
+          'assets/DispatchHub-*.js',
+          'assets/ResourceHub-*.js',
+          'assets/PotatoMarket-*.js',
+          'assets/TatakaruGame-*.js',
+          'assets/GameLeaderboard-*.js',
+          'assets/pdfjs-vendor-*.js',
+          'assets/pdf.worker.min-*.js',
+          'assets/crypto-vendor-*.js',
+        ],
         navigateFallback: 'index.html',
         // ⚠️ /admin 必须连**不带斜杠**的写法一起排除：
         // 只写 /^\/admin\// 时，访问 /admin（无斜杠）会被 SW 回退成前台首页，

@@ -7,7 +7,8 @@ import {
   Trash2, ChevronLeft, ChevronRight, ShoppingBag, Share2, PenLine
 } from 'lucide-react';
 import { soundManager } from '../utils/audio';
-import { getAccessToken, getCurrentUid, getCurrentProfile } from '../utils/cloudbaseToken';
+import { getAccessToken } from '../utils/cloudbaseToken';
+import { useAuthStore } from '../stores/authStore';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { CharacterArt, spriteRef } from './CharacterArt';
@@ -16,6 +17,8 @@ import { compileRelayPostToNovel, jumpToCompiledNovelInDoujinArchive } from '../
 import { MarketItem, INITIAL_MARKET_ITEMS } from './PotatoMarket';
 import { TeaPartyShareModal, ShareTargetData } from './TeaPartyShareModal';
 import { LinkShare, LinkShareCard, LinkShareModal, platformLabel } from './LinkShareCard';
+import { fmtTime, normalizeShareLink } from '../utils/forumFormat';
+export { fmtTime, normalizeShareLink } from '../utils/forumFormat';
 
 export type PostCategory = 'chat' | 'relay' | 'roleplay' | 'market' | 'links';
 
@@ -26,16 +29,6 @@ export type PostCategory = 'chat' | 'relay' | 'roleplay' | 'market' | 'links';
  * - 裸域名 → 自动补 https://
  * - 空串/明显不是链接 → 返回空串，由调用方提示
  */
-export const normalizeShareLink = (raw: string): string => {
-  const s = raw.trim();
-  if (!s) return '';
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
-  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}([/?#].*)?$/i.test(s)) return `https://${s}`;
-  // 分享文案常是「【标题】 https://…」混合文本：从中抽出链接部分（App scheme 与 http(s) 都认）
-  const m = /[a-z][a-z0-9+.-]*:\/\/[^\s"'<>【】（）《》「」『』，。；！？]+/i.exec(s);
-  return m ? m[0] : '';
-};
-
 /** 是否为 App 自定义 scheme 链接（bilibili:// 等）——这类抓不了预览，只出跳转卡 */
 export const isAppSchemeLink = (url: string): boolean =>
   /^[a-z][a-z0-9+.-]*:\/\//i.test(url) && !/^https?:\/\//i.test(url);
@@ -44,21 +37,6 @@ export const isAppSchemeLink = (url: string): boolean =>
  * 时间显示：云函数落库的是 ISO 串（2026-09-21T08:04:14.263Z），直接渲染很扎眼；
  * 种子数据/老贴里手写的「刚刚」「3 天前」这类文案不是合法日期，原样保留。
  */
-export const fmtTime = (t: string): string => {
-  if (!t) return '';
-  const d = new Date(t);
-  if (Number.isNaN(d.getTime())) return t;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const now = new Date();
-  const sameDay =
-    d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-  if (sameDay) return `今天 ${hm}`;
-  const md = `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  if (d.getFullYear() === now.getFullYear()) return `${md} ${hm}`;
-  return `${d.getFullYear()}-${md} ${hm}`;
-};
-
 export type ForumComment = {
   id: string;
   author: string;
@@ -360,7 +338,8 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   const [posts, setPosts] = useState<ForumPost[]>(loadPosts);
   const [activeCategory, setActiveCategory] = useState<'all' | 'chat' | 'relay' | 'roleplay' | 'market' | 'links'>(initialCategory || 'all');
   const [now, setNow] = useState<number>(Date.now());
-  const [currentUid, setCurrentUid] = useState<string | null>(null);
+  const profile = useAuthStore((state) => state.profile);
+  const currentUid = profile?.uid || null;
 
   // Market states (土豆市集)
   const [marketItems, setMarketItems] = useState<MarketItem[]>(() => {
@@ -486,7 +465,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   // 发帖署名默认留空，待账号档案加载后由 mount 副作用填入「账号昵称」。
   // 语C 分类不发署名（身份=所选拟音人物），其余分类的署名输入框默认显示账号昵称。
   // 注意：选角动作不再改写 nickname，避免把拟音人物名带进闲聊/接龙/市集的署名。
-  const [nickname, setNickname] = useState('');
+  const nickname = profile?.nickname || '';
   const [commenterChars, setCommenterChars] = useState<Record<string, RoleplayCharacter>>({});
 
   // Share Modal & Deep Link Highlights
@@ -648,20 +627,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       })
       .catch(() => undefined);
 
-    void getCurrentUid().then((uid) => { if (uid) setCurrentUid(uid); }).catch(() => undefined);
-
-    void (async () => {
-      try {
-        const profile = await getCurrentProfile();
-        if (!profile) return;
-        // 发帖署名默认取账号昵称；空昵称则保留空串，由发布兜底('调查兵'/'匿名同好')
-        if (profile.nickname) {
-          setNickname(profile.nickname);
-        }
-      } catch {
-        /* ignore */
-      }
-    })();
   }, []);
 
   const persist = (next: ForumPost[]) => {
@@ -3720,4 +3685,3 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     </div>
   );
 };
-

@@ -593,6 +593,14 @@ body.immersive-on .retro-frame-card > .absolute {
   position: relative;
 }
 
+@media (max-width: 767px) {
+  .silver-retro-frame,
+  .popup-frame-border {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 /* 3. 玻璃斜向高光与通透反光覆层 */
 .glass-reflection-overlay {
   position: relative;
@@ -972,5 +980,4 @@ body.immersive-on .retro-frame-card > .absolute {
     max-width: 360px;
   }
 }
-
 

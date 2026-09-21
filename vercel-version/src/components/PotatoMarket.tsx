@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { soundManager } from '../utils/audio';
-import { getAccessToken, getCurrentProfile } from '../utils/cloudbaseToken';
+import { getAccessToken } from '../utils/cloudbaseToken';
+import { useAuthStore } from '../stores/authStore';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
-import { normalizeShareLink } from './RestaurantForum';
+import { normalizeShareLink } from '../utils/forumFormat';
 import { Upload, Link as LinkIcon, DollarSign, User as UserIcon, AlertTriangle, Search, PlusCircle, X, ShieldAlert, CheckCircle2, Plus, Trash2, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 export interface MarketItem {
@@ -55,7 +56,9 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
   const [items, setItems] = useState<MarketItem[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isPublishOpen, setIsPublishOpen] = useState<boolean>(false);
-  const [autoNickname, setAutoNickname] = useState<string>('');  const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean>(false);
+  const profile = useAuthStore((state) => state.profile);
+  const autoNickname = profile?.nickname || '';
+  const isUserLoggedIn = Boolean(profile);
 
   // 查看卡片详情弹窗
   const [selectedItem, setSelectedItem] = useState<MarketItem | null>(null);
@@ -75,7 +78,7 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load items and user login nickname
+  // Load market items; account identity comes from the shared auth store.
   useEffect(() => {
     // 1. Load listings from localStorage or fallback（过滤旧版样品卡片 init-*）
     try {
@@ -101,20 +104,6 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
       })
       .catch(() => undefined);
 
-    // 2. Fetch logged-in user nickname
-    void (async () => {
-      try {
-        const profile = await getCurrentProfile();
-        if (profile) {
-          setIsUserLoggedIn(true);
-          if (profile.nickname) {
-            setAutoNickname(profile.nickname);
-          }
-        }
-      } catch {
-        // ignore
-      }
-    })();
   }, []);
 
   // Sync to localStorage

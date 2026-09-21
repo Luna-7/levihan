@@ -5,7 +5,8 @@ import { soundManager } from '../utils/audio';
 import { NovelReader } from './NovelReader';
 import { AuthorWithLink } from '../utils/authorLink';
 import { newestNovelsFirst } from '../utils/workSort';
-import { getAccessToken, getCurrentProfile, getCurrentUid } from '../utils/cloudbaseToken';
+import { getAccessToken } from '../utils/cloudbaseToken';
+import { useAuthStore } from '../stores/authStore';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { cosService } from '../services/cosClient';
 import { CardPatternOverlay } from './CardPatternOverlay';
@@ -81,19 +82,8 @@ export const NovelModule: React.FC<Props> = ({
   const [editingNovel, setEditingNovel] = useState<GroupNovel | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   /* 当前登录者 uid：卡片上「编辑」按钮只对 uid 匹配的那几篇显示 */
-  const [myUid, setMyUid] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    getCurrentUid()
-      .then((uid) => {
-        if (alive) setMyUid(uid);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const profile = useAuthStore((state) => state.profile);
+  const myUid = profile?.uid || null;
 
   useEffect(() => {
     if (initialReadingNovel) {
@@ -103,18 +93,10 @@ export const NovelModule: React.FC<Props> = ({
 
   // 上传弹窗打开时：作者名默认填当前登录昵称（可直接改成笔名）
   useEffect(() => {
-    if (!showUpload) return;
-    let alive = true;
-    getCurrentProfile()
-      .then((profile) => {
-        if (alive && profile?.nickname && !uploadAuthor) setUploadAuthor(profile.nickname);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showUpload]);
+    if (showUpload && profile?.nickname) {
+      setUploadAuthor((current) => current || profile.nickname);
+    }
+  }, [showUpload, profile?.nickname]);
 
   const q = searchQuery.trim().toLowerCase();
 

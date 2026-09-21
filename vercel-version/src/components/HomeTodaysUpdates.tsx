@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { soundManager } from '../utils/audio';
 import { cosService } from '../services/cosClient';
 import { DoujinBookItem, GroupNovel } from '../types/doujinArchive';
-import { fmtTime, ForumPost } from './RestaurantForum';
+import { fmtTime } from '../utils/forumFormat';
+import type { ForumPost } from './RestaurantForum';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 
 /** 三种更新来源的归类 */

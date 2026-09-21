@@ -1,16 +1,15 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, Suspense } from 'react';
 const Analytics = () => null;
 import { RetroPixelFrame } from './components/RetroPixelFrame';
-import { HeaderCard } from './components/HeaderCard';
 import { ImmersiveGameHome } from './components/ImmersiveGameHome';
 import { GameStageLayout } from './components/GameStageLayout';
 import { AdventureWorldBackground } from './components/AdventureWorldBackground';
 import { AdventureBottomNav } from './components/AdventureBottomNav';
 import { ResourceHub } from './components/ResourceHub';
 import { ExquisiteStoryWorkshop } from './components/ExquisiteStoryWorkshop';
-import { DoujinshiArchive } from './components/DoujinshiArchive';
-import { RestaurantForum } from './components/RestaurantForum';
-import { DispatchHub } from './components/DispatchHub';
+const DoujinshiArchive = React.lazy(() => import('./components/DoujinshiArchive').then(m => ({ default: m.DoujinshiArchive })));
+const RestaurantForum = React.lazy(() => import('./components/RestaurantForum').then(m => ({ default: m.RestaurantForum })));
+const DispatchHub = React.lazy(() => import('./components/DispatchHub').then(m => ({ default: m.DispatchHub })));
 import { BackToTopButton } from './components/BackToTopButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { GROUP_INFO, POTATO_EGG_QUOTES } from './data/initialData';
@@ -38,6 +37,13 @@ export default function App() {
     }
     return 'home';
   });
+  const [departingTab, setDepartingTab] = useState<NavigationTab | null>(null);
+  useEffect(() => {
+    if (departingTab === null) return;
+    const timer = window.setTimeout(() => setDepartingTab(null), 650);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, departingTab]);
+  const isMounted = (tab: NavigationTab) => activeTab === tab || departingTab === tab;
   const [isSoundMuted, setIsSoundMuted] = useState<boolean>(soundManager.isMuted());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
@@ -47,13 +53,14 @@ export default function App() {
   // 监听接龙合订本跳转事件，切换到巨树餐厅（同人典藏阁）
   useEffect(() => {
     const handleOpenNovel = () => {
+      if (activeTab !== 'resources') setDepartingTab(activeTab);
       setActiveTab('resources');
     };
     window.addEventListener(LEVIHAN_OPEN_DOUJIN_EVENT, handleOpenNovel);
     return () => {
       window.removeEventListener(LEVIHAN_OPEN_DOUJIN_EVENT, handleOpenNovel);
     };
-  }, []);
+  }, [activeTab]);
 
   const showToast = useCallback((msg: string) => {
     if (toastTimerRef.current !== null) {
@@ -104,6 +111,7 @@ export default function App() {
 
   const handleNavigate = (tab: NavigationTab) => {
     soundManager.playNavClick();
+    if (tab !== activeTab) setDepartingTab(activeTab);
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -134,12 +142,12 @@ export default function App() {
             }`}
             aria-hidden={activeTab !== 'home'}
           >
-            <ImmersiveGameHome
+            {isMounted('home') && <ImmersiveGameHome
               onNavigateTab={handleNavigate}
               onShowToast={showToast}
               isSoundMuted={isSoundMuted}
               onToggleSound={handleToggleSound}
-            />
+            />}
           </div>
 
           {/* VIEW 2: 巨树餐厅 (同人归档) */}
@@ -149,18 +157,18 @@ export default function App() {
             }`}
             aria-hidden={activeTab !== 'resources'}
           >
-            <GameStageLayout
+            {isMounted('resources') && <GameStageLayout
               activeTab="resources"
               onNavigateTab={handleNavigate}
               isSoundMuted={isSoundMuted}
               onToggleSound={handleToggleSound}
               onShowToast={showToast}
             >
-              <DoujinshiArchive
+              <Suspense fallback={null}><DoujinshiArchive
                 onCopyCode={handleCopyExtractionCode}
                 onShowToast={showToast}
-              />
-            </GameStageLayout>
+              /></Suspense>
+            </GameStageLayout>}
           </div>
 
           {/* VIEW 3: 团长茶话会 (同好茶室·故事接龙·安科创作) */}
@@ -170,10 +178,10 @@ export default function App() {
             }`}
             aria-hidden={activeTab !== 'doujinshi'}
           >
-            <RestaurantForum
+            {isMounted('doujinshi') && <Suspense fallback={null}><RestaurantForum
               onBack={() => handleNavigate('home')}
               onShowToast={showToast}
-            />
+            /></Suspense>}
           </div>
 
           {/* VIEW 4: 调查联络 (飞鸽信使·投递·讨论·营地) */}
@@ -183,15 +191,15 @@ export default function App() {
             }`}
             aria-hidden={activeTab !== 'dispatch'}
           >
-            <GameStageLayout
+            {isMounted('dispatch') && <GameStageLayout
               activeTab="dispatch"
               onNavigateTab={handleNavigate}
               isSoundMuted={isSoundMuted}
               onToggleSound={handleToggleSound}
               onShowToast={showToast}
             >
-              <DispatchHub onShowToast={showToast} />
-            </GameStageLayout>
+              <Suspense fallback={null}><DispatchHub onShowToast={showToast} /></Suspense>
+            </GameStageLayout>}
           </div>
         </div>
       </div>

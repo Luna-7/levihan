@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
-import { getAccessToken, getCurrentProfile } from '../utils/cloudbaseToken';
+import { getAccessToken } from '../utils/cloudbaseToken';
+import { useAuthStore } from '../stores/authStore';
 import { soundManager } from '../utils/audio';
 
 interface NovelComment {
@@ -44,8 +45,9 @@ export const NovelComments: React.FC<Props> = ({ novelId, novelAuthorUid, onToas
   const [loadFailed, setLoadFailed] = useState(false);
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
-  const [myUid, setMyUid] = useState<string | null>(null);
-  const [myNickname, setMyNickname] = useState('');
+  const profile = useAuthStore((state) => state.profile);
+  const myUid = profile?.uid || null;
+  const myNickname = profile?.nickname || '';
   const [confirmId, setConfirmId] = useState<string>('');
 
   useEffect(() => {
@@ -63,13 +65,6 @@ export const NovelComments: React.FC<Props> = ({ novelId, novelAuthorUid, onToas
           setLoadFailed(true);
         }
       });
-    getCurrentProfile()
-      .then((p) => {
-        if (!alive) return;
-        setMyUid(p?.uid || null);
-        setMyNickname(p?.nickname || '');
-      })
-      .catch(() => {});
     return () => {
       alive = false;
     };

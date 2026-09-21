@@ -17,7 +17,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, Flame, RotateCcw, Skull, Volume2, VolumeX } from 'lucide-react';
-import rumblingBg from './assets/images/rumbling_bg_1789328679857.jpg';
+import rumblingBg from './assets/images/rumbling_bg_1789328679857.webp';
 import { GameBoard } from './components/GameBoard';
 import { VictoryModal } from './components/VictoryModal';
 import { DefeatModal } from './components/DefeatModal';

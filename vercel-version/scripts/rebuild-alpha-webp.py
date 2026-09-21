@@ -97,11 +97,6 @@ def rebuild(src: Path, dst: Path, crop=None, resize=None,
 # crop 用 (left, top, right, bottom)
 JOBS = [
     dict(
-        src=SRC_LIB / "导航栏.png",
-        dst=ROOT / "public/images/nav-bar.webp",
-        # 保持线上既有几何 1242×331，不引发布局回归
-    ),
-    dict(
         src=SRC_LIB / "header.png",
         dst=ROOT / "public/images/header.webp",
         # 线上 header.webp 是源图顶部 871 行的裁剪（实测平均差 2.98），

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CLOUDBASE_API_BASE } from '../utils/cloudbaseEndpoint';
-import { getSessionToken, setSessionToken, type AuthProfile } from '../utils/cloudbaseToken';
+import type { AuthProfile } from '../utils/cloudbaseToken';
+import { useAuthStore, type AuthQuestion } from '../stores/authStore';
 import { UiSprite } from './UiSprite';
 
 type View = 'login' | 'register' | 'quiz' | 'account';
@@ -34,32 +34,6 @@ const errorMessage = (error: unknown) => {
   return '操作失败，请稍后重试';
 };
 
-/** 用 text/plain 发送，避开浏览器对 application/json 的 CORS 预检 */
-const postAuth = async (action: string, body: Record<string, unknown>, token?: string | null) => {
-  const headers: Record<string, string> = { 'Content-Type': 'text/plain;charset=UTF-8' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const response = await fetch(`${CLOUDBASE_API_BASE}/auth`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ action, ...body }),
-  });
-  const result = await response.json().catch(() => null);
-  if (!response.ok || !result?.ok) {
-    // 把 HTTP 状态挂到 Error 上，供 refresh 区分「token 真失效(401/403)」与「网络/服务异常」
-    const err = new Error(result?.message || '账号服务暂时不可用，请稍后重试') as Error & { status?: number };
-    err.status = response.status;
-    throw err;
-  }
-  return result;
-};
-
-/** 判断错误是否为「服务端明确判定登录态失效」（401 未认证 / 403 停用），而非网络/服务瞬时故障 */
-const isAuthExpired = (error: unknown): boolean => {
-  if (!error || typeof error !== 'object') return false;
-  const status = (error as { status?: number }).status;
-  return status === 401 || status === 403;
-};
-
 const validateNickname = (nickname: string) =>
   nickname.length < NICKNAME_MIN || nickname.length > NICKNAME_MAX
     ? `昵称需要 ${NICKNAME_MIN}–${NICKNAME_MAX} 个字`
@@ -81,20 +55,24 @@ const readField = (form: HTMLFormElement, name: string, fallback: string) => {
   return typeof value === 'string' && value.length > 0 ? value : fallback;
 };
 
-type Question = { id: string; prompt: string; options: string[] };
-
 export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>('login');
-  const [account, setAccount] = useState<AuthProfile | null>(null);
+  const account = useAuthStore((state) => state.profile);
+  const busy = useAuthStore((state) => state.isBusy);
+  const requestChallenge = useAuthStore((state) => state.requestChallenge);
+  const answerChallenge = useAuthStore((state) => state.answerChallenge);
+  const registerAccount = useAuthStore((state) => state.register);
+  const loginAccount = useAuthStore((state) => state.login);
+  const logoutAccount = useAuthStore((state) => state.logout);
+  const changeNickname = useAuthStore((state) => state.updateNickname);
   const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [busy, setBusy] = useState(false);
   const [newNickname, setNewNickname] = useState('');
 
   // 答题态
-  const [question, setQuestion] = useState<Question | null>(null);
+  const [question, setQuestion] = useState<AuthQuestion | null>(null);
   const [challengeId, setChallengeId] = useState('');
   const [answer, setAnswer] = useState('');
   const [ticket, setTicket] = useState('');
@@ -108,31 +86,10 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
    */
   const pendingRegister = useRef<{ nickname: string; password: string } | null>(null);
 
-  const refresh = async () => {
-    const token = getSessionToken();
-    if (!token) return setAccount(null);
-    try {
-      const result = await postAuth('me', {}, token);
-      setAccount(result.profile as AuthProfile);
-    } catch (error) {
-      // 只有「服务端明确判定 token 失效」（401/403）才清登录态。
-      // 网络抖动 / 云函数冷启动 / 5xx 属于瞬时故障，绝不该把用户踢下线——
-      // 之前无差别 setSessionToken(null) 导致「每隔几小时就被莫名退出登录」。
-      if (isAuthExpired(error)) {
-        setSessionToken(null);
-        setAccount(null);
-      }
-      // 否则保留本地 token 与已登录 UI，等下次 refresh 再校验。
-    }
-  };
-  useEffect(() => { void refresh(); }, []);
-
   const run = async (task: () => Promise<void>) => {
-    if (busy) return;
-    setBusy(true);
+    if (useAuthStore.getState().isBusy) return;
     try { await task(); }
     catch (error) { onShowToast(errorMessage(error)); }
-    finally { setBusy(false); }
   };
 
   const clearSecrets = () => { setPassword(''); setConfirmPassword(''); setAnswer(''); };
@@ -155,12 +112,12 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
       const invalid = validateNickname(name) || validatePassword(pw);
       if (invalid) throw new Error(invalid);
       if (pw !== confirm) throw new Error('两次输入的密码不一致');
-      const result = await postAuth('challenge', {});
+      const result = await requestChallenge();
       // 存进保险箱：答题页不持有密码，答完后靠它完成注册
       pendingRegister.current = { nickname: name, password: pw };
       setNickname(name);
-      setQuestion(result.question as Question);
-      setChallengeId(result.challengeId as string);
+      setQuestion(result.question);
+      setChallengeId(result.challengeId);
       setTicket('');
       // 只切视图，不清密码 —— 答题后 confirmRegister 还要用 nickname/password
       setView('quiz');
@@ -172,9 +129,9 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     void run(async () => {
       const trimmed = answer.trim();
       if (!trimmed) throw new Error('请先作答');
-      const result = await postAuth('answer', { challengeId, answer: trimmed });
+      const result = await answerChallenge(challengeId, trimmed);
       if (result.correct) {
-        setTicket(result.ticket as string);
+        setTicket(result.ticket || '');
       } else {
         // 答错：若非耗尽，可重试；耗尽则触发冷却，回到登录页
         onShowToast(result.message || '答案不正确');
@@ -192,11 +149,8 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
       const pw = saved?.password || password;
       if (!name) throw new Error('昵称已丢失，请点「返回修改昵称密码」重新填写');
       if (!pw) throw new Error('密码已丢失，请点「返回修改昵称密码」重新填写');
-      const result = await postAuth('register', { ticket, nickname: name, password: pw });
+      await registerAccount(ticket, name, pw);
       pendingRegister.current = null;
-      setSessionToken(result.token as string);
-      setAccount(result.profile as AuthProfile);
-      window.dispatchEvent(new Event('levihan-auth-changed'));
       clearSecrets();
       setOpen(false);
       onShowToast('注册成功，欢迎加入利韩土豆仓');
@@ -209,10 +163,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     void run(async () => {
       const invalid = validateNickname(name) || validatePassword(pw);
       if (invalid) throw new Error(invalid);
-      const result = await postAuth('login', { nickname: name, password: pw });
-      setSessionToken(result.token as string);
-      setAccount(result.profile as AuthProfile);
-      window.dispatchEvent(new Event('levihan-auth-changed'));
+      await loginAccount(name, pw);
       clearSecrets();
       setOpen(false);
       onShowToast('欢迎回到利韩土豆仓');
@@ -221,12 +172,8 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
 
   const logout = () => {
     void run(async () => {
-      const token = getSessionToken();
-      if (token) { try { await postAuth('logout', {}, token); } catch { /* 忽略 */ } }
+      await logoutAccount();
       pendingRegister.current = null;
-      setSessionToken(null);
-      setAccount(null);
-      window.dispatchEvent(new Event('levihan-auth-changed'));
       switchView('login');
       setOpen(false);
       onShowToast('已退出登录');
@@ -238,10 +185,8 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
       const name = newNickname.trim();
       const invalid = validateNickname(name);
       if (invalid) throw new Error(invalid);
-      await postAuth('update-nickname', { nickname: name }, getSessionToken());
+      await changeNickname(name);
       setNewNickname('');
-      await refresh();
-      window.dispatchEvent(new Event('levihan-auth-changed'));
       onShowToast('昵称已更新，后续发布与评论将使用新昵称');
     });
   };

@@ -21,11 +21,11 @@ const SRC = path.join(ROOT, 'src', 'components', 'RestaurantForum.tsx');
 const src = fs.readFileSync(SRC, 'utf8');
 
 test('发帖署名默认取账号昵称（不再被拟音人物名顶替）', () => {
-  // 新行为：mount 副作用只要 profile.nickname 存在就写入 nickname，不再卡 composeCategory
+  // 账号档案直接来自唯一的 auth store，昵称应随登录或改名实时更新。
   assert.match(
     src,
-    /if \(profile\.nickname\) \{\s*setNickname\(profile\.nickname\);/s,
-    'mount 副作用必须把账号昵称写进 nickname',
+    /const profile = useAuthStore\(\(state\) => state\.profile\);[\s\S]*?const nickname = profile\?\.nickname \|\| '';/,
+    '发帖署名必须直接读取全局账号昵称',
   );
   // 旧的有害写法必须消失：账号昵称被 composeCategory 守卫挡住
   assert.equal(
@@ -33,8 +33,7 @@ test('发帖署名默认取账号昵称（不再被拟音人物名顶替）', ()
     false,
     '不得再用 composeCategory !== \'roleplay\' 守卫账号昵称，否则默认分类 roleplay 下署名永远是利威尔',
   );
-  // nickname 初始值改为空串（由账号档案填充），不再默认 PRESET 人物名
-  assert.match(src, /const \[nickname, setNickname\] = useState\(''\)/, 'nickname 初始值应留空，待账号档案填充');
+  assert.equal(/setNickname\(/.test(src), false, '不得另存一份可能过期的昵称状态');
   // 选角动作不得再改写 nickname（避免拟音人物名带进署名）
   assert.equal(
     /setSelectedChar\(char\);\s*setNickname\(char\.name\)/.test(src),

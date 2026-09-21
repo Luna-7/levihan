@@ -15,7 +15,7 @@ export const AdventureWorldBackground: React.FC<Props> = () => (
         backgroundPosition: 'center center',
       }}
     />
-    <div className="absolute inset-0 bg-black/15 backdrop-blur-[1px]" />
+    <div className="absolute inset-0 bg-black/15 md:backdrop-blur-[1px]" />
     <div className="absolute top-2 left-0 w-full h-48 overflow-hidden opacity-40">
       <span className="absolute top-4 left-[8%] text-[#FFFDF9] text-xs animate-pulse">✦</span>
       <span className="absolute top-12 left-[35%] text-[#F9E79F] text-sm animate-pulse [animation-delay:1.5s]">✧</span>

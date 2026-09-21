@@ -6,11 +6,11 @@ import {
 import { MiniProgramJumpGrid } from './MiniProgramJumpGrid';
 import { HomeAnnouncementGrid } from './HomeAnnouncementGrid';
 import { HomeTodaysUpdates } from './HomeTodaysUpdates';
-import { RestaurantForum } from './RestaurantForum';
-import { TatakaruGame } from './TatakaruGame';
-import { GameLeaderboard } from './GameLeaderboard';
-import { PotatoMarket } from './PotatoMarket';
-import { ResourceHub } from './ResourceHub';
+const RestaurantForum = React.lazy(() => import('./RestaurantForum').then(m => ({ default: m.RestaurantForum })));
+const TatakaruGame = React.lazy(() => import('./TatakaruGame').then(m => ({ default: m.TatakaruGame })));
+const GameLeaderboard = React.lazy(() => import('./GameLeaderboard').then(m => ({ default: m.GameLeaderboard })));
+const PotatoMarket = React.lazy(() => import('./PotatoMarket').then(m => ({ default: m.PotatoMarket })));
+const ResourceHub = React.lazy(() => import('./ResourceHub').then(m => ({ default: m.ResourceHub })));
 import { soundManager } from '../utils/audio';
 import { GROUP_INFO } from '../data/initialData';
 import { UserEntry } from './UserEntry';
@@ -51,13 +51,13 @@ export const ImmersiveGameHome: React.FC<Props> = ({
   }, [onNavigateTab]);
 
   if (isForumOpen) {
-    return <RestaurantForum onBack={() => setIsForumOpen(false)} onShowToast={onShowToast} />;
+    return <React.Suspense fallback={null}><RestaurantForum onBack={() => setIsForumOpen(false)} onShowToast={onShowToast} /></React.Suspense>;
   }
 
   return (
     <div
       id="view-main"
-      className="relative w-full h-full select-none flex flex-col justify-between overflow-y-auto no-scrollbar overscroll-contain bg-[#FFFEEF]/55 backdrop-blur-md"
+      className="relative w-full h-full select-none flex flex-col justify-between overflow-y-auto no-scrollbar overscroll-contain bg-[#FFFEEF]/80 md:bg-[#FFFEEF]/55 md:backdrop-blur-md"
     >
       {/* 滚动行为：手机端内容恰好一屏 → 不出现滚动（矮屏兜底仍可滚）；
           桌面端 lg 下公告区不再内部滚动，整页随内容自然增高、可滚动。 */}
@@ -393,7 +393,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
               </button>
             </div>
 
-            <GameLeaderboard onShowToast={onShowToast} />
+            <React.Suspense fallback={null}><GameLeaderboard onShowToast={onShowToast} /></React.Suspense>
           </div>
         </div>,
         document.body
@@ -416,11 +416,11 @@ export const ImmersiveGameHome: React.FC<Props> = ({
           >
             {/* 居中沉浸式游戏画面 (内部自带顶部集成控制条，零遮挡) */}
             <div className="w-full h-full flex flex-col items-center justify-center p-0 m-0">
-              <TatakaruGame
+              <React.Suspense fallback={null}><TatakaruGame
                 onShowToast={onShowToast}
                 initialGame={activeGame}
                 onExit={() => setActiveGame(null)}
-              />
+              /></React.Suspense>
             </div>
           </div>
         </div>,
@@ -585,9 +585,9 @@ export const ImmersiveGameHome: React.FC<Props> = ({
 
             {/* 弹窗内容区：包含完整的 PotatoMarket 组件 */}
             <div className="relative z-10 flex-1 min-h-0 overflow-y-auto p-2 sm:p-4">
-              <PotatoMarket
+              <React.Suspense fallback={null}><PotatoMarket
                 onShowToast={onShowToast}
-              />
+              /></React.Suspense>
             </div>
           </div>
         </div>,
@@ -639,7 +639,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
 
             {/* 弹窗内容区：包含完整的 ResourceHub 组件 */}
             <div className="relative z-10 flex-1 min-h-0 overflow-y-auto p-2 sm:p-4">
-              <ResourceHub
+              <React.Suspense fallback={null}><ResourceHub
                 onCopyCode={(code) => {
                   soundManager.playCopySuccess();
                   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -656,7 +656,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                   soundManager.playPageTurn();
                   setActiveModal('doujinshi');
                 }}
-              />
+              /></React.Suspense>
             </div>
           </div>
         </div>,
