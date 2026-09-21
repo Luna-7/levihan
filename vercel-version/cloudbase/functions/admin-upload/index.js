@@ -55,6 +55,7 @@ const ANNOUNCEMENTS_KEY = 'announcements.json'; // 首页公告栏（公开读�
 const ANNOUNCEMENT_DIR = 'announcements/';
 const FORUM_KEY = 'restaurant-forum.json';
 const FORUM_DIR = 'restaurant-forum/';
+const LINK_COVER_DIR = 'link-covers/';
 const MARKET_KEY = 'potato-market.json';   // 土豆市集商品索引（MarketItem[]）
 const MARKET_DIR = 'potato-market/';       // 市集商品图片：potato-market/{itemId}-{n}.webp
 const MAX_MARKET_ITEMS = 500;
@@ -290,6 +291,219 @@ async function readForum() {
 async function writeForum(items) {
   await putObject({ Bucket: BUCKET, Region: REGION, Key: FORUM_KEY,
     Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'), ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache' });
+}
+
+/* ==================== 安利墙（外链分享） ==================== */
+
+/** 按域名识别平台与预览级别：A=B站可站内播放，B=OG 卡片可预览，C=仅跳转 */
+function detectLinkPlatform(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch { return null; }
+  const host = u.hostname.toLowerCase().replace(/^www\./, '');
+  if (host === 'b23.tv' || host.endsWith('.bilibili.com') || host === 'bilibili.com') return { platform: 'bilibili', tier: 'A' };
+  if (host.endsWith('.lofter.com') || host === 'lofter.com') return { platform: 'lofter', tier: 'B' };
+  if (host.endsWith('.xiaohongshu.com') || host === 'xiaohongshu.com' || host === 'xhslink.com') return { platform: 'xiaohongshu', tier: 'C' };
+  if (host.endsWith('.weibo.com') || host === 'weibo.com' || host === 'weibo.cn') return { platform: 'weibo', tier: 'B' };
+  return { platform: 'web', tier: 'B' };
+}
+
+/** 从 URL 提取 B 站 BV 号（支持 /video/BVxx 与 b23.tv 短链解析后的最终地址） */
+function extractBvid(url) {
+  const m = String(url).match(/(BV[0-9A-Za-z]{10})/);
+  return m ? m[1] : '';
+}
+
+/** SSRF 防护：只许 http(s) 且拒绝内网 / 链路本地地址 */
+function isSafeExternalUrl(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch { return false; }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+  const host = u.hostname.toLowerCase();
+  if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return false;
+  if (/^(127\.|10\.|192\.168\.|169\.254\.|0\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) return false;
+  if (host === '::1' || host === '[::1]' || host === '[fc00::]' ) return false;
+  return true;
+}
+
+function extractMetaTags(html) {
+  const pick = (re) => { const m = html.match(re); return m ? m[1].trim() : ''; };
+  const decode = (s) => s
+    .replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ');
+  return {
+    title: decode(pick(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)["']/i) || pick(/<meta[^>]+content=["']([^"']*)["'][^>]+property=["']og:title["']/i) || pick(/<title[^>]*>([^<]*)<\/title>/i)).slice(0, 200),
+    description: decode(pick(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']*)["']/i) || pick(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)).slice(0, 500),
+    image: decode(pick(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']*)["']/i) || pick(/<meta[^>]+content=["']([^"']*)["'][^>]+property=["']og:image["']/i)),
+  };
+}
+
+/** 带超时地抓取页面（UA 伪装成普通浏览器），失败返回 null（C 级降级路径） */
+async function fetchPageMeta(pageUrl, referer) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(pageUrl, {
+      signal: ctrl.signal,
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        ...(referer ? { Referer: referer } : {}),
+      },
+    });
+    if (!res.ok) return null;
+    const html = (await res.text()).slice(0, 500000);
+    return { finalUrl: res.url || pageUrl, meta: extractMetaTags(html) };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 封面防盗链：把远端图抓下来转存进 COS，返回站内直链；失败返回空串（前端回退占位） */
+async function transferCoverToCos(coverUrl, pageUrl) {
+  if (!coverUrl || !isSafeExternalUrl(coverUrl)) return '';
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(coverUrl, {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1', Referer: pageUrl || coverUrl },
+    });
+    if (!res.ok) return '';
+    const type = String(res.headers['content-type'] || 'image/jpeg');
+    if (!/^image\//.test(type)) return '';
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length === 0 || buf.length > 3 * 1024 * 1024) return '';
+    const ext = /png/i.test(type) ? 'png' : /webp/i.test(type) ? 'webp' : /gif/i.test(type) ? 'gif' : 'jpg';
+    const key = `${LINK_COVER_DIR}cv-${crypto.createHash('sha1').update(coverUrl).digest('hex').slice(0, 16)}.${ext}`;
+    await putObject({ Bucket: BUCKET, Region: REGION, Key: key, Body: buf, ContentType: type, CacheControl: 'public, max-age=31536000' });
+    return `https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${key}`;
+  } catch {
+    return '';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** b23.tv 短链解析：读 302 的 Location 拿到 www.bilibili.com/video/BVxx 最终地址 */
+async function resolveShortLink(shortUrl) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const res = await fetch(shortUrl, {
+      signal: ctrl.signal,
+      redirect: 'manual',
+      headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' },
+    });
+    const loc = res.headers.get('location') || res.headers.get('Location') || '';
+    return loc || '';
+  } catch {
+    return '';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * B 站官方接口取标题/封面/UP主：HTML 页面有反爬（服务端拿到空 OG），
+ * view 接口不需要登录，取到的数据比扒 HTML 稳得多。
+ */
+async function fetchBilibiliMeta(bvid) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
+      signal: ctrl.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        Referer: `https://www.bilibili.com/video/${bvid}`,
+      },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || data.code !== 0 || !data.data) return null;
+    const d = data.data;
+    return {
+      title: String(d.title || '').slice(0, 200),
+      description: String(d.desc || '').slice(0, 500),
+      image: String(d.pic || ''),
+      owner: String((d.owner && d.owner.name) || '').slice(0, 100),
+      duration: Number(d.duration) || 0,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * linkPreview：登录用户粘贴外链后服务端代抓 OG 元数据。
+ * 返回 { platform, tier, bvid?, title, description, coverUrl }；任何失败都优雅降级（tier 可能落到 C）。
+ */
+async function buildLinkPreview(rawUrl) {
+  if (!isSafeExternalUrl(rawUrl)) throw httpError('仅支持公开的 http(s) 链接', 400);
+  let detected = detectLinkPlatform(rawUrl) || { platform: 'web', tier: 'B' };
+  let finalUrl = rawUrl;
+  let meta = { title: '', description: '', image: '' };
+  let bvidHint = '';
+
+  // 小红书等强反爬平台：不再浪费时间抓页面，直接按 C 级跳转卡返回原始链接
+  if (detected.platform === 'xiaohongshu') {
+    return { platform: 'xiaohongshu', tier: 'C', url: rawUrl, title: '', description: '' };
+  }
+
+  // 短链（b23.tv）：先解析出带 BV 号的真实地址
+  if (/b23\.tv$/.test(new URL(rawUrl).hostname.toLowerCase())) {
+    const loc = await resolveShortLink(rawUrl);
+    if (loc) {
+      bvidHint = extractBvid(loc);
+      if (detected.platform === 'bilibili' && bvidHint) finalUrl = loc;
+    }
+  }
+
+  if (detected.platform === 'bilibili') {
+    const bvid = extractBvid(finalUrl) || bvidHint;
+    if (bvid) {
+      const vid = await fetchBilibiliMeta(bvid);
+      if (vid) {
+        meta = { title: vid.title, description: vid.description, image: vid.image };
+        if (vid.owner) meta.description = meta.description || `UP主 @${vid.owner}`;
+      }
+    }
+  }
+
+  // B 站接口没给到数据（或非 B 站）时，退回页面 OG 抓取
+  if (!meta.title && !meta.image) {
+    const page = await fetchPageMeta(finalUrl);
+    if (page) {
+      meta = page.meta;
+      const redetected = detectLinkPlatform(page.finalUrl);
+      // 只在最终地址仍属同一平台、或解析出了 BV 号时才采用跳转地址，避免把「登录拦截页」当成原文链接
+      if (redetected && (redetected.platform === detected.platform || extractBvid(page.finalUrl))) {
+        detected = redetected;
+        finalUrl = page.finalUrl;
+      }
+    }
+  }
+
+  const bvid = detected.platform === 'bilibili' ? (extractBvid(finalUrl) || bvidHint) : '';
+  let coverUrl = '';
+  if (meta.image) coverUrl = await transferCoverToCos(meta.image, detected.platform === 'bilibili' ? 'https://www.bilibili.com/' : finalUrl);
+  const tier = detected.tier === 'A' && !bvid ? 'C' : detected.tier;
+  return {
+    platform: detected.platform,
+    tier,
+    bvid: bvid || undefined,
+    // B站：短链解析后带一堆追踪参数，统一清洗成规范地址
+    url: detected.platform === 'bilibili' && bvid ? `https://www.bilibili.com/video/${bvid}` : finalUrl,
+    title: meta.title,
+    description: meta.description,
+    coverUrl: coverUrl || undefined,
+  };
 }
 
 /**
@@ -968,15 +1182,18 @@ const PUBLIC_ACTIONS = new Set([
 ]);
 // 需用户登录（CloudBase access_token 换 uid）：发布/互动/删除自己的内容
 const USER_ACTIONS = new Set([
-  'forumPublish', 'forumComment', 'forumPotato', 'forumClaim', 'forumReleaseClaim',
-  'forumDelete', 'forumCommentDelete', 'forumEdit',
+  'forumComment', 'forumPotato', 'forumClaim', 'forumReleaseClaim',
+  'forumCommentDelete', 'forumEdit',
   'marketPublish', 'marketDelete',
   'novelDirectPublish', 'novelUpdate', 'novelCommentAdd',
   'novelBody',
 ]);
-/* 用户会话**或**管理员令牌任一即可：删评论 = 本人（uid 比对）或管理员（整篇任意删）。
+/* 用户会话**或**管理员令牌任一即可：
+   - 删评论 / 删帖子 = 本人（uid 比对）或管理员（管理员可清理任意垃圾贴）
+   - linkPreview = 前台发布安利与后台发布安利都要用
+   - forumPublish = 站长代发公告型帖子（如安利墙的整理合集，署编者名）也要能发
    管理员没有用户会话，走普通 USER_ACTIONS 会被 401 挡死。 */
-const USER_OR_ADMIN_ACTIONS = new Set(['novelCommentDelete']);
+const USER_OR_ADMIN_ACTIONS = new Set(['novelCommentDelete', 'linkPreview', 'forumDelete', 'forumPublish']);
 
 async function handle(action, payload) {
   switch (action) {
@@ -1104,19 +1321,45 @@ async function handle(action, payload) {
       return { ok: true, id, items: next };
     }
 
+    case 'linkPreview': {
+      const rawUrl = String(payload.url || '').trim();
+      if (!isSafeExternalUrl(rawUrl)) throw httpError('仅支持公开的 http(s) 链接', 400);
+      const preview = await buildLinkPreview(rawUrl);
+      return { ok: true, preview };
+    }
+
     case 'forumList': return { ok: true, posts: await readForum() };
 
     case 'forumPublish': {
       const category = String(payload.category || 'chat').trim();
-      if (!['chat', 'relay', 'roleplay', 'market'].includes(category)) throw httpError('帖子分类无效', 400);
+      if (!['chat', 'relay', 'roleplay', 'market', 'links'].includes(category)) throw httpError('帖子分类无效', 400);
       const title = String(payload.title || '').trim().slice(0, 100);
       const body = String(payload.body || '').trim().slice(0, 5000);
       const author = String(payload.author || '').trim().slice(0, 40);
       const prompt = String(payload.prompt || '').trim().slice(0, 2000);
       const characterName = String(payload.characterName || '').trim().slice(0, 40);
-      // 发帖门槛：茶歇/接龙/语C 都要求正文或图片，昵称必填
+      // 安利墙：必须带合法外链，正文（推荐语）反而选填；其余板块要求正文或图片，昵称一律必填
+      let link;
+      if (category === 'links') {
+        const linkUrl = String(payload.linkUrl || '').trim();
+        if (!isSafeExternalUrl(linkUrl)) throw httpError('请粘贴公开的 http(s) 外链', 400);
+        const preview = payload.linkPreview && typeof payload.linkPreview === 'object' ? payload.linkPreview : {};
+        // 以前端识别结果为基础，但平台/级别/bvid 一律以服务端重新判定为准，避免伪造
+        const detected = detectLinkPlatform(linkUrl) || { platform: 'web', tier: 'B' };
+        const bvid = detected.platform === 'bilibili' ? extractBvid(linkUrl) : '';
+        const tier = detected.tier === 'A' && !bvid ? 'C' : detected.tier;
+        link = {
+          url: linkUrl,
+          platform: detected.platform,
+          tier,
+          bvid: bvid || undefined,
+          coverUrl: isSafeExternalUrl(String(preview.coverUrl || '')) ? String(preview.coverUrl) : undefined,
+          ogTitle: String(preview.ogTitle || '').trim().slice(0, 200) || undefined,
+          ogDesc: String(preview.ogDesc || '').trim().slice(0, 500) || undefined,
+        };
+      }
       if (!author) throw httpError('昵称不能为空', 400);
-      if (!body && !payload.imageBase64) throw httpError('正文或图片不能为空', 400);
+      if (category !== 'links' && !body && !payload.imageBase64) throw httpError('正文或图片不能为空', 400);
       const id = `post-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
       let image = '';
       const b64 = String(payload.imageBase64 || '');
@@ -1128,11 +1371,12 @@ async function handle(action, payload) {
       }
       const posts = await readForum();
       const post = {
-        id, category, author, title, body,
+        id, category, author, title: category === 'links' ? (title || link.ogTitle || link.url) : title, body,
         uid: payload.__uid,
         prompt: prompt || undefined,
         characterName: characterName || undefined,
         characterImage: String(payload.characterImage || '').trim().slice(0, 500) || undefined,
+        link,
         image, potatoes: 0, potatoGiven: false,
         createdAt: new Date().toISOString(), comments: [],
       };
@@ -1231,7 +1475,7 @@ async function handle(action, payload) {
       const id = String(payload.id || '').trim(); const posts = await readForum();
       const target = posts.find((p) => p && p.id === id);
       if (!target) throw httpError('帖子不存在', 404);
-      if (target.uid && target.uid !== payload.__uid) throw httpError('只能删除自己发布的帖子', 403);
+      if (target.uid && target.uid !== payload.__uid && payload.__uid !== '__admin__') throw httpError('只能删除自己发布的帖子', 403);
       const next = posts.filter((p) => p && p.id !== id); await writeForum(next);
       // 删除故事接龙帖子时，同步删除对应合订本
       if (target.category === 'relay') {

@@ -37,6 +37,7 @@ interface Props {
 const CATEGORY_NAMES: Record<string, string> = {
   all: '兵长茶会',
   chat: '闲聊茶歇',
+  links: '安利墙',
   roleplay: '角色拟音',
   relay: '故事接龙',
   market: '土豆市集',

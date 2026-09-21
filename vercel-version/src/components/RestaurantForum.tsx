@@ -15,8 +15,9 @@ import { TeaPartyInteractiveZipline } from './TeaPartyInteractiveZipline';
 import { compileRelayPostToNovel, jumpToCompiledNovelInDoujinArchive } from '../utils/relayNovels';
 import { MarketItem, INITIAL_MARKET_ITEMS } from './PotatoMarket';
 import { TeaPartyShareModal, ShareTargetData } from './TeaPartyShareModal';
+import { LinkShare, LinkShareCard, LinkShareModal, platformLabel } from './LinkShareCard';
 
-export type PostCategory = 'chat' | 'relay' | 'roleplay' | 'market';
+export type PostCategory = 'chat' | 'relay' | 'roleplay' | 'market' | 'links';
 
 export type ForumComment = {
   id: string;
@@ -61,6 +62,8 @@ export type ForumPost = {
   createdAt: string;
   comments: ForumComment[];
   quillClaim?: QuillClaim;
+  /** 安利墙（category='links'）：外链预览数据，卡片按 tier 分级渲染 */
+  link?: LinkShare;
 };
 
 export interface RoleplayCharacter {
@@ -306,14 +309,14 @@ const loadPosts = (): ForumPost[] => {
 interface Props {
   onBack?: () => void;
   onShowToast: (message: string) => void;
-  initialCategory?: 'all' | 'chat' | 'relay' | 'roleplay' | 'market';
+  initialCategory?: 'all' | 'chat' | 'relay' | 'roleplay' | 'market' | 'links';
 }
 
 const MARKET_STORAGE_KEY = 'levihan_market_items';
 
 export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory }) => {
   const [posts, setPosts] = useState<ForumPost[]>(loadPosts);
-  const [activeCategory, setActiveCategory] = useState<'all' | 'chat' | 'relay' | 'roleplay' | 'market'>(initialCategory || 'all');
+  const [activeCategory, setActiveCategory] = useState<'all' | 'chat' | 'relay' | 'roleplay' | 'market' | 'links'>(initialCategory || 'all');
   const [now, setNow] = useState<number>(Date.now());
   const [currentUid, setCurrentUid] = useState<string | null>(null);
 
@@ -375,7 +378,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     }
   };
 
-  const handleCategoryTabClick = (categoryKey: 'all' | 'chat' | 'roleplay' | 'relay' | 'market') => {
+  const handleCategoryTabClick = (categoryKey: 'all' | 'chat' | 'roleplay' | 'relay' | 'market' | 'links') => {
     if (categoryDragDistanceRef.current > 6) {
       return; // Dragged, prevent accidental click
     }
@@ -417,6 +420,12 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   const [image, setImage] = useState<string | undefined>();
   const [publishing, setPublishing] = useState(false);
 
+  // 安利墙（外链分享）：粘贴链接 → 服务端识别 OG → 可选改标题 + 写推荐语
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkPreview, setLinkPreview] = useState<LinkShare | null>(null);
+  const [linkDetecting, setLinkDetecting] = useState(false);
+  const [linkModalPost, setLinkModalPost] = useState<ForumPost | null>(null);
+
   // 故事接龙编辑弹窗（仅自己发布的接龙可编辑）
   const [editingRelay, setEditingRelay] = useState<ForumPost | null>(null);
   const [relayEditTitle, setRelayEditTitle] = useState('');
@@ -446,7 +455,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const targetPostId = params.get('postId');
     const targetItemId = params.get('itemId');
 
-    if (targetCategory && ['all', 'chat', 'relay', 'roleplay', 'market'].includes(targetCategory)) {
+    if (targetCategory && ['all', 'chat', 'relay', 'roleplay', 'market', 'links'].includes(targetCategory)) {
       setActiveCategory(targetCategory);
     }
 
@@ -822,6 +831,47 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     onShowToast('羽毛笔已归还');
   };
 
+  /** 安利墙：粘贴链接后点识别 —— 服务端代抓 OG 元数据（浏览器跨域抓不到），失败则降级为手填 */
+  const detectLink = async () => {
+    const url = linkUrl.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      return onShowToast('请粘贴完整链接（以 http:// 或 https:// 开头）');
+    }
+    setLinkDetecting(true);
+    try {
+      const result = await api('linkPreview', { url });
+      // 云函数返回 OG 用 title/description 命名，落地到帖子里统一叫 ogTitle/ogDesc
+      const raw = result.preview as
+        | { url: string; platform: string; tier: 'A' | 'B' | 'C'; bvid?: string; coverUrl?: string; title?: string; description?: string }
+        | undefined;
+      if (!raw) throw new Error('识别失败');
+      const preview: LinkShare = {
+        url: raw.url,
+        platform: raw.platform,
+        tier: raw.tier,
+        bvid: raw.bvid,
+        coverUrl: raw.coverUrl,
+        ogTitle: raw.title,
+        ogDesc: raw.description,
+      };
+      setLinkPreview(preview);
+      if (!title.trim() && preview.ogTitle) setTitle(preview.ogTitle.slice(0, 100));
+      soundManager.playCopySuccess();
+      onShowToast(
+        preview.tier === 'A'
+          ? `已识别 ${platformLabel(preview.platform)} 视频 · 站内可直接播放`
+          : preview.tier === 'B'
+            ? `已识别 ${platformLabel(preview.platform)} · 可站内预览`
+            : `${platformLabel(preview.platform)} 限制抓取：已降级为跳转卡，标题请手动填写`
+      );
+    } catch (error) {
+      setLinkPreview(null);
+      onShowToast(error instanceof Error ? error.message : '识别失败，可手动填写标题后发布');
+    } finally {
+      setLinkDetecting(false);
+    }
+  };
+
   const publish = async (event: React.FormEvent) => {
     event.preventDefault();
 
@@ -829,6 +879,76 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     if (!token) {
       onShowToast('请先登录账号后再发布');
       window.dispatchEvent(new Event('levihan-open-login'));
+      return;
+    }
+
+    // 安利墙（外链分享）发布：链接必填，推荐语选填；平台/级别以服务端判定为准
+    if (composeCategory === 'links') {
+      const authorName = nickname.trim() || '调查兵';
+      const url = linkUrl.trim();
+      if (!/^https?:\/\//i.test(url)) {
+        return onShowToast('请粘贴完整的外链');
+      }
+      const finalTitle = title.trim() || linkPreview?.ogTitle || url;
+      if (!finalTitle.trim()) {
+        return onShowToast('请填写标题（对方站点不给预览时需要手动填）');
+      }
+
+      setPublishing(true);
+      try {
+        const newPost: ForumPost = {
+          id: `post-${Date.now()}`,
+          category: 'links',
+          author: authorName,
+          uid: currentUid || undefined,
+          title: finalTitle,
+          body: body.trim(),
+          potatoes: 1,
+          potatoGiven: false,
+          createdAt: '刚刚',
+          comments: [],
+          link: {
+            url: linkPreview?.url || url,
+            platform: linkPreview?.platform || 'web',
+            tier: linkPreview?.tier || 'C',
+            bvid: linkPreview?.bvid,
+            coverUrl: linkPreview?.coverUrl,
+            ogTitle: linkPreview?.ogTitle,
+            ogDesc: linkPreview?.ogDesc,
+          },
+        };
+
+        persist([newPost, ...posts]);
+        setTitle('');
+        setBody('');
+        setLinkUrl('');
+        setLinkPreview(null);
+        setShowComposer(false);
+        soundManager.playCoin();
+        onShowToast('安利已上墙 📌');
+
+        void api('forumPublish', {
+          author: authorName,
+          category: 'links',
+          title: finalTitle,
+          body: body.trim(),
+          linkUrl: url,
+          linkPreview: {
+            coverUrl: linkPreview?.coverUrl || '',
+            ogTitle: linkPreview?.ogTitle || '',
+            ogDesc: linkPreview?.ogDesc || '',
+          },
+        }).then((result) => {
+          const serverPost = (result && result.post) as ForumPost | undefined;
+          if (serverPost && serverPost.id) {
+            setPosts((cur) => cur.map((p) => (p.id === newPost.id ? { ...p, ...serverPost, id: p.id } : p)));
+          }
+        }).catch(() => onShowToast('⚠️ 帖子同步失败（只保存在本机，其他设备看不到）'));
+      } catch (error) {
+        onShowToast(error instanceof Error ? error.message : '发布失败');
+      } finally {
+        setPublishing(false);
+      }
       return;
     }
 
@@ -1290,7 +1410,24 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
               </span>
             </button>
 
-            {/* 3. 角色拟音 */}
+            {/* 3. 安利墙（外链分享） */}
+            <button
+              type="button"
+              onClick={() => handleCategoryTabClick('links')}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap shadow-2xs shrink-0 ${
+                activeCategory === 'links'
+                  ? 'bg-[#B7791F] text-[#FFFEEF] border border-[#9A6519]'
+                  : 'bg-[#EFE5D2] text-[#614E3C] border border-[#C5B295] hover:bg-[#E2D4BC]'
+              }`}
+            >
+              <LinkIcon size={11} />
+              <span>安利墙</span>
+              <span className="text-[10px] px-1 rounded-full bg-black/15 font-mono">
+                {posts.filter((p) => p.category === 'links').length}
+              </span>
+            </button>
+
+            {/* 4. 角色拟音 */}
             <button
               type="button"
               onClick={() => handleCategoryTabClick('roleplay')}
@@ -1354,6 +1491,11 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
               onClick={() => {
                 soundManager.playActionClick();
                 setComposeCategory('chat');
+                // 每次打开都清掉上一次的安利墙残留（链接 / 识别结果 / 标题），避免串味
+                setLinkUrl('');
+                setLinkPreview(null);
+                setTitle('');
+                setBody('');
                 setShowComposer(true);
               }}
               className="px-3.5 py-1 rounded-full bg-[#1E4334] hover:bg-[#2C5C46] text-[#F9E79F] border border-[#163327] text-xs font-bold cursor-pointer flex items-center gap-1 active:scale-95 shadow-xs"
@@ -1521,7 +1663,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             </div>
           )}
 
-          {/* ==================== 论坛原有分类帖子列表 (全部 / 故事接龙 / 闲聊茶歇 / 角色拟音) ==================== */}
+          {/* ==================== 论坛分类帖子列表 (全部 / 故事接龙 / 安利墙 / 闲聊茶歇 / 角色拟音) ==================== */}
           {activeCategory !== 'market' && filteredPosts.map((post) => {
             const isRelay = post.category === 'relay';
             const isExpanded = openComments === post.id;
@@ -1819,6 +1961,188 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           </button>
                         </div>
                       )}
+                    </section>
+                  )}
+                </article>
+              );
+            }
+
+            // ==================== 📌 安利墙卡片 (外链分享: 平台分级预览 + 土豆/评论照旧) ====================
+            if (post.category === 'links') {
+              const link = post.link;
+              return (
+                <article
+                  key={post.id}
+                  id={`post-${post.id}`}
+                  onClick={() => setOpenComments(isExpanded ? null : post.id)}
+                  className={`relative bg-[#FAF3E3]/90 backdrop-blur-xs border-2 border-[#B7791F] rounded-2xl p-3.5 sm:p-4 cursor-pointer hover:border-[#9A6519] transition-all group overflow-hidden shadow-[0_4px_16px_rgba(183,121,31,0.20)] ${
+                    highlightedPostId === post.id ? 'ring-4 ring-[#D97706] shadow-[0_0_24px_rgba(217,119,6,0.5)] scale-[1.01]' : ''
+                  }`}
+                  aria-expanded={isExpanded}
+                >
+                  <CardPatternOverlay opacity={0.08} mode="multiply" />
+
+                  {/* 顶栏: [📌 安利墙] 胶囊 + 平台徽章 + 分享人 + 时间 */}
+                  <div className="relative z-10 flex items-center justify-between gap-2 pb-2 border-b border-[#D8C7AA]">
+                    <div className="flex items-center gap-2 text-xs min-w-0">
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#B7791F] text-[#FFFEEF] font-bold text-[10px] flex items-center gap-1 shadow-2xs shrink-0">
+                        <LinkIcon size={10} /> 安利墙
+                      </span>
+                      {link && (
+                        <span className="px-2 py-0.5 rounded-full bg-[#EFE5D2] border border-[#C5B295] text-[#614E3C] text-[10px] font-bold shrink-0">
+                          {platformLabel(link.platform)}
+                        </span>
+                      )}
+                      <span className="text-[#2C2016] font-bold text-xs truncate">{post.author}</span>
+                      <span className="text-[#8C7A65] text-[10px] shrink-0">{post.createdAt}</span>
+                      {currentUid && post.uid === currentUid && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); void handleDeletePost(post.id); }}
+                          className="text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors shrink-0"
+                          title="删除我发布的安利"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="relative z-10 mt-2.5">
+                    {link ? (
+                      <LinkShareCard
+                        link={link}
+                        title={post.title || link.ogTitle || link.url}
+                        note={post.body || undefined}
+                        onOpen={() => {
+                          soundManager.playActionClick();
+                          if (link.tier === 'A') setLinkModalPost(post);
+                          else if (link.tier === 'B' && link.coverUrl) setLinkModalPost(post);
+                          else window.open(link.url, '_blank', 'noopener,noreferrer');
+                        }}
+                      />
+                    ) : (
+                      <div className="p-4 text-center text-[11px] font-retro-jp text-[#8C7A65] bg-[#F3E9D2]/60 rounded-xl">
+                        这条安利缺少链接数据，可能是旧版本发布的。
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 底栏: 🍰 蛋糕按键 + 💬 评论数 + 🔗 分享 */}
+                  <div className="relative z-10 mt-3 pt-2.5 border-t border-[#D8C7AA] flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); givePotato(post.id); }}
+                        className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-2xs ${
+                          post.potatoGiven
+                            ? 'bg-[#8C6D4F] text-white'
+                            : 'bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#3B2818]'
+                        }`}
+                      >
+                        <span className="text-sm">🍰</span>
+                        <span>{post.potatoes}</span>
+                      </button>
+
+                      <span className="px-3 py-1 rounded-full bg-[#EFE3CD] border border-[#C5B295] text-[#8C6D4F] text-xs font-bold flex items-center gap-1 shadow-2xs">
+                        <MessageCircle size={11} />
+                        <span>{post.comments.length}</span>
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          soundManager.playActionClick();
+                          setShareTarget({ type: 'post', post });
+                          setIsShareModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 rounded-full bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#8C6D4F] hover:text-[#1E4334] text-xs font-bold flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-2xs"
+                        title="分享这条安利"
+                      >
+                        <Share2 size={11} />
+                        <span>分享</span>
+                      </button>
+                    </div>
+
+                    <div className="text-[#8C6D4F] flex items-center p-1">
+                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </div>
+                  </div>
+
+                  {/* 展开区：留言（安利墙白嫖论坛现成的评论区） */}
+                  {isExpanded && (
+                    <section
+                      onClick={(e) => e.stopPropagation()}
+                      className="relative z-10 mt-3 pt-2 space-y-2.5 cursor-default border-t border-[#D8C7AA]"
+                    >
+                      <div className="space-y-1">
+                        {post.comments.map((comment) => {
+                          const isCommentHost = comment.isHost || comment.author === post.author;
+                          return (
+                            <div
+                              key={comment.id}
+                              className="pt-2 pb-2.5 border-b border-dashed border-[#D8C7AA] last:border-b-0 space-y-1 text-xs"
+                            >
+                              <div className="flex items-center justify-between text-[11px] text-[#715431]">
+                                <div className="flex items-center gap-1.5 font-bold">
+                                  <span className="text-[#8C6D4F] font-mono select-none">↳</span>
+                                  <span className="text-[#2C2016]">{comment.author}</span>
+                                  {isCommentHost && (
+                                    <span className="text-[#8C6D4F] font-bold text-[10px] ml-0.5">楼主</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-[#8C7A65]">{comment.createdAt}</span>
+                                  {currentUid && comment.uid === currentUid && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); void handleDeleteComment(post.id, comment.id); }}
+                                      className="text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
+                                      title="删除我发布的评论"
+                                    >
+                                      <Trash2 size={11} />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <p className="text-xs text-[#3B2818] leading-relaxed whitespace-pre-wrap pl-4 font-serif-title">
+                                {comment.body}
+                              </p>
+                            </div>
+                          );
+                        })}
+
+                        {post.comments.length === 0 && (
+                          <div className="py-2 text-xs text-[#8C7A65] flex items-center gap-1.5">
+                            <span className="font-mono">↳</span>
+                            <span>暂无留言</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={commentDrafts[post.id] || ''}
+                          onChange={(e) =>
+                            setCommentDrafts((drafts) => ({ ...drafts, [post.id]: e.target.value }))
+                          }
+                          placeholder="说说你对这条安利的看法..."
+                          className="min-w-0 flex-1 px-3 py-1.5 rounded-lg text-xs outline-none bg-white text-[#2C2016] border border-[#D8C7AA] focus:border-[#8C6D4F] transition-colors"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') addComment(post.id);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => addComment(post.id)}
+                          className="px-3.5 py-1.5 rounded-full bg-[#B7791F] hover:bg-[#9A6519] text-[#FFFEEF] border border-[#9A6519] text-xs font-bold cursor-pointer transition-transform active:scale-95 shadow-2xs flex items-center gap-1 shrink-0"
+                        >
+                          <span>发送</span>
+                          <Send size={11} />
+                        </button>
+                      </div>
                     </section>
                   )}
                 </article>
@@ -2340,10 +2664,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                 </button>
               </div>
 
-              {/* 类别切换（仅通用发布：闲聊茶歇 / 角色拟音 / 故事接龙；
+              {/* 类别切换（仅通用发布：闲聊茶歇 / 安利墙 / 角色拟音 / 故事接龙；
                   土豆市集已剥离到「发布市集物资」专用弹窗，不再出现在通用发布里） */}
               {!showMarketComposer && (
-              <div className="relative z-10 grid grid-cols-3 gap-1.5 sm:gap-2">
+              <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -2358,6 +2682,21 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                 >
                   <MessageCircle size={13} />
                   <span>闲聊茶歇</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundManager.playWoodTap();
+                    setComposeCategory('links');
+                  }}
+                  className={`py-2 px-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 ${
+                    composeCategory === 'links'
+                      ? 'bg-[#B7791F] text-[#FFFEEF] border-[#9A6519] shadow-xs'
+                      : 'bg-[#FDF6E7] text-[#8A5A12] border-[#E0C48C]'
+                  }`}
+                >
+                  <LinkIcon size={13} />
+                  <span>安利墙</span>
                 </button>
                 <button
                   type="button"
@@ -2697,8 +3036,58 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                     {/* 署名输入已移除：发布人固定为账号昵称（mount 时自动载入，
                         未登录兜底 '调查兵'），不再提供手动输入。 */}
 
-                    {/* 只有故事接龙需要填写标题，闲聊茶歇和角色拟音去除标题 */}
-                    {composeCategory === 'relay' && (
+                  {/* 安利墙：粘贴外链 → 服务端识别 OG（B站自动带出可站内播放的视频） */}
+                  {composeCategory === 'links' && (
+                    <div className="relative z-10 bg-[#FDF6E7] p-2.5 rounded-xl border border-[#E0C48C] space-y-2">
+                      <label className="text-[10px] font-bold text-[#8A5A12] block">
+                        🔗 外链地址 (必填 · 支持 B站 / LOFTER / 小红书 / 微博等):
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          value={linkUrl}
+                          onChange={(e) => { setLinkUrl(e.target.value); setLinkPreview(null); }}
+                          placeholder="https://…"
+                          className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg border border-[#D1B88B] text-xs outline-none bg-white focus:border-[#B7791F] font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={detectLink}
+                          disabled={linkDetecting || !linkUrl.trim()}
+                          className="shrink-0 px-3 py-1.5 rounded-lg bg-[#B7791F] hover:bg-[#9A6519] disabled:opacity-45 text-[#FFFEEF] text-xs font-bold cursor-pointer transition-colors flex items-center gap-1"
+                        >
+                          <Search size={11} />
+                          <span>{linkDetecting ? '识别中…' : '识别'}</span>
+                        </button>
+                      </div>
+
+                      {linkPreview && (
+                        <div className="flex items-center gap-2 flex-wrap text-[10px]">
+                          <span className="px-2 py-0.5 rounded-full bg-[#1E4334] text-[#F9E79F] font-bold">
+                            {platformLabel(linkPreview.platform)}
+                            {linkPreview.bvid ? ` · ${linkPreview.bvid}` : ''}
+                          </span>
+                          <span className="text-[#8A5A12]">
+                            {linkPreview.tier === 'A'
+                              ? '识别成功：站内可直接播放'
+                              : linkPreview.tier === 'B'
+                                ? '识别成功：可站内预览封面与摘要'
+                                : '对方限制抓取：将生成跳转卡，请手动填写标题'}
+                          </span>
+                          {linkPreview.coverUrl && (
+                            <img
+                              src={linkPreview.coverUrl}
+                              alt="封面预览"
+                              className="w-14 h-14 rounded-md object-cover border border-[#D1B88B]"
+                            />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 只有故事接龙需要填写标题，闲聊茶歇和角色拟音去除标题 */}
+                  {composeCategory === 'relay' && (
                       <div>
                         <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">
                           故事标题 (必填):
@@ -2712,9 +3101,28 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       </div>
                     )}
 
+                    {/* 安利墙：标题（识别成功会预填，可改） */}
+                    {composeCategory === 'links' && (
+                      <div>
+                        <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">
+                          安利标题 (必填 · 识别成功后已自动填好，可改):
+                        </label>
+                        <input
+                          value={title}
+                          onChange={(e) => setTitle(e.target.value)}
+                          placeholder="例如：利威尔兵长名场面混剪"
+                          className="w-full px-3 py-2 rounded-lg border border-[#C5B498] text-xs sm:text-sm font-bold outline-none bg-white focus:border-[#B7791F]"
+                        />
+                      </div>
+                    )}
+
                     <div>
                       <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">
-                        {composeCategory === 'roleplay' ? '台词 / 对白内容:' : '内容正文:'}
+                        {composeCategory === 'roleplay'
+                          ? '台词 / 对白内容:'
+                          : composeCategory === 'links'
+                            ? '推荐语 (选填 · 会显示在安利卡上):'
+                            : '内容正文:'}
                       </label>
                       <textarea
                         rows={composeCategory === 'roleplay' ? 3 : composeCategory === 'relay' ? 4 : 3}
@@ -2725,6 +3133,8 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                             ? '以该角色的语气说话（例如：“喂，小鬼，先把桌上的茶渍擦干净再向我报告。”）'
                             : composeCategory === 'relay'
                             ? '输入故事第1棒开篇正文…'
+                            : composeCategory === 'links'
+                            ? '说点什么安利理由，例如：这个剪辑的运镜和选曲都很贴利韩…'
                             : '分享点今天的新鲜事或想法…'
                         }
                         className="w-full px-3 py-2 rounded-lg border border-[#C5B498] text-xs sm:text-sm outline-none bg-white focus:border-[#235340] resize-none leading-relaxed"
@@ -2740,10 +3150,12 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                             ? 'bg-[#16273B] hover:bg-[#223B56] text-[#F9E79F]'
                             : composeCategory === 'relay'
                             ? 'bg-[#7A4F1D] hover:bg-[#633F17] text-[#FFF8EB]'
+                            : composeCategory === 'links'
+                            ? 'bg-[#B7791F] hover:bg-[#9A6519] text-[#FFFEEF]'
                             : 'bg-[#1E4334] hover:bg-[#2C5C46] text-[#FAF5EA]'
                         }`}
                       >
-                        {publishing ? '发布中…' : '确认发布'}
+                        {publishing ? '发布中…' : composeCategory === 'links' ? '安利上墙' : '确认发布'}
                       </button>
                     </div>
                   </form>
@@ -3075,6 +3487,18 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
           </div>,
           document.body
         )}
+      {/* ====================================================
+          安利墙播放 / 预览窗口（点击安利卡展开：B站内嵌官方播放器，其余给大图预览）
+         ==================================================== */}
+      {linkModalPost?.link && (
+        <LinkShareModal
+          link={linkModalPost.link}
+          title={linkModalPost.title || linkModalPost.link.ogTitle || linkModalPost.link.url}
+          note={linkModalPost.body || undefined}
+          onClose={() => setLinkModalPost(null)}
+        />
+      )}
+
       {/* ====================================================
           兵长茶会分享弹窗 (支持直达链接、文案口令、第三方平台与小红书/LOFTER海报)
          ==================================================== */}
