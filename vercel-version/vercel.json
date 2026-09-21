@@ -15,9 +15,26 @@
       "dest": "/admin/pixiv-artists.js"
     },
     {
+      "src": "^/admin/(.*)$",
+      "has": [{ "type": "host", "value": "admin.levihan.asia" }],
+      "dest": "/admin/$1"
+    },
+    {
       "src": "/(.*)",
       "has": [{ "type": "host", "value": "admin.levihan.asia" }],
       "dest": "/admin/$1"
+    },
+    {
+      "src": "^/admin(?:/.*)?$",
+      "has": [{ "type": "host", "value": "www.levihan.asia" }],
+      "dest": "https://admin.levihan.asia/",
+      "statusCode": 308
+    },
+    {
+      "src": "^/admin(?:/.*)?$",
+      "has": [{ "type": "host", "value": "levihan.asia" }],
+      "dest": "https://admin.levihan.asia/",
+      "statusCode": 308
     },
     {
       "src": "^/manifest\\.webmanifest$",
