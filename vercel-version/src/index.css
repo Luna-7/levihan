@@ -681,11 +681,16 @@ body.immersive-on .retro-frame-card > .absolute {
   background-color: #C5A059;
 }
 
-/* 避开固定悬浮的底部行军导航栏（AdventureBottomNav，2026-09-21 改纯图标版）。
-   导航栏高度 88 / 98 / 108px（base/sm/lg），另有 6px 安全区垫条。
-   该类 = 导航栏总高 + 16px 余量，用于首页内容与三个卡片页滚动容器。 */
+/* 避开固定悬浮的底部行军导航栏（AdventureBottomNav，2026-09-21 无背景进度条版）。
+   进度条浮条 64px（无背景）+ 安全区垫条约 4-6px；
+   非首页：导航栏本体默认隐藏，点进度条切换页面时短暂显现后缩回 → 用折叠态高度；
+   首页：导航栏本体一直显现（最高 74px）→ 用 home 变体。 */
 .clear-adventure-nav {
-  padding-bottom: calc(88px + 22px);
+  padding-bottom: calc(64px + 6px + 16px);
+}
+
+.clear-adventure-nav-home {
+  padding-bottom: calc(64px + 74px + 6px + 16px);
 }
 
 /* ============================================================
@@ -697,18 +702,6 @@ body.immersive-on .retro-frame-card > .absolute {
   border: 1.5px solid #E0D2B4;
   border-radius: 12px;
   padding: 12px 14px;
-}
-
-@media (min-width: 640px) {
-  .clear-adventure-nav {
-    padding-bottom: calc(98px + 22px);
-  }
-}
-
-@media (min-width: 1024px) {
-  .clear-adventure-nav {
-    padding-bottom: calc(108px + 22px);
-  }
 }
 
 /* Vintage Envelope Styling & Patterns */

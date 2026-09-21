@@ -64,7 +64,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
           1. 顶部 Header 横幅（不再使用卡片容器）
           打开网页时 header PNG 自动向下移入（animate-header-slide-down）
          ==================================================== */}
-      <div className="relative shrink-0 animate-header-slide-down w-full max-w-xl sm:max-w-2xl lg:max-w-4xl mx-auto">
+      <div className="relative shrink-0 animate-header-slide-down w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto">
         {/* header 横幅：宽度始终与导航栏对齐，高度按图片比例等比缩放 */}
         <img
           src="/images/header.webp"
@@ -115,7 +115,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
          ==================================================== */}
       {/* 桌面端(lg)：整个首页可随内容自然增高滚动；手机端：保持一屏固定不滚动
           （内容超高时仅公告卡内部滚动，页面本身不滚）。 */}
-      <main className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl lg:flex-none lg:overflow-visible mx-auto px-2.5 sm:px-4 lg:px-6 pt-1 sm:pt-2 lg:pt-4 clear-adventure-nav flex-1 min-h-0 flex flex-col justify-start gap-4 sm:gap-5 lg:gap-8 overflow-y-auto no-scrollbar">
+      <main className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl lg:flex-none lg:overflow-visible mx-auto px-2.5 sm:px-4 lg:px-6 pt-1 sm:pt-2 lg:pt-4 clear-adventure-nav-home flex-1 min-h-0 flex flex-col justify-start gap-4 sm:gap-5 lg:gap-8 overflow-y-auto no-scrollbar">
         {/* ====================================================
             【上段】：首页最多 3 条公告卡片 (显现内容、时间、发布人)
             —— 手机端：这一块是唯一的滚动容器；

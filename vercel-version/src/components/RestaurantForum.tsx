@@ -1288,10 +1288,12 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
   return (
     <div className="w-full h-full pb-2 bg-[#E6D9C1]/80 backdrop-blur-xs text-[#2C2016] flex flex-col overflow-hidden select-none font-sans">
+      {/* 滑索与分类工具栏都放进滚动容器内：随内容一起滚走，不再固定遮挡正文 */}
+      <main id="forum-scroll-container" className="clear-adventure-nav flex-1 min-h-0 overflow-y-auto">
       {/* 1. 兵长茶会 · 顶部预留同色系展示区域 (互动滑索小分队，持续往左平移动画) */}
       <TeaPartyInteractiveZipline onShowToast={onShowToast} />
 
-      {/* 2. 羊皮纸分类工具栏 (分类胶囊按键 + 发布按钮) */}
+      {/* 2. 羊皮纸分类工具栏 (分类胶囊按键 + 发布按钮；随内容滚动) */}
       <div className="shrink-0 bg-[#E8DCBF]/90 border-b-2 border-[#B89874] px-3 py-2 z-10 shadow-xs relative overflow-hidden">
         <CardPatternOverlay opacity={0.06} mode="multiply" />
 
@@ -1416,8 +1418,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
         </div>
       </div>
 
-      <main id="forum-scroll-container" className="clear-adventure-nav flex-1 min-h-0 overflow-y-auto px-2 sm:px-4 pt-3">
-        <div className="max-w-3xl mx-auto space-y-3.5">
+        <div className="max-w-3xl mx-auto space-y-3.5 pt-3 px-2 sm:px-4">
 
           {/* ==================== 🥔 土豆市集专用视图 (当选中土豆市集分类时) ==================== */}
           {activeCategory === 'market' && (
