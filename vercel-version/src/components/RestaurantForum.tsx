@@ -2825,6 +2825,102 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
         )}
 
       {/* ====================================================
+          故事接龙编辑弹窗（仅自己发布的接龙可编辑）
+         ==================================================== */}
+      {editingRelay &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[1000] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 select-none overflow-y-auto animate-in fade-in duration-150"
+            onClick={() => { if (!savingRelayEdit) setEditingRelay(null); }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg bg-[#FAF6EE] popup-frame-border rounded-2xl shadow-2xl p-4 sm:p-5 space-y-3 max-h-[90vh] overflow-y-auto relative my-auto shrink-0"
+            >
+              <CardPatternOverlay opacity={0.1} mode="multiply" />
+
+              <div className="relative z-10 flex items-center justify-between pb-2 border-b border-[#D8C7AA]">
+                <h2 className="font-serif-title text-sm font-black text-[#2D1F13] flex items-center gap-1.5">
+                  <PenLine size={14} /> 编辑故事接龙
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => { if (!savingRelayEdit) setEditingRelay(null); }}
+                  className="text-[#8C7A65] hover:text-[#2D1F13] cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form
+                onSubmit={(e) => { e.preventDefault(); void handleSaveRelayEdit(); }}
+                className="relative z-10 space-y-3"
+              >
+                <div>
+                  <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">
+                    故事标题 (必填):
+                  </label>
+                  <input
+                    value={relayEditTitle}
+                    onChange={(e) => setRelayEditTitle(e.target.value)}
+                    maxLength={100}
+                    className="w-full px-3 py-2 rounded-lg border border-[#C5B498] text-xs sm:text-sm font-bold outline-none bg-white focus:border-[#235340]"
+                  />
+                </div>
+
+                <div className="bg-[#F4E6CB] p-2.5 rounded-xl border border-[#DFC593] space-y-1">
+                  <label className="text-[10px] font-bold text-[#7A4F1D] block">
+                    ✍️ 起笔设定 (开篇环境/文档设定，可留空):
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={relayEditPrompt}
+                    onChange={(e) => setRelayEditPrompt(e.target.value)}
+                    maxLength={2000}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-[#D1B88B] text-xs font-serif-title font-medium leading-relaxed bg-white/95 focus:border-[#235340] outline-none resize-none text-[#2D1F13]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">
+                    第 1 棒开篇正文 (必填):
+                  </label>
+                  <textarea
+                    rows={6}
+                    value={relayEditBody}
+                    onChange={(e) => setRelayEditBody(e.target.value)}
+                    maxLength={5000}
+                    className="w-full px-3 py-2 rounded-lg border border-[#C5B498] text-xs sm:text-sm outline-none bg-white focus:border-[#235340] resize-none leading-relaxed font-serif-title"
+                  />
+                  <p className="mt-1 text-[10px] text-[#8C7A65]">
+                    仅可编辑自己发起的接龙；保存后合订本会自动重新编译，他人已接的后续棒数不受影响。
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditingRelay(null)}
+                    disabled={savingRelayEdit}
+                    className="px-4 py-2 rounded-lg text-xs font-bold bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#6D5A46] cursor-pointer transition-colors disabled:opacity-50"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingRelayEdit}
+                    className="px-5 py-2 rounded-lg text-xs font-bold bg-[#7A4F1D] hover:bg-[#633F17] text-[#FFF8EB] cursor-pointer transition-colors shadow-xs disabled:opacity-50"
+                  >
+                    {savingRelayEdit ? '保存中…' : '保存修改'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* ====================================================
           土豆市集物资详情弹窗 (选中商品卡片时弹出)
          ==================================================== */}
       {selectedMarketItem &&
