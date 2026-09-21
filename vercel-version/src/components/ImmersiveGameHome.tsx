@@ -58,11 +58,13 @@ export const ImmersiveGameHome: React.FC<Props> = ({
       id="view-main"
       className="relative w-full h-full select-none flex flex-col justify-between overflow-y-auto no-scrollbar overscroll-contain bg-[#FFFEEF]/55 backdrop-blur-md"
     >
+      {/* 滚动行为：手机端内容恰好一屏 → 不出现滚动（矮屏兜底仍可滚）；
+          桌面端 lg 下公告区不再内部滚动，整页随内容自然增高、可滚动。 */}
       {/* ====================================================
           1. 顶部 Header 横幅（不再使用卡片容器）
           打开网页时 header PNG 自动向下移入（animate-header-slide-down）
          ==================================================== */}
-      <div className="relative shrink-0 animate-header-slide-down w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto">
+      <div className="relative shrink-0 animate-header-slide-down w-full max-w-xl sm:max-w-2xl lg:max-w-4xl mx-auto">
         {/* header 横幅：宽度始终与导航栏对齐，高度按图片比例等比缩放 */}
         <img
           src="/images/header.webp"
@@ -111,14 +113,17 @@ export const ImmersiveGameHome: React.FC<Props> = ({
             矮屏/桌面（header 占高大）空间不足时，main 仍保留兜底滚动，
             避免按钮被裁掉看不见。）
          ==================================================== */}
-      <main className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto px-2.5 pt-1 sm:pt-2 clear-adventure-nav flex-1 min-h-0 flex flex-col justify-start gap-4 overflow-y-auto no-scrollbar">
+      {/* 桌面端(lg)：整个首页可随内容自然增高滚动；手机端：保持一屏固定不滚动
+          （内容超高时仅公告卡内部滚动，页面本身不滚）。 */}
+      <main className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl lg:flex-none lg:overflow-visible mx-auto px-2.5 sm:px-4 lg:px-6 pt-1 sm:pt-2 lg:pt-4 clear-adventure-nav flex-1 min-h-0 flex flex-col justify-start gap-4 sm:gap-5 lg:gap-8 overflow-y-auto no-scrollbar">
         {/* ====================================================
             【上段】：首页最多 3 条公告卡片 (显现内容、时间、发布人)
-            —— 这一块是唯一的滚动容器
+            —— 手机端：这一块是唯一的滚动容器；
+               桌面端(lg)：不再内部滚动，随整页一起滚动。
            ==================================================== */}
         <section
           id="home-announce-scroll"
-          className="w-full flex-1 min-h-[132px] lg:min-h-[196px] flex flex-col overflow-y-auto overflow-x-hidden no-scrollbar px-1 py-1"
+          className="w-full flex-1 min-h-[132px] lg:flex-none lg:min-h-0 lg:overflow-visible flex flex-col overflow-y-auto overflow-x-hidden no-scrollbar px-1 py-1"
         >
           <HomeAnnouncementGrid
             onNavigateTab={onNavigateTab}

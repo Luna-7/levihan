@@ -681,12 +681,11 @@ body.immersive-on .retro-frame-card > .absolute {
   background-color: #C5A059;
 }
 
-/* 避开固定悬浮的底部行军导航栏（AdventureBottomNav）。
-   导航栏波浪纸按 1242:331 比例随宽度拉伸（≈26.65vw），容器上限
-   max-w-xl / sm:max-w-2xl / lg:max-w-3xl，另有 6px 安全区垫条。
-   该类 = 导航栏总高 + 10px 余量，用于首页内容与三个卡片页滚动容器。 */
+/* 避开固定悬浮的底部行军导航栏（AdventureBottomNav，2026-09-21 改纯图标版）。
+   导航栏高度 88 / 98 / 108px（base/sm/lg），另有 6px 安全区垫条。
+   该类 = 导航栏总高 + 16px 余量，用于首页内容与三个卡片页滚动容器。 */
 .clear-adventure-nav {
-  padding-bottom: calc(min(26.65vw, 153.6px) + 16px);
+  padding-bottom: calc(88px + 22px);
 }
 
 /* ============================================================
@@ -702,13 +701,13 @@ body.immersive-on .retro-frame-card > .absolute {
 
 @media (min-width: 640px) {
   .clear-adventure-nav {
-    padding-bottom: calc(min(26.65vw, 179.2px) + 16px);
+    padding-bottom: calc(98px + 22px);
   }
 }
 
 @media (min-width: 1024px) {
   .clear-adventure-nav {
-    padding-bottom: calc(min(26.65vw, 204.8px) + 16px);
+    padding-bottom: calc(108px + 22px);
   }
 }
 
