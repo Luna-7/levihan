@@ -203,9 +203,10 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
 
   return (
     <div className="space-y-2.5">
-      {/* 封面区：A 级常驻播放键；B 级为预览入口；无封面走米色占位 */}
+      {/* AO3 走紧凑卡片：没有封面可放，大视窗只会是一整块空白 */}
+      {!isAo3 && (
       <div
-        onClick={isAo3 ? () => setShowMirrors((v) => !v) : onOpen}
+        onClick={onOpen}
         className={`relative w-full aspect-video overflow-hidden rounded-lg border border-[#D8C7AA] cursor-pointer group/cover ${
           withoutCover ? 'bg-[#EFE5D2]' : 'bg-[#1E4334]'
         }`}
@@ -221,14 +222,7 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-[#8C6D4F]">
             <EyeOff size={22} />
-            <span className="text-[11px] font-retro-jp">
-              {isAo3 ? 'AO3 站外作品 · 无站内封面' : '链接方未提供可预览封面'}
-            </span>
-            {isAo3 && (
-              <span className="text-[10px] font-retro-jp text-[#A89078]">
-                点这里{showMirrors ? '收起' : '展开'}镜像站
-              </span>
-            )}
+            <span className="text-[11px] font-retro-jp">链接方未提供可预览封面</span>
           </div>
         )}
 
@@ -245,11 +239,21 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
         )}
 
         <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-[#2C2016]/85 text-[#F9E79F] text-[10px] font-retro-jp">
-          {isAo3 ? 'AO3 站外 · 需镜像打开' : tierHint(link.tier)}
+          {tierHint(link.tier)}
         </span>
       </div>
+      )}
 
       <div className="space-y-1">
+        {/* AO3：徽章 + 「需镜像打开」提示压在标题行，不再单开视窗 */}
+        {isAo3 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${PLATFORM_STYLE.ao3}`}>
+              {platformLabel(link.platform)}
+            </span>
+            <span className="text-[10px] font-retro-jp text-[#8C6D4F]">AO3 站外作品 · 复制名称或走镜像打开</span>
+          </div>
+        )}
         <p className="font-pixel text-[13px] sm:text-sm font-bold text-[#2C2016] leading-snug break-words">
           {title}
         </p>

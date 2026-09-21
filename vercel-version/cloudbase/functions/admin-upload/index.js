@@ -306,7 +306,7 @@ function detectLinkPlatform(rawUrl) {
   if (host.endsWith('.weibo.com') || host === 'weibo.com' || host === 'weibo.cn') return { platform: 'weibo', tier: 'B' };
   // AO3 及其镜像：站点在国内不可达（云函数抓不到 OG），且原站带 X-Frame-Options 禁止内嵌，
   // 一律落 C 级跳转卡；前端另给「复制名称 + 镜像站面板」兜底。
-  if (host === 'archiveofourown.org' || host.endsWith('.archiveofourown.org')) return { platform: 'ao3', tier: 'C' };
+  if (host === 'archiveofourown.org' || host.endsWith('.archiveofourown.org') || host === 'ao3.org' || host.endsWith('.ao3.org')) return { platform: 'ao3', tier: 'C' };
   if (host === 'ao3mirror.com' || host.endsWith('.ao3mirror.com') || host === 'ao3mirror.net' || host.endsWith('.ao3mirror.net')) return { platform: 'ao3', tier: 'C' };
   if (host === 'ao3-agent.co' || host.endsWith('.ao3-agent.co') || host === 'ao3-agent.org' || host.endsWith('.ao3-agent.org')) return { platform: 'ao3', tier: 'C' };
   if (/^go3-cn\.(online|xyz|blog)$/.test(host)) return { platform: 'ao3', tier: 'C' };
@@ -330,6 +330,31 @@ function isSafeExternalUrl(rawUrl) {
   if (host === '::1' || host === '[::1]' || host === '[fc00::]' ) return false;
   return true;
 }
+
+/** 这类协议能执行代码/读本地文件，绝不入库；App 分享的自定义 scheme（bilibili:// 等）放行 */
+const BLOCKED_LINK_SCHEMES = new Set(['javascript', 'data', 'vbscript', 'file', 'blob', 'about', 'chrome']);
+
+/**
+ * 安利墙链接归一化：不做「必须是 http(s)」的死校验。
+ * - 已带任意 scheme（bilibili:// / snssdk1128:// 等各 App 分享链接）→ 原样放行（拦危险协议）
+ * - 裸域名（xhslink.com/xxx、www.x.com/a）→ 自动补 https://
+ * - 其余形态（纯文本等）→ 返回空串，由调用方报错
+ * 返回值供入库与展示；是否能「抓预览」由调用方再判 http(s)。
+ */
+function normalizeExternalLink(rawUrl) {
+  const s = String(rawUrl || '').trim();
+  if (!s) return '';
+  const schemeMatch = /^([a-z][a-z0-9+.-]*):\/\//i.exec(s);
+  if (schemeMatch) {
+    return BLOCKED_LINK_SCHEMES.has(schemeMatch[1].toLowerCase()) ? '' : s;
+  }
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}([/?#].*)?$/i.test(s)) return `https://${s}`;
+  return '';
+}
+
+/** 是否为可抓取预览的网页链接 */
+const isFetchableLink = (url) => /^https?:\/\/(\[[0-9a-f:]+\]|[^/])/i.test(String(url || ''));
+
 
 function extractMetaTags(html) {
   const pick = (re) => { const m = html.match(re); return m ? m[1].trim() : ''; };
@@ -451,7 +476,15 @@ async function fetchBilibiliMeta(bvid) {
  * 返回 { platform, tier, bvid?, title, description, coverUrl }；任何失败都优雅降级（tier 可能落到 C）。
  */
 async function buildLinkPreview(rawUrl) {
-  if (!isSafeExternalUrl(rawUrl)) throw httpError('仅支持公开的 http(s) 链接', 400);
+  // 先归一化（裸域名补 https、放行 App 分享 scheme、拦危险协议）
+  const normalized = normalizeExternalLink(rawUrl);
+  if (!normalized) throw httpError('请粘贴网页链接或 App 分享链接', 400);
+  // App 自定义 scheme（bilibili:// 等）抓不了预览，直接按 C 级跳转卡返回原链接
+  if (!isFetchableLink(normalized)) {
+    return { platform: 'web', tier: 'C', url: normalized, title: '', description: '', appLink: true };
+  }
+  if (!isSafeExternalUrl(normalized)) throw httpError('仅支持公开的 http(s) 链接', 400);
+  rawUrl = normalized;
   let detected = detectLinkPlatform(rawUrl) || { platform: 'web', tier: 'B' };
   let finalUrl = rawUrl;
   let meta = { title: '', description: '', image: '' };
@@ -1334,9 +1367,9 @@ async function handle(action, payload) {
     }
 
     case 'linkPreview': {
-      const rawUrl = String(payload.url || '').trim();
-      if (!isSafeExternalUrl(rawUrl)) throw httpError('仅支持公开的 http(s) 链接', 400);
-      const preview = await buildLinkPreview(rawUrl);
+      // 归一化 + 危险协议拦截都在 buildLinkPreview 内做，这里不再前置 isSafeExternalUrl
+      // （否则 bilibili:// 等 App 分享链接会在补 https 之前被挡死）
+      const preview = await buildLinkPreview(String(payload.url || '').trim());
       return { ok: true, preview };
     }
 
@@ -1350,15 +1383,17 @@ async function handle(action, payload) {
       const author = String(payload.author || '').trim().slice(0, 40);
       const prompt = String(payload.prompt || '').trim().slice(0, 2000);
       const characterName = String(payload.characterName || '').trim().slice(0, 40);
-      // 安利墙：必须带合法外链，正文（推荐语）反而选填；其余板块要求正文或图片，昵称一律必填
+      // 安利墙：必须带合法外链（网页链接或 App 分享链接），正文（推荐语）反而选填；其余板块要求正文或图片，昵称一律必填
       let link;
       if (category === 'links') {
-        const linkUrl = String(payload.linkUrl || '').trim();
-        if (!isSafeExternalUrl(linkUrl)) throw httpError('请粘贴公开的 http(s) 外链', 400);
+        const linkUrl = normalizeExternalLink(payload.linkUrl);
+        if (!linkUrl) throw httpError('请粘贴网页链接或 App 分享链接', 400);
         const preview = payload.linkPreview && typeof payload.linkPreview === 'object' ? payload.linkPreview : {};
-        // 以前端识别结果为基础，但平台/级别/bvid 一律以服务端重新判定为准，避免伪造
-        const detected = detectLinkPlatform(linkUrl) || { platform: 'web', tier: 'B' };
-        const bvid = detected.platform === 'bilibili' ? extractBvid(linkUrl) : '';
+        // 以前端识别结果为基础，但平台/级别/bvid 一律以服务端重新判定为准，避免伪造。
+        // App 自定义 scheme（bilibili:// 等）抓不了预览，一律 C 级跳转卡。
+        const fetchable = isFetchableLink(linkUrl) && isSafeExternalUrl(linkUrl);
+        const detected = fetchable ? (detectLinkPlatform(linkUrl) || { platform: 'web', tier: 'B' }) : { platform: 'web', tier: 'C' };
+        const bvid = fetchable && detected.platform === 'bilibili' ? extractBvid(linkUrl) : '';
         const tier = detected.tier === 'A' && !bvid ? 'C' : detected.tier;
         link = {
           url: linkUrl,

@@ -20,6 +20,25 @@ import { LinkShare, LinkShareCard, LinkShareModal, platformLabel } from './LinkS
 export type PostCategory = 'chat' | 'relay' | 'roleplay' | 'market' | 'links';
 
 /**
+ * 安利墙链接归一化：各 App 的分享链接并不只有 http(s)（还有 bilibili:// 这类 App scheme），
+ * 裸域名（xhslink.com/xxx）也很常见。这里做宽松归一：
+ * - 已带任意 scheme → 原样保留（危险协议由服务端拦截）
+ * - 裸域名 → 自动补 https://
+ * - 空串/明显不是链接 → 返回空串，由调用方提示
+ */
+export const normalizeShareLink = (raw: string): string => {
+  const s = raw.trim();
+  if (!s) return '';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}([/?#].*)?$/i.test(s)) return `https://${s}`;
+  return '';
+};
+
+/** 是否为 App 自定义 scheme 链接（bilibili:// 等）——这类抓不了预览，只出跳转卡 */
+export const isAppSchemeLink = (url: string): boolean =>
+  /^[a-z][a-z0-9+.-]*:\/\//i.test(url) && !/^https?:\/\//i.test(url);
+
+/**
  * 时间显示：云函数落库的是 ISO 串（2026-09-21T08:04:14.263Z），直接渲染很扎眼；
  * 种子数据/老贴里手写的「刚刚」「3 天前」这类文案不是合法日期，原样保留。
  */
@@ -898,13 +917,14 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
   /** 安利墙：粘贴链接后点识别 —— 服务端代抓 OG 元数据（浏览器跨域抓不到），失败则降级为手填 */
   const detectLink = async () => {
-    const url = linkUrl.trim();
-    if (!/^https?:\/\//i.test(url)) {
-      return onShowToast('请粘贴完整链接（以 http:// 或 https:// 开头）');
+    const normalized = normalizeShareLink(linkUrl);
+    if (!normalized) {
+      return onShowToast('请粘贴网页链接或 App 分享链接（裸域名也行，会自动补 https）');
     }
+    if (normalized !== linkUrl) setLinkUrl(normalized); // 回写归一化结果，发布时用同一个值
     setLinkDetecting(true);
     try {
-      const result = await api('linkPreview', { url });
+      const result = await api('linkPreview', { url: normalized });
       // 云函数返回 OG 用 title/description 命名，落地到帖子里统一叫 ogTitle/ogDesc
       const raw = result.preview as
         | { url: string; platform: string; tier: 'A' | 'B' | 'C'; bvid?: string; coverUrl?: string; title?: string; description?: string }
@@ -929,7 +949,9 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             ? `已识别 ${platformLabel(preview.platform)} 视频 · 站内可直接播放`
             : preview.tier === 'B'
               ? `已识别 ${platformLabel(preview.platform)} · 可站内预览`
-              : `${platformLabel(preview.platform)} 限制抓取：已降级为跳转卡，标题请手动填写`
+              : isAppSchemeLink(preview.url)
+                ? 'App 分享链接：将生成跳转卡，点卡片可唤起对应 App'
+                : `${platformLabel(preview.platform)} 限制抓取：已降级为跳转卡，标题请手动填写`
       );
     } catch (error) {
       setLinkPreview(null);
@@ -949,13 +971,14 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       return;
     }
 
-    // 安利墙（外链分享）发布：链接必填，推荐语选填；平台/级别以服务端判定为准
+    // 安利墙（外链分享）发布：链接必填（网页链接或 App 分享链接），推荐语选填；平台/级别以服务端判定为准
     if (composeCategory === 'links') {
       const authorName = nickname.trim() || '调查兵';
-      const url = linkUrl.trim();
-      if (!/^https?:\/\//i.test(url)) {
-        return onShowToast('请粘贴完整的外链');
+      const url = normalizeShareLink(linkUrl);
+      if (!url) {
+        return onShowToast('请粘贴网页链接或 App 分享链接（裸域名也行，会自动补 https）');
       }
+      if (url !== linkUrl) setLinkUrl(url);
       const finalTitle = title.trim() || linkPreview?.ogTitle || url;
       if (!finalTitle.trim()) {
         return onShowToast('请填写标题（对方站点不给预览时需要手动填）');
@@ -3121,14 +3144,15 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                   {composeCategory === 'links' && (
                     <div className="relative z-10 bg-[#FDF6E7] p-2.5 rounded-xl border border-[#E0C48C] space-y-2">
                       <label className="text-[10px] font-bold text-[#8A5A12] block">
-                        🔗 外链地址 (必填 · 支持 B站 / LOFTER / 小红书 / 微博等):
+                        🔗 外链地址 (必填 · B站 / LOFTER / 小红书 / 微博 / AO3 或各 App 分享链接均可):
                       </label>
                       <div className="flex gap-2">
                         <input
-                          type="url"
+                          type="text"
+                          inputMode="url"
                           value={linkUrl}
                           onChange={(e) => { setLinkUrl(e.target.value); setLinkPreview(null); }}
-                          placeholder="https://…"
+                          placeholder="链接或裸域名均可，如 xhslink.com/xxx"
                           className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg border border-[#D1B88B] text-xs outline-none bg-white focus:border-[#B7791F] font-mono"
                         />
                         <button
