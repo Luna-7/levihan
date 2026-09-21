@@ -1,13 +1,15 @@
 /**
  * 兵长茶会（RestaurantForum）发布弹窗优化回归测试。
  *
- * 两件事被钉住，免得以后改动把它们复辟回去：
- *   1) 发帖署名（属名）默认取「账号昵称」，而不是默认 PRESET_CHARACTERS[0].name（利威尔）。
+ * 三件事被钉住，免得以后改动把它们复辟回去：
+ *   1) 发帖署名默认取「账号昵称」，而不是默认 PRESET_CHARACTERS[0].name（利威尔）。
  *      早期实现里 mount 副作用只在 composeCategory !== 'roleplay' 时才把账号昵称写进 nickname，
  *      而默认分类偏偏就是 roleplay，于是闲聊/接龙/市集的署名永远停在「利威尔」。
  *      另外选角动作不再改写 nickname，避免拟音人物名被带进署名。
+ *      （署名输入框已在 ad88b2a 整体移除、发布人固定账号昵称 —— 这里反向钉住，别又加回来。）
  *   2) 自己发的卡片（post.uid === currentUid）必须出现删除按键。
- *      之前只有「故事接龙」卡片有，角色拟音 / 闲聊茶歇卡片缺。现在三类卡片都要有。
+ *      之前只有「故事接龙」卡片有，角色拟音 / 闲聊茶歇卡片缺。现在四类卡片都要有
+ *      （角色拟音 / 闲聊茶歇 / 故事接龙 / 安利墙）。
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -39,14 +41,19 @@ test('发帖署名默认取账号昵称（不再被拟音人物名顶替）', ()
     false,
     'handleSelectCharacter 不得改写 nickname',
   );
-  // 署名输入框占位符提示默认账号昵称
-  assert.match(src, /placeholder="账号昵称（默认）"/, '发帖署名占位符应提示「账号昵称（默认）」');
+  // 署名输入框已移除：发布人固定账号昵称，不允许再加回手填署名
+  assert.equal(
+    /placeholder="账号昵称（默认）"/.test(src),
+    false,
+    '署名输入框已移除，不应再出现手填署名的占位符',
+  );
+  assert.match(src, /nickname\.trim\(\) \|\| '调查兵'/, '空昵称发布时应兜底为「调查兵」');
 });
 
-test('三类卡片都给「自己发的帖」显示删除按键', () => {
-  // 角色拟音 / 闲聊茶歇 / 故事接龙 三处都要用 currentUid && post.uid === currentUid 守卫删除键
+test('四类卡片都给「自己发的帖」显示删除按键', () => {
+  // 角色拟音 / 闲聊茶歇 / 故事接龙 / 安利墙 四处都要用 currentUid && post.uid === currentUid 守卫删除键
   const guards = src.match(/currentUid && post\.uid === currentUid/g) || [];
-  assert.equal(guards.length, 3, `应有 3 处删除键守卫（角色拟音/闲聊茶歇/故事接龙），实际 ${guards.length} 处`);
+  assert.equal(guards.length, 4, `应有 4 处删除键守卫（角色拟音/闲聊茶歇/故事接龙/安利墙），实际 ${guards.length} 处`);
   // 删除键必须调用已存在的 handleDeletePost
   assert.match(src, /void handleDeletePost\(post\.id\)/, '删除键必须调用 handleDeletePost');
 });

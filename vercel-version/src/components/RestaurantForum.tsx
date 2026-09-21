@@ -858,11 +858,13 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       if (!title.trim() && preview.ogTitle) setTitle(preview.ogTitle.slice(0, 100));
       soundManager.playCopySuccess();
       onShowToast(
-        preview.tier === 'A'
-          ? `已识别 ${platformLabel(preview.platform)} 视频 · 站内可直接播放`
-          : preview.tier === 'B'
-            ? `已识别 ${platformLabel(preview.platform)} · 可站内预览`
-            : `${platformLabel(preview.platform)} 限制抓取：已降级为跳转卡，标题请手动填写`
+        preview.platform === 'ao3'
+          ? '识别到 AO3：站内不预览，请照抄作品名，卡片会给镜像站入口'
+          : preview.tier === 'A'
+            ? `已识别 ${platformLabel(preview.platform)} 视频 · 站内可直接播放`
+            : preview.tier === 'B'
+              ? `已识别 ${platformLabel(preview.platform)} · 可站内预览`
+              : `${platformLabel(preview.platform)} 限制抓取：已降级为跳转卡，标题请手动填写`
       );
     } catch (error) {
       setLinkPreview(null);
@@ -3061,7 +3063,30 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                         </button>
                       </div>
 
-                      {linkPreview && (
+                      {linkPreview && linkPreview.platform === 'ao3' && (
+                        <div className="rounded-lg border border-[#D9A93B] bg-[#FDF3DC] px-2.5 py-2 space-y-1">
+                          <span className="text-[10px] font-bold text-[#8A5A12] flex items-center gap-1">
+                            ⚠ 识别到 AO3 外链
+                          </span>
+                          <p className="text-[10px] font-retro-jp text-[#7A5A22] leading-relaxed">
+                            AO3 原站在国内不可达，站内不做预览，卡片只给「打开原文 / 复制名称」。
+                            复制名称后会就地展开一组可直连的镜像站入口，方便同好打开这篇。
+                          </p>
+                          <p className="text-[10px] font-retro-jp text-[#8A5A12]">
+                            请把作品名照抄进下面的「安利标题」（会同时用于镜像站与复制）。
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => { void detectLink(); }}
+                            disabled={linkDetecting}
+                            className="text-[10px] font-bold text-[#8A5A12] underline underline-offset-2 cursor-pointer disabled:opacity-50"
+                          >
+                            重新识别
+                          </button>
+                        </div>
+                      )}
+
+                      {linkPreview && linkPreview.platform !== 'ao3' && (
                         <div className="flex items-center gap-2 flex-wrap text-[10px]">
                           <span className="px-2 py-0.5 rounded-full bg-[#1E4334] text-[#F9E79F] font-bold">
                             {platformLabel(linkPreview.platform)}
@@ -3101,16 +3126,18 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       </div>
                     )}
 
-                    {/* 安利墙：标题（识别成功会预填，可改） */}
+                    {/* 安利墙：标题（识别成功会预填，可改；AO3 抓不到须手填） */}
                     {composeCategory === 'links' && (
                       <div>
                         <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">
-                          安利标题 (必填 · 识别成功后已自动填好，可改):
+                          {linkPreview?.platform === 'ao3'
+                            ? '安利标题 (必填 · AO3 抓不到，请照抄作品名):'
+                            : '安利标题 (必填 · 识别成功后已自动填好，可改):'}
                         </label>
                         <input
                           value={title}
                           onChange={(e) => setTitle(e.target.value)}
-                          placeholder="例如：利威尔兵长名场面混剪"
+                          placeholder={linkPreview?.platform === 'ao3' ? '例如：堆堆利韩压抑（照抄 AO3 原标题）' : '例如：利威尔兵长名场面混剪'}
                           className="w-full px-3 py-2 rounded-lg border border-[#C5B498] text-xs sm:text-sm font-bold outline-none bg-white focus:border-[#B7791F]"
                         />
                       </div>

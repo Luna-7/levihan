@@ -33,19 +33,6 @@ export interface DoujinBookItem {
   secure?: boolean;
 }
 
-/** 站外推荐条目（腾讯表格「推荐」表 → scripts/sync-archive.mjs → COS recs.json） */
-export interface RecommendItem {
-  id: string; // 稳定 id：优先取 AO3 works/ 后的数字，否则用 URL hash
-  title: string; // A 列 文章名称
-  url: string; // B 列 链接（空 → 只能复制名称）
-  type: string; // C 列 题材（现PA / 原作 / 美高…）
-  rating: string; // D 列 评级（R / 清水），与题材同级参与筛选与标签展示
-  recommender?: string; // E 列 推荐ID（推荐人），卡片显示为「@推荐人 说：」
-  reason?: string; // F 列 推荐理由，跟在推荐人后面；空则理由块不渲染
-  createdAt?: string; // 推荐加入时间（旧记录可能没有）
-  updatedAt?: string; // 最近更新时间
-}
-
 /** 在线小说元数据（管理台「D 在线小说」→ 云函数 → COS novels.json；正文在 novels/{id}.txt） */
 export interface GroupNovel {
   id: string; // 'nv-' + 时间戳36进制 + 随机

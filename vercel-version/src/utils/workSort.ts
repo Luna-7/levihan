@@ -1,4 +1,4 @@
-import { DoujinBookItem, GroupNovel, RecommendItem } from '../types/doujinArchive';
+import { DoujinBookItem, GroupNovel } from '../types/doujinArchive';
 
 const timeOf = (updatedAt?: string, createdAt?: string): number => {
   const date = Date.parse(updatedAt || createdAt || '');
@@ -20,10 +20,4 @@ export const newestNovelsFirst = (novels: GroupNovel[]): GroupNovel[] =>
   [...novels].sort((a, b) =>
     timeOf(b.updatedAt, b.createdAt) - timeOf(a.updatedAt, a.createdAt) ||
     b.id.localeCompare(a.id)
-  );
-
-// 推荐表旧记录没有时间字段；相同或缺失时间时维持表格原有顺序。
-export const newestRecsFirst = (recs: RecommendItem[]): RecommendItem[] =>
-  [...recs].sort((a, b) =>
-    timeOf(b.updatedAt, b.createdAt) - timeOf(a.updatedAt, a.createdAt)
   );

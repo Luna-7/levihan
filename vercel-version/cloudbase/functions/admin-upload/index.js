@@ -304,6 +304,12 @@ function detectLinkPlatform(rawUrl) {
   if (host.endsWith('.lofter.com') || host === 'lofter.com') return { platform: 'lofter', tier: 'B' };
   if (host.endsWith('.xiaohongshu.com') || host === 'xiaohongshu.com' || host === 'xhslink.com') return { platform: 'xiaohongshu', tier: 'C' };
   if (host.endsWith('.weibo.com') || host === 'weibo.com' || host === 'weibo.cn') return { platform: 'weibo', tier: 'B' };
+  // AO3 及其镜像：站点在国内不可达（云函数抓不到 OG），且原站带 X-Frame-Options 禁止内嵌，
+  // 一律落 C 级跳转卡；前端另给「复制名称 + 镜像站面板」兜底。
+  if (host === 'archiveofourown.org' || host.endsWith('.archiveofourown.org')) return { platform: 'ao3', tier: 'C' };
+  if (host === 'ao3mirror.com' || host.endsWith('.ao3mirror.com') || host === 'ao3mirror.net' || host.endsWith('.ao3mirror.net')) return { platform: 'ao3', tier: 'C' };
+  if (host === 'ao3-agent.co' || host.endsWith('.ao3-agent.co') || host === 'ao3-agent.org' || host.endsWith('.ao3-agent.org')) return { platform: 'ao3', tier: 'C' };
+  if (/^go3-cn\.(online|xyz|blog)$/.test(host)) return { platform: 'ao3', tier: 'C' };
   return { platform: 'web', tier: 'B' };
 }
 
@@ -454,6 +460,12 @@ async function buildLinkPreview(rawUrl) {
   // 小红书等强反爬平台：不再浪费时间抓页面，直接按 C 级跳转卡返回原始链接
   if (detected.platform === 'xiaohongshu') {
     return { platform: 'xiaohongshu', tier: 'C', url: rawUrl, title: '', description: '' };
+  }
+
+  // AO3 / AO3 镜像：原站在国内不可达、且带 X-Frame-Options 禁内嵌，抓页面必然超时。
+  // 直接按 C 级跳转卡返回原名（标题由发布者手填），封面留空走占位。
+  if (detected.platform === 'ao3') {
+    return { platform: 'ao3', tier: 'C', url: rawUrl, title: '', description: '' };
   }
 
   // 短链（b23.tv）：先解析出带 BV 号的真实地址

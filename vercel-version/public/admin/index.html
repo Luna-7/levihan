@@ -805,9 +805,10 @@
           <button class="btn-sm" id="btn-nv-clear" data-page-node-id="nvpanel00000000000000000011">清空表单</button>
         </div>
       </div>
-      <div class="row" style="margin-bottom:12px"><button class="btn-sm btn-primary" data-novel-admin-kind="novels">已收录作品</button><button class="btn-sm" data-novel-admin-kind="recs">站外推荐</button><button class="btn-sm" data-novel-admin-kind="review">待审核</button></div>
+      <div class="row" style="margin-bottom:12px"><button class="btn-sm btn-primary" data-novel-admin-kind="novels">已收录作品</button><button class="btn-sm" data-novel-admin-kind="review">待审核</button></div>
       <div id="nv-review" class="hide"><p class="muted">暂无待审核投稿</p></div>
-      <div id="rec-admin" class="hide"><div id="rec-admin-list"></div><p class="muted">站外推荐与在线小说分开保存、分开处理。</p></div>
+      <!-- 站外推荐已迁至前台「兵长茶会 → 安利墙」，此面板仅保留容器以维持脚本引用有效，不再展示入口 -->
+      <div id="rec-admin" class="hide"><div id="rec-admin-list"></div><p class="muted">站外推荐已迁至安利墙。</p></div>
 
       <div id="nv-list" data-page-node-id="nvpanel00000000000000000012"><p class="muted" data-page-node-id="nvpanel00000000000000000013">加载中…</p></div>
 
@@ -1754,31 +1755,79 @@ function promptForPdfPassword(buf, file){
     });
 }
 
-/**
- * 上传前对带密码 PDF 的处置策略（返回真正要拿去加密上传的 File）：
- *   ① 无密码               → 原样返回；
- *   ② 内层口令 = levihan   → **原样返回**（工具箱产物）——阅读器会把读者输入的校验码
- *      透传给 pdf.js 解内层，存原始字节画质零损失；重渲染反而多压一代 JPEG（糊）；
- *   ③ 自定义口令            → 解锁 + 逐页重渲染出无密码副本（阅读器只认 levihan，不重渲染就成死文件）。
- * 密码错误/取消则抛错中止上传。
- */
-async function unlockPdfToCleanFile(file){
-  // 先走一遍 getPdfDocument：内部会静默试 levihan → 失败才弹窗，结果记进 pdfPwCache
-  await getPdfDocument(file);
-  var pw = pdfPwCache.get(file);
-  if (!pw) return file;                        // ① 无密码
-  if (pw === PDF_KNOWN_INNER_PW) return file;  // ② 工具箱口令：原始字节直传，零重渲染
+/** 页面高宽比超过该阈值视为「条漫长页」——任何按长边缩放的管线（重渲染/压缩档/iOS 画布
+ *  上限）都会把它的宽度压扁，必须在上传时纵向切片成正常比例段。 */
+var PDF_TALL_RATIO = 2.2;
+/** 条漫长页切片的目标宽度（px）：按页面原生像素宽渲染，上下限兜底 */
+var PDF_SLICE_MIN_W = 480;
+var PDF_SLICE_MAX_W = 1440;
+/** 每段的高宽比（≈ 普通漫画页），段与段之间不重叠 */
+var PDF_SLICE_RATIO = 1.4;
+/** 单页整幅渲染的画布面积安全阀（px²）。管理台是桌面 Chrome（上限约 268MP），留足余量 */
+var PDF_RENDER_MAX_AREA = 80 * 1000 * 1000;
 
-  // ③ 自定义口令：逐页渲染成 JPEG（getPdfDocument 已缓存、不再弹窗），jsPDF 合成无密码 PDF。
-  // 不能用 saveDocument —— 它保留原加密，导出的仍是要密码的死文件。
-  var pages = await renderPdfPagesForVault(file, { maxSide: PDF_PAGE_MAX_SIDE, quality: 0.85 });
-  if (!pages || !pages.length) throw new Error('已解锁但逐页渲染失败：' + (file.name || ''));
+/** 扫描整本，返回高宽比超限的页码列表（空数组 = 没有长页） */
+async function findTallPdfPages(doc){
+  var tall = [];
+  for (var p = 1; p <= doc.numPages; p++) {
+    var page = await doc.getPage(p);
+    var base = page.getViewport({ scale: 1 });
+    if (page.cleanup) page.cleanup();
+    if (base.height / base.width > PDF_TALL_RATIO) tall.push(p);
+  }
+  return tall;
+}
+
+/** 把某一页整幅渲染成 canvas（宽 = targetW，白底）。超大面积自动降宽兜底 */
+async function renderPdfPageCanvas(doc, pageNo, targetW){
+  var page = await doc.getPage(pageNo);
+  try {
+    var base = page.getViewport({ scale: 1 });
+    var scale = targetW / base.width;
+    // 面积安全阀：极端长页按比例降目标宽，避免画布超限静默失败
+    if (base.width * base.height * scale * scale > PDF_RENDER_MAX_AREA) {
+      scale = Math.sqrt(PDF_RENDER_MAX_AREA / (base.width * base.height));
+    }
+    var vp = page.getViewport({ scale: scale });
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(vp.width));
+    canvas.height = Math.max(1, Math.round(vp.height));
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    return canvas;
+  } finally {
+    if (page.cleanup) page.cleanup();
+  }
+}
+
+/** 把高 canvas 纵向切成若干段 JPEG File（每段高 ≈ 宽 × PDF_SLICE_RATIO） */
+async function sliceTallCanvas(canvas, quality){
+  var sliceH = Math.round(canvas.width * PDF_SLICE_RATIO);
+  var out = [];
+  for (var y = 0; y < canvas.height; y += sliceH) {
+    var h = Math.min(sliceH, canvas.height - y);
+    var c = document.createElement('canvas');
+    c.width = canvas.width;
+    c.height = h;
+    c.getContext('2d').drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+    var blob = await canvasToJpegBlob(c, quality);
+    c.width = 0; c.height = 0;
+    out.push(new File([blob], 'slice-' + String(out.length + 1).padStart(2, '0') + '.jpg', { type: 'image/jpeg' }));
+  }
+  canvas.width = 0; canvas.height = 0;
+  return out;
+}
+
+/** 一组 JPEG File → 一份 PDF File（一图一页，页面尺寸=图片像素×0.75pt） */
+async function composeJpegsToPdfFile(jpegFiles, name){
   var JsPDF = (window.jspdf && window.jspdf.jsPDF);
-  if (typeof JsPDF !== 'function') throw new Error('jsPDF 未加载，无法合成无密码 PDF。');
+  if (typeof JsPDF !== 'function') throw new Error('jsPDF 未加载，无法合成 PDF。');
   var PX_TO_PT = 0.75;
   var doc = null;
-  for (var i = 0; i < pages.length; i++) {
-    var pf = pages[i];
+  for (var i = 0; i < jpegFiles.length; i++) {
+    var pf = jpegFiles[i];
     var url = URL.createObjectURL(pf);
     try {
       var dim = await new Promise(function(res, rej){
@@ -1795,8 +1844,53 @@ async function unlockPdfToCleanFile(file){
       URL.revokeObjectURL(url);
     }
   }
-  var outBytes = doc.output('arraybuffer');
-  return new File([outBytes], file.name, { type: 'application/pdf' });
+  return new File([doc.output('arraybuffer')], name, { type: 'application/pdf' });
+}
+
+/**
+ * 上传前对敏感本 PDF 的处置（返回真正要拿去加密上传的 File）：
+ *   ① 无密码 且 无超长页          → 原样返回（画质零损失）；
+ *   ② 内层口令 = levihan 且 无超长页 → 原样返回（工具箱产物）——阅读器会把读者输入的校验码
+ *      透传给 pdf.js 解内层，存原始字节即可；重渲染反而多压一代 JPEG（糊）；
+ *   ③ 有条漫长页                  → 逐页重渲染并**纵向切片**：长页按原生像素宽渲染（清晰度
+ *      不损失）切成 ≈1:1.4 的段，普通页按原生尺寸 q0.92 重编码。不切的话，阅读端画布、
+ *      iOS 16.7MP 上限、>60MB 压缩档（按长边缩放）都会把长页宽度压扁成 240px 糊图；
+ *   ④ 自定义口令                  → 必须重渲染去密码（阅读器只认 levihan），顺带做 ③ 的切片。
+ * 密码错误/取消则抛错中止上传。
+ */
+async function unlockPdfToCleanFile(file){
+  // 先走一遍 getPdfDocument：内部会静默试 levihan → 失败才弹窗，结果记进 pdfPwCache
+  var doc = await getPdfDocument(file);
+  var pw = pdfPwCache.get(file);
+
+  var tallPages = await findTallPdfPages(doc);
+  var mustRerender = (!!pw && pw !== PDF_KNOWN_INNER_PW) || tallPages.length > 0;
+  if (!mustRerender) return file;   // ①② 原始字节直传
+
+  // ③④ 逐页产出 JPEG：普通页原生尺寸 q0.92；长页原生宽切片 q0.9
+  var jpegs = [];
+  for (var p = 1; p <= doc.numPages; p++) {
+    var isTall = tallPages.indexOf(p) >= 0;
+    var page = await doc.getPage(p);
+    var base = page.getViewport({ scale: 1 });
+    if (page.cleanup) page.cleanup();
+    if (isTall) {
+      // 目标宽 = 页面原生像素宽（pt ÷ 0.75），兜底夹在 [480, 1440]
+      var nativeW = Math.round(base.width / 0.75);
+      var targetW = Math.max(PDF_SLICE_MIN_W, Math.min(PDF_SLICE_MAX_W, nativeW));
+      var canvas = await renderPdfPageCanvas(doc, p, targetW);
+      var slices = await sliceTallCanvas(canvas, 0.9);
+      jpegs = jpegs.concat(slices);
+    } else {
+      var scale = Math.min(2400 / Math.max(base.width, base.height), 3);
+      var canvas2 = await renderPdfPageCanvas(doc, p, Math.round(base.width * scale));
+      var blob = await canvasToJpegBlob(canvas2, 0.92);
+      canvas2.width = 0; canvas2.height = 0;
+      jpegs.push(new File([blob], 'page-' + String(p).padStart(2, '0') + '.jpg', { type: 'image/jpeg' }));
+    }
+  }
+  if (!jpegs.length) throw new Error('逐页渲染失败，没有产出任何页面：' + (file.name || ''));
+  return composeJpegsToPdfFile(jpegs, file.name);
 }
 
 function canvasToImageBlob(canvas, useWebp, quality){

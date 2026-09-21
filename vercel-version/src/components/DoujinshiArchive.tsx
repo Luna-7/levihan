@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   DOUJIN_ARCHIVE_DATA,
 } from '../data/doujinArchiveData';
-import { DoujinBookItem, RecommendItem, GroupNovel } from '../types/doujinArchive';
+import { DoujinBookItem, GroupNovel } from '../types/doujinArchive';
 import { soundManager } from '../utils/audio';
 import { cosService } from '../services/cosClient';
 import { NovelModule } from './NovelModule';
@@ -50,8 +50,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   // 封面加载失败状态
   const [failedCovers, setFailedCovers] = useState<Set<string>>(new Set());
 
-  // 站外推荐表（recs.json）与在线小说索引（novels.json）；读不到则为空 → 对应段不渲染
-  const [recs, setRecs] = useState<RecommendItem[]>([]);
+  // 在线小说索引（novels.json，含合订本与同好来稿）；读不到则为空 → 该段不渲染
   const [novels, setNovels] = useState<GroupNovel[]>([]);
 
   // 统计所有标签（动态汇总当前数据中的所有标签）
@@ -73,10 +72,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     .map(([name]) => name);
   const allAuthors = ['全部', ...dynamicAuthors];
 
-  // 组件挂载时自动尝试同步 COS 远端归档（推荐表与在线小说索引并行加载，失败静默降级）
+  // 组件挂载时自动尝试同步 COS 远端归档（在线小说索引并行加载，失败静默降级）
   useEffect(() => {
     handleRefreshArchive(false);
-    cosService.loadRecsData().then(setRecs).catch(() => {});
     cosService.loadNovelList().then(setNovels).catch(() => {});
     // 投稿免审直发：小说本新上架后立即刷新索引（novels.json 为 no-cache，重拉即最新）
     const reloadNovels = () => {
@@ -404,9 +402,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         )}
       </div>
 
-      {/* 小说本 = 专属视图：段切换（站外推荐 / 在线小说）+ 题材筛选 + 瀑布流 */}
+      {/* 小说本 = 专属视图：分类切换（合订本 / 同好来稿）+ 瀑布流 */}
       {selectedCategory === '小说本' && (
-        <NovelModule searchQuery={searchQuery} recs={recs} novels={novels} onShowToast={onShowToast} initialSeg="站外推荐" />
+        <NovelModule searchQuery={searchQuery} novels={novels} onShowToast={onShowToast} />
       )}
 
       {/* 典藏本卡片网格：2*2 的规整摆放，点击直接进入查看长图 */}

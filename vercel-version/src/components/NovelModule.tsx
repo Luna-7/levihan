@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Feather, BookOpen } from 'lucide-react';
-import { RecommendItem, GroupNovel } from '../types/doujinArchive';
+import { GroupNovel } from '../types/doujinArchive';
 import { soundManager } from '../utils/audio';
 import { NovelReader } from './NovelReader';
 import { AuthorWithLink } from '../utils/authorLink';
-import { newestNovelsFirst, newestRecsFirst } from '../utils/workSort';
-import { submitToInbox } from '../utils/submissionInbox';
+import { newestNovelsFirst } from '../utils/workSort';
 import { getAccessToken, getCurrentProfile, getCurrentUid } from '../utils/cloudbaseToken';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { cosService } from '../services/cosClient';
@@ -39,25 +37,14 @@ interface MammothApi {
 
 interface Props {
   searchQuery: string;
-  recs: RecommendItem[];
   novels: GroupNovel[];
   onShowToast: (msg: string) => void;
-  initialSeg?: string;
   initialReadingNovel?: GroupNovel | null;
 }
 
-/** 从链接域名解析网站名（不做标签，放卡片最右侧） */
-const siteName = (url: string): string => {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    if (host.endsWith('archiveofourown.org')) return 'AO3';
-    if (host.endsWith('lofter.com')) return 'LOFTER';
-    if (host.endsWith('weibo.com')) return '微博';
-    return host.replace(/^www\./, '').toUpperCase();
-  } catch {
-    return '';
-  }
-};
+/** 段切换的三个取值；「同好来稿」= 同好上传的在线小说（非接龙合订本） */
+type NovelSeg = '全部' | '合订本' | '同好来稿';
+const SEGS: NovelSeg[] = ['全部', '合订本', '同好来稿'];
 
 /** 字数缩写：12345 → 1.2万；8600 → 8.6千 */
 const fmtChars = (n: number): string => {
@@ -66,45 +53,19 @@ const fmtChars = (n: number): string => {
   return String(n);
 };
 
-const copyToClipboard = async (text: string): Promise<boolean> => {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand('copy');
-      ta.remove();
-      return ok;
-    } catch {
-      return false;
-    }
-  }
-};
-
 /**
- * 小说本模块：段切换（全部 / 在线小说 / 站外推荐）+ 题材筛选（含评级，单排扁平）
- * 第一段 在线小说 = 竖版卡片瀑布流；第二段 站外推荐 = 横向信息卡瀑布流
+ * 小说本模块：段切换（全部 / 合订本 / 同好来稿）+ 竖版卡片瀑布流。
+ * 站外推荐已迁至「兵长茶会 → 安利墙」，本模块只保留站内可读的正文小说。
  */
 export const NovelModule: React.FC<Props> = ({
   searchQuery,
-  recs,
   novels,
   onShowToast,
-  initialSeg,
   initialReadingNovel,
 }) => {
-  const [seg, setSeg] = useState<string>(initialSeg || '全部'); // 全部 | 在线小说 | 站外推荐
-  const [genre, setGenre] = useState<string>('全部');
-  const [openRec, setOpenRec] = useState<RecommendItem | null>(null);
+  const [seg, setSeg] = useState<NovelSeg>('全部');
   const [reading, setReading] = useState<GroupNovel | null>(initialReadingNovel || null);
   const [showUpload, setShowUpload] = useState(false);
-  const [uploadKind, setUploadKind] = useState<'novel' | 'recommend'>('novel');
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadAuthor, setUploadAuthor] = useState('');
   const [uploadAuthorUrl, setUploadAuthorUrl] = useState('');
@@ -116,11 +77,6 @@ export const NovelModule: React.FC<Props> = ({
   const [uploadSensitive, setUploadSensitive] = useState(false);
   const [uploadFileName, setUploadFileName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const [recTitle, setRecTitle] = useState('');
-  const [recLink, setRecLink] = useState('');
-  const [recAuthor, setRecAuthor] = useState('');
-  const [recReason, setRecReason] = useState('');
-  const [recCategory, setRecCategory] = useState('原作向');
   /* 编辑态：null = 新投稿；非空 = 正在改写这一篇（表单预填、提交走 novelUpdate） */
   const [editingNovel, setEditingNovel] = useState<GroupNovel | null>(null);
   const [editLoading, setEditLoading] = useState(false);
@@ -138,12 +94,6 @@ export const NovelModule: React.FC<Props> = ({
       alive = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (initialSeg) {
-      setSeg(initialSeg);
-    }
-  }, [initialSeg]);
 
   useEffect(() => {
     if (initialReadingNovel) {
@@ -166,85 +116,39 @@ export const NovelModule: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showUpload]);
 
-  // 题材 = 数据里 (type ∪ rating) 去重，不写死（R / 清水 与现PA / 原作同级）
-  const genreList = useMemo(
-    () => Array.from(new Set(recs.flatMap((r) => [r.type, r.rating]).filter(Boolean))),
-    [recs]
-  );
-
   const q = searchQuery.trim().toLowerCase();
 
   const filteredNovels = useMemo(
     () =>
       newestNovelsFirst(novels.filter((n) => {
+        const isRelay = Boolean(n.isRelayCompiled);
+        const matchSeg =
+          seg === '全部' || (seg === '合订本' ? isRelay : !isRelay);
         const matchSearch =
           !q ||
           n.title.toLowerCase().includes(q) ||
           n.author.toLowerCase().includes(q) ||
           (n.authorNote && n.authorNote.toLowerCase().includes(q)) ||
           (n.tags || []).some((t) => t.toLowerCase().includes(q));
-        return matchSearch;
+        return matchSeg && matchSearch;
       })),
-    [novels, q]
+    [novels, seg, q]
   );
 
-  const filteredRecs = useMemo(
-    () =>
-      newestRecsFirst(recs.filter((r) => {
-        const matchGenre = genre === '全部' || r.type === genre || r.rating === genre;
-        const matchSearch =
-          !q ||
-          r.title.toLowerCase().includes(q) ||
-          r.type.toLowerCase().includes(q) ||
-          r.rating.toLowerCase().includes(q) ||
-          (r.recommender && r.recommender.toLowerCase().includes(q)) ||
-          (r.reason && r.reason.toLowerCase().includes(q));
-        return matchGenre && matchSearch;
-      })),
-    [recs, genre, q]
-  );
+  /** 区块标题随段变化；空段也给准确名字，避免「共 0 篇」时看不出缺的是哪一类 */
+  const sectionTitle =
+    seg === '合订本'
+      ? '故事接龙合订本'
+      : seg === '同好来稿'
+        ? '同好来稿'
+        : '合订本 & 同好来稿';
 
-  // 弹窗：Esc 关闭 + 锁背景滚动
-  useEffect(() => {
-    if (!openRec) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpenRec(null);
-    };
-    window.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [openRec]);
-
-  const showNovels = seg === '全部' || seg === '在线小说';
-  const showRecs = seg === '全部' || seg === '站外推荐';
-  const genreDisabled = seg === '在线小说';
-
-  const openRecModal = (rec: RecommendItem) => {
-    soundManager.playEnvelopeOpen();
-    setOpenRec(rec);
-  };
-
-  const handleJump = (rec: RecommendItem) => {
-    if (!rec.url) return;
-    soundManager.playWarpJump();
-    // 弹窗保持打开：用户看完可能回来继续复制名称
-    window.open(rec.url, '_blank', 'noopener,noreferrer');
-  };
-
-  const handleCopyTitle = async (rec: RecommendItem) => {
-    const ok = await copyToClipboard(rec.title);
-    if (ok) {
-      soundManager.playCopySuccess();
-      onShowToast(`已复制标题《${rec.title.slice(0, 18)}${rec.title.length > 18 ? '…' : ''}》📋`);
-      setOpenRec(null); // 复制成功后自动关弹窗
-    } else {
-      onShowToast('复制失败，请长按标题手动复制');
-    }
-  };
+  const emptyText =
+    seg === '合订本'
+      ? '还没有接龙合订本，去兵长茶会开一棒试试～'
+      : seg === '同好来稿'
+        ? '还没有同好投稿，欢迎点右上角上传～'
+        : '还没有在线小说，敬请期待～';
 
   const handleNovelFile = async (file?: File) => {
     if (!file) return;
@@ -309,7 +213,6 @@ export const NovelModule: React.FC<Props> = ({
   const handleEditNovel = async (novel: GroupNovel) => {
     if (editLoading) return;
     soundManager.playWoodTap();
-    setUploadKind('novel');
     setEditLoading(true);
     try {
       const body = await fetchNovelBodyForEdit(novel);
@@ -349,17 +252,6 @@ export const NovelModule: React.FC<Props> = ({
 
   const handleNovelSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (uploadKind === 'recommend') {
-      if (!recTitle.trim() || !recLink.trim()) { onShowToast('请填写推荐名称和外链'); return; }
-      setIsUploading(true);
-      try {
-        await submitToInbox('submitRecommend', { title: recTitle.trim(), link: recLink.trim(), author: recAuthor.trim(), reason: recReason.trim(), category: recCategory });
-        setShowUpload(false); setRecTitle(''); setRecLink(''); setRecReason('');
-        onShowToast('推荐已提交，审核通过后会进入站外推荐');
-      } catch (error) { onShowToast(error instanceof Error ? error.message : '推荐提交失败'); }
-      finally { setIsUploading(false); }
-      return;
-    }
     if (!uploadTitle.trim() || !uploadAuthor.trim() || !uploadBody.trim()) {
       onShowToast('请填写标题、作者和正文');
       return;
@@ -413,21 +305,6 @@ export const NovelModule: React.FC<Props> = ({
     }
   };
 
-  // 推荐理由文本：@推荐人 说：…（只有推荐人 / 只有理由时分别降级）
-  const reasonText = (r: RecommendItem): string | null => {
-    if (r.recommender && r.reason) return `@${r.recommender} 说：${r.reason}`;
-    if (r.recommender) return `@${r.recommender} 说：`;
-    if (r.reason) return `说：${r.reason}`;
-    return null;
-  };
-
-  const chipCls = (active: boolean) =>
-    `px-2 py-0.5 rounded-xs border transition-all cursor-pointer text-[11px] font-retro-jp ${
-      active
-        ? 'bg-[#B7791F] text-[#FFFEEF] border-[#B7791F] font-bold'
-        : 'bg-[#FAF5E8] text-[#7A6958] border-[#E0D5BE] hover:bg-white'
-    }`;
-
   const segCls = (active: boolean) =>
     `px-2 py-0.5 rounded-xs border transition-all cursor-pointer text-[11px] font-retro-jp ${
       active
@@ -435,18 +312,15 @@ export const NovelModule: React.FC<Props> = ({
         : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5]'
     }`;
 
-  const tagChipCls =
-    'text-[9px] font-retro-jp px-1.5 py-0.2 rounded-xs border bg-[#F4EEDF] text-[#7A6958] border-[#DECFA9]';
-
   return (
     <div className="space-y-3">
-      {/* 模块筛选条：段切换 + 题材（无粗糙边框，半透明毛玻璃） */}
+      {/* 模块筛选条：段切换（无粗糙边框，半透明毛玻璃） */}
       <div className="bg-[#FFFEEF]/80 backdrop-blur-md rounded-xl p-2.5 space-y-2 relative overflow-hidden shadow-2xs">
         <CardPatternOverlay opacity={0.12} mode="multiply" />
         <div className="relative z-10 space-y-2">
         <div className="flex flex-wrap items-center gap-1.5 text-xs font-retro-jp">
-          <span className="text-[10px] font-pixel text-[#8C7A68] mr-1">段:</span>
-          {['全部', '在线小说', '站外推荐'].map((s) => (
+          <span className="text-[10px] font-pixel text-[#8C7A68] mr-1">分类:</span>
+          {SEGS.map((s) => (
             <button
               key={s}
               onClick={() => {
@@ -459,45 +333,26 @@ export const NovelModule: React.FC<Props> = ({
               {s}
             </button>
           ))}
-        </div>
-        <div
-          className={`flex flex-wrap items-center gap-1 pt-1 border-t border-dashed border-[#E0D5BE] text-xs font-retro-jp ${
-            genreDisabled ? 'opacity-40 pointer-events-none' : ''
-          }`}
-          title={genreDisabled ? '题材筛选仅作用于站外推荐' : undefined}
-        >
-          <span className="text-[10px] font-pixel text-[#8C7A68] mr-1">题材:</span>
-          {['全部', ...genreList].map((g) => (
-            <button
-              key={g}
-              onClick={() => {
-                soundManager.playFilterClick();
-                setGenre(g);
-              }}
-              onMouseEnter={() => soundManager.playCardHover()}
-              className={chipCls(genre === g)}
-            >
-              {g}
-            </button>
-          ))}
+          <span className="text-[10px] font-retro-jp text-[#A89098] ml-auto">
+            站外安利请去 兵长茶会 → 安利墙
+          </span>
         </div>
         </div>
       </div>
 
-      {/* 第一段：在线小说与接龙合订本（2列瀑布流） */}
-      {showNovels && (
-        <div className="space-y-2.5">
+      {/* 站内正文小说（合订本 / 同好来稿）瀑布流 */}
+      <div className="space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="inline-flex items-center gap-2 bg-[#1E4334]/90 backdrop-blur-md border border-[#1E4334]/70 rounded-lg px-3 py-1.5 shadow-2xs">
               <span className="w-2 h-2 rounded-full bg-[#F9E79F] animate-pulse" />
               <h3 className="font-pixel text-xs font-bold text-white tracking-wide">
-                在线小说 & 合订本 · 共 {filteredNovels.length} 篇
+                {sectionTitle} · 共 {filteredNovels.length} 篇
               </h3>
             </div>
             {/* 上传入口：与后台「小说管理」同款格式投稿 */}
             <button
               type="button"
-              onClick={() => { soundManager.playWoodTap(); setUploadKind('novel'); setShowUpload(true); }}
+              onClick={() => { soundManager.playWoodTap(); setShowUpload(true); }}
               className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#B7791F] border border-[#9A6519] text-[#FFFEEF] font-pixel text-[11px] font-bold cursor-pointer transition-colors hover:bg-[#9A6519]"
             >
               ✍️ 上传文
@@ -505,7 +360,7 @@ export const NovelModule: React.FC<Props> = ({
           </div>
           {filteredNovels.length === 0 ? (
             <div className="p-6 text-center bg-[#FFFEEF]/75 backdrop-blur-xs border border-dashed border-[#D5C9AF] rounded-xl text-xs font-retro-jp text-[#8C7A68]">
-              还没有在线小说，敬请期待～
+              {emptyText}
             </div>
           ) : (
             <div className="columns-2 gap-3.5 sm:gap-4.5 w-full">
@@ -522,7 +377,7 @@ export const NovelModule: React.FC<Props> = ({
                     }}
                     onMouseEnter={() => soundManager.playCardHover()}
                     className="mb-3.5 sm:mb-4.5 break-inside-avoid relative overflow-hidden bg-[#FFFEEF]/85 backdrop-blur-md border border-[#D5C9AF]/70 hover:border-[#8C6B38] rounded-xl p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-lg hover:bg-[#FFFEEF]/95 group select-none cursor-pointer space-y-3 w-full"
-                    title={isRelay ? "点击在线阅读接龙合订本" : "点击在线阅读小说"}
+                    title={isRelay ? '点击在线阅读接龙合订本' : '点击在线阅读小说'}
                   >
                     <CardPatternOverlay opacity={0.10} mode="multiply" />
                     <div className="relative z-10 flex flex-col flex-1 justify-between space-y-3">
@@ -537,7 +392,7 @@ export const NovelModule: React.FC<Props> = ({
                                   : 'bg-[#1E4334] text-white'
                               }`}
                             >
-                              {isRelay ? '故事接龙合订本' : '在线小说'}
+                              {isRelay ? '故事接龙合订本' : '同好来稿'}
                             </span>
                             <span className="text-xs font-retro-jp text-[#8C7A68] whitespace-nowrap">
                               {fmtChars(novel.chars || 0)}字
@@ -605,150 +460,6 @@ export const NovelModule: React.FC<Props> = ({
             </div>
           )}
         </div>
-      )}
-
-      {/* 第二段：站外推荐（2列瀑布流） */}
-      {showRecs && recs.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="inline-flex items-center gap-2 bg-[#1E4334]/90 backdrop-blur-md border border-[#1E4334]/70 rounded-lg px-3 py-1.5 shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-[#F9E79F] animate-pulse" />
-              <h3 className="font-pixel text-xs font-bold text-white tracking-wide">
-                站外推荐 · 共 {filteredRecs.length} 篇
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => { soundManager.playWoodTap(); setUploadKind('recommend'); setShowUpload(true); }}
-              className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#B7791F] border border-[#9A6519] text-[#FFFEEF] font-pixel text-[11px] font-bold cursor-pointer transition-colors hover:bg-[#9A6519]"
-            >
-              ✎ 上传文/推荐文
-            </button>
-          </div>
-          {filteredRecs.length === 0 ? (
-            <div className="p-6 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
-              没有符合筛选的推荐，可以换个题材试试～
-            </div>
-          ) : (
-            <div className="columns-2 gap-3 sm:gap-4 w-full">
-              {filteredRecs.map((rec) => {
-                const reason = reasonText(rec);
-                const site = siteName(rec.url);
-                return (
-                  <div
-                    key={rec.id}
-                    className="mb-3 sm:mb-4 break-inside-avoid group cursor-pointer select-none"
-                    title="点击选择打开方式"
-                    onMouseEnter={() => soundManager.playCardHover()}
-                    onClick={() => {
-                      soundManager.playCardClick();
-                      openRecModal(rec);
-                    }}
-                  >
-                    <div className="relative overflow-hidden bg-[#FFFEEF]/85 backdrop-blur-md border border-[#D5C9AF]/70 hover:border-[#8C6B38] hover:shadow-lg rounded-xl p-3 sm:p-3.5 space-y-2 transition-all">
-                      <CardPatternOverlay opacity={0.10} mode="multiply" />
-                      <div className="relative z-10 space-y-2">
-                      {/* 顶部行：题材/评级标签（同级同款） + 网站名（最右，非标签） */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex flex-wrap gap-1">
-                          <span className={tagChipCls}>#{rec.type}</span>
-                          <span className={tagChipCls}>#{rec.rating}</span>
-                        </div>
-                        {site && (
-                          <span className="text-[11px] font-retro-jp text-[#8C7A68] shrink-0">{site} ↗</span>
-                        )}
-                      </div>
-
-                      <h4 className="font-pixel text-xs sm:text-[13px] font-bold text-[#2C2016] group-hover:text-[#B7791F] break-words leading-snug transition-colors line-clamp-2">
-                        {rec.title}
-                      </h4>
-
-                      {/* 理由块：@推荐人 说：…；都没有则不渲染 */}
-                      {reason && (
-                        <div className="bg-[#FAF5E8] border border-[#EBE3D0] rounded-xs p-2">
-                          <span className="font-retro-jp text-[11px] text-[#7A6958] break-words leading-snug line-clamp-3">
-                            {reason}
-                          </span>
-                        </div>
-                      )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 打开方式弹窗 */}
-      {openRec && (
-        <div
-          className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setOpenRec(null)}
-        >
-          <div
-            className="relative overflow-hidden bg-[#FFFEEF] border-2 border-[#1E4334] rounded-lg w-full max-w-md p-4 space-y-3 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <CardPatternOverlay opacity={0.12} mode="multiply" />
-            <div className="relative z-10 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-pixel text-xs font-bold text-[#1E4334]">打开方式</span>
-              <button
-                onClick={() => setOpenRec(null)}
-                className="text-[#8C7A68] hover:text-[#1E4334] px-1 cursor-pointer text-sm"
-                title="关闭"
-              >
-                ✕
-              </button>
-            </div>
-
-            <h4 className="font-pixel text-sm font-bold text-[#1E3A2B] break-words leading-snug">{openRec.title}</h4>
-
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex flex-wrap gap-1">
-                <span className={tagChipCls}>#{openRec.type}</span>
-                <span className={tagChipCls}>#{openRec.rating}</span>
-              </div>
-              {siteName(openRec.url) && (
-                <span className="text-[11px] font-retro-jp text-[#8C7A68]">{siteName(openRec.url)}</span>
-              )}
-            </div>
-
-            {reasonText(openRec) && (
-              <div className="bg-[#FAF5E8] border border-[#EBE3D0] rounded-xs p-2.5">
-                <span className="font-retro-jp text-[11px] text-[#5B4636] break-words leading-relaxed">
-                  {reasonText(openRec)}
-                </span>
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => handleJump(openRec)}
-                disabled={!openRec.url}
-                className={`flex-1 px-3 py-2.5 rounded-xs font-pixel text-xs transition-all ${
-                  openRec.url
-                    ? 'bg-[#1E4334] text-white hover:bg-[#2B5E4A] cursor-pointer shadow-xs font-bold'
-                    : 'bg-[#EFE8D6] text-[#B4A68F] cursor-not-allowed'
-                }`}
-              >
-                ↗ 直接跳转
-              </button>
-              <button
-                onClick={() => handleCopyTitle(openRec)}
-                className="flex-1 px-3 py-2.5 rounded-xs font-pixel text-xs bg-[#FFFEEF] text-[#1E4334] border border-[#D5C9AF] hover:border-[#1E4334] cursor-pointer transition-all"
-              >
-                ⧉ 复制名称
-              </button>
-            </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 在线阅读器 */}
       {reading && <NovelReader novel={reading} onClose={() => setReading(null)} />}
@@ -760,29 +471,24 @@ export const NovelModule: React.FC<Props> = ({
             <div className="relative flex items-center justify-between gap-3 border-b border-[#D5C9AF] pb-2">
               <div>
                 <h3 className="font-pixel text-sm font-bold text-[#1E4334]">
-                  {editingNovel ? '✏️ 编辑小说' : '上传文 / 推荐文'}
+                  {editingNovel ? '✏️ 编辑小说' : '上传文'}
                 </h3>
                 <p className="text-[10px] text-[#7A6958] mt-1">
                   {editingNovel
                     ? `正在修改《${editingNovel.title}》，保存后立即生效。`
-                    : '登录后投稿立即上架（默认普通、勾选敏感才加密）；推荐外链仍需审核。'}
+                    : '登录后投稿立即上架（默认普通、勾选敏感才加密）。想安利站外作品（B站 / LOFTER / AO3 等）请去「兵长茶会 → 安利墙」。'}
                 </p>
               </div>
               <button type="button" onClick={() => { setShowUpload(false); leaveEditMode(); }} className="text-lg text-[#5B4636] cursor-pointer" aria-label="关闭上传窗口">×</button>
             </div>
 
-            {editingNovel ? (
+            {editingNovel && (
               <div className="px-2.5 py-1.5 rounded-xs bg-[#FAF5E8] border border-[#E0D5BE] text-[10px] text-[#7A6958]">
                 编辑模式：正文与各字段已回填，改完直接点底部「保存修改」。
               </div>
-            ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setUploadKind('novel')} className={`py-2 border font-bold text-xs ${uploadKind === 'novel' ? 'bg-[#1E4334] text-[#F9E79F]' : 'bg-white text-[#5B4636]'}`}>上传文</button>
-              <button type="button" onClick={() => setUploadKind('recommend')} className={`py-2 border font-bold text-xs ${uploadKind === 'recommend' ? 'bg-[#1E4334] text-[#F9E79F]' : 'bg-white text-[#5B4636]'}`}>推荐文</button>
-            </div>
             )}
 
-            {uploadKind === 'novel' ? <><div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <label className="text-xs font-bold">标题<input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} maxLength={80} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
               <label className="text-xs font-bold">作者<input value={uploadAuthor} onChange={(e) => setUploadAuthor(e.target.value)} maxLength={40} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
               <label className="text-xs font-bold">作者主页（选填）<input type="url" value={uploadAuthorUrl} onChange={(e) => setUploadAuthorUrl(e.target.value)} className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
@@ -816,21 +522,12 @@ export const NovelModule: React.FC<Props> = ({
             <label className="block text-xs font-bold">小说正文<textarea value={uploadBody} onChange={(e) => setUploadBody(e.target.value)} rows={10} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334] resize-y leading-relaxed" /></label>
             <label className="block text-xs font-bold">作者说的话（选填）<span className="font-normal text-[#7A6958]">审核通过后以引用块展示在卡片上</span><textarea value={uploadNotes} onChange={(e) => setUploadNotes(e.target.value)} rows={2} maxLength={2000} className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334] resize-y" /></label>
 
-            </> : <div className="space-y-2">
-              <label className="block text-xs font-bold">作品名称<input value={recTitle} onChange={(e) => setRecTitle(e.target.value)} required className="mt-1 w-full p-2 bg-white border border-[#BFA985]" /></label>
-              <label className="block text-xs font-bold">外链<input type="url" value={recLink} onChange={(e) => setRecLink(e.target.value)} required className="mt-1 w-full p-2 bg-white border border-[#BFA985]" /></label>
-              <div className="grid grid-cols-2 gap-2"><label className="block text-xs font-bold">推荐人<input value={recAuthor} onChange={(e) => setRecAuthor(e.target.value)} className="mt-1 w-full p-2 bg-white border border-[#BFA985]" /></label><label className="block text-xs font-bold">分类<select value={recCategory} onChange={(e) => setRecCategory(e.target.value)} className="mt-1 w-full p-2 bg-white border border-[#BFA985]"><option>原作向</option><option>现代AU</option><option>短篇</option><option>其他</option></select></label></div>
-              <label className="block text-xs font-bold">推荐理由<textarea value={recReason} onChange={(e) => setRecReason(e.target.value)} rows={4} className="mt-1 w-full p-2 bg-white border border-[#BFA985]" /></label>
-            </div>}
-
             <button type="submit" disabled={isUploading} className="w-full py-2.5 bg-[#1E4334] text-[#F9E79F] border border-[#153025] font-pixel text-xs font-bold cursor-pointer disabled:opacity-50">
               {isUploading
                 ? (editingNovel ? '保存中…' : uploadSensitive ? '加密上传中…' : '上传中…')
                 : editingNovel
                   ? '💾 保存修改'
-                  : uploadKind === 'novel'
-                    ? (uploadSensitive ? '🔒 加密上架' : '📖 普通上架')
-                    : '提交推荐审核'}
+                  : (uploadSensitive ? '🔒 加密上架' : '📖 普通上架')}
             </button>
           </form>
         </div>,
