@@ -7,6 +7,8 @@ import { NovelReader } from './NovelReader';
 import { AuthorWithLink } from '../utils/authorLink';
 import { newestNovelsFirst, newestRecsFirst } from '../utils/workSort';
 import { submitToInbox } from '../utils/submissionInbox';
+import { getAccessToken, getCurrentProfile } from '../utils/cloudbaseToken';
+import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
 
 interface Props {
@@ -79,7 +81,6 @@ export const NovelModule: React.FC<Props> = ({
   const [uploadKind, setUploadKind] = useState<'novel' | 'recommend'>('novel');
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadAuthor, setUploadAuthor] = useState('');
-  const [uploadEmail, setUploadEmail] = useState('');
   const [uploadAuthorUrl, setUploadAuthorUrl] = useState('');
   const [uploadBody, setUploadBody] = useState('');
   const [uploadNotes, setUploadNotes] = useState('');
@@ -105,6 +106,21 @@ export const NovelModule: React.FC<Props> = ({
       setReading(initialReadingNovel);
     }
   }, [initialReadingNovel]);
+
+  // 上传弹窗打开时：作者名默认填当前登录昵称（可直接改成笔名）
+  useEffect(() => {
+    if (!showUpload) return;
+    let alive = true;
+    getCurrentProfile()
+      .then((profile) => {
+        if (alive && profile?.nickname && !uploadAuthor) setUploadAuthor(profile.nickname);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showUpload]);
 
   // 题材 = 数据里 (type ∪ rating) 去重，不写死（R / 清水 与现PA / 原作同级）
   const genreList = useMemo(
@@ -220,30 +236,42 @@ export const NovelModule: React.FC<Props> = ({
       finally { setIsUploading(false); }
       return;
     }
-    if (!uploadTitle.trim() || !uploadAuthor.trim() || !uploadEmail.trim() || !uploadBody.trim()) {
-      onShowToast('请填写标题、作者、邮箱和正文');
+    if (!uploadTitle.trim() || !uploadAuthor.trim() || !uploadBody.trim()) {
+      onShowToast('请填写标题、作者和正文');
       return;
     }
     if (uploadWarnOn && !uploadWarning.trim()) {
       onShowToast('已勾选内容预警，请填写预警内容');
       return;
     }
+    // 免审直发：必须登录，正文提交后立即加密上架（novelDirectPublish）
+    const token = await getAccessToken();
+    if (!token) {
+      onShowToast('请先登录账号再投稿');
+      window.dispatchEvent(new Event('levihan-open-login'));
+      return;
+    }
     setIsUploading(true);
     try {
-      await submitToInbox('submitNovel', {
-        title: uploadTitle.trim(),
-        author: uploadAuthor.trim(),
-        email: uploadEmail.trim(),
-        authorUrl: uploadAuthorUrl.trim(),
-        body: uploadBody.trim(),
-        notes: uploadNotes.trim(),
-        tags: uploadTags.trim(),
-        warning: uploadWarnOn ? uploadWarning.trim() : '',
+      const response = await fetch(ADMIN_UPLOAD_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: 'novelDirectPublish',
+          title: uploadTitle.trim(),
+          author: uploadAuthor.trim(),
+          authorUrl: uploadAuthorUrl.trim(),
+          body: uploadBody.trim(),
+          authorNote: uploadNotes.trim(),
+          tags: uploadTags.trim(),
+          warning: uploadWarnOn ? uploadWarning.trim() : '',
+        }),
       });
+      const result = await response.json().catch(() => ({})) as { ok?: boolean; error?: string };
+      if (!response.ok || !result.ok) throw new Error(result.error || '发布失败，请稍后重试');
       setShowUpload(false);
       setUploadTitle('');
       setUploadAuthor('');
-      setUploadEmail('');
       setUploadAuthorUrl('');
       setUploadBody('');
       setUploadNotes('');
@@ -251,9 +279,10 @@ export const NovelModule: React.FC<Props> = ({
       setUploadWarnOn(false);
       setUploadWarning('');
       setUploadFileName('');
-      onShowToast('文稿已提交，审核通过后会进入在线粮仓 📚');
+      window.dispatchEvent(new Event('levihan-novels-changed'));
+      onShowToast('已加密上架，感谢投稿 📚');
     } catch (error) {
-      onShowToast(error instanceof Error ? error.message : '小说提交失败，请稍后重试');
+      onShowToast(error instanceof Error ? error.message : '投稿失败，请稍后重试');
     } finally {
       setIsUploading(false);
     }
@@ -593,7 +622,7 @@ export const NovelModule: React.FC<Props> = ({
             <div className="relative flex items-center justify-between gap-3 border-b border-[#D5C9AF] pb-2">
               <div>
                 <h3 className="font-pixel text-sm font-bold text-[#1E4334]">上传文 / 推荐文</h3>
-                <p className="text-[10px] text-[#7A6958] mt-1">投稿将进入待审收件箱，通过后公开展示。</p>
+                <p className="text-[10px] text-[#7A6958] mt-1">登录后投稿立即加密上架；推荐外链仍需审核。</p>
               </div>
               <button type="button" onClick={() => setShowUpload(false)} className="text-lg text-[#5B4636] cursor-pointer" aria-label="关闭上传窗口">×</button>
             </div>
@@ -606,7 +635,6 @@ export const NovelModule: React.FC<Props> = ({
             {uploadKind === 'novel' ? <><div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <label className="text-xs font-bold">标题<input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} maxLength={80} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
               <label className="text-xs font-bold">作者<input value={uploadAuthor} onChange={(e) => setUploadAuthor(e.target.value)} maxLength={40} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
-              <label className="text-xs font-bold">联系邮箱<input type="email" value={uploadEmail} onChange={(e) => setUploadEmail(e.target.value)} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
               <label className="text-xs font-bold">作者主页（选填）<input type="url" value={uploadAuthorUrl} onChange={(e) => setUploadAuthorUrl(e.target.value)} className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
             </div>
 
@@ -639,7 +667,7 @@ export const NovelModule: React.FC<Props> = ({
             </div>}
 
             <button type="submit" disabled={isUploading} className="w-full py-2.5 bg-[#1E4334] text-[#F9E79F] border border-[#153025] font-pixel text-xs font-bold cursor-pointer disabled:opacity-50">
-              {isUploading ? '提交中…' : uploadKind === 'novel' ? '提交文稿' : '提交推荐审核'}
+              {isUploading ? '加密上传中…' : uploadKind === 'novel' ? '🔒 加密上架' : '提交推荐审核'}
             </button>
           </form>
         </div>,

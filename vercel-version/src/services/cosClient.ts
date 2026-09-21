@@ -263,6 +263,11 @@ export class COSService {
     return this.getObjectUrl(`novels/${id}.txt`);
   }
 
+  /** 加密正文直链（novels_vault/{id}_secure.txt，用户投稿免审直发的密文） */
+  public getNovelSecureBodyUrl(id: string): string {
+    return this.getObjectUrl(`novels_vault/${id}_secure.txt`);
+  }
+
   /**
    * 动态加载远程归档数据：
    * 1. 尝试从 COS 根目录读取 archive.json 或 books.json

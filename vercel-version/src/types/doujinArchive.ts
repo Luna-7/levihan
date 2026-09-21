@@ -56,6 +56,7 @@ export interface GroupNovel {
   createdAt: string; // ISO
   updatedAt?: string;
   authorNote?: string; // 作者说的话：卡片引用块 + 阅读器顶部；空则不渲染
+  encrypted?: boolean; // 正文已深度加密：存于 novels_vault/{id}_secure.txt，阅读器解密后展示
   warning?: string; // 内容预警：卡片琥珀条 + 阅读器顶部；空则不渲染
   tags?: string[]; // 卡片标签行；空则整行不渲染
   isRelayCompiled?: boolean; // 是否为故事接龙合订本

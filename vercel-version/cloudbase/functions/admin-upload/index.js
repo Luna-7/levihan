@@ -64,6 +64,21 @@ const INBOX_COLLECTION = 'submission_inbox';
 const NOVELS_KEY = 'novels.json';   // 在线小说索引（GroupNovel[]）
 const NOVEL_DIR = 'novels/';        // 在线小说正文：novels/{id}.txt（纯文本）
 const MAX_NOVEL_CHARS = 500000;     // 单篇正文字数上限
+
+/* 用户投稿免审直发的加密正文：novels_vault/{id}_secure.txt（明文永不落桶）。
+   密码链与敏感漫画本完全同款（public/admin/secure-upload.js）：
+   key = SHA-256(密码) 32 字节 raw，IV = 16 字节 ASCII，AES-256-CBC → Base64。
+   前台解密用 crypto-js 同参数（SecureComicReader 同源思路），改任一端都会解不开历史密文。 */
+const NOVEL_VAULT_DIR = 'novels_vault/';
+const NOVEL_VAULT_PASSWORD = 'levihan';
+const NOVEL_VAULT_IV_UTF8 = 'levihan-vault-iv';
+
+function encryptNovelBody(text) {
+  const key = crypto.createHash('sha256').update(NOVEL_VAULT_PASSWORD).digest();
+  const iv = Buffer.from(NOVEL_VAULT_IV_UTF8, 'utf8');
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  return Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]).toString('base64');
+}
 const MAX_BYTES = 4 * 1024 * 1024; // 单文件上限 4MB
 const MAX_BODY = 6 * 1024 * 1024; // 请求体上限 6MB（HTTP 访问服务 / API 网关的硬上限）
 
@@ -866,8 +881,9 @@ const PUBLIC_ACTIONS = new Set([
 // 需用户登录（CloudBase access_token 换 uid）：发布/互动/删除自己的内容
 const USER_ACTIONS = new Set([
   'forumPublish', 'forumComment', 'forumPotato', 'forumClaim', 'forumReleaseClaim',
-  'forumDelete', 'forumCommentDelete',
+  'forumDelete', 'forumCommentDelete', 'forumEdit',
   'marketPublish', 'marketDelete',
+  'novelDirectPublish',
 ]);
 
 async function handle(action, payload) {
@@ -1092,6 +1108,29 @@ async function handle(action, payload) {
       await writeForum(posts); return { ok: true, posts };
     }
 
+    // 编辑帖子：目前仅开放故事接龙，且只能改自己发布的内容
+    case 'forumEdit': {
+      const id = String(payload.id || '').trim();
+      const posts = await readForum();
+      const post = posts.find((p) => p && p.id === id);
+      if (!post) throw httpError('帖子不存在', 404);
+      if (post.category !== 'relay') throw httpError('目前仅支持编辑故事接龙', 400);
+      if (post.uid && post.uid !== payload.__uid) throw httpError('只能修改自己发布的接龙', 403);
+      const nextTitle = payload.title !== undefined ? String(payload.title).trim().slice(0, 100) : undefined;
+      const nextBody = payload.body !== undefined ? String(payload.body).trim().slice(0, 5000) : undefined;
+      const nextPrompt = payload.prompt !== undefined ? String(payload.prompt).trim().slice(0, 2000) : undefined;
+      if (nextBody !== undefined && !nextBody && !post.image) throw httpError('正文不能为空', 400);
+      if (nextTitle !== undefined) post.title = nextTitle;
+      if (nextBody !== undefined) post.body = nextBody;
+      if (nextPrompt !== undefined) post.prompt = nextPrompt || undefined;
+      post.editedAt = new Date().toISOString();
+      await writeForum(posts);
+      // 编辑接龙后同步重编译合订本
+      try { await saveRelayNovel(compileRelayToNovel(post)); }
+      catch (e) { console.error('[relay] 编辑后更新合订本失败', e && e.message); }
+      return { ok: true, post, posts };
+    }
+
     case 'marketList': return { ok: true, items: await readMarket() };
 
     case 'marketPublish': {
@@ -1260,6 +1299,46 @@ async function handle(action, payload) {
     case 'novelList': {
       const novels = await readNovels();
       return { ok: true, count: novels.length, novels };
+    }
+
+    case 'novelDirectPublish': {
+      /* 用户投稿免审直发（2026-09-21 取消文稿审核）：登录用户提交后立即加密上架，
+         正文只落 novels_vault/{id}_secure.txt 密文，novels.json 标记 encrypted:true。 */
+      const text = String(payload.body || '').replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '');
+      if (!text.trim()) throw httpError('正文不能为空', 400);
+      if (text.length > MAX_NOVEL_CHARS) throw httpError(`正文超过 ${MAX_NOVEL_CHARS} 字上限`, 413);
+      const title = String(payload.title || '').trim();
+      const author = String(payload.author || '').trim();
+      if (!title || title.length > 120 || !author || author.length > 80) throw httpError('请填写有效的标题和作者', 400);
+      const authorUrl = String(payload.authorUrl || '').trim().slice(0, 300);
+      if (authorUrl) {
+        let parsed;
+        try { parsed = new URL(authorUrl); } catch { throw httpError('作者主页链接不是有效网址', 400); }
+        if (!['https:', 'http:'].includes(parsed.protocol)) throw httpError('作者主页链接只支持 HTTP(S)', 400);
+      }
+      const authorNote = String(payload.authorNote || '').trim().slice(0, 2000);
+      const warning = String(payload.warning || '').trim().slice(0, 100);
+      const rawTags = Array.isArray(payload.tags) ? payload.tags : String(payload.tags || '').split(/[,，]/);
+      const tags = rawTags.map((t) => String(t == null ? '' : t).trim()).filter(Boolean).slice(0, 20);
+
+      const novelId = 'nv-' + Date.now().toString(36) + crypto.randomBytes(2).toString('hex');
+      await putObject({
+        Bucket: BUCKET,
+        Region: REGION,
+        Key: `${NOVEL_VAULT_DIR}${novelId}_secure.txt`,
+        Body: Buffer.from(encryptNovelBody(text), 'utf8'),
+        ContentType: 'text/plain; charset=utf-8',
+        CacheControl: 'no-cache',
+      });
+
+      const meta = normalizeNovelMeta({ id: novelId, title, author, authorUrl, authorNote, warning, tags }, text.length);
+      meta.encrypted = true;
+      const novels = await readNovels();
+      novels.unshift(meta);
+      novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+      await writeNovels(novels);
+      try { await upsertAuthor(meta.author, meta.authorUrl); } catch (e) { console.error('[authorLib] 登记失败', e && e.message); }
+      return { ok: true, novel: meta, count: novels.length, novels };
     }
 
     case 'novelSave': {

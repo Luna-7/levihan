@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GroupNovel } from '../types/doujinArchive';
 import { cosService } from '../services/cosClient';
 import { soundManager } from '../utils/audio';
+import { decryptNovelBody } from '../utils/novelVault';
 import { AuthorWithLink } from '../utils/authorLink';
 
 interface Props {
@@ -20,13 +21,15 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
   });
   const [body, setBody] = useState<string | null>(null);
   const [failed, setFailed] = useState<boolean>(false);
+  const [failedReason, setFailedReason] = useState<string>('');
   const [progress, setProgress] = useState<number>(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 按需加载正文（本地编译内容直接使用，否则请求 novels/{id}.txt）
+  // 按需加载正文（本地编译内容直接使用；加密篇拉密文解密；否则请求 novels/{id}.txt）
   useEffect(() => {
     let alive = true;
     setFailed(false);
+    setFailedReason('');
     setProgress(0);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
 
@@ -36,6 +39,30 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
     }
 
     setBody(null);
+
+    /** 加密篇：novels_vault/{id}_secure.txt → AES-CBC 解密 → 明文 */
+    if (novel.encrypted) {
+      fetch(cosService.getNovelSecureBodyUrl(novel.id), { cache: 'default' })
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.text();
+        })
+        .then((cipher) => {
+          const plain = decryptNovelBody(cipher);
+          if (!plain) throw new Error('DECRYPT_EMPTY');
+          if (alive) setBody(plain);
+        })
+        .catch(() => {
+          if (alive) {
+            setFailed(true);
+            setFailedReason('内容解密失败，请返回后重试。');
+          }
+        });
+      return () => {
+        alive = false;
+      };
+    }
+
     fetch(cosService.getNovelBodyUrl(novel.id), { cache: 'default' })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -45,12 +72,15 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
         if (alive) setBody(t);
       })
       .catch(() => {
-        if (alive) setFailed(true);
+        if (alive) {
+          setFailed(true);
+          setFailedReason('正文加载失败，请返回后重试。');
+        }
       });
     return () => {
       alive = false;
     };
-  }, [novel.id, novel.bodyContent]);
+  }, [novel.id, novel.bodyContent, novel.encrypted]);
 
   // Esc 关闭 + 锁定背景滚动
   useEffect(() => {
@@ -175,7 +205,7 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
 
           {failed && (
             <div className="p-8 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
-              正文加载失败，请返回后重试。
+              {failedReason || '正文加载失败，请返回后重试。'}
             </div>
           )}
 

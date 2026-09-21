@@ -78,6 +78,12 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     handleRefreshArchive(false);
     cosService.loadRecsData().then(setRecs).catch(() => {});
     cosService.loadNovelList().then(setNovels).catch(() => {});
+    // 投稿免审直发：小说本新上架后立即刷新索引（novels.json 为 no-cache，重拉即最新）
+    const reloadNovels = () => {
+      cosService.loadNovelList().then(setNovels).catch(() => {});
+    };
+    window.addEventListener('levihan-novels-changed', reloadNovels);
+    return () => window.removeEventListener('levihan-novels-changed', reloadNovels);
   }, []);
 
   useEffect(() => {

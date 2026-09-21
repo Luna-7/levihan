@@ -4,7 +4,7 @@ import {
   MessageCircle, Plus, X, Feather, Dice5, Copy, Check, BookOpen, Sparkles, RefreshCw,
   Lock, Unlock, ChevronDown, ChevronUp, Send, Upload, Link as LinkIcon, DollarSign,
   AlertTriangle, Search, PlusCircle, ShieldAlert,
-  Trash2, ChevronLeft, ChevronRight, ShoppingBag, Share2
+  Trash2, ChevronLeft, ChevronRight, ShoppingBag, Share2, PenLine
 } from 'lucide-react';
 import { soundManager } from '../utils/audio';
 import { getAccessToken, getCurrentUid, getCurrentProfile } from '../utils/cloudbaseToken';
@@ -434,6 +434,13 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   const [image, setImage] = useState<string | undefined>();
   const [publishing, setPublishing] = useState(false);
 
+  // 故事接龙编辑弹窗（仅自己发布的接龙可编辑）
+  const [editingRelay, setEditingRelay] = useState<ForumPost | null>(null);
+  const [relayEditTitle, setRelayEditTitle] = useState('');
+  const [relayEditPrompt, setRelayEditPrompt] = useState('');
+  const [relayEditBody, setRelayEditBody] = useState('');
+  const [savingRelayEdit, setSavingRelayEdit] = useState(false);
+
   // Comments & Relay Replies
   const [openComments, setOpenComments] = useState<string | null>(null);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
@@ -717,6 +724,48 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     }).catch((err) => onShowToast(err instanceof Error ? err.message : '删除失败'));
     soundManager.playWoodTap();
     onShowToast('帖子已删除');
+  };
+
+  // 编辑故事接龙（仅自己发布的帖子；目前后端仅开放 relay 分类）
+  const openRelayEdit = (post: ForumPost) => {
+    soundManager.playWoodTap();
+    setRelayEditTitle(post.title || '');
+    setRelayEditPrompt(post.prompt || '');
+    setRelayEditBody(post.body || '');
+    setEditingRelay(post);
+  };
+
+  const handleSaveRelayEdit = async () => {
+    if (!editingRelay) return;
+    const token = await getAccessToken();
+    if (!token) {
+      onShowToast('请先登录账号后再编辑接龙');
+      window.dispatchEvent(new Event('levihan-open-login'));
+      return;
+    }
+    const nextTitle = relayEditTitle.trim();
+    const nextBody = relayEditBody.trim();
+    if (!nextTitle || !nextBody) {
+      onShowToast('标题和正文不能为空');
+      return;
+    }
+    setSavingRelayEdit(true);
+    try {
+      const result = await api('forumEdit', {
+        id: editingRelay.id,
+        title: nextTitle,
+        body: nextBody,
+        prompt: relayEditPrompt.trim(),
+      });
+      if (Array.isArray(result.posts)) persist(result.posts);
+      setEditingRelay(null);
+      soundManager.playPageTurn();
+      onShowToast('✏️ 接龙已更新，合订本已同步重编 📖');
+    } catch (err) {
+      onShowToast(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSavingRelayEdit(false);
+    }
   };
 
   const handleDeleteComment = async (postId: string, commentId: string) => {
@@ -1601,14 +1650,24 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       <span className="text-[#3B2818] font-bold">{post.author}</span>
                       <span className="text-[#8C7A65] text-[10px]">{post.createdAt}</span>
                       {currentUid && post.uid === currentUid && (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); void handleDeletePost(post.id); }}
-                          className="ml-1 text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
-                          title="删除我发布的帖子"
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); openRelayEdit(post); }}
+                            className="ml-1 text-[#8C7A65] hover:text-[#235340] p-0.5 rounded transition-colors"
+                            title="编辑我发布的接龙"
+                          >
+                            <PenLine size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); void handleDeletePost(post.id); }}
+                            className="text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
+                            title="删除我发布的帖子"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
