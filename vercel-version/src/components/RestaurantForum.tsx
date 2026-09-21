@@ -1236,9 +1236,12 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       if (!marketFormLink.trim()) {
         return onShowToast('⚠️ 必须填写交易/参考详情链接');
       }
-      if (!marketFormLink.trim().startsWith('http://') && !marketFormLink.trim().startsWith('https://')) {
-        return onShowToast('⚠️ 链接格式不正确，必须以 http:// 或 https:// 开头');
+      // 与安利墙同一套归一化：App 分享链接（闲鱼/微店 taobao:// 等）与裸域名都放行
+      const normalizedMarketLink = normalizeShareLink(marketFormLink);
+      if (!normalizedMarketLink) {
+        return onShowToast('⚠️ 请粘贴网页链接或 App 分享链接（裸域名也行，会自动补 https）');
       }
+      if (normalizedMarketLink !== marketFormLink.trim()) setMarketFormLink(normalizedMarketLink);
 
       const finalNickname = nickname.trim() || '匿名同好';
 
@@ -1248,7 +1251,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
         price: priceNum,
         image: marketFormImages[0],
         images: marketFormImages,
-        link: marketFormLink.trim(),
+        link: normalizedMarketLink,
         description: marketFormDesc.trim() || '暂无详细描述。',
         nickname: finalNickname,
         date: new Date().toISOString().split('T')[0],
@@ -2881,16 +2884,17 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                     <div className="relative">
                       <LinkIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D4F]" />
                       <input
-                        type="url"
+                        type="text"
+                        inputMode="url"
                         value={marketFormLink}
                         onChange={(e) => setMarketFormLink(e.target.value)}
-                        placeholder="https://m.tb.cn/... 或闲鱼/微店/小红书链接"
+                        placeholder="链接或裸域名均可，如 m.tb.cn/xxx"
                         className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-[#C5B498] text-xs outline-none bg-white focus:border-[#8C5828]"
                         required
                       />
                     </div>
                     <p className="text-[10px] text-[#8C7A65] mt-0.5">
-                      支持闲鱼、淘宝、微店、小红书或交流帖链接（需以 http:// 或 https:// 开头）
+                      支持闲鱼、淘宝、微店、小红书等分享链接（App 分享的自定义链接也可以，裸域名会自动补 https://）
                     </p>
                   </div>
 
