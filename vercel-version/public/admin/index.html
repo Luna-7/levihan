@@ -1678,6 +1678,10 @@ var PDF_PAGE_MAX_SIDE = 2000;
 var pdfDocCache = new Map();
 /** 记住某个 file 已解锁、对应的密码，避免同一个带密码 PDF 反复弹窗 */
 var pdfPwCache = new Map();
+/** 工具箱「图片/文件转加密 PDF」的固定口令（= tools.js CONFIG.pdfPassword，两处必须同步）。
+ *  命中它时上传端**不做**去密码重渲染 —— 阅读器 SecureComicReader 会把读者输入的校验码
+ *  透传给 pdf.js 解内层口令，存原始字节即可，画质零损失。 */
+var PDF_KNOWN_INNER_PW = 'levihan';
 
 function pdfJsReady(){
   if (!window.pdfjsLib) return false;
@@ -1726,33 +1730,46 @@ function openPdfWithPassword(buf, file, knownPw){
   return pdfjsLib.getDocument(params).promise.catch(function(err){
     var isPw = err && (err.name === 'PasswordException' || /password/i.test(err && err.message || ''));
     if (!isPw) throw err;
-    var name = (file && file.name) || '该 PDF';
-    var pw = window.prompt('「' + name + '」是一份带密码的 PDF，请输入打开密码：');
-    if (pw == null) throw new Error('已取消：' + name + ' 需要密码才能打开。');
-    if (pw === '') throw new Error(name + ' 的密码不能为空，已中止。');
-    return pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)), password: pw }).promise
-      .then(function(doc){ pdfPwCache.set(file, pw); return doc; })
-      .catch(function(err2){
-        var stillPw = err2 && (err2.name === 'PasswordException' || /password/i.test(err2 && err2.message || ''));
-        if (stillPw) throw new Error(name + ' 的密码不正确，请点「重试」再输一次。');
-        throw err2;
-      });
+    // 工具箱产物固定口令 levihan：先静默试一次，命中就零弹窗直开（页数/封面/上传全程不打扰）
+    if (!knownPw) {
+      return pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)), password: PDF_KNOWN_INNER_PW }).promise
+        .then(function(doc){ pdfPwCache.set(file, PDF_KNOWN_INNER_PW); return doc; })
+        .catch(function(){ return promptForPdfPassword(buf, file); });
+    }
+    return promptForPdfPassword(buf, file);
   });
 }
 
+function promptForPdfPassword(buf, file){
+  var name = (file && file.name) || '该 PDF';
+  var pw = window.prompt('「' + name + '」是一份带密码的 PDF，请输入打开密码：');
+  if (pw == null) throw new Error('已取消：' + name + ' 需要密码才能打开。');
+  if (pw === '') throw new Error(name + ' 的密码不能为空，已中止。');
+  return pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)), password: pw }).promise
+    .then(function(doc){ pdfPwCache.set(file, pw); return doc; })
+    .catch(function(err2){
+      var stillPw = err2 && (err2.name === 'PasswordException' || /password/i.test(err2 && err2.message || ''));
+      if (stillPw) throw new Error(name + ' 的密码不正确，请点「重试」再输一次。');
+      throw err2;
+    });
+}
+
 /**
- * 解锁带密码的 PDF 并导出一份「无密码」的干净 PDF（File）。
- * 供深度加密（敏感模式）整份直传前调用：那份 PDF 要能被读者的
- * SecureComicReader 解密外层后直接打开，内层不能再留一道密码。
- * 普通 PDF 原样返回；密码错误/取消则抛错中止上传。
+ * 上传前对带密码 PDF 的处置策略（返回真正要拿去加密上传的 File）：
+ *   ① 无密码               → 原样返回；
+ *   ② 内层口令 = levihan   → **原样返回**（工具箱产物）——阅读器会把读者输入的校验码
+ *      透传给 pdf.js 解内层，存原始字节画质零损失；重渲染反而多压一代 JPEG（糊）；
+ *   ③ 自定义口令            → 解锁 + 逐页重渲染出无密码副本（阅读器只认 levihan，不重渲染就成死文件）。
+ * 密码错误/取消则抛错中止上传。
  */
 async function unlockPdfToCleanFile(file){
-  // 先走一遍 getPdfDocument：它内部会探测密码并弹窗（必要时）、记进 pdfPwCache。
-  // 若解析完 pdfPwCache 仍无此 file，说明它本就没密码，原样返回。
+  // 先走一遍 getPdfDocument：内部会静默试 levihan → 失败才弹窗，结果记进 pdfPwCache
   await getPdfDocument(file);
-  if (!pdfPwCache.has(file)) return file;
+  var pw = pdfPwCache.get(file);
+  if (!pw) return file;                        // ① 无密码
+  if (pw === PDF_KNOWN_INNER_PW) return file;  // ② 工具箱口令：原始字节直传，零重渲染
 
-  // 带密码：逐页渲染成 JPEG（此时 getPdfDocument 已缓存、不再弹窗），再用 jsPDF 合成无密码 PDF。
+  // ③ 自定义口令：逐页渲染成 JPEG（getPdfDocument 已缓存、不再弹窗），jsPDF 合成无密码 PDF。
   // 不能用 saveDocument —— 它保留原加密，导出的仍是要密码的死文件。
   var pages = await renderPdfPagesForVault(file, { maxSide: PDF_PAGE_MAX_SIDE, quality: 0.85 });
   if (!pages || !pages.length) throw new Error('已解锁但逐页渲染失败：' + (file.name || ''));
