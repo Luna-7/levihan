@@ -56,6 +56,8 @@ export type ForumComment = {
   };
   relayStep?: number;
   wordCount?: number;
+  /** 编辑过的棒：卡片上标「已编辑」 */
+  editedAt?: string;
 };
 
 export type QuillClaim = {
@@ -452,6 +454,11 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   const [relayEditBody, setRelayEditBody] = useState('');
   const [savingRelayEdit, setSavingRelayEdit] = useState(false);
 
+  // 编辑「某一棒」（第 2 棒起存在 comments 里，只能改自己写的那几棒）
+  const [editingStick, setEditingStick] = useState<{ postId: string; commentId: string; step: number } | null>(null);
+  const [stickEditBody, setStickEditBody] = useState('');
+  const [savingStickEdit, setSavingStickEdit] = useState(false);
+
   // Comments & Relay Replies
   const [openComments, setOpenComments] = useState<string | null>(null);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
@@ -776,6 +783,45 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       onShowToast(err instanceof Error ? err.message : '保存失败');
     } finally {
       setSavingRelayEdit(false);
+    }
+  };
+
+  // 编辑接龙的某一棒（第 2 棒起）：只能改自己写的那几棒，改完整本重编译
+  const openStickEdit = (post: ForumPost, comment: ForumComment, step: number) => {
+    soundManager.playWoodTap();
+    setStickEditBody(comment.body || '');
+    setEditingStick({ postId: post.id, commentId: comment.id, step });
+  };
+
+  const handleSaveStickEdit = async () => {
+    if (!editingStick) return;
+    const token = await getAccessToken();
+    if (!token) {
+      onShowToast('请先登录账号后再编辑接龙');
+      window.dispatchEvent(new Event('levihan-open-login'));
+      return;
+    }
+    const nextBody = stickEditBody.trim();
+    if (nextBody.length < RELAY_MIN_WORDS) {
+      onShowToast(`接龙每棒需满 ${RELAY_MIN_WORDS} 字（当前 ${nextBody.length} 字）`);
+      return;
+    }
+    setSavingStickEdit(true);
+    const step = editingStick.step;
+    try {
+      const result = await api('forumCommentEdit', {
+        postId: editingStick.postId,
+        commentId: editingStick.commentId,
+        body: nextBody,
+      });
+      if (Array.isArray(result.posts)) persist(result.posts);
+      setEditingStick(null);
+      soundManager.playPageTurn();
+      onShowToast(`✏️ 第 ${step} 棒已更新，合订本已同步重编 📖`);
+    } catch (err) {
+      onShowToast(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSavingStickEdit(false);
     }
   };
 
@@ -1885,18 +1931,31 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                                       (🎲 1D100={comment.diceRoll.value})
                                     </span>
                                   )}
+                                  {comment.editedAt && (
+                                    <span className="text-[10px] text-[#8C7A65] font-normal">(已编辑)</span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-[10px] text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
                                   {currentUid && comment.uid === currentUid && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => { e.stopPropagation(); void handleDeleteComment(post.id, comment.id); }}
-                                      className="text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
-                                      title="删除我发布的评论"
-                                    >
-                                      <Trash2 size={11} />
-                                    </button>
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); openStickEdit(post, comment, index + 2); }}
+                                        className="text-[#8C7A65] hover:text-[#235340] p-0.5 rounded transition-colors"
+                                        title={`编辑第 ${index + 2} 棒`}
+                                      >
+                                        <PenLine size={11} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); void handleDeleteComment(post.id, comment.id); }}
+                                        className="text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
+                                        title="删除我发布的评论"
+                                      >
+                                        <Trash2 size={11} />
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               </div>
@@ -1924,6 +1983,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                             onChange={(e) =>
                               setCommentDrafts((drafts) => ({ ...drafts, [post.id]: e.target.value }))
                             }
+                            maxLength={5000}
                             placeholder="承接剧情撰写..."
                             className="w-full p-2.5 rounded-lg text-xs sm:text-sm outline-none bg-white text-[#2C2016] resize-y font-serif-title border border-[#D8C7AA] leading-relaxed"
                           />
@@ -3300,6 +3360,79 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                     className="px-5 py-2 rounded-lg text-xs font-bold bg-[#7A4F1D] hover:bg-[#633F17] text-[#FFF8EB] cursor-pointer transition-colors shadow-xs disabled:opacity-50"
                   >
                     {savingRelayEdit ? '保存中…' : '保存修改'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* ====================================================
+          故事接龙「某一棒」编辑弹窗（第 2 棒起，仅自己写的那几棒可编辑）
+         ==================================================== */}
+      {editingStick &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[1000] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 select-none overflow-y-auto animate-in fade-in duration-150"
+            onClick={() => { if (!savingStickEdit) setEditingStick(null); }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg bg-[#FAF6EE] popup-frame-border rounded-2xl shadow-2xl p-4 sm:p-5 space-y-3 max-h-[90vh] overflow-y-auto relative my-auto shrink-0"
+            >
+              <CardPatternOverlay opacity={0.1} mode="multiply" />
+
+              <div className="relative z-10 flex items-center justify-between pb-2 border-b border-[#D8C7AA]">
+                <h2 className="font-serif-title text-sm font-black text-[#2D1F13] flex items-center gap-1.5">
+                  <PenLine size={14} /> 编辑第 {editingStick.step} 棒
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => { if (!savingStickEdit) setEditingStick(null); }}
+                  className="text-[#8C7A65] hover:text-[#2D1F13] cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form
+                onSubmit={(e) => { e.preventDefault(); void handleSaveStickEdit(); }}
+                className="relative z-10 space-y-3"
+              >
+                <div>
+                  <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">
+                    第 {editingStick.step} 棒正文 (必填 · 至少 {RELAY_MIN_WORDS} 字):
+                  </label>
+                  <textarea
+                    rows={10}
+                    value={stickEditBody}
+                    onChange={(e) => setStickEditBody(e.target.value)}
+                    maxLength={5000}
+                    className="w-full px-3 py-2 rounded-lg border border-[#C5B498] text-xs sm:text-sm outline-none bg-white focus:border-[#235340] resize-y leading-relaxed font-serif-title"
+                  />
+                  <p className={`mt-1 text-[10px] ${stickEditBody.trim().length < RELAY_MIN_WORDS ? 'text-[#A33A3A]' : 'text-[#8C7A65]'}`}>
+                    {stickEditBody.trim().length} 字
+                    {stickEditBody.trim().length < RELAY_MIN_WORDS ? ` · 还差 ${RELAY_MIN_WORDS - stickEditBody.trim().length} 字才能保存` : ''}
+                    ｜ 只能编辑自己写的棒；保存后合订本会自动重编译，他人已接的后续棒不受影响。
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditingStick(null)}
+                    disabled={savingStickEdit}
+                    className="px-4 py-2 rounded-lg text-xs font-bold bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#6D5A46] cursor-pointer transition-colors disabled:opacity-50"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingStickEdit || stickEditBody.trim().length < RELAY_MIN_WORDS}
+                    className="px-5 py-2 rounded-lg text-xs font-bold bg-[#7A4F1D] hover:bg-[#633F17] text-[#FFF8EB] cursor-pointer transition-colors shadow-xs disabled:opacity-50"
+                  >
+                    {savingStickEdit ? '保存中…' : '保存修改'}
                   </button>
                 </div>
               </form>

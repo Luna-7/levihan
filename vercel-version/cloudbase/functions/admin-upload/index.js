@@ -1205,7 +1205,7 @@ const USER_ACTIONS = new Set([
    - linkPreview = 前台发布安利与后台发布安利都要用
    - forumPublish = 站长代发公告型帖子（如安利墙的整理合集，署编者名）也要能发
    管理员没有用户会话，走普通 USER_ACTIONS 会被 401 挡死。 */
-const USER_OR_ADMIN_ACTIONS = new Set(['novelCommentDelete', 'linkPreview', 'forumDelete', 'forumPublish']);
+const USER_OR_ADMIN_ACTIONS = new Set(['novelCommentDelete', 'linkPreview', 'forumDelete', 'forumPublish', 'forumCommentEdit']);
 
 async function handle(action, payload) {
   switch (action) {
@@ -1403,11 +1403,14 @@ async function handle(action, payload) {
 
     case 'forumComment': {
       const postId = String(payload.postId || '').trim();
-      const body = String(payload.body || '').trim().slice(0, 2000);
+      const rawBody = String(payload.body || '').trim();
       const author = String(payload.author || '').trim().slice(0, 40);
-      if (!postId || !body || !author) throw httpError('评论内容和昵称不能为空', 400);
+      if (!postId || !rawBody || !author) throw httpError('评论内容和昵称不能为空', 400);
       const posts = await readForum(); const post = posts.find((p) => p && p.id === postId);
       if (!post) throw httpError('帖子不存在', 404);
+      // 接龙的「棒」是长篇正文（递交下限 500 字），上限给 5000；普通评论仍限 2000。
+      // 09-21 事故：这里原来一律 slice(0,2000)，把用户 3146 字的第 2 棒静默截成半句话。
+      const body = rawBody.slice(0, post.category === 'relay' ? 5000 : 2000);
       post.comments = Array.isArray(post.comments) ? post.comments : [];
       const comment = {
         id: `comment-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`,
@@ -1528,6 +1531,34 @@ async function handle(action, payload) {
       try { await saveRelayNovel(compileRelayToNovel(post)); }
       catch (e) { console.error('[relay] 编辑后更新合订本失败', e && e.message); }
       return { ok: true, post, posts };
+    }
+
+    // 编辑接龙的某一棒（第 2 棒起存在 comments 里）：只能改自己写的，改完整本重编译
+    case 'forumCommentEdit': {
+      const postId = String(payload.postId || '').trim();
+      const commentId = String(payload.commentId || '').trim();
+      const nextBody = String(payload.body || '').trim().slice(0, 5000);
+      if (!postId || !commentId) throw httpError('缺少帖子或棒的标识', 400);
+      if (!nextBody) throw httpError('正文不能为空', 400);
+      const posts = await readForum();
+      const post = posts.find((p) => p && p.id === postId);
+      if (!post) throw httpError('帖子不存在', 404);
+      if (post.category !== 'relay') throw httpError('目前仅支持编辑故事接龙', 400);
+      const comments = Array.isArray(post.comments) ? post.comments : [];
+      const comment = comments.find((c) => c && c.id === commentId);
+      if (!comment) throw httpError('这一棒不存在', 404);
+      if (comment.uid && comment.uid !== payload.__uid && payload.__uid !== '__admin__') {
+        throw httpError('只能修改自己写的接龙', 403);
+      }
+      comment.body = nextBody;
+      comment.wordCount = nextBody.length;
+      comment.editedAt = new Date().toISOString();
+      post.comments = comments;
+      await writeForum(posts);
+      // 改的是接龙里的某一棒 ⇒ 合订本同步重编译（后续他人的棒保留，不受影响）
+      try { await saveRelayNovel(compileRelayToNovel(post)); }
+      catch (e) { console.error('[relay] 编辑棒后更新合订本失败', e && e.message); }
+      return { ok: true, comment, posts };
     }
 
     // 维护动作（需管理员 token）：清理接龙残留锁——认领的棒已递交或认领已过期却没释放
