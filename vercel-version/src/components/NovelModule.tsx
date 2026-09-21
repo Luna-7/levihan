@@ -17,7 +17,9 @@ function loadMammoth(): Promise<MammothApi> {
   if (!mammothPromise) {
     mammothPromise = new Promise<MammothApi>((resolve, reject) => {
       const el = document.createElement('script');
-      el.src = `${import.meta.env.BASE_URL}admin/vendor/mammoth.browser.min.js`;
+      // 前台同源加载（public/vendor/）。不能用 /admin/ 路径：www 域名下 /admin/ 会被 vercel.json 308 到 admin 域名，
+      // 跨域 + 路径丢失导致 script 加载失败，前端误报「无法解析该 Word 文档」。
+      el.src = `${import.meta.env.BASE_URL}vendor/mammoth.browser.min.js`;
       el.onload = () => {
         const w = window as unknown as { mammoth?: MammothApi };
         if (w.mammoth && typeof w.mammoth.extractRawText === 'function') resolve(w.mammoth);
