@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { soundManager } from '../utils/audio';
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { useAuthStore } from '../stores/authStore';
+import { useAppShellStore } from '../stores/appShellStore';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { normalizeShareLink } from '../utils/forumFormat';
@@ -181,7 +182,7 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再发布商品');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      useAppShellStore.getState().openLogin();
       return;
     }
 
@@ -257,7 +258,7 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再下架商品');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      useAppShellStore.getState().openLogin();
       return;
     }
     const updated = items.filter((item) => item.id !== id);

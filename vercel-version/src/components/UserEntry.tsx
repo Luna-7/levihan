@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AuthProfile } from '../utils/cloudbaseToken';
 import { useAuthStore, type AuthQuestion } from '../stores/authStore';
+import { useAppShellStore } from '../stores/appShellStore';
 import { UiSprite } from './UiSprite';
 
 type View = 'login' | 'register' | 'quiz' | 'account';
@@ -66,6 +67,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   const loginAccount = useAuthStore((state) => state.login);
   const logoutAccount = useAuthStore((state) => state.logout);
   const changeNickname = useAuthStore((state) => state.updateNickname);
+  const loginRequest = useAppShellStore((state) => state.loginRequest);
   const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -97,11 +99,13 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
   // 重新打开入口 = 重新开始，凭据保险箱一并清空（不把密码留在内存里）
   const showEntry = () => { pendingRegister.current = null; switchView(account ? 'account' : 'login'); setOpen(true); };
 
+  // 由 appShellStore.openLogin() 触发打开登录框，取代 window 隐式事件
   useEffect(() => {
-    const handleOpenRequest = () => showEntry();
-    window.addEventListener('levihan-open-login', handleOpenRequest);
-    return () => window.removeEventListener('levihan-open-login', handleOpenRequest);
-  }, [account]);
+    if (loginRequest === 0) return;
+    showEntry();
+    // 只关注意图信号的跳变，不依赖 showEntry/account 引用。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loginRequest]);
 
   /** 注册第一步：发起答题挑战（值从表单 DOM 读，兼容密码管理器自动填充） */
   const startRegister = (form: HTMLFormElement) => {

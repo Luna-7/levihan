@@ -7,6 +7,7 @@ import { AuthorWithLink } from '../utils/authorLink';
 import { newestNovelsFirst } from '../utils/workSort';
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { useAuthStore } from '../stores/authStore';
+import { useAppShellStore } from '../stores/appShellStore';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { cosService } from '../services/cosClient';
 import { CardPatternOverlay } from './CardPatternOverlay';
@@ -247,7 +248,7 @@ export const NovelModule: React.FC<Props> = ({
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号再投稿');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      useAppShellStore.getState().openLogin();
       return;
     }
     setIsUploading(true);
@@ -272,7 +273,7 @@ export const NovelModule: React.FC<Props> = ({
       if (!response.ok || !result.ok) throw new Error(result.error || '发布失败，请稍后重试');
       setShowUpload(false);
       leaveEditMode();
-      window.dispatchEvent(new Event('levihan-novels-changed'));
+      useAppShellStore.getState().invalidateNovelIndex();
       onShowToast(
         editingNovel
           ? `已更新《${uploadTitle.trim().slice(0, 18)}》✏️`

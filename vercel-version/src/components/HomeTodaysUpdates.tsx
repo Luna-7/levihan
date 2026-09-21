@@ -5,6 +5,7 @@ import { DoujinBookItem, GroupNovel } from '../types/doujinArchive';
 import { fmtTime } from '../utils/forumFormat';
 import type { ForumPost } from './RestaurantForum';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
+import { useAppShellStore } from '../stores/appShellStore';
 
 /** 三种更新来源的归类 */
 type UpdateKind = 'manga' | 'novel' | 'relay';
@@ -168,8 +169,8 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onShowToast 
       }
       if (it.kind === 'novel') {
         onNavigateTab('resources');
-        // 归档页默认落在「漫画本」，广播切到「小说本」分类（DoujinshiArchive 监听）
-        window.dispatchEvent(new CustomEvent('levihan-open-novel-category'));
+        // 归档页默认落在「漫画本」，通知切到「小说本」分类（DoujinshiArchive 监听）
+        useAppShellStore.getState().openNovelCategory();
         return;
       }
       onNavigateTab('resources');

@@ -16,7 +16,7 @@ import { GROUP_INFO } from '../data/initialData';
 import { UserEntry } from './UserEntry';
 import { UiSprite } from './UiSprite';
 import { CardPatternOverlay } from './CardPatternOverlay';
-import { LEVIHAN_OPEN_DOUJIN_EVENT } from '../utils/relayNovels';
+import { useAppShellStore } from '../stores/appShellStore';
 
 interface Props {
   onNavigateTab: (tabId: string) => void;
@@ -36,19 +36,18 @@ export const ImmersiveGameHome: React.FC<Props> = ({
 
   const [activeModal, setActiveModal] = useState<'game' | 'leaderboard' | 'rules' | 'doujinshi' | 'resources' | null>(null);
   const [isForumOpen, setIsForumOpen] = useState(false);
+  const pendingDoujinOpen = useAppShellStore((state) => state.pendingDoujinOpen);
 
-  // 监听接龙合订本跳转事件，自动跳转到巨树餐厅典藏阁
+  // 接龙合订本跳转意图：自动跳转到巨树餐厅典藏阁（取代 window 隐式事件）。
+  // 首页的 isForumOpen / activeModal 是首页局部的弹窗态，需要在跳转前一并收起。
   useEffect(() => {
-    const onOpenDoujin = () => {
-      setIsForumOpen(false);
-      setActiveModal(null);
-      onNavigateTab('resources');
-    };
-    window.addEventListener(LEVIHAN_OPEN_DOUJIN_EVENT, onOpenDoujin);
-    return () => {
-      window.removeEventListener(LEVIHAN_OPEN_DOUJIN_EVENT, onOpenDoujin);
-    };
-  }, [onNavigateTab]);
+    if (pendingDoujinOpen === 0) return;
+    setIsForumOpen(false);
+    setActiveModal(null);
+    onNavigateTab('resources');
+    // 只关注意图信号的跳变。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDoujinOpen]);
 
   if (isForumOpen) {
     return <React.Suspense fallback={null}><RestaurantForum onBack={() => setIsForumOpen(false)} onShowToast={onShowToast} /></React.Suspense>;

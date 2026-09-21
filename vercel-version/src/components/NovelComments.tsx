@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { useAuthStore } from '../stores/authStore';
+import { useAppShellStore } from '../stores/appShellStore';
 import { soundManager } from '../utils/audio';
 
 interface NovelComment {
@@ -76,7 +77,7 @@ export const NovelComments: React.FC<Props> = ({ novelId, novelAuthorUid, onToas
     let token = await getAccessToken();
     if (!token) {
       onToast?.('请先登录账号再评论');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      useAppShellStore.getState().openLogin();
       return;
     }
     setPosting(true);
@@ -206,7 +207,7 @@ export const NovelComments: React.FC<Props> = ({ novelId, novelAuthorUid, onToas
           <span className="text-[10px] font-retro-jp text-[#7A6958]">登录后即可参与评论</span>
           <button
             type="button"
-            onClick={() => window.dispatchEvent(new Event('levihan-open-login'))}
+            onClick={() => useAppShellStore.getState().openLogin()}
             className="px-2.5 py-1 rounded-xs bg-[#1E4334] text-[#F9E79F] font-pixel text-[10px] font-bold cursor-pointer hover:bg-[#2B5E4A] transition-colors"
           >
             去登录

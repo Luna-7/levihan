@@ -16,6 +16,7 @@ import { AuthorWithLink } from '../utils/authorLink';
 import { MangaCommentSection } from './MangaCommentSection';
 import { getCommentCountByBookId } from '../data/mangaComments';
 import { useAuthStore } from '../stores/authStore';
+import { useAppShellStore } from '../stores/appShellStore';
 
 interface Props {
   onCopyCode?: (code: string) => void;
@@ -78,23 +79,27 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   useEffect(() => {
     handleRefreshArchive(false);
     cosService.loadNovelList().then(setNovels).catch(() => {});
-    // 投稿免审直发：小说本新上架后立即刷新索引（novels.json 为 no-cache，重拉即最新）
-    const reloadNovels = () => {
-      cosService.loadNovelList().then(setNovels).catch(() => {});
-    };
-    window.addEventListener('levihan-novels-changed', reloadNovels);
-    // 首页「今日上新」点小说本 → 切到「小说本」分类
-    const openNovelCat = () => {
-      setSelectedCategory('小说本');
-      setSelectedTag('全部');
-      setSelectedAuthor('全部');
-    };
-    window.addEventListener('levihan-open-novel-category', openNovelCat);
-    return () => {
-      window.removeEventListener('levihan-novels-changed', reloadNovels);
-      window.removeEventListener('levihan-open-novel-category', openNovelCat);
-    };
   }, []);
+
+  // 投稿免审直发：小说本新上架后立即刷新索引（novels.json 为 no-cache，重拉即最新）
+  const novelIndexVersion = useAppShellStore((state) => state.novelIndexVersion);
+  useEffect(() => {
+    if (novelIndexVersion === 0) return;
+    cosService.loadNovelList().then(setNovels).catch(() => {});
+    // 只关注版本信号的跳变。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [novelIndexVersion]);
+
+  // 首页「今日上新」点小说本 → 切到「小说本」分类（由 appShellStore 信号触发）
+  const pendingNovelCategory = useAppShellStore((state) => state.pendingNovelCategory);
+  useEffect(() => {
+    if (pendingNovelCategory === 0) return;
+    setSelectedCategory('小说本');
+    setSelectedTag('全部');
+    setSelectedAuthor('全部');
+    // 只关注意图信号的跳变。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingNovelCategory]);
 
   // 刷新归档数据 (尝试从 COS 获取 archive.json)
   const handleRefreshArchive = async (showToastNotice = true) => {
@@ -460,7 +465,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           enabled={selectedCategory === '漫画本' && !isMangaUnlocked}
           onUnlock={() => undefined}
           loginRequired
-          onLogin={() => window.dispatchEvent(new Event('levihan-open-login'))}
+          onLogin={() => useAppShellStore.getState().openLogin()}
         >
           <div className="columns-1 sm:columns-2 gap-3.5 sm:gap-4.5 w-full">
         {sortedBooks.map((book) => {

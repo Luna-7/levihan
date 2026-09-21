@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 const Analytics = () => null;
 import { RetroPixelFrame } from './components/RetroPixelFrame';
 import { ImmersiveGameHome } from './components/ImmersiveGameHome';
@@ -15,7 +15,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { GROUP_INFO, POTATO_EGG_QUOTES } from './data/initialData';
 import { soundManager } from './utils/audio';
 import { NavigationTab } from './types';
-import { LEVIHAN_OPEN_DOUJIN_EVENT } from './utils/relayNovels';
+import { useAppShellStore } from './stores/appShellStore';
 
 const TAB_INDEX_MAP: Partial<Record<NavigationTab, number>> = {
   home: 0,
@@ -26,17 +26,13 @@ const TAB_INDEX_MAP: Partial<Record<NavigationTab, number>> = {
 
 export default function App() {
   // Navigation State: 'home' | 'resources' | 'doujinshi' | 'dispatch'
-  // 支持 ?tab=<name> 深度直达任意分区
-  const [activeTab, setActiveTab] = useState<NavigationTab>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const tab = params.get('tab');
-      if (tab === 'resources' || tab === 'doujinshi' || tab === 'dispatch') {
-        return tab;
-      }
-    }
-    return 'home';
-  });
+  // 单一来源：appShellStore，支持 ?tab=<name> 深度直达，且 URL 与分区实时同步
+  const activeTab = useAppShellStore((state) => state.activeTab);
+  const navigate = useAppShellStore((state) => state.navigate);
+  const pendingDoujinOpen = useAppShellStore((state) => state.pendingDoujinOpen);
+  const showToast = useAppShellStore((state) => state.showToast);
+  const toastMessage = useAppShellStore((state) => state.toast);
+
   const [departingTab, setDepartingTab] = useState<NavigationTab | null>(null);
   useEffect(() => {
     if (departingTab === null) return;
@@ -45,33 +41,18 @@ export default function App() {
   }, [activeTab, departingTab]);
   const isMounted = (tab: NavigationTab) => activeTab === tab || departingTab === tab;
   const [isSoundMuted, setIsSoundMuted] = useState<boolean>(soundManager.isMuted());
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const toastTimerRef = useRef<number | null>(null);
 
   const activeIndex = TAB_INDEX_MAP[activeTab] ?? 0;
 
-  // 监听接龙合订本跳转事件，切换到巨树餐厅（同人典藏阁）
+  // 接龙合订本跳转意图：切换到巨树餐厅（同人典藏阁）。
+  // 由 appShellStore.openDoujinArchive() 触发，取代 window 隐式事件。
   useEffect(() => {
-    const handleOpenNovel = () => {
-      if (activeTab !== 'resources') setDepartingTab(activeTab);
-      setActiveTab('resources');
-    };
-    window.addEventListener(LEVIHAN_OPEN_DOUJIN_EVENT, handleOpenNovel);
-    return () => {
-      window.removeEventListener(LEVIHAN_OPEN_DOUJIN_EVENT, handleOpenNovel);
-    };
-  }, [activeTab]);
-
-  const showToast = useCallback((msg: string) => {
-    if (toastTimerRef.current !== null) {
-      window.clearTimeout(toastTimerRef.current);
-    }
-    setToastMessage(msg);
-    toastTimerRef.current = window.setTimeout(() => {
-      setToastMessage(null);
-      toastTimerRef.current = null;
-    }, 2800);
-  }, []);
+    if (pendingDoujinOpen === 0) return;
+    if (activeTab !== 'resources') setDepartingTab(activeTab);
+    navigate('resources');
+    // 依赖 navigate 会导致每次跳转都重跑；这里只关注意图信号的跳变。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDoujinOpen]);
 
   const handleCopyGroupNumber = () => {
     soundManager.playCoin();
@@ -112,8 +93,7 @@ export default function App() {
   const handleNavigate = (tab: NavigationTab) => {
     soundManager.playNavClick();
     if (tab !== activeTab) setDepartingTab(activeTab);
-    setActiveTab(tab);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigate(tab);
   };
 
   return (

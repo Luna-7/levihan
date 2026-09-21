@@ -1,22 +1,12 @@
 import { GroupNovel } from '../types/doujinArchive';
 import { ForumPost, ForumComment } from '../components/RestaurantForum';
+import { useAppShellStore } from '../stores/appShellStore';
 
 const FORUM_STORAGE_KEYS = [
   'levihan_restaurant_forum_v7',
   'levihan_restaurant_forum_v6',
   'levihan_restaurant_forum_v5',
 ];
-
-export const LEVIHAN_OPEN_DOUJIN_EVENT = 'levihan-open-doujin-novel';
-export const LEVIHAN_RELAY_UPDATED_EVENT = 'levihan-relay-posts-updated';
-
-export interface OpenDoujinNovelDetail {
-  novel?: GroupNovel;
-  novelId?: string;
-  category?: string;
-  seg?: string;
-  autoRead?: boolean;
-}
 
 /**
  * 将单个故事接龙帖子编译转换为在线小说（GroupNovel）
@@ -99,16 +89,10 @@ export function getAllCompiledRelayNovels(currentPosts?: ForumPost[]): GroupNove
 }
 
 /**
- * 触发跳转到「土豆粮仓 · 小说本 · 在线小说」卡片列表
+ * 触发跳转到「土豆粮仓 · 小说本 · 在线小说」卡片列表。
+ * 通过 appShellStore 的跳转意图信号通知 App 切换分区（取代 window 隐式事件）。
+ * 注意：合订本卡片由典藏阁挂载时自行拉取小说索引，detail 不再需要跨层传值。
  */
-export function jumpToCompiledNovelInDoujinArchive(novel: GroupNovel, autoRead = false) {
-  if (typeof window === 'undefined') return;
-  const detail: OpenDoujinNovelDetail = {
-    novel,
-    novelId: novel.id,
-    category: '小说本',
-    seg: '在线小说',
-    autoRead,
-  };
-  window.dispatchEvent(new CustomEvent(LEVIHAN_OPEN_DOUJIN_EVENT, { detail }));
+export function jumpToCompiledNovelInDoujinArchive(_novel?: GroupNovel, _autoRead = false) {
+  useAppShellStore.getState().openDoujinArchive();
 }

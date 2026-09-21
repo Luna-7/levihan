@@ -9,6 +9,7 @@ import {
 import { soundManager } from '../utils/audio';
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { useAuthStore } from '../stores/authStore';
+import { useAppShellStore } from '../stores/appShellStore';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { CharacterArt, spriteRef } from './CharacterArt';
@@ -340,6 +341,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   const [now, setNow] = useState<number>(Date.now());
   const profile = useAuthStore((state) => state.profile);
   const currentUid = profile?.uid || null;
+  const openLogin = useAppShellStore((state) => state.openLogin);
 
   // Market states (土豆市集)
   const [marketItems, setMarketItems] = useState<MarketItem[]>(() => {
@@ -633,9 +635,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     setPosts(next);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('levihan-relay-posts-updated'));
-      }
     } catch {
       /* storage fallback */
     }
@@ -696,7 +695,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再下架商品');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      openLogin();
       return;
     }
     const updated = marketItems.filter((item) => item.id !== id);
@@ -718,7 +717,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再删除帖子');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      openLogin();
       return;
     }
     const updated = posts.filter((p) => p.id !== postId);
@@ -744,7 +743,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再编辑接龙');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      openLogin();
       return;
     }
     const nextTitle = relayEditTitle.trim();
@@ -784,7 +783,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再编辑接龙');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      openLogin();
       return;
     }
     const nextBody = stickEditBody.trim();
@@ -815,7 +814,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再删除评论');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      openLogin();
       return;
     }
     const updated = posts.map((p) => p.id === postId ? { ...p, comments: (p.comments || []).filter((c) => c.id !== commentId) } : p);
@@ -840,7 +839,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再认领接龙');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      openLogin();
       return;
     }
     const currentAuthor = nickname.trim() || '调查兵';
@@ -934,7 +933,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再发布');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      openLogin();
       return;
     }
 
@@ -1258,7 +1257,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再点赞');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      openLogin();
       return;
     }
     let nowGiven = false;
@@ -1291,7 +1290,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再评论');
-      window.dispatchEvent(new Event('levihan-open-login'));
+      openLogin();
       return;
     }
 
