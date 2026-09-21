@@ -1766,6 +1766,20 @@ var PDF_SLICE_RATIO = 1.4;
 /** 单页整幅渲染的画布面积安全阀（px²）。管理台是桌面 Chrome（上限约 268MP），留足余量 */
 var PDF_RENDER_MAX_AREA = 80 * 1000 * 1000;
 
+/**
+ * 图片输入的长图切片画质（敏感本/普通本共用）。
+ * 切片产物是 JPEG，在敏感本管线里正好命中 buildPageImage 的「JPEG 源原字节直通」——
+ * 加密 PDF 里嵌的就是切片原字节，不会再有第二次编码。q0.9 与上面 PDF 长页切片同参：
+ * 原生分辨率不缩放，与全站普通页（q0.92）肉眼无差别。
+ */
+var IMG_SLICE_QUALITY = 0.9;
+
+/** 长图切片是否适用于该文件：GIF 是动图，切了只剩一帧，放行走原流程 */
+function sliceableImageFile(f){
+  if (!isImageFile(f)) return false;
+  return !/^image\/gif$/i.test((f && f.type) || '') && !/\.gif$/i.test((f && f.name) || '');
+}
+
 /** 扫描整本，返回高宽比超限的页码列表（空数组 = 没有长页） */
 async function findTallPdfPages(doc){
   var tall = [];
@@ -2072,6 +2086,86 @@ function expandPdfIntoPages(file){
   });
 }
 
+/**
+ * 长图（高宽比 ≥ PDF_TALL_RATIO，典型如 webtoon 条漫、整话搬运拼图）自动纵向切片。
+ *
+ * 为什么必须切：这类图走「一图一页」处处撞墙——敏感本管线里 800×20000px 会变成
+ * 600×15000pt 的页（超 PDF 规范 14400pt 页面上限），secure-upload.js 的 MAX_PAGE_PX=12000
+ * 兜底还会把宽度一起压掉，阅读端长页再被压缩档按长边缩放压成糊图。
+ * 切片后每页都是正常比例，下游 secure-upload.js 与阅读器**一行不用改**——
+ * 切片产物就是普通图片页。
+ *
+ * 切法与 PDF 长页切片同参数：按原生像素宽（不缩放；超宽才兜底夹进
+ * [PDF_SLICE_MIN_W, PDF_SLICE_MAX_W]）等高均分，段高 = 宽 × PDF_SLICE_RATIO，
+ * 段间不重叠。每片画布约 0.9MP，远低于 iOS 16.7MP 静默失效线。
+ * JPEG 没有透明概念，先铺白底再画，避免透明底被编码成黑块。
+ */
+async function sliceImageIntoPages(file, img){
+  var stem = String(file.name || 'image').replace(/\.[^.]+$/, '') || 'image';
+  var w = img.naturalWidth, h = img.naturalHeight;
+  if (!w || !h) throw new Error('读取图片尺寸失败：' + (file.name || ''));
+  var targetW = Math.max(PDF_SLICE_MIN_W, Math.min(PDF_SLICE_MAX_W, w));
+  var scale = targetW / w;                  // 绝大多数条漫 = 1（原生宽直接切）
+  var sliceH = Math.round(targetW * PDF_SLICE_RATIO);
+  var count = Math.max(1, Math.ceil(h * scale / sliceH));
+  var out = [];
+  for (var i = 0; i < count; i++) {
+    var sy = Math.min(h - 1, Math.round(i * sliceH / scale));
+    var sh = Math.min(h - sy, Math.round(sliceH / scale));
+    var c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * scale));
+    c.height = Math.max(1, Math.round(sh * scale));
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, sy, w, sh, 0, 0, c.width, c.height);
+    var blob = await canvasToJpegBlob(c, IMG_SLICE_QUALITY);
+    c.width = 0; c.height = 0;
+    out.push(new File([blob], stem + '.slice-' + String(out.length + 1).padStart(2, '0') + '.jpg', { type: 'image/jpeg' }));
+  }
+  return out;
+}
+
+/**
+ * 加入列表后异步探测长图：命中就在列表里**原地替换**成切片页。
+ * 仿 probePdfPages 的后置模式，不打断 addFiles 的同步节奏；普通图零开销。
+ * 只在条目还空闲（未被编辑、未在上传）时才替换 —— 宁可放过也不抢用户已上手的东西。
+ */
+function probeLongImages(){
+  var chain = Promise.resolve();
+  files.slice().forEach(function(f){
+    if (f.fromLongImage || f.fromPdf) return;   // 切片产物 / PDF 拆页产物不重复探测
+    if (!sliceableImageFile(f.file)) return;
+    chain = chain.then(function(){
+      if (files.indexOf(f) < 0 || f.status !== 'idle' || f.edited) return;
+      return loadImage(f.url).then(function(img){
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (!w || !h || h / w < PDF_TALL_RATIO) return;
+        return sliceImageIntoPages(f.file, img).then(function(slices){
+          var at = files.indexOf(f);
+          if (at < 0 || f.status !== 'idle' || f.edited) return;   // 期间被移除/占用 → 丢弃切片
+          var items = slices.map(function(sf, k){
+            return {
+              file: sf, originalFile: sf,
+              url: URL.createObjectURL(sf), originalUrl: URL.createObjectURL(sf),
+              status: 'idle', err: '', name: sf.name,
+              edited: false, op: null,
+              fromLongImage: { src: f.file, part: k + 1, total: slices.length }
+            };
+          });
+          files.splice.apply(files, [at, 1].concat(items));
+          releaseFile(f);
+          show($('main-msg'), 'ok', '✓ 长图「' + (f.name || '') + '」已自动切成 ' + slices.length + ' 页（原生分辨率，无需手动裁切）。');
+        });
+      }).catch(function(){ /* 尺寸读不出来就按原图照常走，不挡流程 */ });
+    });
+  });
+  return chain.then(function(){
+    renderFiles();
+    syncPages();
+  });
+}
+
 function addFiles(list){
   var incoming = Array.prototype.slice.call(list || []);
   incoming.sort(function(a, b){ return naturalSort(a.name, b.name); });
@@ -2104,6 +2198,7 @@ function addFiles(list){
   });
   renderFiles();
   syncPages();
+  probeLongImages();   // 长图后置探测：命中就原地替换成切片页（异步，不阻塞加入节奏）
 }
 
 function clearFiles(){
@@ -2874,8 +2969,8 @@ function refreshSecureUI(){
   var dropHint = $('drop') && $('drop').querySelector('.muted');
   if (dropHint) {
     dropHint.textContent = on
-      ? '支持多张图片（按文件名顺序在本地合并成 PDF），或直接拖入一个 PDF 文件'
-      : '支持 jpg / png / webp；拖入 PDF 会按页转成 WebP 图片后逐页上传';
+      ? '支持多张图片（按文件名顺序在本地合并成 PDF；高宽比超 2.2 的长图自动切成正常页），或直接拖入一个 PDF 文件'
+      : '支持 jpg / png / webp；拖入 PDF 会按页转成 WebP 图片后逐页上传；高宽比超 2.2 的长图自动切成正常页';
   }
 
   // 从敏感模式切回普通模式时，列表里可能还躺着"整份 PDF"的条目（敏感模式下它是原样交给加密流程的）。
