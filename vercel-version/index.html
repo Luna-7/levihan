@@ -16,6 +16,20 @@
         } catch (e) {}
       })();
     </script>
+    <script>
+      // 后台路径兜底：/admin 一律交给后台域名。
+      // 正常情况下 Vercel 已 308 跳转，但**旧版 Service Worker 会把 /admin 导航回退成
+      // 这份前台首页**（navigateFallback），用户就会「点后台进到主页」。
+      // 这段在 SW 回退命中时依然会执行，因此作为兜底把用户送回后台。
+      (function () {
+        try {
+          var p = location.pathname;
+          if (p === '/admin' || p.indexOf('/admin/') === 0) {
+            location.replace('https://admin.levihan.asia/' + location.hash);
+          }
+        } catch (e) {}
+      })();
+    </script>
     <title>利韩土豆仓</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" data-page-node-id="fpp6pwgdZldfAZxCsVcyOz" />
     <link rel="manifest" href="/manifest.webmanifest" />

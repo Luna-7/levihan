@@ -89,7 +89,10 @@ export default defineConfig(({ mode }) => {
         // 且它本身就必须联网取密文，离线预缓存没有意义 —— 别让每个访客都在后台拖它。
         globIgnores: ['assets/SecureComicReader-*.js'],
         navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/^\/daxigua\//, /^\/save-hange\//, /^\/admin\//],
+        // ⚠️ /admin 必须连**不带斜杠**的写法一起排除：
+        // 只写 /^\/admin\// 时，访问 /admin（无斜杠）会被 SW 回退成前台首页，
+        // 用户看到的是「主页」而不是后台（2026-09-21 实测踩过）。
+        navigateFallbackDenylist: [/^\/daxigua\//, /^\/save-hange\//, /^\/admin(\/|$)/],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
