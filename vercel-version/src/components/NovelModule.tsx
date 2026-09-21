@@ -11,6 +11,29 @@ import { getAccessToken, getCurrentProfile } from '../utils/cloudbaseToken';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
 
+/** 懒加载本地 mammoth（仅在选择 .docx 时才拉取 ~636KB 脚本，避免进主包） */
+let mammothPromise: Promise<MammothApi> | null = null;
+function loadMammoth(): Promise<MammothApi> {
+  if (!mammothPromise) {
+    mammothPromise = new Promise<MammothApi>((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = `${import.meta.env.BASE_URL}admin/vendor/mammoth.browser.min.js`;
+      el.onload = () => {
+        const w = window as unknown as { mammoth?: MammothApi };
+        if (w.mammoth && typeof w.mammoth.extractRawText === 'function') resolve(w.mammoth);
+        else reject(new Error('mammoth 加载失败'));
+      };
+      el.onerror = () => reject(new Error('mammoth 加载失败'));
+      document.head.appendChild(el);
+    });
+  }
+  return mammothPromise;
+}
+
+interface MammothApi {
+  extractRawText: (input: { arrayBuffer: ArrayBuffer }) => Promise<{ value?: string }>;
+}
+
 interface Props {
   searchQuery: string;
   recs: RecommendItem[];
@@ -87,6 +110,7 @@ export const NovelModule: React.FC<Props> = ({
   const [uploadTags, setUploadTags] = useState('');
   const [uploadWarnOn, setUploadWarnOn] = useState(false);
   const [uploadWarning, setUploadWarning] = useState('');
+  const [uploadSensitive, setUploadSensitive] = useState(false);
   const [uploadFileName, setUploadFileName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [recTitle, setRecTitle] = useState('');
@@ -204,22 +228,38 @@ export const NovelModule: React.FC<Props> = ({
 
   const handleNovelFile = async (file?: File) => {
     if (!file) return;
-    if (!/\.(txt|md)$/i.test(file.name)) {
-      onShowToast('目前仅支持 UTF-8 的 .txt 或 .md 文件');
+    const isDocx = /\.docx$/i.test(file.name);
+    const isText = /\.(txt|md)$/i.test(file.name);
+    if (!isText && !isDocx) {
+      onShowToast('目前仅支持 UTF-8 的 .txt / .md，或 Word 的 .docx 文件');
       return;
     }
-    if (file.size > 1024 * 1024) {
-      onShowToast('小说文件不能超过 1MB');
+    const sizeCap = isDocx ? 10 * 1024 * 1024 : 1024 * 1024; // docx 允许到 10MB（含内嵌图）
+    if (file.size > sizeCap) {
+      onShowToast(isDocx ? 'Word 文件不能超过 10MB' : '小说文件不能超过 1MB');
       return;
     }
     try {
-      const content = await file.text();
+      let content = '';
+      if (isDocx) {
+        // 本地 mammoth 把 docx 转纯文本，图片不落地、只取正文文字
+        const arrayBuffer = await file.arrayBuffer();
+        const mammoth = await loadMammoth();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        content = result.value || '';
+        if (!content.trim()) {
+          onShowToast('该 Word 文档没有可提取的正文文字');
+          return;
+        }
+      } else {
+        content = await file.text();
+      }
       setUploadBody(content);
       setUploadFileName(file.name);
-      if (!uploadTitle) setUploadTitle(file.name.replace(/\.(txt|md)$/i, ''));
+      if (!uploadTitle) setUploadTitle(file.name.replace(/\.(txt|md|docx)$/i, ''));
       onShowToast(`已读取《${file.name}》`);
     } catch {
-      onShowToast('无法读取文件，请确认它是 UTF-8 文本');
+      onShowToast(isDocx ? '无法解析该 Word 文档，请另存为 .txt 或直接粘贴正文' : '无法读取文件，请确认它是 UTF-8 文本');
     }
   };
 
@@ -244,7 +284,8 @@ export const NovelModule: React.FC<Props> = ({
       onShowToast('已勾选内容预警，请填写预警内容');
       return;
     }
-    // 免审直发：必须登录，正文提交后立即加密上架（novelDirectPublish）
+    // 免审直发：必须登录，正文提交后立即上架（novelDirectPublish）
+    // 普通篇明文上架，敏感篇加密入 vault —— 由「含敏感元素」勾选决定
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号再投稿');
@@ -258,6 +299,7 @@ export const NovelModule: React.FC<Props> = ({
         headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           action: 'novelDirectPublish',
+          sensitive: uploadSensitive,
           title: uploadTitle.trim(),
           author: uploadAuthor.trim(),
           authorUrl: uploadAuthorUrl.trim(),
@@ -278,9 +320,10 @@ export const NovelModule: React.FC<Props> = ({
       setUploadTags('');
       setUploadWarnOn(false);
       setUploadWarning('');
+      setUploadSensitive(false);
       setUploadFileName('');
       window.dispatchEvent(new Event('levihan-novels-changed'));
-      onShowToast('已加密上架，感谢投稿 📚');
+      onShowToast(uploadSensitive ? '已加密上架，感谢投稿 📚' : '已上架，感谢投稿 📚');
     } catch (error) {
       onShowToast(error instanceof Error ? error.message : '投稿失败，请稍后重试');
     } finally {
@@ -484,7 +527,7 @@ export const NovelModule: React.FC<Props> = ({
               onClick={() => { soundManager.playWoodTap(); setUploadKind('recommend'); setShowUpload(true); }}
               className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#B7791F] border border-[#9A6519] text-[#FFFEEF] font-pixel text-[11px] font-bold cursor-pointer transition-colors hover:bg-[#9A6519]"
             >
-              ✎ 推荐文
+              ✎ 上传文/推荐文
             </button>
           </div>
           {filteredRecs.length === 0 ? (
@@ -622,7 +665,7 @@ export const NovelModule: React.FC<Props> = ({
             <div className="relative flex items-center justify-between gap-3 border-b border-[#D5C9AF] pb-2">
               <div>
                 <h3 className="font-pixel text-sm font-bold text-[#1E4334]">上传文 / 推荐文</h3>
-                <p className="text-[10px] text-[#7A6958] mt-1">登录后投稿立即加密上架；推荐外链仍需审核。</p>
+                <p className="text-[10px] text-[#7A6958] mt-1">登录后投稿立即上架（默认普通、勾选敏感才加密）；推荐外链仍需审核。</p>
               </div>
               <button type="button" onClick={() => setShowUpload(false)} className="text-lg text-[#5B4636] cursor-pointer" aria-label="关闭上传窗口">×</button>
             </div>
@@ -639,9 +682,9 @@ export const NovelModule: React.FC<Props> = ({
             </div>
 
             <label className="block p-3 border border-dashed border-[#1E4334] bg-[#F3EAD5] text-center cursor-pointer hover:bg-[#E8E0CB]">
-              <span className="block font-bold text-xs">选择 .txt / .md 文件（最大 1MB）</span>
+              <span className="block font-bold text-xs">选择 .txt / .md / .docx 文件（文本 ≤1MB，Word ≤10MB）</span>
               <span className="block text-[10px] text-[#7A6958] mt-1">{uploadFileName || '也可以直接在下方粘贴正文'}</span>
-              <input type="file" accept=".txt,.md,text/plain,text/markdown" className="hidden" onChange={(e) => void handleNovelFile(e.target.files?.[0])} />
+              <input type="file" accept=".txt,.md,.docx,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={(e) => void handleNovelFile(e.target.files?.[0])} />
             </label>
 
             <label className="block text-xs font-bold">标签 <span className="font-normal text-[#7A6958]">英文逗号分隔，如：原作向,R</span><input value={uploadTags} onChange={(e) => setUploadTags(e.target.value)} maxLength={120} placeholder="例如：原作向,R" className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
@@ -656,6 +699,13 @@ export const NovelModule: React.FC<Props> = ({
               )}
             </div>
 
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
+                <input type="checkbox" checked={uploadSensitive} onChange={(e) => setUploadSensitive(e.target.checked)} className="w-auto accent-[#1E4334]" />
+                🔒 含敏感元素 <span className="font-normal text-[#7A6958]">勾选后正文加密入密库，前端仅存密文</span>
+              </label>
+            </div>
+
             <label className="block text-xs font-bold">小说正文<textarea value={uploadBody} onChange={(e) => setUploadBody(e.target.value)} rows={10} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334] resize-y leading-relaxed" /></label>
             <label className="block text-xs font-bold">作者说的话（选填）<span className="font-normal text-[#7A6958]">审核通过后以引用块展示在卡片上</span><textarea value={uploadNotes} onChange={(e) => setUploadNotes(e.target.value)} rows={2} maxLength={2000} className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334] resize-y" /></label>
 
@@ -667,7 +717,7 @@ export const NovelModule: React.FC<Props> = ({
             </div>}
 
             <button type="submit" disabled={isUploading} className="w-full py-2.5 bg-[#1E4334] text-[#F9E79F] border border-[#153025] font-pixel text-xs font-bold cursor-pointer disabled:opacity-50">
-              {isUploading ? '加密上传中…' : uploadKind === 'novel' ? '🔒 加密上架' : '提交推荐审核'}
+              {isUploading ? (uploadSensitive ? '加密上传中…' : '上传中…') : uploadKind === 'novel' ? (uploadSensitive ? '🔒 加密上架' : '📖 普通上架') : '提交推荐审核'}
             </button>
           </form>
         </div>,

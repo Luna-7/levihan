@@ -1372,8 +1372,10 @@ async function handle(action, payload) {
     }
 
     case 'novelDirectPublish': {
-      /* 用户投稿免审直发（2026-09-21 取消文稿审核）：登录用户提交后立即加密上架，
-         正文只落 novels_vault/{id}_secure.txt 密文，novels.json 标记 encrypted:true。 */
+      /* 用户投稿免审直发（2026-09-21 取消文稿审核）：登录用户提交后立即上架。
+         敏感篇（sensitive=true）正文落 novels_vault/{id}_secure.txt 密文，novels.json 标记 encrypted:true；
+         普通篇（默认）正文落 novels/{id}.txt 明文，标记 encrypted:false。 */
+      const sensitive = payload.sensitive === true;
       const text = String(payload.body || '').replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '');
       if (!text.trim()) throw httpError('正文不能为空', 400);
       if (text.length > MAX_NOVEL_CHARS) throw httpError(`正文超过 ${MAX_NOVEL_CHARS} 字上限`, 413);
@@ -1395,14 +1397,14 @@ async function handle(action, payload) {
       await putObject({
         Bucket: BUCKET,
         Region: REGION,
-        Key: `${NOVEL_VAULT_DIR}${novelId}_secure.txt`,
-        Body: Buffer.from(encryptNovelBody(text), 'utf8'),
+        Key: sensitive ? `${NOVEL_VAULT_DIR}${novelId}_secure.txt` : `${NOVEL_DIR}${novelId}.txt`,
+        Body: Buffer.from(sensitive ? encryptNovelBody(text) : text, 'utf8'),
         ContentType: 'text/plain; charset=utf-8',
         CacheControl: 'no-cache',
       });
 
       const meta = normalizeNovelMeta({ id: novelId, title, author, authorUrl, authorNote, warning, tags }, text.length);
-      meta.encrypted = true;
+      meta.encrypted = sensitive;
       const novels = await readNovels();
       novels.unshift(meta);
       novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));

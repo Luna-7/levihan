@@ -843,8 +843,12 @@
           <textarea id="nv-note" rows="2" maxlength="2000" data-page-node-id="nvpanel00000000000000000034"></textarea>
         </div>
         <div class="f span2" data-page-node-id="nvpanel00000000000000000035">
-          <label for="nv-body" data-page-node-id="nvpanel00000000000000000036">正文 <span class="req">*</span> <span class="tag" data-page-node-id="nvpanel00000000000000000037">段落之间空一行，站点按空行分段 · 上限 50 万字</span></label>
-          <textarea id="nv-body" rows="10" placeholder="粘贴正文…" style="font-family:ui-monospace,Menlo,'Noto Sans SC',monospace" data-page-node-id="nvpanel00000000000000000038"></textarea>
+          <div class="row" style="justify-content:space-between">
+            <label for="nv-body" data-page-node-id="nvpanel00000000000000000036">正文 <span class="req">*</span> <span class="tag" data-page-node-id="nvpanel00000000000000000037">段落之间空一行，站点按空行分段 · 上限 50 万字</span></label>
+            <button type="button" class="btn-sm" id="btn-nv-import-docx">📄 导入 Word / 文本</button>
+          </div>
+          <textarea id="nv-body" rows="18" placeholder="粘贴正文，或点上方「导入 Word / 文本」选择 .docx / .txt 自动转文本…" style="font-family:ui-monospace,Menlo,'Noto Sans SC',monospace;min-height:320px" data-page-node-id="nvpanel00000000000000000038"></textarea>
+          <input type="file" id="nv-import-file" accept=".txt,.md,.docx,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none">
           <div class="muted" style="margin-top:2px" data-page-node-id="nvpanel00000000000000000039"><span id="nv-body-len">0</span> 字</div>
         </div>
       </div>
@@ -918,6 +922,8 @@
 <script src="./vendor/jspdf.umd.min.js"></script>
 <script src="./vendor/pdf.min.js"></script>
 <script src="./vendor/jszip.min.js"></script>
+<!-- mammoth：Word(.docx) → 纯文本/HTML，本地转换后填进小说正文框，不依赖第三方 CDN -->
+<script src="./vendor/mammoth.browser.min.js"></script>
 <script src="./pixiv-artists.js"></script>
 <script src="./tools.js"></script>
 <!-- cos-js-sdk-v5：浏览器直传 COS 用。加载失败不影响页面，secure-upload.js 会自动降级为中转上传 -->
@@ -1545,6 +1551,38 @@ $('btn-nv-clear').addEventListener('click', function(){
 });
 $('nv-body').addEventListener('input', function(){
   $('nv-body-len').textContent = String(this.value.length);
+});
+// 导入 Word(.docx) / 纯文本(.txt/.md)：本地转文本后填入正文框
+$('btn-nv-import-docx').addEventListener('click', function(){ $('nv-import-file').click(); });
+$('nv-import-file').addEventListener('change', function(){
+  var file = this.files && this.files[0];
+  if (!file) return;
+  var name = file.name || '';
+  var isDocx = /\.docx$/i.test(name);
+  var isText = /\.(txt|md)$/i.test(name);
+  if (!isDocx && !isText) { show($('nv-msg'), 'err', '仅支持 .docx / .txt / .md 文件。'); this.value = ''; return; }
+  if (!window.mammoth && isDocx) { show($('nv-msg'), 'err', 'Word 转换组件未加载，请刷新页面或改用 .txt。'); this.value = ''; return; }
+  var done = function(text){
+    text = String(text || '').replace(/\r\n?/g, '\n');
+    if (!text.trim()) { show($('nv-msg'), 'err', '文件里没有可提取的正文文字。'); return; }
+    $('nv-body').value = text;
+    $('nv-body-len').textContent = String(text.length);
+    show($('nv-msg'), 'ok', '✓ 已导入《' + name + '》' + (isDocx ? '（Word 图片不落地，仅取文字）' : ''));
+  };
+  var fail = function(err){
+    show($('nv-msg'), 'err', '导入失败：' + (err && err.message ? err.message : '无法解析该文件'));
+  };
+  if (isDocx) {
+    file.arrayBuffer().then(function(buf){
+      return window.mammoth.extractRawText({ arrayBuffer: buf });
+    }).then(function(res){ done(res && res.value); }).catch(fail).finally(function(){ /* noop */ });
+  } else {
+    var reader = new FileReader();
+    reader.onload = function(){ done(reader.result); };
+    reader.onerror = function(){ fail(new Error('读取失败')); };
+    reader.readAsText(file, 'utf-8');
+  }
+  this.value = '';
 });
 $('nv-warn-on').addEventListener('change', function(){
   $('nv-warn-box').classList.toggle('hide', !this.checked);

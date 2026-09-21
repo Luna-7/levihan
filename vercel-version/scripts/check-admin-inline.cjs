@@ -41,8 +41,8 @@ const HOST_GLOBALS = new Set([
   'structuredClone', 'btoa', 'atob', 'crypto', 'performance', 'CustomEvent', 'Event', 'MutationObserver',
   'localStorage', 'sessionStorage', 'caches', 'Uint8Array', 'Int8Array', 'Uint16Array', 'Int16Array',
   'Uint32Array', 'Int32Array', 'Float32Array', 'Float64Array', 'ArrayBuffer', 'DataView', 'NumberFormat',
-  // 外部脚本（tools.js / secure-upload.js / pixiv-artists.js / COS SDK / jsPDF）
-  'LeVihanVault', 'LeVihanTools', 'COS', 'jspdf', 'window',
+  // 外部脚本（tools.js / secure-upload.js / pixiv-artists.js / COS SDK / jsPDF / mammoth）
+  'LeVihanVault', 'LeVihanTools', 'COS', 'jspdf', 'mammoth', 'window',
 ]);
 
 function collectDeclared(code) {

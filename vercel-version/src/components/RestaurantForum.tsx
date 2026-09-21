@@ -149,23 +149,6 @@ const resolveArtwork = (name: string | undefined, stored: string | undefined) =>
   return artworkOf(PRESET_CHARACTERS[0]);
 };
 
-const PROMPT_CHARACTERS = ['利威尔', '韩吉', '艾尔文', '萨沙', '让', '阿尔敏', '三笠', '莫布利特'];
-const PROMPT_LOCATIONS = ['巨树森林深处', '调查兵团旧本部地下室', '玛利亚之墙顶端日落时', '兵长专用茶室', '暴雨夜的特训营地', '特罗斯特区旧书肆', '雪山补给哨所'];
-const PROMPT_ITEMS = ['一罐特调红茶罐', '一本泛黄的巨人实验手稿', '一副备用护目镜', '一块新鲜烘焙的蛋糕', '一枚磨损的自由之翼徽章', '一封未寄出的密信'];
-const PROMPT_EVENTS = ['突发暴雨被困在木屋里', '不小心打翻了实验溶剂', '发现了一张神秘的壁外藏宝地图', '被要求一起整理一整间档案室', '深夜在屋顶偶遇看星空'];
-
-const generateInspirationPrompt = (): string => {
-  const char1 = PROMPT_CHARACTERS[Math.floor(Math.random() * PROMPT_CHARACTERS.length)];
-  const char2 = PROMPT_CHARACTERS[Math.floor(Math.random() * PROMPT_CHARACTERS.length)];
-  const loc = PROMPT_LOCATIONS[Math.floor(Math.random() * PROMPT_LOCATIONS.length)];
-  const item = PROMPT_ITEMS[Math.floor(Math.random() * PROMPT_ITEMS.length)];
-  const evt = PROMPT_EVENTS[Math.floor(Math.random() * PROMPT_EVENTS.length)];
-  
-  return char1 === char2
-    ? `【${char1}】在【${loc}】带着【${item}】，准备【${evt}】。`
-    : `【${char1}】与【${char2}】在【${loc}】围绕【${item}】，因为【${evt}】。`;
-};
-
 const formatTimeRemaining = (expiresAt: number, now: number): string => {
   const diff = expiresAt - now;
   if (diff <= 0) return '00:00';
@@ -791,43 +774,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const reader = new FileReader();
     reader.onload = () => setImage(typeof reader.result === 'string' ? reader.result : undefined);
     reader.readAsDataURL(file);
-  };
-
-  const handleDiceRollForComment = (postId: string) => {
-    soundManager.playShuffle();
-    const roll = Math.floor(Math.random() * 100) + 1;
-    let verdict = '成功';
-    if (roll >= 95) verdict = '极度大成功';
-    else if (roll >= 80) verdict = '大成功';
-    else if (roll <= 5) verdict = '大失败';
-    else if (roll <= 25) verdict = '波折';
-    
-    const rollText = `\n【🎲 1D100=${roll} (${verdict})】\n`;
-    setCommentDrafts((drafts) => ({
-      ...drafts,
-      [postId]: (drafts[postId] || '') + rollText,
-    }));
-    onShowToast(`🎲 1D100 = ${roll} (${verdict})`);
-  };
-
-  const handleInspirationForComment = (postId: string) => {
-    soundManager.playWoodTap();
-    const p = generateInspirationPrompt();
-    setCommentDrafts((drafts) => ({
-      ...drafts,
-      [postId]: (drafts[postId] || '') + (drafts[postId] ? '\n\n' : '') + `【灵感】${p}\n`,
-    }));
-    onShowToast('✨ 灵感要素已填入');
-  };
-
-  const handleInsertFramework = (postId: string) => {
-    soundManager.playWoodTap();
-    const framework = `\n【环境】……\n【动作】……\n【对白】“……”\n【推进】……\n`;
-    setCommentDrafts((drafts) => ({
-      ...drafts,
-      [postId]: (drafts[postId] || '') + framework,
-    }));
-    onShowToast('📝 框架已插入');
   };
 
   const handleClaimQuill = async (postId: string) => {
@@ -1807,29 +1753,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                             <span className="flex items-center gap-1">
                               <Feather size={12} /> 第 {claim.relayStep} 棒 (剩 {formatTimeRemaining(claim.expiresAt, now)})
                             </span>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleInsertFramework(post.id)}
-                                className="px-2 py-0.5 rounded bg-[#EFE3CD] border border-[#C5B295] text-[10px] cursor-pointer"
-                              >
-                                框架
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDiceRollForComment(post.id)}
-                                className="px-2 py-0.5 rounded bg-[#EFE3CD] border border-[#C5B295] text-[10px] cursor-pointer"
-                              >
-                                1D100
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleInspirationForComment(post.id)}
-                                className="px-2 py-0.5 rounded bg-[#EFE3CD] border border-[#C5B295] text-[10px] cursor-pointer"
-                              >
-                                灵感
-                              </button>
-                            </div>
                           </div>
 
                           <textarea
