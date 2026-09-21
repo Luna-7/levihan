@@ -30,6 +30,46 @@
         } catch (e) {}
       })();
     </script>
+    <script>
+      // 部署后自动换新版。sw.js 里是 `skipWaiting() + clientsClaim()`，所以新版 SW 一激活
+      // 就会给已受控的页面派发 controllerchange —— 此刻刷新一次，用户就不会一直停在旧缓存上
+      // （否则前台是 SPA，用户不整页跳转就永远看不到新版本，容易误以为「改动没生效」）。
+      // 三个守卫：
+      //   1) 首次安装不刷：那时本来就没有 controller，刷新纯属多余；
+      //   2) 每次页面加载最多刷一次，杜绝循环；
+      //   3) 焦点在输入框 / 文本域时**不当场刷**，挂到下一次切走（visibilitychange → hidden）
+      //      再刷，免得打断正在填写的投稿表单或正在进行的上传。
+      (function () {
+        try {
+          if (!('serviceWorker' in navigator)) return;
+          if (!navigator.serviceWorker.controller) return; // 首次安装，无需刷新
+          var done = false;
+          var pending = false;
+          var reload = function () {
+            if (done) return;
+            done = true;
+            location.reload();
+          };
+          var isTyping = function () {
+            var el = document.activeElement;
+            if (!el) return false;
+            var tag = el.tagName;
+            return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable === true;
+          };
+          navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (done) return;
+            if (isTyping()) {
+              pending = true; // 正在填写：等用户切走再刷
+              return;
+            }
+            reload();
+          });
+          document.addEventListener('visibilitychange', function () {
+            if (pending && document.visibilityState === 'hidden') reload();
+          });
+        } catch (e) {}
+      })();
+    </script>
     <title>利韩土豆仓</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" data-page-node-id="fpp6pwgdZldfAZxCsVcyOz" />
     <link rel="manifest" href="/manifest.webmanifest" />
