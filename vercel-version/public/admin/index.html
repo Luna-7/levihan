@@ -1747,18 +1747,12 @@ function openPdfWithPassword(buf, file, knownPw){
  * 普通 PDF 原样返回；密码错误/取消则抛错中止上传。
  */
 async function unlockPdfToCleanFile(file){
-  // 先探一次：不弹窗，只判断它到底带不带密码
-  var buf = await readFileBytes(file);
-  var needsPw = false;
-  try {
-    await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
-  } catch (e) {
-    if (e && e.name === 'PasswordException') needsPw = true;
-    else throw e;
-  }
-  if (!needsPw) return file;   // 本来就没密码，原样返回
+  // 先走一遍 getPdfDocument：它内部会探测密码并弹窗（必要时）、记进 pdfPwCache。
+  // 若解析完 pdfPwCache 仍无此 file，说明它本就没密码，原样返回。
+  await getPdfDocument(file);
+  if (!pdfPwCache.has(file)) return file;
 
-  // 带密码：逐页渲染成 JPEG（getPdfDocument 内部会弹窗问密码），再用 jsPDF 合成无密码 PDF。
+  // 带密码：逐页渲染成 JPEG（此时 getPdfDocument 已缓存、不再弹窗），再用 jsPDF 合成无密码 PDF。
   // 不能用 saveDocument —— 它保留原加密，导出的仍是要密码的死文件。
   var pages = await renderPdfPagesForVault(file, { maxSide: PDF_PAGE_MAX_SIDE, quality: 0.85 });
   if (!pages || !pages.length) throw new Error('已解锁但逐页渲染失败：' + (file.name || ''));
