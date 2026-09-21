@@ -3,8 +3,14 @@
 土豆粮仓的「同人本上传台」后端。站长在网页上填好信息、选好图片即可发布，
 **不需要再进 COS 控制台**，也**不需要在本地或仓库里存放任何腾讯云密钥**。
 
-- 上传台地址：<https://levihan-tudou-d0g7jivue1ccc4a35-1325571558.tcloudbaseapp.com/admin/>
+- 上传台地址：<https://admin.levihan.asia/>
+  （旧地址 `https://levihan-tudou-d0g7jivue1ccc4a35-1325571558.tcloudbaseapp.com/admin/` 已于 2026-09-21 下线：
+  该 CloudBase 静态托管配额耗尽且镜像内容过期，现仅保留跳转页。**不要再用它进后台。**）
 - 云函数接口：`https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/admin-upload`
+
+> ⚠️ 遗留项：`cloudbaserc.json` 里 `admin-upload` 的 `ALLOWED_ORIGINS` 仍含已下线的 tcloudbaseapp 域名。
+> 因该域名下已无任何可执行页面，不构成实际风险，故**未改动**（避免为一行白名单去重部署云函数）。
+> 下次因其他原因部署 `admin-upload` 时，顺手把那段 origin 删掉即可。
 
 ---
 
