@@ -221,7 +221,7 @@ export const NovelModule: React.FC<Props> = ({
       return;
     }
     if (!uploadTitle.trim() || !uploadAuthor.trim() || !uploadEmail.trim() || !uploadBody.trim()) {
-      onShowToast('请填写标题、作者、邮箱和小说正文');
+      onShowToast('请填写标题、作者、邮箱和正文');
       return;
     }
     if (uploadWarnOn && !uploadWarning.trim()) {
@@ -251,7 +251,7 @@ export const NovelModule: React.FC<Props> = ({
       setUploadWarnOn(false);
       setUploadWarning('');
       setUploadFileName('');
-      onShowToast('小说已提交，审核通过后会进入在线粮仓 📚');
+      onShowToast('文稿已提交，审核通过后会进入在线粮仓 📚');
     } catch (error) {
       onShowToast(error instanceof Error ? error.message : '小说提交失败，请稍后重试');
     } finally {
@@ -346,7 +346,7 @@ export const NovelModule: React.FC<Props> = ({
               onClick={() => { soundManager.playWoodTap(); setUploadKind('novel'); setShowUpload(true); }}
               className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#B7791F] border border-[#9A6519] text-[#FFFEEF] font-pixel text-[11px] font-bold cursor-pointer transition-colors hover:bg-[#9A6519]"
             >
-              ✍️ 上传小说
+              ✍️ 上传文
             </button>
           </div>
           {filteredNovels.length === 0 ? (
@@ -455,7 +455,7 @@ export const NovelModule: React.FC<Props> = ({
               onClick={() => { soundManager.playWoodTap(); setUploadKind('recommend'); setShowUpload(true); }}
               className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#B7791F] border border-[#9A6519] text-[#FFFEEF] font-pixel text-[11px] font-bold cursor-pointer transition-colors hover:bg-[#9A6519]"
             >
-              ✎ 推荐外链
+              ✎ 推荐文
             </button>
           </div>
           {filteredRecs.length === 0 ? (
@@ -592,15 +592,15 @@ export const NovelModule: React.FC<Props> = ({
             <CardPatternOverlay opacity={0.12} mode="multiply" />
             <div className="relative flex items-center justify-between gap-3 border-b border-[#D5C9AF] pb-2">
               <div>
-                <h3 className="font-pixel text-sm font-bold text-[#1E4334]">上传小说 / 推荐</h3>
+                <h3 className="font-pixel text-sm font-bold text-[#1E4334]">上传文 / 推荐文</h3>
                 <p className="text-[10px] text-[#7A6958] mt-1">投稿将进入待审收件箱，通过后公开展示。</p>
               </div>
               <button type="button" onClick={() => setShowUpload(false)} className="text-lg text-[#5B4636] cursor-pointer" aria-label="关闭上传窗口">×</button>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setUploadKind('novel')} className={`py-2 border font-bold text-xs ${uploadKind === 'novel' ? 'bg-[#1E4334] text-[#F9E79F]' : 'bg-white text-[#5B4636]'}`}>上传小说</button>
-              <button type="button" onClick={() => setUploadKind('recommend')} className={`py-2 border font-bold text-xs ${uploadKind === 'recommend' ? 'bg-[#1E4334] text-[#F9E79F]' : 'bg-white text-[#5B4636]'}`}>推荐外链</button>
+              <button type="button" onClick={() => setUploadKind('novel')} className={`py-2 border font-bold text-xs ${uploadKind === 'novel' ? 'bg-[#1E4334] text-[#F9E79F]' : 'bg-white text-[#5B4636]'}`}>上传文</button>
+              <button type="button" onClick={() => setUploadKind('recommend')} className={`py-2 border font-bold text-xs ${uploadKind === 'recommend' ? 'bg-[#1E4334] text-[#F9E79F]' : 'bg-white text-[#5B4636]'}`}>推荐文</button>
             </div>
 
             {uploadKind === 'novel' ? <><div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -639,7 +639,7 @@ export const NovelModule: React.FC<Props> = ({
             </div>}
 
             <button type="submit" disabled={isUploading} className="w-full py-2.5 bg-[#1E4334] text-[#F9E79F] border border-[#153025] font-pixel text-xs font-bold cursor-pointer disabled:opacity-50">
-              {isUploading ? '提交中…' : uploadKind === 'novel' ? '提交小说稿件' : '提交推荐审核'}
+              {isUploading ? '提交中…' : uploadKind === 'novel' ? '提交文稿' : '提交推荐审核'}
             </button>
           </form>
         </div>,
