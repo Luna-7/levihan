@@ -349,6 +349,12 @@ function normalizeExternalLink(rawUrl) {
     return BLOCKED_LINK_SCHEMES.has(schemeMatch[1].toLowerCase()) ? '' : s;
   }
   if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}([/?#].*)?$/i.test(s)) return `https://${s}`;
+  // 分享文案常是「【标题】 https://…」混合文本：从中抽出链接部分（App scheme 与 http(s) 都认）
+  const m = /[a-z][a-z0-9+.-]*:\/\/[^\s"'<>【】（）《》「」『』，。；！？]+/i.exec(s);
+  if (m) {
+    const m2 = /^([a-z][a-z0-9+.-]*):\/\//i.exec(m[0]);
+    if (m2 && !BLOCKED_LINK_SCHEMES.has(m2[1].toLowerCase())) return m[0];
+  }
   return '';
 }
 

@@ -31,7 +31,9 @@ export const normalizeShareLink = (raw: string): string => {
   if (!s) return '';
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
   if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}([/?#].*)?$/i.test(s)) return `https://${s}`;
-  return '';
+  // 分享文案常是「【标题】 https://…」混合文本：从中抽出链接部分（App scheme 与 http(s) 都认）
+  const m = /[a-z][a-z0-9+.-]*:\/\/[^\s"'<>【】（）《》「」『』，。；！？]+/i.exec(s);
+  return m ? m[0] : '';
 };
 
 /** 是否为 App 自定义 scheme 链接（bilibili:// 等）——这类抓不了预览，只出跳转卡 */
@@ -3148,7 +3150,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                   {composeCategory === 'links' && (
                     <div className="relative z-10 bg-[#FDF6E7] p-2.5 rounded-xl border border-[#E0C48C] space-y-2">
                       <label className="text-[10px] font-bold text-[#8A5A12] block">
-                        🔗 外链地址 (必填 · B站 / LOFTER / 小红书 / 微博 / AO3 或各 App 分享链接均可):
+                        🔗 外链地址 (必填 · 直接粘贴整段分享文案也行，会自动抽出链接):
                       </label>
                       <div className="flex gap-2">
                         <input
