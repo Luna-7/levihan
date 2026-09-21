@@ -4,6 +4,7 @@ import { soundManager } from '../utils/audio';
 import { getAccessToken, getCurrentProfile } from '../utils/cloudbaseToken';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
+import { normalizeShareLink } from './RestaurantForum';
 import { Upload, Link as LinkIcon, DollarSign, User as UserIcon, AlertTriangle, Search, PlusCircle, X, ShieldAlert, CheckCircle2, Plus, Trash2, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 export interface MarketItem {
@@ -213,8 +214,10 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
       onShowToast('⚠️ 必须上传购买或交易外链');
       return;
     }
-    if (!formLink.trim().startsWith('http://') && !formLink.trim().startsWith('https://')) {
-      onShowToast('⚠️ 链接格式不正确，必须以 http:// 或 https:// 开头');
+    // 与安利墙/市集表单同一套归一化：App 分享链接与裸域名都放行
+    const normalizedMarketLink = normalizeShareLink(formLink);
+    if (!normalizedMarketLink) {
+      onShowToast('⚠️ 请粘贴网页链接或 App 分享链接（裸域名也行，会自动补 https）');
       return;
     }
 
@@ -226,7 +229,7 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
       price: priceNum,
       image: formImages[0], // fallback main cover
       images: formImages, // full array
-      link: formLink.trim(),
+      link: normalizedMarketLink,
       description: formDesc.trim() || '暂无详细描述。',
       nickname: finalNickname,
       date: new Date().toISOString().split('T')[0]
@@ -520,9 +523,10 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
                 <div className="relative">
                   <LinkIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C7A68]" />
                   <input
-                    type="url"
+                    type="text"
+                    inputMode="url"
                     required
-                    placeholder="必须是闲鱼、淘宝、微店等合规跳转地址，以 http/https 开头"
+                    placeholder="链接或裸域名均可，App 分享链接也可以"
                     value={formLink}
                     onChange={(e) => setFormLink(e.target.value)}
                     className="w-full pl-8 pr-3 py-2 bg-[#FAF5E8] border-2 border-[#D5C9AF] rounded-lg focus:outline-none focus:border-[#1E4334]"
