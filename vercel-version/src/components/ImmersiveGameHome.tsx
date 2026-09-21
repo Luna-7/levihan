@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { MiniProgramJumpGrid } from './MiniProgramJumpGrid';
 import { HomeAnnouncementGrid } from './HomeAnnouncementGrid';
+import { HomeTodaysUpdates } from './HomeTodaysUpdates';
 import { RestaurantForum } from './RestaurantForum';
 import { TatakaruGame } from './TatakaruGame';
 import { GameLeaderboard } from './GameLeaderboard';
@@ -130,6 +131,15 @@ export const ImmersiveGameHome: React.FC<Props> = ({
             onShowToast={onShowToast}
           />
         </section>
+
+        {/* ====================================================
+            【中段】今日上新（漫画本 / 小说本 / 接力棒）
+            —— 固定高度不滚动；今天无更新时整栏自动隐藏
+           ==================================================== */}
+        <HomeTodaysUpdates
+          onNavigateTab={onNavigateTab}
+          onShowToast={onShowToast}
+        />
 
         {/* ====================================================
             【下段】：3 个大复古羊皮纸入口 (塔塔开 + 影视厅 + 巨人资源)

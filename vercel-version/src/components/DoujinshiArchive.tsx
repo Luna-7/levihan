@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   DOUJIN_ARCHIVE_DATA,
 } from '../data/doujinArchiveData';
@@ -34,6 +34,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const [selectedCategory, setSelectedCategory] = useState<string>('漫画本');
   const [selectedTag, setSelectedTag] = useState<string>('全部');
   const [selectedAuthor, setSelectedAuthor] = useState<string>('全部');
+  // 排序方式：'pages' = 从页数多到页数少（默认），'new' = 从新到旧
+  const [sortBy, setSortBy] = useState<'pages' | 'new'>('pages');
   const previewLoggedIn = import.meta.env.DEV && new URLSearchParams(window.location.search).get('previewAuth') === '1';
   const [isMangaUnlocked, setIsMangaUnlocked] = useState<boolean>(previewLoggedIn);
   const [isCheckingLogin, setIsCheckingLogin] = useState<boolean>(true);
@@ -81,7 +83,17 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
       cosService.loadNovelList().then(setNovels).catch(() => {});
     };
     window.addEventListener('levihan-novels-changed', reloadNovels);
-    return () => window.removeEventListener('levihan-novels-changed', reloadNovels);
+    // 首页「今日上新」点小说本 → 切到「小说本」分类
+    const openNovelCat = () => {
+      setSelectedCategory('小说本');
+      setSelectedTag('全部');
+      setSelectedAuthor('全部');
+    };
+    window.addEventListener('levihan-open-novel-category', openNovelCat);
+    return () => {
+      window.removeEventListener('levihan-novels-changed', reloadNovels);
+      window.removeEventListener('levihan-open-novel-category', openNovelCat);
+    };
   }, []);
 
   useEffect(() => {
@@ -182,6 +194,26 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
     return matchCat && matchTag && matchAuthor && matchSearch;
   });
+
+  // 排序：默认「页数多→少」；「从新到旧」按 updatedAt/createdAt 降序；
+  // 缺失日期的条目视为最旧（排到末尾）。两种排序都以前者为主、后者（页数/日期）为次级稳定键。
+  const sortedBooks = useMemo(() => {
+    const getTime = (b: DoujinBookItem) =>
+      new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
+    const arr = [...filteredBooks];
+    if (sortBy === 'new') {
+      arr.sort((a, b) => {
+        const diff = getTime(b) - getTime(a);
+        return diff !== 0 ? diff : (b.pages || 0) - (a.pages || 0);
+      });
+    } else {
+      arr.sort((a, b) => {
+        const diff = (b.pages || 0) - (a.pages || 0);
+        return diff !== 0 ? diff : getTime(b) - getTime(a);
+      });
+    }
+    return arr;
+  }, [filteredBooks, sortBy]);
 
   // 处理封面加载失败
   const handleCoverError = (bookId: string) => {
@@ -400,6 +432,41 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
             </select>
           </div>
         )}
+
+        {/* 排序：漫画本/插画集卡片网格通用；小说本使用自己的模块，此处隐藏 */}
+        {selectedCategory !== '小说本' && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-dashed border-[#E0D5BE]">
+            <span className="text-[11px] font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">排序:</span>
+            <div className="flex flex-wrap items-center gap-1">
+              <button
+                onClick={() => {
+                  soundManager.playBlip();
+                  setSortBy('pages');
+                }}
+                className={`px-2 py-0.5 rounded-xs border text-xs font-retro-jp transition-all cursor-pointer whitespace-nowrap shrink-0 select-none active:scale-95 ${
+                  sortBy === 'pages'
+                    ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-2xs'
+                    : 'bg-[#FAF5E8] text-[#7A6958] border-[#E0D5BE] hover:bg-white active:bg-[#EAE2CE]'
+                }`}
+              >
+                页数多→少
+              </button>
+              <button
+                onClick={() => {
+                  soundManager.playBlip();
+                  setSortBy('new');
+                }}
+                className={`px-2 py-0.5 rounded-xs border text-xs font-retro-jp transition-all cursor-pointer whitespace-nowrap shrink-0 select-none active:scale-95 ${
+                  sortBy === 'new'
+                    ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-2xs'
+                    : 'bg-[#FAF5E8] text-[#7A6958] border-[#E0D5BE] hover:bg-white active:bg-[#EAE2CE]'
+                }`}
+              >
+                从新到旧
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 小说本 = 专属视图：分类切换（合订本 / 同好来稿）+ 瀑布流 */}
@@ -416,7 +483,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           onLogin={() => window.dispatchEvent(new Event('levihan-open-login'))}
         >
           <div className="columns-1 sm:columns-2 gap-3.5 sm:gap-4.5 w-full">
-        {filteredBooks.map((book) => {
+        {sortedBooks.map((book) => {
           // 通过 COS 逻辑层动态生成封面 CDN 地址
           const coverUrl = cosService.getCoverUrl(book);
           const commentCount = getCommentCountByBookId(book.id);

@@ -199,7 +199,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
           避免底图在宽屏上被压扁。上限 204px 防止桌面端卡片过高。
          ==================================================== */}
       <div
-        className="w-full flex flex-col gap-3 sm:gap-3.5 max-w-md sm:max-w-2xl lg:max-w-3xl mx-auto"
+        className="w-full flex flex-col gap-2 sm:gap-2.5 max-w-md sm:max-w-2xl lg:max-w-3xl mx-auto"
         style={{ containerType: 'inline-size' }}
       >
         {loadingAnnouncements && (
@@ -230,7 +230,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
                 setShowDetailModal(item);
               }}
               className="announcement-board group relative shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-between gap-2.5 sm:gap-3 active:scale-[0.99]"
-              style={{ minHeight: 'min(28.63cqw, 196px)' }}
+              style={{ padding: '9px 12px' }}
             >
               {/* 左侧内容区：徽章 + 文本 + 日期 */}
               <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
@@ -259,14 +259,14 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
 
                   {/* 公告正文（管理台 description） */}
                   {item.description && (
-                    <p className="font-serif-title text-[10px] sm:text-xs text-[#5D4733] mt-1 line-clamp-3 leading-normal">
+                    <p className="font-serif-title text-[10px] sm:text-xs text-[#5D4733] mt-1 line-clamp-1 leading-normal">
                       {item.description}
                     </p>
                   )}
 
                   {/* 发布人（管理台 author） */}
                   {item.author && (
-                    <div className="flex items-center gap-2 mt-2 text-[10px] text-[#7A6048] leading-none">
+                    <div className="hidden sm:flex items-center gap-2 mt-1 text-[10px] text-[#7A6048] leading-none">
                       <span className="font-retro-jp text-[#8C7A65] truncate">· {item.author}</span>
                     </div>
                   )}
