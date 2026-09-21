@@ -19,6 +19,25 @@ import { LinkShare, LinkShareCard, LinkShareModal, platformLabel } from './LinkS
 
 export type PostCategory = 'chat' | 'relay' | 'roleplay' | 'market' | 'links';
 
+/**
+ * 时间显示：云函数落库的是 ISO 串（2026-09-21T08:04:14.263Z），直接渲染很扎眼；
+ * 种子数据/老贴里手写的「刚刚」「3 天前」这类文案不是合法日期，原样保留。
+ */
+export const fmtTime = (t: string): string => {
+  if (!t) return '';
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return t;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  if (sameDay) return `今天 ${hm}`;
+  const md = `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  if (d.getFullYear() === now.getFullYear()) return `${md} ${hm}`;
+  return `${d.getFullYear()}-${md} ${hm}`;
+};
+
 export type ForumComment = {
   id: string;
   author: string;
@@ -1742,7 +1761,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                     </div>
                     <div className="flex items-center gap-2 text-xs">
                       <span className="text-[#3B2818] font-bold">{post.author}</span>
-                      <span className="text-[#8C7A65] text-[10px]">{post.createdAt}</span>
+                      <span className="text-[#8C7A65] text-[10px]">{fmtTime(post.createdAt)}</span>
                       {currentUid && post.uid === currentUid && (
                         <>
                           <button
@@ -1868,7 +1887,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-[#8C7A65]">{comment.createdAt}</span>
+                                  <span className="text-[10px] text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
                                   {currentUid && comment.uid === currentUid && (
                                     <button
                                       type="button"
@@ -1996,7 +2015,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                         </span>
                       )}
                       <span className="text-[#2C2016] font-bold text-xs truncate">{post.author}</span>
-                      <span className="text-[#8C7A65] text-[10px] shrink-0">{post.createdAt}</span>
+                      <span className="text-[#8C7A65] text-[10px] shrink-0">{fmtTime(post.createdAt)}</span>
                       {currentUid && post.uid === currentUid && (
                         <button
                           type="button"
@@ -2095,7 +2114,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-[#8C7A65]">{comment.createdAt}</span>
+                                  <span className="text-[10px] text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
                                   {currentUid && comment.uid === currentUid && (
                                     <button
                                       type="button"
@@ -2196,7 +2215,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                         </span>
                       </div>
 
-                      <span className="text-[#8C7A65] text-[10px]">{post.createdAt}</span>
+                      <span className="text-[#8C7A65] text-[10px]">{fmtTime(post.createdAt)}</span>
                       {currentUid && post.uid === currentUid && (
                         <button
                           type="button"
@@ -2344,7 +2363,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                                 </div>
 
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-[#8C7A65]">{comment.createdAt}</span>
+                                  <span className="text-[10px] text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
                                   {currentUid && comment.uid === currentUid && (
                                     <button
                                       type="button"
@@ -2484,7 +2503,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       ☕
                     </div>
                     <span className="text-[#2C2016] font-bold text-xs">{post.author}</span>
-                    <span className="text-[#8C7A65] text-[10px]">{post.createdAt}</span>
+                    <span className="text-[#8C7A65] text-[10px]">{fmtTime(post.createdAt)}</span>
                     {currentUid && post.uid === currentUid && (
                       <button
                         type="button"
@@ -2581,7 +2600,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                                 )}
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-[#8C7A65]">{comment.createdAt}</span>
+                                <span className="text-[10px] text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
                                 {currentUid && comment.uid === currentUid && (
                                   <button
                                     type="button"
