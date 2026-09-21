@@ -1026,6 +1026,8 @@ async function handle(action, payload) {
         comment.diceRoll = { sides: Number(dr.sides) || 6, value: Number(dr.value) || 0, verdict: String(dr.verdict || '').trim().slice(0, 200) || undefined };
       }
       post.comments.push(comment);
+      // 故事接龙：递交接棒后立即释放羽毛笔，否则下次 forumList 会把锁还原回来（一直显示锁定/旧棒数）
+      if (post.category === 'relay') post.quillClaim = undefined;
       await writeForum(posts);
       // 故事接龙：接棒后自动重编译，把最新一棒并入合订本
       if (post.category === 'relay') {
@@ -1129,6 +1131,24 @@ async function handle(action, payload) {
       try { await saveRelayNovel(compileRelayToNovel(post)); }
       catch (e) { console.error('[relay] 编辑后更新合订本失败', e && e.message); }
       return { ok: true, post, posts };
+    }
+
+    // 维护动作（需管理员 token）：清理接龙残留锁——认领的棒已递交或认领已过期却没释放
+    case 'forumFixStaleClaims': {
+      const posts = await readForum();
+      const ts = Date.now();
+      const fixed = [];
+      for (const p of posts) {
+        if (!p || p.category !== 'relay' || !p.quillClaim) continue;
+        const commentCount = Array.isArray(p.comments) ? p.comments.length : 0;
+        const stale = (Number(p.quillClaim.relayStep) || 0) <= commentCount + 1 || p.quillClaim.expiresAt <= ts;
+        if (stale) {
+          fixed.push({ id: p.id, step: p.quillClaim.relayStep, claimedBy: p.quillClaim.claimedBy });
+          p.quillClaim = undefined;
+        }
+      }
+      if (fixed.length) await writeForum(posts);
+      return { ok: true, fixed };
     }
 
     case 'marketList': return { ok: true, items: await readMarket() };

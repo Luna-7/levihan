@@ -1242,6 +1242,9 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
         postId, author: authorName, body: text,
         characterName: authorName, characterAvatar, isHost,
         relayStep: stepIndex, wordCount: text.length, diceRoll,
+      }).then((result) => {
+        // 以服务端真值收敛本地状态（服务端已释放羽毛笔）
+        if (Array.isArray(result.posts)) persist(result.posts);
       }).catch(() => onShowToast('⚠️ 接棒同步失败（只保存在本机，其他设备看不到）'));
       onShowToast(`第 ${stepIndex} 棒已递交 (${text.length}字)，合订本已同步更新 📖`);
     } else {
@@ -1825,13 +1828,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                               >
                                 灵感
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => handleReleaseQuill(post.id)}
-                                className="px-2 py-0.5 rounded bg-[#E5D5BA] border border-[#C5B295] text-[10px] cursor-pointer"
-                              >
-                                归还
-                              </button>
                             </div>
                           </div>
 
@@ -1851,21 +1847,31 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                                 isWordCountMet ? 'bg-[#1E4334] text-[#F9E79F]' : 'bg-[#EFE3CD] text-[#8C6D4F]'
                               }`}
                             >
-                              {currentDraft.length} / {RELAY_MIN_WORDS} 字
+                              最少 {RELAY_MIN_WORDS} 字 (已写 {currentDraft.length})
                             </span>
 
-                            <button
-                              type="button"
-                              onClick={() => addComment(post.id)}
-                              className={`px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-2xs ${
-                                isWordCountMet
-                                  ? 'bg-[#8C6D4F] text-white'
-                                  : 'bg-[#C5B295] text-white'
-                              }`}
-                            >
-                              <Feather size={12} />
-                              <span>递交第 {claim.relayStep} 棒</span>
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleReleaseQuill(post.id)}
+                                className="px-3 py-1.5 rounded-full text-xs font-bold bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#8C6D4F] cursor-pointer transition-all active:scale-95 shadow-2xs"
+                                title="归还羽毛笔（放弃本次认领）"
+                              >
+                                归还
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => addComment(post.id)}
+                                className={`px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-2xs ${
+                                  isWordCountMet
+                                    ? 'bg-[#8C6D4F] text-white'
+                                    : 'bg-[#C5B295] text-white'
+                                }`}
+                              >
+                                <Feather size={12} />
+                                <span>递交第 {claim.relayStep} 棒</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )}
