@@ -44,8 +44,20 @@ const postAuth = async (action: string, body: Record<string, unknown>, token?: s
     body: JSON.stringify({ action, ...body }),
   });
   const result = await response.json().catch(() => null);
-  if (!response.ok || !result?.ok) throw new Error(result?.message || '账号服务暂时不可用，请稍后重试');
+  if (!response.ok || !result?.ok) {
+    // 把 HTTP 状态挂到 Error 上，供 refresh 区分「token 真失效(401/403)」与「网络/服务异常」
+    const err = new Error(result?.message || '账号服务暂时不可用，请稍后重试') as Error & { status?: number };
+    err.status = response.status;
+    throw err;
+  }
   return result;
+};
+
+/** 判断错误是否为「服务端明确判定登录态失效」（401 未认证 / 403 停用），而非网络/服务瞬时故障 */
+const isAuthExpired = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const status = (error as { status?: number }).status;
+  return status === 401 || status === 403;
 };
 
 const validateNickname = (nickname: string) =>
@@ -102,9 +114,15 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
     try {
       const result = await postAuth('me', {}, token);
       setAccount(result.profile as AuthProfile);
-    } catch {
-      setSessionToken(null);
-      setAccount(null);
+    } catch (error) {
+      // 只有「服务端明确判定 token 失效」（401/403）才清登录态。
+      // 网络抖动 / 云函数冷启动 / 5xx 属于瞬时故障，绝不该把用户踢下线——
+      // 之前无差别 setSessionToken(null) 导致「每隔几小时就被莫名退出登录」。
+      if (isAuthExpired(error)) {
+        setSessionToken(null);
+        setAccount(null);
+      }
+      // 否则保留本地 token 与已登录 UI，等下次 refresh 再校验。
     }
   };
   useEffect(() => { void refresh(); }, []);
