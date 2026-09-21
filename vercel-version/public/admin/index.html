@@ -1676,6 +1676,8 @@ function isImageFile(f){
    直接渲染出来上传一方面体积失控，一方面站点也不需要那么大的图。 */
 var PDF_PAGE_MAX_SIDE = 2000;
 var pdfDocCache = new Map();
+/** 记住某个 file 已解锁、对应的密码，避免同一个带密码 PDF 反复弹窗 */
+var pdfPwCache = new Map();
 
 function pdfJsReady(){
   if (!window.pdfjsLib) return false;
@@ -1700,12 +1702,88 @@ function readFileBytes(file){
 /** 同一个 PDF 只解析一次；失败时把缓存清掉，避免把 reject 的 Promise 一直挂着 */
 function getPdfDocument(file){
   if (!pdfJsReady()) return Promise.reject(new Error('pdf.js 未加载，无法处理 PDF（vendor 依赖未加载完成，请刷新页面后重试）'));
-  if (pdfDocCache.has(file)) return pdfDocCache.get(file);
+  // 已解锁过的 PDF 用「file + password」作缓存键，普通 PDF 沿用 file 本身
+  var cached = pdfPwCache.get(file);
+  var key = cached ? { file: file, pw: cached } : file;
+  if (pdfDocCache.has(key)) return pdfDocCache.get(key);
   var pr = readFileBytes(file)
-    .then(function(buf){ return pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise; })
-    .catch(function(err){ pdfDocCache.delete(file); throw err; });
-  pdfDocCache.set(file, pr);
+    .then(function(buf){ return openPdfWithPassword(buf, file, cached); })
+    .catch(function(err){ pdfDocCache.delete(key); throw err; });
+  pdfDocCache.set(key, pr);
   return pr;
+}
+
+/**
+ * 用（可选的）密码打开 PDF。带密码的 PDF 在缺密码时 pdf.js 会抛
+ * PasswordException —— 这里捕获后弹窗问密码，用 { data, password } 重试；
+ * 成功则把密码记进 pdfPwCache，后续拆页/封面解析/重渲染都直接复用。
+ */
+function openPdfWithPassword(buf, file, knownPw){
+  var params = { data: new Uint8Array(buf) };
+  if (knownPw) params.password = knownPw;
+  return pdfjsLib.getDocument(params).promise.catch(function(err){
+    var isPw = err && (err.name === 'PasswordException' || /password/i.test(err && err.message || ''));
+    if (!isPw) throw err;
+    var name = (file && file.name) || '该 PDF';
+    var pw = window.prompt('「' + name + '」是一份带密码的 PDF，请输入打开密码：');
+    if (pw == null) throw new Error('已取消：' + name + ' 需要密码才能打开。');
+    if (pw === '') throw new Error(name + ' 的密码不能为空，已中止。');
+    return pdfjsLib.getDocument({ data: new Uint8Array(buf), password: pw }).promise
+      .then(function(doc){ pdfPwCache.set(file, pw); return doc; })
+      .catch(function(err2){
+        var stillPw = err2 && (err2.name === 'PasswordException' || /password/i.test(err2 && err2.message || ''));
+        if (stillPw) throw new Error(name + ' 的密码不正确，请重新选择文件后重试。');
+        throw err2;
+      });
+  });
+}
+
+/**
+ * 解锁带密码的 PDF 并导出一份「无密码」的干净 PDF（File）。
+ * 供深度加密（敏感模式）整份直传前调用：那份 PDF 要能被读者的
+ * SecureComicReader 解密外层后直接打开，内层不能再留一道密码。
+ * 普通 PDF 原样返回；密码错误/取消则抛错中止上传。
+ */
+async function unlockPdfToCleanFile(file){
+  // 先探一次：不弹窗，只判断它到底带不带密码
+  var buf = await readFileBytes(file);
+  var needsPw = false;
+  try {
+    await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  } catch (e) {
+    if (e && e.name === 'PasswordException') needsPw = true;
+    else throw e;
+  }
+  if (!needsPw) return file;   // 本来就没密码，原样返回
+
+  // 带密码：逐页渲染成 JPEG（getPdfDocument 内部会弹窗问密码），再用 jsPDF 合成无密码 PDF。
+  // 不能用 saveDocument —— 它保留原加密，导出的仍是要密码的死文件。
+  var pages = await renderPdfPagesForVault(file, { maxSide: PDF_PAGE_MAX_SIDE, quality: 0.85 });
+  if (!pages || !pages.length) throw new Error('已解锁但逐页渲染失败：' + (file.name || ''));
+  var JsPDF = (window.jspdf && window.jspdf.jsPDF);
+  if (typeof JsPDF !== 'function') throw new Error('jsPDF 未加载，无法合成无密码 PDF。');
+  var PX_TO_PT = 0.75;
+  var doc = null;
+  for (var i = 0; i < pages.length; i++) {
+    var pf = pages[i];
+    var url = URL.createObjectURL(pf);
+    try {
+      var dim = await new Promise(function(res, rej){
+        var img = new Image();
+        img.onload = function(){ res({ w: img.naturalWidth, h: img.naturalHeight }); };
+        img.onerror = function(){ rej(new Error('读取渲染页失败：' + pf.name)); };
+        img.src = url;
+      });
+      var pageW = dim.w * PX_TO_PT, pageH = dim.h * PX_TO_PT;
+      if (!doc) doc = new JsPDF({ unit: 'pt', format: [pageW, pageH], orientation: pageW > pageH ? 'landscape' : 'portrait', compress: true });
+      else doc.addPage([pageW, pageH], pageW > pageH ? 'landscape' : 'portrait');
+      doc.addImage(url, 'JPEG', 0, 0, pageW, pageH, undefined, 'FAST');
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+  var outBytes = doc.output('arraybuffer');
+  return new File([outBytes], file.name, { type: 'application/pdf' });
 }
 
 function canvasToImageBlob(canvas, useWebp, quality){
@@ -2297,7 +2375,10 @@ if (window.LeVihanVault) {
     // 把 pdf.js 渲染器注入给 vault 模块：PDF 输入在敏感模式下是原字节直通，
     // 图像旋钮对它无效，只有逐页重渲染才能压缩 —— 而 pdf.js 已经在页面里了，
     // 注入比让 secure-upload.js 自己再引一份依赖干净。
-    renderPdfPages: renderPdfPagesForVault
+    renderPdfPages: renderPdfPagesForVault,
+    // 带密码 PDF 解锁器：敏感模式整份直传前，先把内层密码解开导出无密码版，
+    // 否则读者解密外层后仍打不开（双层加密死文件）。
+    unlockPdf: unlockPdfToCleanFile
   });
 }
 

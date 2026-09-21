@@ -182,6 +182,13 @@
      * 本模块因此**不必自己引 pdf.js** —— 没注入就自动跳过 PDF 压缩档。
      */
     renderPdfPages: null,
+    /**
+     * 带密码 PDF 解锁器，签名 (file) => Promise<File>。
+     * 由管理台注入（复用 index.html 的 pdf.js）：输入带密码的 PDF 时，
+     * 弹窗问密码、解锁并导出一份无密码 PDF 返回；普通 PDF 原样返回；
+     * 密码错误/取消则 reject。没注入时跳过此检测（保持原字节直通行为）。
+     */
+    unlockPdf: null,
   };
 
   var cosInstance = null;      // cos-js-sdk-v5 实例（懒加载，凭证自动续期）
@@ -197,6 +204,7 @@
     if (options.apiEndpoint) runtime.apiEndpoint = String(options.apiEndpoint);
     if (typeof options.getToken === 'function') runtime.getToken = options.getToken;
     if (typeof options.renderPdfPages === 'function') runtime.renderPdfPages = options.renderPdfPages;
+    if (typeof options.unlockPdf === 'function') runtime.unlockPdf = options.unlockPdf;
     if (options.cos) Object.assign(CONFIG.COS, options.cos);
     ['VERSIONED_KEY', 'RANDOM_IV', 'UPLOAD_MODE', 'MAX_INPUT_BYTES', 'MAX_OUTPUT_BYTES',
      'AUTO_DOWNSCALE', 'COMPRESS_LADDER', 'PDF_LADDER', 'VAULT_PART_BYTES',
@@ -737,6 +745,15 @@
     // 单个文件且是 PDF → 直接读取，不做任何转码（保真且最快）
     var firstBytes = new Uint8Array(await readFileAsArrayBuffer(list[0]));
     if (list.length === 1 && isPdfBytes(firstBytes)) {
+      // 带密码的 PDF：外层 AES 加密后，读者解密出来仍是一份「带密码」的死文件。
+      // 注入的 unlockPdf 会先解锁并导出无密码版本，否则等于把坏数据静默传上去。
+      if (typeof runtime.unlockPdf === 'function') {
+        var unlocked = await runtime.unlockPdf(list[0]);
+        if (unlocked && unlocked !== list[0]) {
+          firstBytes = new Uint8Array(await readFileAsArrayBuffer(unlocked));
+          if (onProgress) onProgress({ stage: 'read', ratio: 0.6, text: '已解除 PDF 密码，导出无密码版本' });
+        }
+      }
       if (onProgress) onProgress({ stage: 'read', ratio: 1, text: '检测到 PDF 原文件，跳过图片合并' });
       if (typeof onStats === 'function') {
         onStats({ pages: null, passthrough: true, reencoded: 0, downscaled: 0, sourceBytes: firstBytes.length, pdfBytes: firstBytes.length, wholePdf: true });
