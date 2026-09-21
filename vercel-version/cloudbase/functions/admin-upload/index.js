@@ -72,12 +72,26 @@ const MAX_NOVEL_CHARS = 500000;     // 单篇正文字数上限
 const NOVEL_VAULT_DIR = 'novels_vault/';
 const NOVEL_VAULT_PASSWORD = 'levihan';
 const NOVEL_VAULT_IV_UTF8 = 'levihan-vault-iv';
+/* 小说评论区：novel_comments/{id}.json（一篇一个文件，阅读器只拉自己那篇） */
+const NOVEL_COMMENTS_DIR = 'novel_comments/';
+const MAX_NOVEL_COMMENTS = 500; // 单篇评论上限（超出丢最旧的）
 
 function encryptNovelBody(text) {
   const key = crypto.createHash('sha256').update(NOVEL_VAULT_PASSWORD).digest();
   const iv = Buffer.from(NOVEL_VAULT_IV_UTF8, 'utf8');
   const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
   return Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]).toString('base64');
+}
+
+/** 与前端 src/utils/novelVault.ts 同参数（key=SHA-256(密码)、IV=ASCII、AES-256-CBC、Base64） */
+function decryptNovelBody(cipherBase64) {
+  const key = crypto.createHash('sha256').update(NOVEL_VAULT_PASSWORD).digest();
+  const iv = Buffer.from(NOVEL_VAULT_IV_UTF8, 'utf8');
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+  return Buffer.concat([
+    decipher.update(Buffer.from(String(cipherBase64 || '').trim(), 'base64')),
+    decipher.final(),
+  ]).toString('utf8');
 }
 const MAX_BYTES = 4 * 1024 * 1024; // 单文件上限 4MB
 const MAX_BODY = 6 * 1024 * 1024; // 请求体上限 6MB（HTTP 访问服务 / API 网关的硬上限）
@@ -606,6 +620,66 @@ async function writeNovels(novels) {
   });
 }
 
+/**
+ * 按加密与否把正文写到正确位置，并清掉另一侧的旧文件。
+ * 编辑/保存可能切换「普通 ↔ 敏感」，若只写新位置不清旧位置，
+ * 会留下一份孤儿密文/明文：敏感篇的明文一旦残留，等于加密形同虚设。
+ */
+async function writeNovelBody(id, text, sensitive) {
+  const plainKey = `${NOVEL_DIR}${id}.txt`;
+  const vaultKey = `${NOVEL_VAULT_DIR}${id}_secure.txt`;
+  const target = sensitive ? vaultKey : plainKey;
+  const stale = sensitive ? plainKey : vaultKey;
+  await putObject({
+    Bucket: BUCKET,
+    Region: REGION,
+    Key: target,
+    Body: Buffer.from(sensitive ? encryptNovelBody(text) : text, 'utf8'),
+    ContentType: 'text/plain; charset=utf-8',
+    CacheControl: 'no-cache',
+  });
+  try {
+    await deleteMultipleObject({ Bucket: BUCKET, Region: REGION, Objects: [{ Key: stale }] });
+  } catch (e) {
+    console.error('[novel] 清理旧正文失败', e && e.message);
+  }
+  return target;
+}
+
+/** 读取某篇小说的明文正文（加密篇解密后返回），供后台编辑回填 */
+async function readNovelBodyText(novel) {
+  if (novel.encrypted) {
+    const res = await getObject({
+      Bucket: BUCKET, Region: REGION, Key: `${NOVEL_VAULT_DIR}${novel.id}_secure.txt`,
+    });
+    const cipher = Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body);
+    return decryptNovelBody(cipher);
+  }
+  const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: `${NOVEL_DIR}${novel.id}.txt` });
+  return Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body);
+}
+
+async function readNovelComments(id) {
+  try {
+    const res = await getObject({
+      Bucket: BUCKET, Region: REGION, Key: `${NOVEL_COMMENTS_DIR}${id}.json`,
+    });
+    const parsed = JSON.parse(Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+
+async function writeNovelComments(id, comments) {
+  await putObject({
+    Bucket: BUCKET, Region: REGION, Key: `${NOVEL_COMMENTS_DIR}${id}.json`,
+    Body: Buffer.from(JSON.stringify(comments, null, 2), 'utf8'),
+    ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache',
+  });
+}
+
 /** 校验并规范化小说元数据；正文字数由调用方传入 */
 function normalizeNovelMeta(raw, chars) {
   const title = String(raw.title || '').trim();
@@ -646,6 +720,18 @@ function normalizeNovelMeta(raw, chars) {
   const tags = rawTags.map((t) => String(t == null ? '' : t).trim()).filter(Boolean).slice(0, 20);
   if (tags.length) meta.tags = tags;
 
+  return meta;
+}
+
+/**
+ * 编辑合并时会先摊开旧 meta 再覆盖新值：新值若被清空（作者说/预警/链接/标签），
+ * {...旧, ...新} 会把旧值留下来，导致「清空」操作永远不生效 —— 这里统一删掉空字段。
+ */
+function pruneEmptyNovelFields(meta) {
+  ['authorUrl', 'authorNote', 'warning', 'tags'].forEach((k) => {
+    const v = meta[k];
+    if (!v || (Array.isArray(v) && !v.length)) delete meta[k];
+  });
   return meta;
 }
 
@@ -878,14 +964,19 @@ const PUBLIC_ACTIONS = new Set([
   'submitCustomOrderEmail',
   'announcementList', 'announcementImageUpload',
   'forumList', 'marketList',
+  'novelCommentList',
 ]);
 // 需用户登录（CloudBase access_token 换 uid）：发布/互动/删除自己的内容
 const USER_ACTIONS = new Set([
   'forumPublish', 'forumComment', 'forumPotato', 'forumClaim', 'forumReleaseClaim',
   'forumDelete', 'forumCommentDelete', 'forumEdit',
   'marketPublish', 'marketDelete',
-  'novelDirectPublish',
+  'novelDirectPublish', 'novelUpdate', 'novelCommentAdd',
+  'novelBody',
 ]);
+/* 用户会话**或**管理员令牌任一即可：删评论 = 本人（uid 比对）或管理员（整篇任意删）。
+   管理员没有用户会话，走普通 USER_ACTIONS 会被 401 挡死。 */
+const USER_OR_ADMIN_ACTIONS = new Set(['novelCommentDelete']);
 
 async function handle(action, payload) {
   switch (action) {
@@ -1394,17 +1485,12 @@ async function handle(action, payload) {
       const tags = rawTags.map((t) => String(t == null ? '' : t).trim()).filter(Boolean).slice(0, 20);
 
       const novelId = 'nv-' + Date.now().toString(36) + crypto.randomBytes(2).toString('hex');
-      await putObject({
-        Bucket: BUCKET,
-        Region: REGION,
-        Key: sensitive ? `${NOVEL_VAULT_DIR}${novelId}_secure.txt` : `${NOVEL_DIR}${novelId}.txt`,
-        Body: Buffer.from(sensitive ? encryptNovelBody(text) : text, 'utf8'),
-        ContentType: 'text/plain; charset=utf-8',
-        CacheControl: 'no-cache',
-      });
+      await writeNovelBody(novelId, text, sensitive);
 
       const meta = normalizeNovelMeta({ id: novelId, title, author, authorUrl, authorNote, warning, tags }, text.length);
       meta.encrypted = sensitive;
+      /* 记下作者 uid：前台「编辑自己的小说」靠它做服务端归属校验（历史旧篇没有 uid，只能管理员改） */
+      meta.uid = payload.__uid;
       const novels = await readNovels();
       novels.unshift(meta);
       novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
@@ -1418,33 +1504,152 @@ async function handle(action, payload) {
       if (!text.trim()) throw httpError('正文不能为空', 400);
       if (text.length > MAX_NOVEL_CHARS) throw httpError(`正文超过 ${MAX_NOVEL_CHARS} 字上限`, 413);
 
-      const meta = normalizeNovelMeta(payload, text.length);
-      await putObject({
-        Bucket: BUCKET,
-        Region: REGION,
-        Key: `${NOVEL_DIR}${meta.id}.txt`,
-        Body: Buffer.from(text, 'utf8'),
-        ContentType: 'text/plain; charset=utf-8',
-        CacheControl: 'no-cache',
-      });
-
       const novels = await readNovels();
-      const idx = novels.findIndex((n) => n && n.id === meta.id);
-      const replaced = idx >= 0;
-      if (replaced) {
-        meta.createdAt = novels[idx].createdAt || meta.createdAt;
-        meta.updatedAt = new Date().toISOString();
-        novels[idx] = meta;
-      } else {
-        novels.unshift(meta);
+      const idx = novels.findIndex((n) => n && n.id === String(payload.id || '').trim());
+      const existing = idx >= 0 ? novels[idx] : null;
+      /* 敏感标记：显式传 sensitive 以它为准；没传则沿用原篇加密状态 ——
+         后台编辑一篇加密小说时若不传，绝不能悄悄转成明文落桶 */
+      const sensitive =
+        payload.sensitive === true ||
+        (payload.sensitive === undefined && Boolean(existing && existing.encrypted));
+
+      const meta = pruneEmptyNovelFields(normalizeNovelMeta(payload, text.length));
+      // 旧篇的 uid / 接龙编译字段等一并保留，否则一次编辑就会把它们抹掉
+      const next = existing ? { ...existing, ...meta } : meta;
+      next.chars = text.length;
+      next.encrypted = sensitive;
+      next.updatedAt = new Date().toISOString();
+      if (existing) {
+        next.createdAt = existing.createdAt || next.createdAt;
+        if (existing.uid) next.uid = existing.uid;   // 作者归属不变，前台作者仍可继续编辑
       }
+      pruneEmptyNovelFields(next);
+
+      await writeNovelBody(next.id, text, sensitive);
+      if (idx >= 0) novels[idx] = next;
+      else novels.unshift(next);
       novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
       await writeNovels(novels);
 
       // 在线小说同样自动登记作者链接
-      try { await upsertAuthor(meta.author, meta.authorUrl); } catch (e) { console.error('[authorLib] 登记失败', e && e.message); }
+      try { await upsertAuthor(next.author, next.authorUrl); } catch (e) { console.error('[authorLib] 登记失败', e && e.message); }
 
-      return { ok: true, replaced, novel: meta, count: novels.length, novels };
+      return { ok: true, replaced: Boolean(existing), novel: next, count: novels.length, novels };
+    }
+
+    /** 用户自助编辑自己上传的小说（需登录 + uid 归属校验） */
+    case 'novelUpdate': {
+      const id = String(payload.id || '').trim();
+      if (!NOVEL_ID_RE.test(id)) throw httpError('非法小说 ID', 400);
+      const text = String(payload.body || '').replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '');
+      if (!text.trim()) throw httpError('正文不能为空', 400);
+      if (text.length > MAX_NOVEL_CHARS) throw httpError(`正文超过 ${MAX_NOVEL_CHARS} 字上限`, 413);
+      const title = String(payload.title || '').trim();
+      const author = String(payload.author || '').trim();
+      if (!title || title.length > 120 || !author || author.length > 80) throw httpError('请填写有效的标题和作者', 400);
+      const authorUrl = String(payload.authorUrl || '').trim().slice(0, 300);
+      if (authorUrl) {
+        let parsed;
+        try { parsed = new URL(authorUrl); } catch { throw httpError('作者主页链接不是有效网址', 400); }
+        if (!['https:', 'http:'].includes(parsed.protocol)) throw httpError('作者主页链接只支持 HTTP(S)', 400);
+      }
+
+      const novels = await readNovels();
+      const idx = novels.findIndex((n) => n && n.id === id);
+      if (idx < 0) throw httpError('小说不存在或已被删除', 404);
+      const cur = novels[idx];
+      if (cur.isRelayCompiled) throw httpError('接龙合订本由茶会接龙自动编译，请编辑对应的接龙帖子', 400);
+      if (!cur.uid) throw httpError('这篇发布于编辑功能上线前，请由管理员在后台修改', 403);
+      if (cur.uid !== payload.__uid) throw httpError('只能编辑自己上传的小说', 403);
+
+      const sensitive = payload.sensitive === true;
+      const meta = pruneEmptyNovelFields(normalizeNovelMeta({ ...payload, id }, text.length));
+      const next = { ...cur, ...meta };
+      next.chars = text.length;
+      next.encrypted = sensitive;
+      next.uid = cur.uid;
+      next.createdAt = cur.createdAt || meta.createdAt;
+      next.updatedAt = new Date().toISOString();
+      pruneEmptyNovelFields(next);
+
+      await writeNovelBody(id, text, sensitive);
+      novels[idx] = next;
+      novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+      await writeNovels(novels);
+      try { await upsertAuthor(next.author, next.authorUrl); } catch (e) { console.error('[authorLib] 登记失败', e && e.message); }
+      return { ok: true, novel: next, count: novels.length, novels };
+    }
+
+    /** 后台编辑回填：返回元数据 + 明文正文（加密篇服务端解密，后台无需感知密钥） */
+    case 'novelGet': {
+      const id = String(payload.id || '').trim();
+      if (!NOVEL_ID_RE.test(id)) throw httpError('非法小说 ID', 400);
+      const novels = await readNovels();
+      const novel = novels.find((n) => n && n.id === id);
+      if (!novel) throw httpError('小说不存在', 404);
+      const body = await readNovelBodyText(novel);
+      return { ok: true, novel, body };
+    }
+
+    /**
+     * 前台阅读器取正文（需登录）：加密篇在服务端解密后返回明文，
+     * 密钥不再下发到前端 bundle，密文直链也不再被阅读器直接 fetch。
+     * 普通篇（未加密）也统一走这里，行为一致。
+     */
+    case 'novelBody': {
+      const id = String(payload.id || '').trim();
+      if (!NOVEL_ID_RE.test(id)) throw httpError('非法小说 ID', 400);
+      const novels = await readNovels();
+      const novel = novels.find((n) => n && n.id === id);
+      if (!novel) throw httpError('小说不存在或已被删除', 404);
+      const body = await readNovelBodyText(novel);
+      return { ok: true, id, encrypted: novel.encrypted === true, body };
+    }
+
+    /* -------- 小说评论区（novel_comments/{id}.json，读公开、写需登录） -------- */
+
+    case 'novelCommentList': {
+      const id = String(payload.id || '').trim();
+      if (!NOVEL_ID_RE.test(id)) throw httpError('非法小说 ID', 400);
+      return { ok: true, comments: await readNovelComments(id) };
+    }
+
+    case 'novelCommentAdd': {
+      const id = String(payload.id || '').trim();
+      if (!NOVEL_ID_RE.test(id)) throw httpError('非法小说 ID', 400);
+      const body = String(payload.body || '').replace(/\r\n?/g, '\n').trim().slice(0, 2000);
+      if (!body) throw httpError('评论内容不能为空', 400);
+      const author = String(payload.author || '').trim().slice(0, 40);
+      if (!author) throw httpError('昵称不能为空', 400);
+      const novels = await readNovels();
+      if (!novels.some((n) => n && n.id === id)) throw httpError('小说不存在或已被删除', 404);
+
+      const list = await readNovelComments(id);
+      const comment = {
+        id: `nc-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
+        author,
+        body,
+        uid: payload.__uid,
+        createdAt: new Date().toISOString(),
+      };
+      const next = list.concat([comment]).slice(-MAX_NOVEL_COMMENTS);
+      await writeNovelComments(id, next);
+      return { ok: true, comment, comments: next };
+    }
+
+    case 'novelCommentDelete': {
+      const id = String(payload.id || '').trim();
+      if (!NOVEL_ID_RE.test(id)) throw httpError('非法小说 ID', 400);
+      const commentId = String(payload.commentId || '').trim();
+      const list = await readNovelComments(id);
+      const hit = list.find((c) => c && c.id === commentId);
+      if (!hit) throw httpError('评论不存在', 404);
+      // __admin__ 由路由层在「管理员令牌通过校验」时注入；普通用户只能删自己的
+      const isAdmin = payload.__uid === '__admin__';
+      if (!isAdmin && hit.uid && hit.uid !== payload.__uid) throw httpError('只能删除自己的评论', 403);
+      const next = list.filter((c) => c && c.id !== commentId);
+      await writeNovelComments(id, next);
+      return { ok: true, comments: next };
     }
 
     case 'novelDelete': {
@@ -1453,10 +1658,15 @@ async function handle(action, payload) {
 
       const novels = await readNovels();
       const next = novels.filter((n) => n && n.id !== id);
+      /* 明文与密文两个落点、评论区一起清 —— 只删明文会给加密篇留孤儿密文 */
       await deleteMultipleObject({
         Bucket: BUCKET,
         Region: REGION,
-        Objects: [{ Key: `${NOVEL_DIR}${id}.txt` }],
+        Objects: [
+          { Key: `${NOVEL_DIR}${id}.txt` },
+          { Key: `${NOVEL_VAULT_DIR}${id}_secure.txt` },
+          { Key: `${NOVEL_COMMENTS_DIR}${id}.json` },
+        ],
       });
       await writeNovels(next);
       return { ok: true, id, count: next.length, novels: next };
@@ -1660,6 +1870,11 @@ const server = http.createServer(async (req, res) => {
     if (USER_ACTIONS.has(action)) {
       payload.__uid = await authUid(bearer);
       if (!payload.__uid) throw httpError('请先登录账号', 401);
+    } else if (USER_OR_ADMIN_ACTIONS.has(action)) {
+      // 用户会话或管理员令牌任一通过即可；管理员以 __admin__ 身份放行（可删任意评论）
+      payload.__uid = await authUid(bearer);
+      if (!payload.__uid && verifyToken(token)) payload.__uid = '__admin__';
+      if (!payload.__uid) throw httpError('请先登录账号', 401);
     } else if (!PUBLIC_ACTIONS.has(action) && !verifyToken(token)) {
       throw httpError('未授权或登录已过期，请重新登录', 401);
     }
@@ -1720,6 +1935,10 @@ exports.main = async (event) => {
   try {
     if (USER_ACTIONS.has(action)) {
       payload.__uid = await authUid(bearer);
+      if (!payload.__uid) throw httpError('请先登录账号', 401);
+    } else if (USER_OR_ADMIN_ACTIONS.has(action)) {
+      payload.__uid = await authUid(bearer);
+      if (!payload.__uid && verifyToken(token)) payload.__uid = '__admin__';
       if (!payload.__uid) throw httpError('请先登录账号', 401);
     } else if (!PUBLIC_ACTIONS.has(action) && !verifyToken(token)) {
       throw httpError('未授权或登录已过期，请重新登录', 401);

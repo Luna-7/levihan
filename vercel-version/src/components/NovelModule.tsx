@@ -7,8 +7,9 @@ import { NovelReader } from './NovelReader';
 import { AuthorWithLink } from '../utils/authorLink';
 import { newestNovelsFirst, newestRecsFirst } from '../utils/workSort';
 import { submitToInbox } from '../utils/submissionInbox';
-import { getAccessToken, getCurrentProfile } from '../utils/cloudbaseToken';
+import { getAccessToken, getCurrentProfile, getCurrentUid } from '../utils/cloudbaseToken';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
+import { cosService } from '../services/cosClient';
 import { CardPatternOverlay } from './CardPatternOverlay';
 
 /** 懒加载本地 mammoth（仅在选择 .docx 时才拉取 ~636KB 脚本，避免进主包） */
@@ -120,6 +121,23 @@ export const NovelModule: React.FC<Props> = ({
   const [recAuthor, setRecAuthor] = useState('');
   const [recReason, setRecReason] = useState('');
   const [recCategory, setRecCategory] = useState('原作向');
+  /* 编辑态：null = 新投稿；非空 = 正在改写这一篇（表单预填、提交走 novelUpdate） */
+  const [editingNovel, setEditingNovel] = useState<GroupNovel | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  /* 当前登录者 uid：卡片上「编辑」按钮只对 uid 匹配的那几篇显示 */
+  const [myUid, setMyUid] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getCurrentUid()
+      .then((uid) => {
+        if (alive) setMyUid(uid);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (initialSeg) {
@@ -265,6 +283,70 @@ export const NovelModule: React.FC<Props> = ({
     }
   };
 
+  /** 拉取正文原文供编辑回填：普通篇直链明文；加密篇经登录鉴权由服务端解密（密钥不下发前端） */
+  const fetchNovelBodyForEdit = async (novel: GroupNovel): Promise<string> => {
+    if (novel.bodyContent) return novel.bodyContent;
+    if (novel.encrypted) {
+      const token = await getAccessToken();
+      if (!token) throw new Error('请先登录账号后再编辑');
+      const resp = await fetch(ADMIN_UPLOAD_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'novelBody', id: novel.id }),
+      });
+      const result = await resp.json().catch(() => null) as { ok?: boolean; body?: string; error?: string } | null;
+      if (!resp.ok || !result?.ok || typeof result.body !== 'string') {
+        throw new Error(result?.error || '正文加载失败，无法编辑');
+      }
+      return result.body;
+    }
+    const resp = await fetch(cosService.getNovelBodyUrl(novel.id), { cache: 'default' });
+    if (!resp.ok) throw new Error(`正文加载失败（HTTP ${resp.status}）`);
+    return resp.text();
+  };
+
+  /** 点「编辑」：把这篇的所有字段（含正文）回填进上传表单，提交时走 novelUpdate */
+  const handleEditNovel = async (novel: GroupNovel) => {
+    if (editLoading) return;
+    soundManager.playWoodTap();
+    setUploadKind('novel');
+    setEditLoading(true);
+    try {
+      const body = await fetchNovelBodyForEdit(novel);
+      setEditingNovel(novel);
+      setUploadTitle(novel.title || '');
+      setUploadAuthor(novel.author || '');
+      setUploadAuthorUrl(novel.authorUrl || '');
+      setUploadTags((novel.tags || []).join(','));
+      setUploadWarnOn(Boolean(novel.warning));
+      setUploadWarning(novel.warning || '');
+      setUploadSensitive(Boolean(novel.encrypted));
+      setUploadNotes(novel.authorNote || '');
+      setUploadBody(body);
+      setUploadFileName('');
+      setShowUpload(true);
+    } catch (error) {
+      onShowToast(error instanceof Error ? error.message : '正文读取失败，请稍后重试');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  /** 关闭/提交完成后清掉编辑态，否则下一次打开上传窗会残留上一篇的预填值 */
+  const leaveEditMode = () => {
+    setEditingNovel(null);
+    setUploadTitle('');
+    setUploadAuthor('');
+    setUploadAuthorUrl('');
+    setUploadBody('');
+    setUploadNotes('');
+    setUploadTags('');
+    setUploadWarnOn(false);
+    setUploadWarning('');
+    setUploadSensitive(false);
+    setUploadFileName('');
+  };
+
   const handleNovelSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (uploadKind === 'recommend') {
@@ -300,7 +382,8 @@ export const NovelModule: React.FC<Props> = ({
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          action: 'novelDirectPublish',
+          action: editingNovel ? 'novelUpdate' : 'novelDirectPublish',
+          id: editingNovel?.id,
           sensitive: uploadSensitive,
           title: uploadTitle.trim(),
           author: uploadAuthor.trim(),
@@ -314,18 +397,15 @@ export const NovelModule: React.FC<Props> = ({
       const result = await response.json().catch(() => ({})) as { ok?: boolean; error?: string };
       if (!response.ok || !result.ok) throw new Error(result.error || '发布失败，请稍后重试');
       setShowUpload(false);
-      setUploadTitle('');
-      setUploadAuthor('');
-      setUploadAuthorUrl('');
-      setUploadBody('');
-      setUploadNotes('');
-      setUploadTags('');
-      setUploadWarnOn(false);
-      setUploadWarning('');
-      setUploadSensitive(false);
-      setUploadFileName('');
+      leaveEditMode();
       window.dispatchEvent(new Event('levihan-novels-changed'));
-      onShowToast(uploadSensitive ? '已加密上架，感谢投稿 📚' : '已上架，感谢投稿 📚');
+      onShowToast(
+        editingNovel
+          ? `已更新《${uploadTitle.trim().slice(0, 18)}》✏️`
+          : uploadSensitive
+            ? '已加密上架，感谢投稿 📚'
+            : '已上架，感谢投稿 📚'
+      );
     } catch (error) {
       onShowToast(error instanceof Error ? error.message : '投稿失败，请稍后重试');
     } finally {
@@ -462,6 +542,19 @@ export const NovelModule: React.FC<Props> = ({
                             <span className="text-xs font-retro-jp text-[#8C7A68] whitespace-nowrap">
                               {fmtChars(novel.chars || 0)}字
                             </span>
+                            {novel.uid && novel.uid === myUid && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleEditNovel(novel);
+                                }}
+                                className="ml-auto px-2 py-0.5 rounded-xs border border-[#D5C9AF] bg-[#FAF5E8] text-[10px] font-retro-jp text-[#5B4636] hover:bg-[#1E4334] hover:text-[#F9E79F] hover:border-[#1E4334] cursor-pointer transition-colors shrink-0"
+                                title="编辑这篇小说（含正文）"
+                              >
+                                ✏️ 编辑
+                              </button>
+                            )}
                           </div>
                           <h3 className="font-pixel text-base sm:text-lg font-bold text-[#2C2016] group-hover:text-[#B7791F] mt-1.5 break-words leading-snug transition-colors">
                             {novel.title}
@@ -661,21 +754,33 @@ export const NovelModule: React.FC<Props> = ({
       {reading && <NovelReader novel={reading} onClose={() => setReading(null)} />}
 
       {showUpload && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[100] bg-black/65 flex items-center justify-center p-3" onMouseDown={(e) => e.target === e.currentTarget && setShowUpload(false)}>
+        <div className="fixed inset-0 z-[100] bg-black/65 flex items-center justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowUpload(false); leaveEditMode(); } }}>
           <form onSubmit={handleNovelSubmit} className="relative overflow-hidden w-full max-w-lg max-h-[90dvh] overflow-y-auto bg-[#FFFEEF] border-2 border-[#1E4334] rounded-lg p-4 sm:p-5 space-y-3 font-retro-jp text-[#2C241D] shadow-2xl">
             <CardPatternOverlay opacity={0.12} mode="multiply" />
             <div className="relative flex items-center justify-between gap-3 border-b border-[#D5C9AF] pb-2">
               <div>
-                <h3 className="font-pixel text-sm font-bold text-[#1E4334]">上传文 / 推荐文</h3>
-                <p className="text-[10px] text-[#7A6958] mt-1">登录后投稿立即上架（默认普通、勾选敏感才加密）；推荐外链仍需审核。</p>
+                <h3 className="font-pixel text-sm font-bold text-[#1E4334]">
+                  {editingNovel ? '✏️ 编辑小说' : '上传文 / 推荐文'}
+                </h3>
+                <p className="text-[10px] text-[#7A6958] mt-1">
+                  {editingNovel
+                    ? `正在修改《${editingNovel.title}》，保存后立即生效。`
+                    : '登录后投稿立即上架（默认普通、勾选敏感才加密）；推荐外链仍需审核。'}
+                </p>
               </div>
-              <button type="button" onClick={() => setShowUpload(false)} className="text-lg text-[#5B4636] cursor-pointer" aria-label="关闭上传窗口">×</button>
+              <button type="button" onClick={() => { setShowUpload(false); leaveEditMode(); }} className="text-lg text-[#5B4636] cursor-pointer" aria-label="关闭上传窗口">×</button>
             </div>
 
+            {editingNovel ? (
+              <div className="px-2.5 py-1.5 rounded-xs bg-[#FAF5E8] border border-[#E0D5BE] text-[10px] text-[#7A6958]">
+                编辑模式：正文与各字段已回填，改完直接点底部「保存修改」。
+              </div>
+            ) : (
             <div className="grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setUploadKind('novel')} className={`py-2 border font-bold text-xs ${uploadKind === 'novel' ? 'bg-[#1E4334] text-[#F9E79F]' : 'bg-white text-[#5B4636]'}`}>上传文</button>
               <button type="button" onClick={() => setUploadKind('recommend')} className={`py-2 border font-bold text-xs ${uploadKind === 'recommend' ? 'bg-[#1E4334] text-[#F9E79F]' : 'bg-white text-[#5B4636]'}`}>推荐文</button>
             </div>
+            )}
 
             {uploadKind === 'novel' ? <><div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <label className="text-xs font-bold">标题<input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} maxLength={80} required className="mt-1 w-full p-2 bg-white border border-[#BFA985] outline-none focus:border-[#1E4334]" /></label>
@@ -719,7 +824,13 @@ export const NovelModule: React.FC<Props> = ({
             </div>}
 
             <button type="submit" disabled={isUploading} className="w-full py-2.5 bg-[#1E4334] text-[#F9E79F] border border-[#153025] font-pixel text-xs font-bold cursor-pointer disabled:opacity-50">
-              {isUploading ? (uploadSensitive ? '加密上传中…' : '上传中…') : uploadKind === 'novel' ? (uploadSensitive ? '🔒 加密上架' : '📖 普通上架') : '提交推荐审核'}
+              {isUploading
+                ? (editingNovel ? '保存中…' : uploadSensitive ? '加密上传中…' : '上传中…')
+                : editingNovel
+                  ? '💾 保存修改'
+                  : uploadKind === 'novel'
+                    ? (uploadSensitive ? '🔒 加密上架' : '📖 普通上架')
+                    : '提交推荐审核'}
             </button>
           </form>
         </div>,

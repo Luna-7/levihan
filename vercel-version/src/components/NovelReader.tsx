@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GroupNovel } from '../types/doujinArchive';
 import { cosService } from '../services/cosClient';
 import { soundManager } from '../utils/audio';
-import { decryptNovelBody } from '../utils/novelVault';
 import { AuthorWithLink } from '../utils/authorLink';
+import { getAccessToken } from '../utils/cloudbaseToken';
+import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
+import { NovelComments } from './NovelComments';
 
 interface Props {
   novel: GroupNovel;
@@ -40,24 +42,35 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
 
     setBody(null);
 
-    /** 加密篇：novels_vault/{id}_secure.txt → AES-CBC 解密 → 明文 */
+    /** 加密篇：经登录鉴权由服务端解密后下发明文，密钥不下发前端 */
     if (novel.encrypted) {
-      fetch(cosService.getNovelSecureBodyUrl(novel.id), { cache: 'default' })
-        .then((r) => {
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          return r.text();
-        })
-        .then((cipher) => {
-          const plain = decryptNovelBody(cipher);
-          if (!plain) throw new Error('DECRYPT_EMPTY');
-          if (alive) setBody(plain);
-        })
-        .catch(() => {
+      void (async () => {
+        try {
+          const token = await getAccessToken();
+          if (!token) {
+            if (alive) {
+              setFailed(true);
+              setFailedReason('本篇为加密内容，请先登录账号后再阅读。');
+            }
+            return;
+          }
+          const resp = await fetch(ADMIN_UPLOAD_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ action: 'novelBody', id: novel.id }),
+          });
+          const result = await resp.json().catch(() => null) as { ok?: boolean; body?: string; error?: string } | null;
+          if (!resp.ok || !result?.ok || typeof result.body !== 'string') {
+            throw new Error(result?.error || `HTTP ${resp.status}`);
+          }
+          if (alive) setBody(result.body);
+        } catch {
           if (alive) {
             setFailed(true);
-            setFailedReason('内容解密失败，请返回后重试。');
+            setFailedReason('内容加载失败，请确认已登录后重试。');
           }
-        });
+        }
+      })();
       return () => {
         alive = false;
       };
@@ -226,11 +239,15 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
                   {p}
                 </p>
               ))}
-              <div className="pt-6 pb-10 text-center font-retro-jp text-[11px] text-[#8C7A68]">
+              <div className="pt-6 pb-4 text-center font-retro-jp text-[11px] text-[#8C7A68]">
                 —— 全文完 · 共 {novel.chars || 0} 字 ——
               </div>
             </>
           )}
+
+          {/* 评论区：正文加载失败也照样展示，不挡读后讨论 */}
+          <NovelComments novelId={novel.id} novelAuthorUid={novel.uid} />
+          <div className="pb-16" />
         </div>
       </div>
     </div>

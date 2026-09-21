@@ -1499,6 +1499,16 @@ function readNovelForm(){
   };
 }
 
+function syncNvSaveBtn(){
+  var btn = $('btn-nv-save');
+  if (nvEditingId) {
+    var n = findNovel(nvEditingId);
+    btn.textContent = '💾 保存修改' + (n ? '《' + n.title + '》' : '');
+  } else {
+    btn.textContent = '💾 保存并发布';
+  }
+}
+
 function resetNovelForm(){
   ['nv-title','nv-author','nv-authorUrl','nv-tags','nv-note','nv-body','nv-warning'].forEach(function(k){ $(k).value = ''; });
   $('nv-warn-on').checked = false;
@@ -1542,6 +1552,7 @@ function renderNovelList(){
   if (!novels.length) { box.innerHTML = '<p class="muted">还没有在线小说，在下面粘贴正文发布第一篇吧。</p>'; return; }
   // 瀑布流多列（窄屏 2 列 / 中屏 3 列 / 宽屏 4 列），与前台小说区一致
   box.innerHTML = '<div class="nv-cards">' + sortNovels(novels).map(novelCardHTML).join('') + '</div>';
+  syncNvSaveBtn();   // 编辑态/新建态的保存按钮文案跟随 nvEditingId
 }
 
 $('btn-nv-save').addEventListener('click', saveNovel);
@@ -1609,8 +1620,22 @@ $('nv-list').addEventListener('click', function(e){
     $('nv-warn-box').classList.toggle('hide', !n.warning);
     $('nv-body').value = '';
     $('nv-body-len').textContent = '0';
-    show($('nv-msg'), 'ok', '正在编辑《' + n.title + '》：正文不回填（避免覆盖），需要改正文请整篇重新粘贴。');
+    show($('nv-msg'), 'ok', '正在编辑《' + n.title + '》：正在拉取正文…');
     window.scrollTo({ top: $('nv-panel-top').getBoundingClientRect().top + window.scrollY - 12, behavior: 'smooth' });
+    // 回填正文：novelGet 由服务端解密后返回明文（编辑保存走 novelSave 合并更新，不会误建新篇）
+    api({ action:'novelGet', id: n.id }).then(function(d){
+      if (nvEditingId !== n.id) return;   // 用户已切走编辑目标，丢弃迟到响应
+      var text = (d && d.body) || '';
+      $('nv-body').value = text;
+      $('nv-body-len').textContent = String(text.length);
+      show($('nv-msg'), 'ok', '✓ 正在编辑《' + n.title + '》：正文已回填，改完点「保存并发布」即可。');
+    }).catch(function(err){
+      if (nvEditingId !== n.id) return;
+      if (onAuthFail(err)) return;
+      $('nv-body').value = '';
+      $('nv-body-len').textContent = '0';
+      show($('nv-msg'), 'err', '正文回填失败（' + (err.message || err) + '）：元信息仍可改；要改正文请整篇重新粘贴后再保存。');
+    });
   } else if (del) {
     var id = del.getAttribute('data-nv-del');
     var target = findNovel(id);

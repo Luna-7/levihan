@@ -59,6 +59,7 @@ export interface GroupNovel {
   encrypted?: boolean; // 正文已深度加密：存于 novels_vault/{id}_secure.txt，阅读器解密后展示
   warning?: string; // 内容预警：卡片琥珀条 + 阅读器顶部；空则不渲染
   tags?: string[]; // 卡片标签行；空则整行不渲染
+  uid?: string; // 上传者 uid（novelDirectPublish 记录）：前台「编辑自己的小说」按它判定归属；旧篇与合订本没有
   isRelayCompiled?: boolean; // 是否为故事接龙合订本
   relayAuthors?: string[]; // 所有接力的人（依序排列）
   relayStepsCount?: number; // 接力总棒数
