@@ -1702,14 +1702,11 @@ function readFileBytes(file){
 /** 同一个 PDF 只解析一次；失败时把缓存清掉，避免把 reject 的 Promise 一直挂着 */
 function getPdfDocument(file){
   if (!pdfJsReady()) return Promise.reject(new Error('pdf.js 未加载，无法处理 PDF（vendor 依赖未加载完成，请刷新页面后重试）'));
-  // 已解锁过的 PDF 用「file + password」作缓存键，普通 PDF 沿用 file 本身
-  var cached = pdfPwCache.get(file);
-  var key = cached ? { file: file, pw: cached } : file;
-  if (pdfDocCache.has(key)) return pdfDocCache.get(key);
+  if (pdfDocCache.has(file)) return pdfDocCache.get(file);
   var pr = readFileBytes(file)
-    .then(function(buf){ return openPdfWithPassword(buf, file, cached); })
-    .catch(function(err){ pdfDocCache.delete(key); throw err; });
-  pdfDocCache.set(key, pr);
+    .then(function(buf){ return openPdfWithPassword(buf, file, pdfPwCache.get(file)); })
+    .catch(function(err){ pdfDocCache.delete(file); throw err; });
+  pdfDocCache.set(file, pr);
   return pr;
 }
 
@@ -1717,9 +1714,14 @@ function getPdfDocument(file){
  * 用（可选的）密码打开 PDF。带密码的 PDF 在缺密码时 pdf.js 会抛
  * PasswordException —— 这里捕获后弹窗问密码，用 { data, password } 重试；
  * 成功则把密码记进 pdfPwCache，后续拆页/封面解析/重渲染都直接复用。
+ *
+ * ⚠️ pdf.js 会把 data 背后的 ArrayBuffer **transfer 给 worker**（主线程从此
+ * detached），所以每次尝试都必须喂一份独立拷贝（buf.slice(0)）——原 buf
+ * 永不交给 pdf.js，否则重试时 buf 已被抽走，new Uint8Array(buf) 直接炸
+ * "Cannot perform Construct on a detached ArrayBuffer"。
  */
 function openPdfWithPassword(buf, file, knownPw){
-  var params = { data: new Uint8Array(buf) };
+  var params = { data: new Uint8Array(buf.slice(0)) };
   if (knownPw) params.password = knownPw;
   return pdfjsLib.getDocument(params).promise.catch(function(err){
     var isPw = err && (err.name === 'PasswordException' || /password/i.test(err && err.message || ''));
@@ -1728,11 +1730,11 @@ function openPdfWithPassword(buf, file, knownPw){
     var pw = window.prompt('「' + name + '」是一份带密码的 PDF，请输入打开密码：');
     if (pw == null) throw new Error('已取消：' + name + ' 需要密码才能打开。');
     if (pw === '') throw new Error(name + ' 的密码不能为空，已中止。');
-    return pdfjsLib.getDocument({ data: new Uint8Array(buf), password: pw }).promise
+    return pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)), password: pw }).promise
       .then(function(doc){ pdfPwCache.set(file, pw); return doc; })
       .catch(function(err2){
         var stillPw = err2 && (err2.name === 'PasswordException' || /password/i.test(err2 && err2.message || ''));
-        if (stillPw) throw new Error(name + ' 的密码不正确，请重新选择文件后重试。');
+        if (stillPw) throw new Error(name + ' 的密码不正确，请点「重试」再输一次。');
         throw err2;
       });
   });
