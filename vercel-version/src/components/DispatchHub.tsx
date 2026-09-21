@@ -466,13 +466,21 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       `----------------------------------------`,
     ].join('\n');
 
-    const sent = await sendToInbox('custom-order', {
-      name: coName,
-      email: coContact,
-      content: coDesc,
-    });
+    // 直接邮件送达站长邮箱（不进收件箱/管理后台）
+    const sent = await (async () => {
+      try {
+        await submitToInbox('submitCustomOrderEmail', {
+          name: coName,
+          email: coContact,
+          content: coDesc,
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    })();
     if (sent) {
-      onShowToast('定制需求已呈递至收件箱！📬');
+      onShowToast('定制需求已发送到站长邮箱！📬');
       setTimeout(() => {
         setIsCustomModalOpen(false);
         setCoDesc('');

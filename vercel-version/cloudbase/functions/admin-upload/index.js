@@ -875,6 +875,7 @@ async function reviewInbox(payload) {
 const PUBLIC_ACTIONS = new Set([
   'status', 'login',
   'submitNovel', 'submitContact', 'submitAnnouncement', 'submitRecommend',
+  'submitCustomOrderEmail',
   'announcementList', 'announcementImageUpload',
   'forumList', 'marketList',
 ]);
@@ -890,6 +891,55 @@ async function handle(action, payload) {
   switch (action) {
     case 'submitNovel': return submitToInbox('novel', payload);
     case 'submitContact': return submitToInbox('contact', payload);
+
+    // 商业定制需求函：不经收件箱/管理后台，直接邮件中继到站长邮箱
+    case 'submitCustomOrderEmail': {
+      const name = String(payload.name || '').trim().slice(0, 60) || '某同好委托人';
+      const email = String(payload.email || '').trim().slice(0, 120);
+      const content = String(payload.content || '').trim().slice(0, 5000);
+      if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) throw httpError('委托人邮箱格式无效', 400);
+      if (!content) throw httpError('需求描述不能为空', 400);
+      const OWNER_EMAIL = 'luna721yue@gmail.com';
+      const dateStr = new Date().toLocaleString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' });
+      const controller = new AbortController();
+      const killTimer = setTimeout(() => controller.abort(), 12000);
+      let resp;
+      try {
+        resp = await fetch(`https://formsubmit.co/ajax/${OWNER_EMAIL}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            // FormSubmit 要求请求来自网页（带 Origin/Referer），否则拒绝中继
+            'Origin': 'https://www.levihan.asia',
+            'Referer': 'https://www.levihan.asia/',
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            _subject: `【利韩土豆仓 · 商业定制需求】${name}`,
+            _replyto: email,
+            _template: 'table',
+            _captcha: 'false',
+            '委托人称呼': name,
+            '委托人邮箱': email,
+            '提交时间': dateStr,
+            '需求与周期构想': content,
+          }),
+        });
+      } finally {
+        clearTimeout(killTimer);
+      }
+      if (!resp.ok) throw httpError('邮件中继通道暂不可用', 502);
+      const data = await resp.json().catch(() => ({}));
+      if (String(data.success) !== 'true') {
+        const msg = String(data.message || '');
+        // FormSubmit 首次使用需站长点击激活邮件；激活前返回友好提示
+        if (/Activation/i.test(msg)) throw httpError('邮箱通道初始化中，请稍后再试', 503);
+        throw httpError('邮件中继被拒：' + msg.slice(0, 120), 502);
+      }
+      return { ok: true, delivered: 'email' };
+    }
+
     case 'submitAnnouncement': return submitToInbox('announcement', payload);
     case 'submitRecommend': return submitToInbox('recommend', payload);
     case 'inboxList': {

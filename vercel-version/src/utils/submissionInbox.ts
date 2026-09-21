@@ -1,7 +1,7 @@
 import { ADMIN_UPLOAD_ENDPOINT } from './cloudbaseEndpoint';
 
 export async function submitToInbox(
-  action: 'submitNovel' | 'submitContact' | 'submitAnnouncement' | 'submitRecommend',
+  action: 'submitNovel' | 'submitContact' | 'submitAnnouncement' | 'submitRecommend' | 'submitCustomOrderEmail',
   fields: Record<string, unknown>
 ) {
   const response = await fetch(ADMIN_UPLOAD_ENDPOINT, {
