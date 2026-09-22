@@ -28,18 +28,21 @@ export const BackToTopButton: React.FC = () => {
       setIsVisible(hasScrolledPast300);
     };
 
-    // Use capture phase so that inner containers' scroll events bubble up to window
-    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
-    
-    // Initial check
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        handleScroll();
+      });
+    };
+    // 捕获内部滚动容器的 scroll，每帧最多读一次位置。
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true });
     handleScroll();
 
-    // Check periodically in case layout changes or renders complete without trigger
-    const interval = setInterval(handleScroll, 400);
-
     return () => {
-      window.removeEventListener('scroll', handleScroll, { capture: true });
-      clearInterval(interval);
+      window.removeEventListener('scroll', onScroll, { capture: true });
+      if (frame) cancelAnimationFrame(frame);
     };
   }, []);
 

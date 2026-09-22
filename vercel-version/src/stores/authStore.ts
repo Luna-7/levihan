@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { CLOUDBASE_API_BASE } from '../utils/cloudbaseEndpoint';
 import { getSessionToken, setSessionToken, type AuthProfile } from '../utils/cloudbaseToken';
+import { clearVerifiedComicCode } from '../utils/secureComicCode';
 
 export type AuthQuestion = { id: string; prompt: string; options: string[] };
 
@@ -83,6 +84,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           const status = (error as { status?: number })?.status;
           if (status === 401 || status === 403) {
             setSessionToken(null);
+            clearVerifiedComicCode();
             revision += 1;
             set({ profile: null, hasSession: false, isLoading: false });
           }
@@ -154,6 +156,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       revision += 1;
       setSessionToken(null);
+      clearVerifiedComicCode();
       set({ profile: null, hasSession: false, isLoading: false, initialized: true });
     } finally { set({ isBusy: false }); }
   },

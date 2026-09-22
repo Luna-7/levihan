@@ -36,6 +36,7 @@
       "dest": "https://admin.levihan.asia/",
       "statusCode": 308
     },
+    { "src": "^/comics/?$", "dest": "/index.html" },
     {
       "src": "^/manifest\\.webmanifest$",
       "headers": { "Content-Type": "application/manifest+json" },

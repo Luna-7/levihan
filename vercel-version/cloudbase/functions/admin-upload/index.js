@@ -1228,7 +1228,7 @@ const PUBLIC_ACTIONS = new Set([
   'submitNovel', 'submitContact', 'submitAnnouncement', 'submitRecommend',
   'submitCustomOrderEmail',
   'announcementList', 'announcementImageUpload',
-  'forumList', 'marketList',
+  'forumList', 'forumTodayRelay', 'marketList',
   'novelCommentList',
 ]);
 // 需用户登录（CloudBase access_token 换 uid）：发布/互动/删除自己的内容
@@ -1380,6 +1380,30 @@ async function handle(action, payload) {
     }
 
     case 'forumList': return { ok: true, posts: await readForum() };
+
+    case 'forumTodayRelay': {
+      const since = Number(payload.since);
+      const start = Number.isFinite(since) && since > 0 ? since : Date.now() - 86400000;
+      const posts = (await readForum())
+        .filter((post) => post && post.category === 'relay')
+        .map((post) => ({
+          id: post.id,
+          category: 'relay',
+          title: post.title,
+          author: post.author,
+          createdAt: post.createdAt,
+          comments: (Array.isArray(post.comments) ? post.comments : [])
+            .filter((comment) => Date.parse(comment.createdAt) >= start)
+            .map((comment) => ({
+              id: comment.id,
+              author: comment.author,
+              createdAt: comment.createdAt,
+              relayStep: comment.relayStep,
+            })),
+        }))
+        .filter((post) => Date.parse(post.createdAt) >= start || post.comments.length > 0);
+      return { ok: true, posts };
+    }
 
     case 'forumPublish': {
       const category = String(payload.category || 'chat').trim();

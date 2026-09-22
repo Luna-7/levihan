@@ -22,9 +22,10 @@ interface Props {
   onCopyCode?: (code: string) => void;
   onShowToast: (msg: string) => void;
   onGoToResources?: () => void;
+  comicsOnly?: boolean;
 }
 
-export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources }) => {
+export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources, comicsOnly = false }) => {
   // 归档数据状态（优先加载远端 COS archive.json，兜底使用本地 Excel 录入数据）
   const [books, setBooks] = useState<DoujinBookItem[]>(DOUJIN_ARCHIVE_DATA);
   const [isLoadingArchive, setIsLoadingArchive] = useState<boolean>(false);
@@ -32,7 +33,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
   // 搜索与多维筛选
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('漫画本');
+  const [selectedCategory, setSelectedCategory] = useState<string>(comicsOnly ? '漫画本' : '小说本');
   const [selectedTag, setSelectedTag] = useState<string>('全部');
   const [selectedAuthor, setSelectedAuthor] = useState<string>('全部');
   // 排序方式：'pages' = 从页数多到页数少（默认），'new' = 从新到旧
@@ -57,7 +58,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const [novels, setNovels] = useState<GroupNovel[]>([]);
 
   // 统计所有标签（动态汇总当前数据中的所有标签）
-  const allCategories = ['漫画本', '小说本', '插画集'];
+  const allCategories = comicsOnly ? ['漫画本'] : ['小说本', '插画集'];
   const dynamicTags = Array.from(new Set(books.flatMap((b) => b.tags || [])));
   const allTags = ['全部', ...dynamicTags];
 

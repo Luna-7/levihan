@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -33,6 +33,17 @@ export const ImmersiveGameHome: React.FC<Props> = ({
 }) => {
   // 选中的沉浸游戏（点击下方街机进入后全屏直接玩）
   const [activeGame, setActiveGame] = useState<'daxigua' | 'hange' | 'lihan' | null>(null);
+  const scrollClickRef = useRef({ count: 0, lastAt: 0 });
+  const handleScrollSecretClick = () => {
+    const now = Date.now();
+    const previous = scrollClickRef.current;
+    const count = now - previous.lastAt <= 2500 ? previous.count + 1 : 1;
+    scrollClickRef.current = { count, lastAt: now };
+    if (count === 3) {
+      scrollClickRef.current = { count: 0, lastAt: 0 };
+      window.location.assign('/comics');
+    }
+  };
 
   const [activeModal, setActiveModal] = useState<'game' | 'leaderboard' | 'rules' | 'doujinshi' | 'resources' | null>(null);
   const [isForumOpen, setIsForumOpen] = useState(false);
@@ -70,6 +81,15 @@ export const ImmersiveGameHome: React.FC<Props> = ({
           src="/images/header.webp"
           alt="LEVI × HANS WAREHOUSE 调查兵团特别驻地 · 情报与粮草整备"
           className="home-header-art w-full h-auto max-w-full block"
+          role="button"
+          tabIndex={0}
+          onClick={handleScrollSecretClick}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              handleScrollSecretClick();
+            }
+          }}
           referrerPolicy="no-referrer"
           fetchPriority="high"
         />

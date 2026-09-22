@@ -33,6 +33,9 @@ const PLATFORM_STYLE: Record<string, string> = {
 const tierHint = (tier: string): string =>
   tier === 'A' ? '站内直接播放' : tier === 'B' ? '站内预览 · 可跳原文' : '对方限制抓取 · 仅跳转';
 
+const isIOS = (): boolean =>
+  typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
 export const platformLabel = (platform: string): string => PLATFORM_LABEL[platform] || '网页';
 
 /**
@@ -180,6 +183,7 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
   const [copiedName, setCopiedName] = useState(false);
   const [showMirrors, setShowMirrors] = useState(false);
   const isPlayable = link.tier === 'A';
+  const playOnOriginalSite = isPlayable && isIOS();
   const isAo3 = link.platform === 'ao3';
   const withoutCover = !link.coverUrl;
 
@@ -239,7 +243,7 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
         )}
 
         <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-[#2C2016]/85 text-[#F9E79F] text-[10px] font-retro-jp">
-          {tierHint(link.tier)}
+          {playOnOriginalSite ? '前往 B 站播放' : tierHint(link.tier)}
         </span>
       </div>
       )}
@@ -283,7 +287,7 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
           className="px-2.5 py-1 rounded-md bg-[#1E4334] text-[#F9E79F] text-[11px] font-bold flex items-center gap-1 cursor-pointer hover:bg-[#2B5E4A] transition-colors"
         >
           {isPlayable ? <Play size={11} /> : <ExternalLink size={11} />}
-          <span>{isPlayable ? '站内播放' : isAo3 ? '打开原文 / 镜像' : link.tier === 'B' ? '站内预览' : '打开原文'}</span>
+          <span>{playOnOriginalSite ? '前往 B 站播放' : isPlayable ? '站内播放' : isAo3 ? '打开原文 / 镜像' : link.tier === 'B' ? '站内预览' : '打开原文'}</span>
         </button>
 
         {isAo3 ? (
@@ -337,6 +341,7 @@ export const LinkShareModal: React.FC<ModalProps> = ({ link, title, note, onClos
   }, [onClose]);
 
   const playable = link.tier === 'A' && Boolean(link.bvid);
+  const playOnOriginalSite = playable && isIOS();
 
   return (
     <div
@@ -357,17 +362,25 @@ export const LinkShareModal: React.FC<ModalProps> = ({ link, title, note, onClos
         </div>
 
         <div className="bg-[#2C2016]">
-          {playable ? (
+          {playOnOriginalSite ? (
+            <div className="relative w-full aspect-video flex flex-col items-center justify-center gap-3 bg-[#2C2016]">
+              {link.coverUrl && <img src={link.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-35" referrerPolicy="no-referrer" />}
+              <p className="relative text-sm text-[#FFFEEF] font-retro-jp">iOS 请在 B 站页面播放视频</p>
+              <a href={link.url} target="_blank" rel="noopener noreferrer nofollow" className="relative px-4 py-2 rounded-md bg-[#B7791F] text-white text-sm font-bold flex items-center gap-2">
+                <Play size={16} /> 前往 B 站播放
+              </a>
+            </div>
+          ) : playable ? (
             <div className="relative w-full" style={{ aspectRatio: '16 / 9' }}>
               <iframe
                 title={title}
-                src={`https://player.bilibili.com/player.html?bvid=${link.bvid}&autoplay=1&danmaku=0&high_quality=1`}
+                src={`https://player.bilibili.com/player.html?bvid=${link.bvid}&autoplay=0&danmaku=0&high_quality=1`}
                 className="absolute inset-0 w-full h-full"
                 allowFullScreen
+                allow="fullscreen; picture-in-picture"
                 scrolling="no"
                 frameBorder="0"
                 sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
-                referrerPolicy="no-referrer"
               />
             </div>
           ) : link.coverUrl ? (
@@ -387,7 +400,7 @@ export const LinkShareModal: React.FC<ModalProps> = ({ link, title, note, onClos
               {platformLabel(link.platform)}
             </span>
             <span className="text-[10px] font-retro-jp text-[#8C6D4F]">
-              {link.platform === 'ao3' ? 'AO3 站外 · 需镜像打开' : tierHint(link.tier)}
+              {playOnOriginalSite ? 'iOS 使用 B 站页面播放' : link.platform === 'ao3' ? 'AO3 站外 · 需镜像打开' : tierHint(link.tier)}
             </span>
           </div>
           {link.ogDesc && (

@@ -3,6 +3,7 @@
   <head data-page-node-id="N7BzHNnupslljZeZN2V6A7">
     <meta charset="UTF-8" data-page-node-id="L4EfQBQ3FTCMonXJwrnI58" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" data-page-node-id="XiKQtj2sBTHeZM77h7NJSy" />
+    <meta name="robots" content="noindex, nofollow" />
     <script>
       // 独立 PWA（iOS 添加到主屏幕）标记。
       // iOS standalone 下 100dvh 会比真实屏幕矮一个 env(safe-area-inset-top)，
@@ -30,46 +31,6 @@
         } catch (e) {}
       })();
     </script>
-    <script>
-      // 部署后自动换新版。sw.js 里是 `skipWaiting() + clientsClaim()`，所以新版 SW 一激活
-      // 就会给已受控的页面派发 controllerchange —— 此刻刷新一次，用户就不会一直停在旧缓存上
-      // （否则前台是 SPA，用户不整页跳转就永远看不到新版本，容易误以为「改动没生效」）。
-      // 三个守卫：
-      //   1) 首次安装不刷：那时本来就没有 controller，刷新纯属多余；
-      //   2) 每次页面加载最多刷一次，杜绝循环；
-      //   3) 焦点在输入框 / 文本域时**不当场刷**，挂到下一次切走（visibilitychange → hidden）
-      //      再刷，免得打断正在填写的投稿表单或正在进行的上传。
-      (function () {
-        try {
-          if (!('serviceWorker' in navigator)) return;
-          if (!navigator.serviceWorker.controller) return; // 首次安装，无需刷新
-          var done = false;
-          var pending = false;
-          var reload = function () {
-            if (done) return;
-            done = true;
-            location.reload();
-          };
-          var isTyping = function () {
-            var el = document.activeElement;
-            if (!el) return false;
-            var tag = el.tagName;
-            return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable === true;
-          };
-          navigator.serviceWorker.addEventListener('controllerchange', function () {
-            if (done) return;
-            if (isTyping()) {
-              pending = true; // 正在填写：等用户切走再刷
-              return;
-            }
-            reload();
-          });
-          document.addEventListener('visibilitychange', function () {
-            if (pending && document.visibilityState === 'hidden') reload();
-          });
-        } catch (e) {}
-      })();
-    </script>
     <title>利韩土豆仓</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" data-page-node-id="fpp6pwgdZldfAZxCsVcyOz" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -85,9 +46,6 @@
     <meta property="og:description" content="利韩土豆仓官方网站，发布群规守则与进群指引，归档进击的巨人利韩Cut/动画素材、资源外链与土豆粮仓驻地，内嵌利韩专属街机游戏大厅（合成大西皮、拯救韩吉、利了个韩）。" data-page-node-id="GrzS5QYLdclsAfsCYJvfMa" />
     <meta property="og:type" content="website" data-page-node-id="ID8hCkSlOw6E4fmiVpyfnQ" />
     <meta name="twitter:card" content="summary_large_image" data-page-node-id="azKd4ThnIYGHvCJjUgv1Vx" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" data-page-node-id="9vox86pa7fqeXrBe2dMiDj">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin data-page-node-id="rA0oGbQzGq4SG2KePx7U8Y">
-    <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&family=VT323&family=Noto+Sans+SC:wght@400;500;700;900&family=Noto+Serif+SC:wght@400;500;700;900&display=swap" rel="stylesheet" data-page-node-id="5rTygBmUAFQFL9Ifoug8Zd">
     <script>
       if (typeof window !== 'undefined' && typeof window.global === 'undefined') {
         window.global = window;

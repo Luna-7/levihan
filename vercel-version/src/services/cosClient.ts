@@ -1,7 +1,3 @@
-import {
-  S3Client,
-  ListObjectsV2Command,
-} from '@aws-sdk/client-s3';
 import { DoujinBookItem, GroupNovel } from '../types/doujinArchive';
 import { DOUJIN_ARCHIVE_DATA, TENCENT_COS_CONFIG } from '../data/doujinArchiveData';
 import { requestDebug } from '../utils/requestDebug';
@@ -53,44 +49,21 @@ export const saveStoredCOSConfig = (config: Partial<COSConfigState>) => {
  */
 export class COSService {
   private config: COSConfigState;
-  private s3Client: S3Client | null = null;
 
   constructor() {
     this.config = getStoredCOSConfig();
-    this.initS3Client();
   }
 
   public updateConfig(partial: Partial<COSConfigState>) {
     this.config = saveStoredCOSConfig(partial);
-    this.initS3Client();
   }
 
   public getConfig(): COSConfigState {
     return { ...this.config };
   }
 
-  private initS3Client() {
-    if (this.config.accessKeyId && this.config.secretAccessKey && this.config.s3ApiEndpoint) {
-      try {
-        this.s3Client = new S3Client({
-          region: this.config.region || 'auto',
-          endpoint: this.config.s3ApiEndpoint,
-          credentials: {
-            accessKeyId: this.config.accessKeyId,
-            secretAccessKey: this.config.secretAccessKey,
-          },
-        });
-      } catch (err) {
-        console.error('Failed to initialize AWS S3 Client for COS:', err);
-        this.s3Client = null;
-      }
-    } else {
-      this.s3Client = null;
-    }
-  }
-
   public hasS3Credentials(): boolean {
-    return Boolean(this.config.accessKeyId && this.config.secretAccessKey && this.s3Client);
+    return Boolean(this.config.accessKeyId && this.config.secretAccessKey && this.config.s3ApiEndpoint);
   }
 
   /**
@@ -200,19 +173,14 @@ export class COSService {
    * （腾讯云 COS 兼容 S3 API，密钥为 COS 的 SecretId / SecretKey）
    */
   public async listS3Objects(prefix = 'lh-'): Promise<string[]> {
-    if (!this.s3Client) {
+    if (!this.hasS3Credentials()) {
       throw new Error('未配置腾讯云 COS S3 密钥 (SecretId / SecretKey)');
     }
 
     try {
-      const command = new ListObjectsV2Command({
-        Bucket: this.config.bucketName,
-        Prefix: prefix,
-        MaxKeys: 100,
-      });
-
-      const response = await this.s3Client.send(command);
-      return (response.Contents || []).map((item) => item.Key || '').filter(Boolean);
+      // Public archive reads never load the S3 SDK.
+      const { scanCosObjects } = await import('./cosS3Scanner');
+      return scanCosObjects(this.config, prefix);
     } catch (err) {
       console.error('S3 ListObjectsV2 error:', err);
       throw err;

@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { soundManager } from '../utils/audio';
 import { cosService } from '../services/cosClient';
-import { DoujinBookItem, GroupNovel } from '../types/doujinArchive';
+import { GroupNovel } from '../types/doujinArchive';
 import { fmtTime } from '../utils/forumFormat';
 import type { ForumPost } from './RestaurantForum';
 import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
 import { useAppShellStore } from '../stores/appShellStore';
 
 /** 三种更新来源的归类 */
-type UpdateKind = 'manga' | 'novel' | 'relay';
+type UpdateKind = 'novel' | 'relay';
 
 interface UpdateItem {
   id: string;
@@ -24,7 +24,6 @@ interface Props {
 
 /** 类别 → 徽章（与公告栏同款配色语言，仅色相区分类型） */
 const KIND_META: Record<UpdateKind, { label: string; cls: string }> = {
-  manga: { label: '漫画本', cls: 'bg-[#534AB7] text-[#F6F2FF] border-[#3C3489]' },
   novel: { label: '小说本', cls: 'bg-[#1D9E75] text-[#F2FFF9] border-[#0F6E56]' },
   relay: { label: '接力棒', cls: 'bg-[#BA7517] text-[#FFF8EA] border-[#854F0B]' },
 };
@@ -63,26 +62,9 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onShowToast 
         if (timeOf(it.createdAt) >= start) list.push(it);
       };
 
-      // 漫画本：归档里今天 created/updated 的本子（作者不显名，只报「上新了」）
-      cosService
-        .loadArchiveData()
-        .then((books: DoujinBookItem[]) => {
-          if (cancelled) return [];
-          return books.map<UpdateItem | null>((b) => {
-            const t = timeOf(b.createdAt || b.updatedAt);
-            if (t < start) return null;
-            return {
-              id: `manga-${b.id}`,
-              kind: 'manga',
-              text: `上新了本子《${b.titleZh}》`,
-              createdAt: b.createdAt || b.updatedAt || '',
-            };
-          }).filter((x): x is UpdateItem => !!x);
-        })
-        .then((manga) => {
+      Promise.resolve().then(() => {
           if (cancelled) return;
           const acc: UpdateItem[] = [];
-          manga.forEach((it) => push(acc, it));
 
           cosService
             .loadNovelList()
@@ -100,11 +82,13 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onShowToast 
               });
 
               // 接力棒：论坛接龙帖 comments 里今天新增的棒（含开头第 1 棒）
-              fetch(ADMIN_UPLOAD_ENDPOINT, {
+              const requestForum = (action: 'forumTodayRelay' | 'forumList') => fetch(ADMIN_UPLOAD_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-                body: JSON.stringify({ action: 'forumList' }),
-              })
+                body: JSON.stringify({ action, since: start }),
+              });
+              requestForum('forumTodayRelay')
+                .then((r) => r.status === 400 ? requestForum('forumList') : r)
                 .then((r) => (r.ok ? r.json() : Promise.reject(new Error('list fail'))))
                 .then((data: { posts?: ForumPost[] }) => {
                   if (cancelled) return;
@@ -150,7 +134,9 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onShowToast 
     };
 
     load();
-    const timer = window.setInterval(load, 120_000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') load();
+    }, 120_000);
     const onVis = () => { if (document.visibilityState === 'visible') load(); };
     document.addEventListener('visibilitychange', onVis);
     return () => {
@@ -169,11 +155,9 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onShowToast 
       }
       if (it.kind === 'novel') {
         onNavigateTab('resources');
-        // 归档页默认落在「漫画本」，通知切到「小说本」分类（DoujinshiArchive 监听）
         useAppShellStore.getState().openNovelCategory();
         return;
       }
-      onNavigateTab('resources');
     },
     [onNavigateTab]
   );

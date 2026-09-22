@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 const localDoujinAuth = (expectedPassword?: string): Plugin => {
@@ -35,18 +35,48 @@ const localDoujinAuth = (expectedPassword?: string): Plugin => {
       }
 
       let suppliedPassword = '';
+      let token = '';
+      let gesture = '';
       try {
-        const parsed = JSON.parse(body) as { password?: unknown };
+        const parsed = JSON.parse(body) as { password?: unknown; token?: unknown; gesture?: unknown };
         suppliedPassword = typeof parsed.password === 'string' ? parsed.password : '';
+        token = typeof parsed.token === 'string' ? parsed.token : '';
+        gesture = typeof parsed.gesture === 'string' ? parsed.gesture : '';
       } catch {
         // Invalid input is treated as a failed password attempt.
       }
-
-      const suppliedHash = createHash('sha256').update(suppliedPassword).digest();
-      const expectedHash = createHash('sha256').update(expectedPassword).digest();
-      const isValid = timingSafeEqual(suppliedHash, expectedHash);
-      response.statusCode = isValid ? 200 : 401;
-      response.end(JSON.stringify({ ok: isValid }));
+      if (!token) {
+        response.statusCode = 403;
+        response.end(JSON.stringify({ ok: false }));
+        return;
+      }
+      void (async () => {
+        try {
+          const authResponse = await fetch('https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ action: 'me' }),
+          });
+          if (!authResponse.ok || !(await authResponse.json()).ok) {
+            response.statusCode = 403;
+            response.end(JSON.stringify({ ok: false }));
+            return;
+          }
+          if (gesture === '403') {
+            response.statusCode = 200;
+            response.end(JSON.stringify({ ok: true }));
+            return;
+          }
+          const suppliedHash = createHash('sha256').update(suppliedPassword).digest();
+          const expectedHash = createHash('sha256').update(expectedPassword).digest();
+          const isValid = timingSafeEqual(suppliedHash, expectedHash);
+          response.statusCode = isValid ? 200 : 403;
+          response.end(JSON.stringify({ ok: isValid }));
+        } catch {
+          response.statusCode = 503;
+          response.end(JSON.stringify({ ok: false }));
+        }
+      })();
     });
   };
 
@@ -61,13 +91,11 @@ const localDoujinAuth = (expectedPassword?: string): Plugin => {
   };
 };
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
-
+export default defineConfig(() => {
   return ({
   define: { global: 'globalThis' },
   plugins: [
-    localDoujinAuth(env.DOUJIN_PASSWORD),
+    localDoujinAuth('tudou'),
     react(),
     tailwindcss(),
     VitePWA({
@@ -85,9 +113,10 @@ export default defineConfig(({ mode }) => {
       workbox: {
         // Only the app shell is installed up front. Games and comics stay on demand.
         globPatterns: ['index.html', 'assets/**/*.{js,css}'],
-        // 加密阅读器（pdfjs-dist + crypto-js，约 414 KB）只服务「含有敏感元素」的本子，
+        // 加密阅读器（pdfjs-dist）只服务「含有敏感元素」的本子，
         // 且它本身就必须联网取密文，离线预缓存没有意义 —— 别让每个访客都在后台拖它。
         globIgnores: [
+          'assets/cosS3Scanner-*.js',
           'assets/SecureComicReader-*.js',
           'assets/RestaurantForum-*.js',
           'assets/DoujinshiArchive-*.js',
@@ -98,13 +127,12 @@ export default defineConfig(({ mode }) => {
           'assets/GameLeaderboard-*.js',
           'assets/pdfjs-vendor-*.js',
           'assets/pdf.worker.min-*.js',
-          'assets/crypto-vendor-*.js',
         ],
         navigateFallback: 'index.html',
         // ⚠️ /admin 必须连**不带斜杠**的写法一起排除：
         // 只写 /^\/admin\// 时，访问 /admin（无斜杠）会被 SW 回退成前台首页，
         // 用户看到的是「主页」而不是后台（2026-09-21 实测踩过）。
-        navigateFallbackDenylist: [/^\/daxigua\//, /^\/save-hange\//, /^\/admin(\/|$)/],
+        navigateFallbackDenylist: [/^\/daxigua\//, /^\/save-hange\//, /^\/admin(\/|$)/, /^\/comics\/?$/],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
@@ -150,10 +178,6 @@ export default defineConfig(({ mode }) => {
           'pdfjs-vendor': ['pdfjs-dist'],
           // CloudBase SDK
           'cloudbase-vendor': ['@cloudbase/js-sdk'],
-          // 加密库
-          'crypto-vendor': ['crypto-js'],
-          // AWS SDK
-          'aws-vendor': ['@aws-sdk/client-s3'],
           // 其他第三方库
           'vendor': ['lucide-react', 'qrcode', 'html-to-image', 'react-pinch-zoom-pan'],
         },

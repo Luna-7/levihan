@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'Almendra', 'Noto Serif SC', 'Noto Sans SC', serif, sans-serif;
-  --font-serif: 'Noto Serif SC', 'Source Han Serif SC', serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', 'Noto Serif SC', monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-serif: 'Songti SC', 'STSong', 'Noto Serif CJK SC', serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @layer base {
@@ -29,7 +29,7 @@
     -moz-osx-font-smoothing: grayscale;
     font-size: 16px;
     padding-top: env(safe-area-inset-top, 0px);
-    font-family: 'Almendra', 'Noto Serif SC', 'Noto Sans SC', serif, sans-serif;
+    font-family: var(--font-sans);
     overflow: hidden;
     height: 100%;
   }
@@ -108,15 +108,15 @@
 }
 
 .font-pixel {
-  font-family: 'Press Start 2P', 'DotGothic16', 'Noto Serif SC', monospace;
+  font-family: var(--font-mono), var(--font-sans);
 }
 
 .font-retro-jp {
-  font-family: 'DotGothic16', 'Noto Serif SC', monospace, serif;
+  font-family: var(--font-sans);
 }
 
 .font-vt {
-  font-family: 'VT323', 'Noto Serif SC', monospace;
+  font-family: var(--font-mono), var(--font-sans);
 }
 
 /* 8-bit crisp pixel rendering */
@@ -539,19 +539,19 @@ body.immersive-on .retro-frame-card > .absolute {
    (Derived from official Pop Up Shop Angel & Devil Visual)
    ==================================================== */
 .font-serif-title {
-  font-family: 'Cinzel Decorative', 'Cinzel', 'Noto Serif SC', Georgia, 'Times New Roman', serif;
+  font-family: var(--font-serif);
 }
 
 .font-mincho {
-  font-family: 'Noto Serif SC', 'Source Han Serif SC', serif;
+  font-family: var(--font-serif);
 }
 
 .font-gothic {
-  font-family: 'UnifrakturMaguntia', 'Cinzel', 'Noto Serif SC', serif;
+  font-family: var(--font-serif);
 }
 
 .font-medieval {
-  font-family: 'MedievalSharp', 'Almendra', 'Noto Serif SC', serif;
+  font-family: var(--font-serif);
 }
 
 /* ====================================================
@@ -920,7 +920,7 @@ body.immersive-on .retro-frame-card > .absolute {
   justify-content: center;
   padding: clamp(2px, 0.5vw, 4px) clamp(8px, 1.6vw, 14px);
   font-size: clamp(9px, 1.5vw, 12px);
-  font-family: var(--font-serif-title, 'Cinzel', serif);
+  font-family: var(--font-serif);
   font-weight: 900;
   letter-spacing: 0.12em;
   white-space: nowrap;
@@ -980,4 +980,3 @@ body.immersive-on .retro-frame-card > .absolute {
     max-width: 360px;
   }
 }
-

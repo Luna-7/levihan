@@ -474,6 +474,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [shareTarget, setShareTarget] = useState<ShareTargetData | null>(null);
   const [highlightedPostId, setHighlightedPostId] = useState<string | null>(null);
+  const locatedPostId = useRef<string | null>(null);
 
   // 深度链接解析与自动定位 (Deep Linking)
   useEffect(() => {
@@ -495,22 +496,26 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       }
     }
 
-    if (targetPostId) {
+    if (targetPostId && posts.some((post) => post.id === targetPostId) && locatedPostId.current !== targetPostId) {
       setOpenComments(targetPostId);
       setHighlightedPostId(targetPostId);
-      setTimeout(() => {
+      const scrollTimer = window.setTimeout(() => {
         const el = document.getElementById(`post-${targetPostId}`);
         if (el) {
+          locatedPostId.current = targetPostId;
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-      }, 500);
+      }, 100);
 
-      const timer = setTimeout(() => {
+      const timer = window.setTimeout(() => {
         setHighlightedPostId(null);
       }, 4500);
-      return () => clearTimeout(timer);
+      return () => {
+        window.clearTimeout(scrollTimer);
+        window.clearTimeout(timer);
+      };
     }
-  }, [marketItems]);
+  }, [marketItems, posts]);
 
   const saveMarketItems = (updated: MarketItem[]) => {
     setMarketItems(updated);

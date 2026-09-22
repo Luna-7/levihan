@@ -5,32 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="WJCacGGq8uacjSIYi7e77s">
 <meta name="robots" content="noindex,nofollow,noarchive" data-page-node-id="nzdVfmMXyOVAFFjrcvguFU">
 <title>利韩土豆仓 · 管理工作台</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" data-page-node-id="m63IDgjo2MUtQPFGflEwnM">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin data-page-node-id="KOBVtVPM4hqtIgfrlBGGLG">
-<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&family=VT323&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet" data-page-node-id="zkXkoWrrN9T4W6Spi3HXge">
 <style>
   :root{
     --paper:#FBF7EC; --bg:#F6F1E3; --card:#FFFBF0;
     --green:#1B4332; --green-2:#1E4334; --ink:#22372B; --ink-2:#4A3A2C; --ink-3:#7A6A55;
     --gold:#E5A93C; --gold-2:#B7791F; --line:#D5C9AF; --rule:#EAE2CE;
     --purple:#6A4C93; --danger:#B4442F; --ok:#2F7A4F;
+    --font-ui:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
+    --font-code:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box}
   body{
     margin:0;background:var(--bg);color:var(--ink-2);
-    font-family:'Noto Sans SC',-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;
+    font-family:var(--font-ui);
     font-size:14px;line-height:1.7;-webkit-font-smoothing:antialiased;
     background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:22px 22px;
   }
-  .jp{font-family:'DotGothic16','Noto Sans SC',monospace}
-  .px{font-family:'Press Start 2P','DotGothic16','Noto Sans SC',monospace}
+  .jp{font-family:var(--font-ui)}
+  .px{font-family:var(--font-code),var(--font-ui)}
   .wrap{max-width:1080px;margin:0 auto;padding:24px 16px 80px}
   .panel{background:var(--paper);border:2px solid var(--green-2);border-radius:10px;padding:18px;box-shadow:3px 3px 0 rgba(30,67,52,.16)}
   .panel + .panel{margin-top:18px}
-  h1{font-family:'DotGothic16','Noto Sans SC',monospace;font-size:19px;margin:0;color:var(--green-2);letter-spacing:.5px}
-  h2{font-family:'DotGothic16','Noto Sans SC',monospace;font-size:15px;margin:0 0 14px;color:var(--green-2);
+  h1{font-family:var(--font-ui);font-size:19px;margin:0;color:var(--green-2);letter-spacing:.5px}
+  h2{font-family:var(--font-ui);font-size:15px;margin:0 0 14px;color:var(--green-2);
      display:flex;align-items:center;gap:8px}
-  h2 .n{background:var(--green-2);color:var(--paper);font-family:'Press Start 2P','DotGothic16','Noto Sans SC',monospace;
+  h2 .n{background:var(--green-2);color:var(--paper);font-family:var(--font-code),var(--font-ui);
         font-size:9px;padding:4px 6px;border-radius:3px;line-height:1}
   .muted{color:var(--ink-3);font-size:12px}
   .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
@@ -106,16 +105,16 @@
   .files::-webkit-scrollbar-thumb:hover{background:#2E6249}
   .file{border:1.5px solid var(--line);border-radius:6px;overflow:hidden;background:#fff;position:relative}
   .file img{display:block;width:100%;aspect-ratio:2/3;object-fit:cover;background:#F2EDE2}
-  .file .meta{padding:3px 5px;font-size:10.5px;font-family:'VT323','Noto Sans SC',monospace;color:var(--ink-3);
+  .file .meta{padding:3px 5px;font-size:10.5px;font-family:var(--font-code),var(--font-ui);color:var(--ink-3);
               display:flex;justify-content:space-between;gap:4px}
   .file .st{position:absolute;top:3px;right:3px;font-size:10px;padding:1px 5px;border-radius:10px;
-            background:rgba(34,55,43,.82);color:#fff;font-family:'VT323','Noto Sans SC',monospace}
+            background:rgba(34,55,43,.82);color:#fff;font-family:var(--font-code),var(--font-ui)}
   .file.done .st{background:var(--ok)}
   .file.err  .st{background:var(--danger)}
   .file.busy .st{background:var(--gold-2)}
   /* PDF 页数角标：加入列表时异步识别后原地填上。放左上（右上被 .st 占了） */
   .file .pg{position:absolute;top:3px;left:3px;font-size:10px;padding:1px 5px;border-radius:10px;
-            background:rgba(176,141,58,.92);color:#fff;font-family:'VT323','Noto Sans SC',monospace;letter-spacing:.4px}
+            background:rgba(176,141,58,.92);color:#fff;font-family:var(--font-code),var(--font-ui);letter-spacing:.4px}
   .file .del{position:absolute;top:3px;left:3px;width:19px;height:19px;padding:0;border-radius:50%;
              font-size:11px;line-height:1;background:rgba(255,255,255,.9);border-color:var(--line);
              color:var(--danger);display:flex;align-items:center;justify-content:center}
@@ -128,7 +127,7 @@
       border-radius:8px;background:var(--card);margin-bottom:8px}
   .bk img{width:38px;height:57px;object-fit:cover;border-radius:4px;border:1px solid var(--line);background:#EDE7D8;flex:none}
   .bk .info{flex:1;min-width:0}
-  .bk .id{font-family:'VT323','Noto Sans SC',monospace;font-size:15px;color:var(--gold-2);font-weight:700}
+  .bk .id{font-family:var(--font-code),var(--font-ui);font-size:15px;color:var(--gold-2);font-weight:700}
   .bk .t{font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* ---- 在线小说卡片：复刻前台 NovelModule 的小说卡排版（徽章/标题/字段块/标签/预警/作者说/底栏） ---- */
   /* 注意：这里刻意不给 #nv-list 定高 + overflow —— CSS 多列在定高容器里会被强制
@@ -142,16 +141,16 @@
   .nv-card:hover{border-color:var(--green-2);box-shadow:0 3px 10px rgba(30,67,52,.14)}
   .nv-card.editing{border-color:var(--gold-2);box-shadow:0 0 0 3px rgba(183,121,31,.18)}
   .nv-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-  .nv-badge{font-family:'Press Start 2P','DotGothic16','Noto Sans SC',monospace;font-size:8px;line-height:1;font-weight:700;
+  .nv-badge{font-family:var(--font-code),var(--font-ui);font-size:8px;line-height:1;font-weight:700;
             padding:4px 5px;border-radius:3px;background:var(--green-2);color:#F9E79F}
   .nv-chars{font-size:10.5px;color:#8C7A68}
-  .nv-id{margin-left:auto;font-family:'VT323','Noto Sans SC',monospace;font-size:14px;color:var(--gold-2);font-weight:700;
+  .nv-id{margin-left:auto;font-family:var(--font-code),var(--font-ui);font-size:14px;color:var(--gold-2);font-weight:700;
          user-select:all}
-  .nv-title{font-family:'Press Start 2P','DotGothic16','Noto Sans SC',monospace;font-size:11px;font-weight:700;color:#1E3A2B;
+  .nv-title{font-family:var(--font-code),var(--font-ui);font-size:11px;font-weight:700;color:#1E3A2B;
             line-height:1.65;margin:7px 0 0;word-break:break-word;transition:color .15s}
   .nv-card:hover .nv-title{color:var(--gold-2)}
   .nv-fields{margin-top:7px;background:#FAF5E8;border:1px solid #EBE3D0;border-radius:4px;padding:6px 7px;
-             font-family:'DotGothic16','Noto Sans SC',monospace;font-size:11px;line-height:1.75}
+             font-family:var(--font-ui);font-size:11px;line-height:1.75}
   .nv-fields .r{display:flex;gap:5px;align-items:flex-start}
   .nv-fields .k{flex:none;width:34px;text-align:right;font-weight:700;color:#7A6958}
   .nv-fields .r.au .k{color:#8C6B38}
@@ -160,19 +159,19 @@
   .nv-fields .v a{color:#8C6B38;text-decoration:none;border-bottom:1px dotted #C29641}
   .nv-fields .v a:hover{color:#B7791F;border-bottom-style:solid}
   .nv-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
-  .nv-tag{font-family:'DotGothic16','Noto Sans SC',monospace;font-size:9px;padding:2px 5px;border-radius:3px;
+  .nv-tag{font-family:var(--font-ui);font-size:9px;padding:2px 5px;border-radius:3px;
           background:#F4EEDF;color:#7A6958;border:1px solid #DECFA9}
   .nv-warn{display:flex;gap:6px;align-items:flex-start;margin-top:7px;background:#FDF0E3;border:1px solid #E8B04B;
-           border-radius:4px;padding:5px 7px;font-family:'DotGothic16','Noto Sans SC',monospace;font-size:10.5px;
+           border-radius:4px;padding:5px 7px;font-family:var(--font-ui);font-size:10.5px;
            color:#8A5A12;line-height:1.65}
   .nv-warn .ic{flex:none;line-height:1.2}
   .nv-note{margin-top:7px;border-left:3px solid #C29641;background:#FAF5E8;border-radius:0 4px 4px 0;padding:6px 8px;
-           font-family:'DotGothic16','Noto Sans SC',monospace;font-size:10.5px;color:#5B4636;line-height:1.7}
+           font-family:var(--font-ui);font-size:10.5px;color:#5B4636;line-height:1.7}
   .nv-note b{color:#8C6B38}
   .nv-note-txt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
                word-break:break-word}
   .nv-foot{margin-top:8px;padding-top:7px;border-top:1px dashed #E0D5BE;display:flex;justify-content:space-between;
-           align-items:center;gap:6px;font-family:'DotGothic16','Noto Sans SC',monospace;font-size:10.5px;color:#8C7A68}
+           align-items:center;gap:6px;font-family:var(--font-ui);font-size:10.5px;color:#8C7A68}
   .nv-acts{display:flex;gap:6px;flex:none}
   .nv-acts button{padding:3px 9px;font-size:11px;border-radius:5px}
   .notice-preview{width:100%;max-width:560px;aspect-ratio:16/9;object-fit:cover;border:1.5px solid var(--line);
@@ -237,7 +236,7 @@
   .tagopt button:hover{background:var(--danger);color:#fff}
   .tagnew{padding:6px 8px;border-top:1.5px dashed var(--rule);margin-top:3px;font-size:12px;color:var(--green-2);
           display:flex;align-items:center;gap:6px}
-  .tagnew kbd{font-family:'VT323','Noto Sans SC',monospace;background:#F1ECE0;border:1px solid var(--line);border-radius:4px;
+  .tagnew kbd{font-family:var(--font-code),var(--font-ui);background:#F1ECE0;border:1px solid var(--line);border-radius:4px;
               padding:0 5px;font-size:12px}
   .sw input{width:auto}
   /* ---- 文件项：操作条 / 编辑角标 / 拖拽 ---- */
@@ -255,12 +254,12 @@
   .file .ops button{padding:1px 6px;font-size:11px;line-height:1.5;border-radius:4px;
                     border-color:rgba(255,255,255,.7);background:rgba(255,255,255,.94);color:var(--green-2)}
   .file .etag{position:absolute;bottom:22px;left:3px;font-size:9px;padding:1px 5px;border-radius:9px;
-            background:var(--gold-2);color:#fff;font-family:'VT323','Noto Sans SC',monospace;letter-spacing:.5px}
+            background:var(--gold-2);color:#fff;font-family:var(--font-code),var(--font-ui);letter-spacing:.5px}
   /* ---- 大图预览 ---- */
   .lb{position:fixed;inset:0;z-index:100;background:rgba(18,14,10,.93);display:flex;flex-direction:column;
       align-items:center;justify-content:center;gap:12px;padding:18px}
   .lb img{max-width:94vw;max-height:72vh;object-fit:contain;border-radius:6px;box-shadow:0 12px 40px rgba(0,0,0,.55)}
-  .lb .info{color:#E8E0CE;font-size:12.5px;text-align:center;font-family:'VT323','Noto Sans SC',monospace;letter-spacing:.4px}
+  .lb .info{color:#E8E0CE;font-size:12.5px;text-align:center;font-family:var(--font-code),var(--font-ui);letter-spacing:.4px}
   .lb .nav{display:flex;gap:10px;align-items:center}
   .lb .nav button{background:rgba(255,255,255,.92);border-color:rgba(255,255,255,.6)}
   .lb .close{position:absolute;top:14px;right:18px;font-size:18px;line-height:1;padding:6px 12px}
@@ -290,8 +289,8 @@
   .tool-page{display:none}
   .tool-page.active{display:block}
   .tool-page h2{margin-top:0}
-  .tool-bar-text{min-height:18px;margin-top:6px;font-family:'VT323','Noto Sans SC',monospace;font-size:13px;color:var(--ink-3);letter-spacing:.4px}
-  .tool-out{background:#FFF9EC!important;cursor:default;font-family:'VT323','Noto Sans SC',monospace;font-size:14px}
+  .tool-bar-text{min-height:18px;margin-top:6px;font-family:var(--font-code),var(--font-ui);font-size:13px;color:var(--ink-3);letter-spacing:.4px}
+  .tool-out{background:#FFF9EC!important;cursor:default;font-family:var(--font-code),var(--font-ui);font-size:14px}
   .tool-preview{display:block;max-width:100%;max-height:340px;margin-top:12px;border:1.5px solid var(--line);
                 border-radius:6px;background:#fff}
   .tool-file-name{min-height:17px;margin-top:4px;font-size:12px;color:var(--ink-3);
@@ -305,7 +304,7 @@
   @keyframes tkFade{from{opacity:0}to{opacity:1}}
   .tk-modal-box{width:min(430px,100%);background:var(--paper);border:2px solid var(--green-2);border-radius:10px;
                 box-shadow:5px 5px 0 rgba(30,67,52,.22),inset 0 0 0 3px rgba(229,169,60,.18);padding:18px}
-  .tk-modal-box h3{margin:0 0 10px;display:flex;align-items:center;gap:8px;font-family:'DotGothic16','Noto Sans SC',monospace;
+  .tk-modal-box h3{margin:0 0 10px;display:flex;align-items:center;gap:8px;font-family:var(--font-ui);
                    font-size:15px;color:var(--green-2)}
   .tk-modal-box h3 .ico{width:24px;height:24px;flex:none;display:flex;align-items:center;justify-content:center;
                         border-radius:50%;background:#FFF9EC;border:1.5px solid var(--gold-2);font-size:13px}
@@ -561,7 +560,7 @@
           <div class="f"><label for="tk-lineartColor">目标颜色</label>
             <div class="row" style="gap:8px">
               <input type="color" id="tk-lineartColor" value="#1B4332">
-              <span class="muted" id="tk-colorHex" style="font-family:'VT323','Noto Sans SC',monospace">#1B4332</span>
+              <span class="muted" id="tk-colorHex" style="font-family:var(--font-code),var(--font-ui)">#1B4332</span>
             </div>
           </div>
           <div class="f"><label for="tk-lineartThreshold">识别阈值 <span class="tag">亮度低于此值视为线条，20–255</span></label>
@@ -727,7 +726,7 @@
         <label class="sw" data-page-node-id="pQaWi60yZRoe2w5S8E5aZc"><input type="checkbox" id="opt-webp" checked data-page-node-id="AS89LFET3xAUQ6I8f8nNa5"> 自动转 WebP（大幅减小体积）</label>
         <label class="sw" data-page-node-id="947qB4IysnJAULLUbqxgwb">画质
           <input type="range" id="opt-q" min="60" max="95" value="85" style="width:90px" data-page-node-id="Z9ovsnbWotmjrznb6L89fL">
-          <span class="muted" id="q-val" style="font-family:'VT323','Noto Sans SC',monospace;font-size:15px" data-page-node-id="SdgavqMEsfOGXk70cEbLFW">85</span>
+          <span class="muted" id="q-val" style="font-family:var(--font-code),var(--font-ui);font-size:15px" data-page-node-id="SdgavqMEsfOGXk70cEbLFW">85</span>
         </label>
       </div>
 
@@ -754,7 +753,7 @@
           <img id="secure-cover-thumb" alt="封面预览" style="width:92px;aspect-ratio:2/3;object-fit:cover;border:1.5px solid var(--line);border-radius:6px;background:#FAF5E8">
           <div class="muted" style="line-height:1.8;min-width:0">
             <div id="secure-cover-name" style="color:var(--ink);word-break:break-all">尚未选择文件</div>
-            <div id="secure-cover-key" style="font-family:'VT323','Noto Sans SC',monospace;font-size:15px"></div>
+            <div id="secure-cover-key" style="font-family:var(--font-code),var(--font-ui);font-size:15px"></div>
             <div id="secure-cover-err" class="hide" style="color:#A32D2D;margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <span id="secure-cover-err-text"></span>
               <button class="btn-sm" id="secure-cover-retry" type="button">重试</button>
@@ -848,7 +847,7 @@
             <label for="nv-body" data-page-node-id="nvpanel00000000000000000036">正文 <span class="req">*</span> <span class="tag" data-page-node-id="nvpanel00000000000000000037">段落之间空一行，站点按空行分段 · 上限 50 万字</span></label>
             <button type="button" class="btn-sm" id="btn-nv-import-docx">📄 导入 Word / 文本</button>
           </div>
-          <textarea id="nv-body" rows="18" placeholder="粘贴正文，或点上方「导入 Word / 文本」选择 .docx / .txt 自动转文本…" style="font-family:ui-monospace,Menlo,'Noto Sans SC',monospace;min-height:320px" data-page-node-id="nvpanel00000000000000000038"></textarea>
+          <textarea id="nv-body" rows="18" placeholder="粘贴正文，或点上方「导入 Word / 文本」选择 .docx / .txt 自动转文本…" style="font-family:var(--font-code),var(--font-ui);min-height:320px" data-page-node-id="nvpanel00000000000000000038"></textarea>
           <input type="file" id="nv-import-file" accept=".txt,.md,.docx,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none">
           <div class="muted" style="margin-top:2px" data-page-node-id="nvpanel00000000000000000039"><span id="nv-body-len">0</span> 字</div>
         </div>

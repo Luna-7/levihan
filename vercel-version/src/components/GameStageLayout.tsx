@@ -19,7 +19,7 @@ export const GameStageLayout: React.FC<Props> = ({
 
   if (isSeamless) {
     return (
-      <div className="relative w-full h-full select-none overflow-hidden text-[#374151] flex flex-col bg-[#FFFEEF]/55 backdrop-blur-md">
+      <div className="relative w-full h-full select-none overflow-hidden text-[#374151] flex flex-col bg-[#FFFEEF]/80 md:bg-[#FFFEEF]/55 md:backdrop-blur-md">
         <CardPatternOverlay opacity={0.06} mode="multiply" />
 
         {/* 巨树餐厅与调查联络：全屏半透明磨砂底图，统一兵长茶会同款流动式舞台布局 */}

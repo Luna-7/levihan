@@ -32,6 +32,8 @@ export default function LazyComicPage({
   const [shouldLoad, setShouldLoad] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [inRange, setInRange] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState(2 / 3);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -39,6 +41,18 @@ export default function LazyComicPage({
     return () => {
       mountedRef.current = false;
     };
+  }, []);
+
+  // 已加载的长篇图片离开阅读区域后卸载 DOM 图像，保留占位高度。
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setInRange(entry.isIntersecting),
+      { root: null, rootMargin: '100% 0px 100% 0px', threshold: 0 },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -83,6 +97,9 @@ export default function LazyComicPage({
 
         image.onload = () => {
           requestDebug.recordImageLoad();
+          if (mountedRef.current && image.naturalWidth && image.naturalHeight) {
+            setAspectRatio(image.naturalWidth / image.naturalHeight);
+          }
           resolve();
         };
 
@@ -120,15 +137,16 @@ export default function LazyComicPage({
       data-page={pageNumber}
       style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
     >
-      {!shouldLoad ? (
+      {!failed && (!loaded || !inRange) ? (
         // 占位容器，维持滚动高度
         <div
           aria-hidden="true"
           className="w-full min-h-[240px]"
+          style={{ aspectRatio }}
         />
       ) : (
         <>
-          {loaded && (
+          {loaded && inRange && (
             <img
               src={src}
               alt={alt || `第 ${pageNumber} 页`}

@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import * as CryptoJsNamespace from 'crypto-js';
 import * as pdfjsLib from 'pdfjs-dist';
 // ?url 让 Vite 把 1MB 的 worker 原样 emit 成 assets/ 下的一个文件并返回其 URL（同源，走站点自己的 CDN）
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 import type { DoujinBookItem } from '../types/doujinArchive';
 import { cosService } from '../services/cosClient';
+import { clearVerifiedComicCode, getVerifiedComicCode, setVerifiedComicCode } from '../utils/secureComicCode';
+import { decryptOuterLayer } from '../utils/secureComicDecrypt';
 
 /**
  * ============================================================================
@@ -15,7 +16,7 @@ import { cosService } from '../services/cosClient';
  * 站点上不给任何图片或 .pdf 直链，必须由本组件在浏览器内存里解开才看得到。
  *
  * 解密是两层，共用一个密码（"一密双解"）：
- *   外层：crypto-js 解 AES-256-CBC —— key = SHA-256(密码)，IV = 'levihan-vault-iv'
+ *   外层：Web Crypto 解 AES-256-CBC —— key = SHA-256(密码)，IV = 'levihan-vault-iv'
  *         解出来**直接就是 PDF 的二进制字节**（不要再做一次 Base64 解码）
  *   内层：把同一个密码透传给 pdfjs 的 password 参数，解 jsPDF 施加的 PDF 标准口令
  *         若管理台上传的是图片（内层没加口令），多传这个参数会被 pdf.js 忽略 —— 都成立
@@ -26,8 +27,6 @@ import { cosService } from '../services/cosClient';
  * ============================================================================
  */
 
-/** 统一 IV：16 字节 ASCII，改这里会解不开历史密文 */
-const IV_UTF8 = 'levihan-vault-iv';
 /** 密文目录与文件名规则，必须和 secure-upload.js 的 buildVaultKey() 完全一致 */
 const VAULT_DIR = 'comic_vault';
 
@@ -42,15 +41,6 @@ const VAULT_DIR = 'comic_vault';
  */
 const PDFJS_WORKER_SRC = pdfWorkerUrl;
 
-/**
- * CJS/ESM 互操作兜底。
- * crypto-js 是 UMD 包，不同打包器对 `import * as X` 的展开方式不一致：
- * 有的把具名导出摊平（X.AES 可用），有的只给一个 default（要取 X.default.AES）。
- * 这里两种都兼容，避免"本地能跑、线上白屏"这类只在构建期暴露的问题。
- */
-const CryptoJS = ((CryptoJsNamespace as unknown as { default?: typeof CryptoJsNamespace }).default ??
-  CryptoJsNamespace) as unknown as typeof CryptoJsNamespace;
-
 pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
 
 type SecureComicReaderProps = {
@@ -61,19 +51,17 @@ type SecureComicReaderProps = {
 
 type Phase = 'locked' | 'working' | 'ready';
 
+// PDF.js 绘制会占用主线程和大块位图内存；滚动时只允许一页实际绘制。
+let renderQueue: Promise<void> = Promise.resolve();
+const queuePageRender = (draw: () => Promise<void>): Promise<void> => {
+  const next = renderQueue.catch(() => undefined).then(draw);
+  renderQueue = next.catch(() => undefined);
+  return next;
+};
+
 /** 密文直链：comic_vault/{id}_secure.txt */
 export const getSecureVaultUrl = (book: DoujinBookItem): string =>
   cosService.getObjectUrl(`${VAULT_DIR}/${String(book.id).replace(/[^A-Za-z0-9_-]/g, '')}_secure.txt`);
-
-/** WordArray → Uint8Array（crypto-js 的输出格式转成 pdf.js 能吃的二进制） */
-function wordArrayToBytes(wordArray: { words: number[]; sigBytes: number }): Uint8Array {
-  const { words, sigBytes } = wordArray;
-  const out = new Uint8Array(sigBytes);
-  for (let i = 0; i < sigBytes; i += 1) {
-    out[i] = (words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
-  }
-  return out;
-}
 
 /** PDF 文件头魔数：解出来必须是个 PDF，否则宁可直接失败也不要把乱码喂给 pdf.js */
 function looksLikePdf(bytes: Uint8Array): boolean {
@@ -87,18 +75,6 @@ function looksLikePdf(bytes: Uint8Array): boolean {
   );
 }
 
-/** 外层解密：密文 Base64 文本 → PDF 字节流（密码由用户输入，外壳密码就是 'levihan'） */
-function decryptOuterLayer(cipherTextBase64: string, password: string): Uint8Array {
-  const key = CryptoJS.SHA256(password);
-  const iv = CryptoJS.enc.Utf8.parse(IV_UTF8);
-  const decrypted = CryptoJS.AES.decrypt(
-    CryptoJS.lib.CipherParams.create({ ciphertext: CryptoJS.enc.Base64.parse(cipherTextBase64) }),
-    key,
-    { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 },
-  );
-  return wordArrayToBytes(decrypted);
-}
-
 /* ============================================================================
  * 单页 Canvas：进入视口才画，远离视口就把画布内容抹掉
  * 抹掉有两个作用：① 长本子不会把几十张全尺寸画布同时留在内存里；
@@ -110,14 +86,15 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
   const [visible, setVisible] = useState(false);
   const [aspect, setAspect] = useState(1.4); // 占位高度，避免滚动条乱跳
   const [failed, setFailed] = useState(false);
+  const [rendered, setRendered] = useState(false);
 
-  // 上下留足余量：可见前后各提前一屏开始画，离开两屏后才清
+  // 只提前半屏开始画，避免手机快速滑动时多页同时进入绘制范围。
   useEffect(() => {
     const el = holderRef.current;
     if (!el) return undefined;
     const observer = new IntersectionObserver(
       ([entry]) => setVisible(entry.isIntersecting),
-      { root: null, rootMargin: '120% 0px 120% 0px', threshold: 0 },
+      { root: null, rootMargin: '50% 0px 50% 0px', threshold: 0 },
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -135,8 +112,13 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
       try {
         const page = await doc.getPage(pageNumber);
         if (cancelled) return;
-        // 1.6 倍渲染 + CSS 拉满宽度：在清晰度和内存之间取平衡
-        const viewport = page.getViewport({ scale: 1.6 });
+        const baseViewport = page.getViewport({ scale: 1 });
+        const displayWidth = Math.min(holderRef.current?.clientWidth || window.innerWidth, baseViewport.width);
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+        const maxPixels = 4 * 1024 * 1024;
+        const desiredScale = (displayWidth * pixelRatio) / baseViewport.width;
+        const scale = Math.min(desiredScale, Math.sqrt(maxPixels / (baseViewport.width * baseViewport.height)));
+        const viewport = page.getViewport({ scale: Math.max(scale, 0.1) });
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
@@ -146,6 +128,7 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
 
         task = page.render({ canvasContext: ctx, viewport });
         await task.promise;
+        if (!cancelled) setRendered(true);
       } catch (err: any) {
         // 渲染被打断（快速滚动、切页、卸载）是常态，不算失败
         if (err && (err.name === 'RenderingCancelledException' || err.name === 'AbortException')) return;
@@ -153,7 +136,9 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
       }
     };
 
-    void draw();
+    void queuePageRender(async () => {
+      if (!cancelled) await draw();
+    });
 
     return () => {
       cancelled = true;
@@ -174,6 +159,7 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
     ctx?.clearRect(0, 0, canvas.width, canvas.height);
     canvas.width = 0;
     canvas.height = 0;
+    setRendered(false);
   }, [visible]);
 
   return (
@@ -182,7 +168,7 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
       className="w-full max-w-3xl mx-auto bg-white shadow-[0_1px_0_rgba(0,0,0,.08)]"
       data-page={pageNumber}
     >
-      {!visible && <div aria-hidden="true" style={{ paddingBottom: `${aspect * 100}%` }} />}
+      {!rendered && !failed && <div aria-hidden="true" style={{ paddingBottom: `${aspect * 100}%` }} />}
       {failed ? (
         <div className="py-12 text-center font-mono text-xs text-[#8892a4]">
           第 {pageNumber} 页渲染失败 · 请刷新后重试
@@ -191,7 +177,7 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
         <canvas
           ref={canvasRef}
           className="w-full h-auto block select-none"
-          style={{ display: visible ? 'block' : 'none', WebkitTouchCallout: 'none' }}
+          style={{ display: visible && rendered ? 'block' : 'none', WebkitTouchCallout: 'none' }}
           draggable={false}
           onContextMenu={(e) => e.preventDefault()}
         />
@@ -202,11 +188,13 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
 
 export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onClose, onShowToast }) => {
   const [phase, setPhase] = useState<Phase>('locked');
+  const [workingStage, setWorkingStage] = useState('解析中…');
   const [code, setCode] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [doc, setDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
   const docRef = useRef<any>(null);
+  const autoAttemptedRef = useRef(false);
 
   /* ---------------- 反爬与防手滑：只在阅读器挂载期间生效 ---------------- */
   useEffect(() => {
@@ -261,36 +249,50 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
    * 全程在内存里完成，不产生任何 .pdf 文件或直链。
    */
   const handleUnlock = useCallback(
-    async (e?: React.FormEvent) => {
-      e?.preventDefault();
+    async (password: string, automatic = false) => {
       if (phase === 'working') return;
 
-      const password = code.trim();
       if (!password) {
         setErrorMsg('校验码不能为空');
         return;
       }
 
       setPhase('working');
+      setWorkingStage('下载数据中…');
       setErrorMsg('');
 
       try {
+        const startedAt = performance.now();
         // ① 从 COS 取回伪装成 .txt 的密文
         const url = getSecureVaultUrl(book);
         const res = await fetch(url, { mode: 'cors', cache: 'no-store' });
         if (!res.ok) throw new Error(`节点返回 HTTP ${res.status}`);
         const cipherText = (await res.text()).trim();
         if (!cipherText) throw new Error('节点数据为空');
+        const downloadedAt = performance.now();
 
         // ② 解外层 AES-256-CBC（纯内存；解出来就是 PDF 二进制）
-        const pdfBytes = decryptOuterLayer(cipherText, password);
+        setWorkingStage('解密数据中…');
+        const pdfBytes = await decryptOuterLayer(cipherText, password);
         if (!looksLikePdf(pdfBytes)) throw new Error('校验码不匹配');
+        const decryptedAt = performance.now();
 
         // ③ 解内层 PDF 标准口令：同一个密码直接透传
+        setWorkingStage('解析页面中…');
         const task = pdfjsLib.getDocument({ data: pdfBytes, password });
         const loaded = await task.promise;
+        const parsedAt = performance.now();
+        console.info('[漫画解析耗时]', {
+          bookId: book.id,
+          downloadMs: Math.round(downloadedAt - startedAt),
+          decryptMs: Math.round(decryptedAt - downloadedAt),
+          pdfParseMs: Math.round(parsedAt - decryptedAt),
+          totalMs: Math.round(parsedAt - startedAt),
+        });
 
         docRef.current = loaded;
+        setVerifiedComicCode(password);
+        setCode('');
         setDoc(loaded);
         setNumPages(loaded.numPages);
         setPhase('ready');
@@ -299,17 +301,25 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
         // 失败文案也保持在"系统页"的语境里，不暴露加密方式与文件类型
         const raw = String(err?.message || err);
         let friendly = '解析失败，请稍后重试。';
-        if (/password|校验码|Malformed|不匹配|empty/i.test(raw) || err?.name === 'PasswordException') {
+        if (/password|校验码|Malformed|不匹配|empty/i.test(raw) || err?.name === 'PasswordException' || err?.name === 'OperationError') {
           friendly = '校验码无效，节点拒绝解析。';
+          if (automatic && getVerifiedComicCode() === password) clearVerifiedComicCode();
         } else if (/HTTP|Failed to fetch|NetworkError/i.test(raw)) {
           friendly = '安全节点未响应，请检查网络后重试。';
         }
-        setErrorMsg(friendly);
+        setErrorMsg(automatic && friendly === '校验码无效，节点拒绝解析。' ? '已保存的校验码无效，请重新输入。' : friendly);
         setPhase('locked');
       }
     },
-    [book, code, onShowToast, phase],
+    [book, onShowToast, phase],
   );
+
+  useEffect(() => {
+    if (autoAttemptedRef.current) return;
+    autoAttemptedRef.current = true;
+    const savedCode = getVerifiedComicCode();
+    if (savedCode) void handleUnlock(savedCode, true);
+  }, [handleUnlock]);
 
   /* ========================== 403 伪装界面 ========================== */
   if (phase !== 'ready') {
@@ -351,7 +361,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
               </div>
 
               {/* 解析表单：文案全程不提"密码""漫画" */}
-              <form onSubmit={handleUnlock} className="mt-6 flex flex-col sm:flex-row gap-2.5">
+              <form onSubmit={(event) => { event.preventDefault(); void handleUnlock(code.trim()); }} className="mt-6 flex flex-col sm:flex-row gap-2.5">
                 <input
                   type="password"
                   value={code}
@@ -367,7 +377,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
                   disabled={phase === 'working'}
                   className="px-5 py-2.5 text-[13px] font-bold rounded-[3px] bg-[#1f2328] text-white hover:bg-[#33383f] disabled:bg-[#9aa0a6] disabled:cursor-wait transition-colors"
                 >
-                  {phase === 'working' ? '解析中…' : '启动解析'}
+                  {phase === 'working' ? workingStage : '启动解析'}
                 </button>
               </form>
 

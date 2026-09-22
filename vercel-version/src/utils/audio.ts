@@ -11,7 +11,11 @@ function markSoundPlayed() {
 // Check localStorage for saved sound preference
 if (typeof window !== 'undefined') {
   try {
-    isMuted = localStorage.getItem('rpg_sound_muted') === 'true';
+    const savedPreference = localStorage.getItem('rpg_sound_muted');
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    // iOS 首次创建 AudioContext 会阻塞第一次交互；由用户点音量键明确开启。
+    isMuted = savedPreference === 'true' || (savedPreference === null && isIOS);
   } catch {
     isMuted = false;
   }

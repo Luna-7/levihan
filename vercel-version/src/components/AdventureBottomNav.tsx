@@ -112,8 +112,8 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
   /** 切换到第 idx 站；导航栏短暂显现，切换完成后缩回（首页常显不受影响） */
   const navigateTo = (best: number) => {
     const target = STAGES[best];
-    soundManager.playNavClick();
     if (best === safeIndex) {
+      soundManager.playNavClick();
       // 点的是当前页：回到顶部即可，不出导航栏
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
@@ -138,11 +138,11 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
   };
 
   const handleSelectTab = (tab: NavigationTab) => {
-    soundManager.playNavClick();
     // 图标切换：切完即缩（首页若切走，目标页同样回到折叠态）
     clearRetractTimer();
     setTransientNav(false);
     if (tab === activeTab) {
+      soundManager.playNavClick();
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
