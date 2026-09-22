@@ -1,0 +1,10 @@
+{
+  "name": "exportBackup",
+  "version": "1.0.0",
+  "description": "dump all PostgreSQL tables to COS as JSON before shutting down CloudBase",
+  "main": "index.js",
+  "dependencies": {
+    "cos-nodejs-sdk-v5": "^2.14.6",
+    "@cloudbase/node-sdk": "^3.18.3"
+  }
+}

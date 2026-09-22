@@ -114,6 +114,19 @@
         "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}",
         "AUTH_PEPPER": "{{env.AUTH_PEPPER}}"
       }
+    },
+    {
+      "name": "exportBackup",
+      "type": "Event",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 60,
+      "memorySize": 256,
+      "description": "退出前数据保全：把 PostgreSQL 全表导出成 JSON 写进 COS（只导出不删除，可重复执行）",
+      "installDependency": true,
+      "envVariables": {
+        "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}"
+      }
     }
   ]
 }

@@ -9,6 +9,9 @@ coverage/
 !.env.example
 .vercel
 
+# CloudBase 退出前导出的数据备份（含 users 表密码哈希，禁止入库）
+cloudbase/backups/cloudbase-exit-*/
+
 # Playwright
 /test-results/
 /playwright-report/
