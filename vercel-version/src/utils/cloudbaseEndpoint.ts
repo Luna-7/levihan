@@ -19,8 +19,4 @@ const DEV_PROXY_PREFIX = '/__cf';
 
 export const CLOUDBASE_API_BASE = import.meta.env.DEV ? DEV_PROXY_PREFIX : CLOUDBASE_ORIGIN;
 
-/** admin-upload 云函数入口：公告 / 论坛 / 市集 / 投稿收件箱都走它 */
-export const ADMIN_UPLOAD_ENDPOINT = `${CLOUDBASE_API_BASE}/admin-upload`;
-
-/** 头号玩家排行榜入口：公开读榜 + 登录后提交成绩 */
-export const GAME_LEADERBOARD_ENDPOINT = `${CLOUDBASE_API_BASE}/gameLeaderboard`;
+/** admin-upload 云函数入口：公告 / 论坛 / 市集 / 投稿收件箱 / 头号玩家排行榜都走它 */

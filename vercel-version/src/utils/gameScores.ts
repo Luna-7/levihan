@@ -10,7 +10,7 @@
  *   cloudbase/functions/submitGameScore/index.js → meritOf()
  * 改任一端都要同步改另一端，否则本地预估值与入库值会对不上。
  */
-import { GAME_LEADERBOARD_ENDPOINT } from './cloudbaseEndpoint';
+import { ADMIN_UPLOAD_ENDPOINT } from './cloudbaseEndpoint';
 import { getSessionToken } from './cloudbaseToken';
 import { FALLBACK_TRACK_SECONDS } from '../save-hange/constants';
 
@@ -29,7 +29,7 @@ async function postLeaderboard(
 ): Promise<Record<string, unknown> | null> {
   const headers: Record<string, string> = { 'Content-Type': 'text/plain;charset=UTF-8' };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch(GAME_LEADERBOARD_ENDPOINT, {
+  const response = await fetch(ADMIN_UPLOAD_ENDPOINT, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
