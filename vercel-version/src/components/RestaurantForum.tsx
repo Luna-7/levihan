@@ -17,8 +17,9 @@ import { TeaPartyInteractiveZipline } from './TeaPartyInteractiveZipline';
 import { compileRelayPostToNovel, jumpToCompiledNovelInDoujinArchive } from '../utils/relayNovels';
 import { MarketItem, INITIAL_MARKET_ITEMS } from './PotatoMarket';
 import { TeaPartyShareModal, ShareTargetData } from './TeaPartyShareModal';
-import { LinkShare, LinkShareCard, LinkShareModal, platformLabel } from './LinkShareCard';
+import { LinkShare, LinkShareCard, LinkShareModal, canEmbedLink, platformForLink, platformLabel } from './LinkShareCard';
 import { fmtTime, normalizeShareLink } from '../utils/forumFormat';
+import { toForumWebp } from '../utils/forumImage';
 export { fmtTime, normalizeShareLink } from '../utils/forumFormat';
 
 export type PostCategory = 'chat' | 'relay' | 'roleplay' | 'market' | 'links';
@@ -76,6 +77,7 @@ export type ForumPost = {
   body: string;
   prompt?: string;
   image?: string;
+  images?: string[];
   characterName?: string;
   characterImage?: string;
   potatoes: number;
@@ -337,6 +339,8 @@ const MARKET_STORAGE_KEY = 'levihan_market_items';
 
 export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory }) => {
   const [posts, setPosts] = useState<ForumPost[]>(loadPosts);
+  const pendingPotatoes = useRef(new Set<string>());
+  const pendingLinkEnrich = useRef(new Set<string>());
   const [activeCategory, setActiveCategory] = useState<'all' | 'chat' | 'relay' | 'roleplay' | 'market' | 'links'>(initialCategory || 'all');
   const [now, setNow] = useState<number>(Date.now());
   const profile = useAuthStore((state) => state.profile);
@@ -441,9 +445,12 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   const [body, setBody] = useState('');
   const [prompt, setPrompt] = useState('天空');
   const [image, setImage] = useState<string | undefined>();
+  const [forumImages, setForumImages] = useState<string[]>([]);
+  const [imageProcessing, setImageProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   const [publishing, setPublishing] = useState(false);
 
-  // 安利墙（外链分享）：粘贴链接 → 服务端识别 OG → 可选改标题 + 写推荐语
+  // 与初版一致：上墙前先读取链接元数据，供用户核对封面。
   const [linkUrl, setLinkUrl] = useState('');
   const [linkPreview, setLinkPreview] = useState<LinkShare | null>(null);
   const [linkDetecting, setLinkDetecting] = useState(false);
@@ -616,11 +623,34 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     return result;
   };
 
+  const enrichLink = (id: string) => {
+    if (pendingLinkEnrich.current.has(id)) return;
+    pendingLinkEnrich.current.add(id);
+    void api('forumEnrichLink', { id }).then((result) => {
+      if (!result.link) return;
+      setPosts((current) => {
+        const next = current.map((post) => post.id === id
+          ? { ...post, link: result.link as LinkShare, title: String(result.title || '') }
+          : post);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* storage fallback */ }
+        return next;
+      });
+    }).catch(() => undefined).finally(() => pendingLinkEnrich.current.delete(id));
+  };
+
   useEffect(() => {
+    // 本地缓存只作首屏占位，账号切换后立即清除旧账号的点赞选中态。
+    setPosts((current) => current.map((post) => ({ ...post, potatoGiven: false })));
     void api('forumList')
       .then((result) => {
         if (Array.isArray(result.posts) && result.posts.length > 0) {
           persist(result.posts);
+          result.posts.forEach((post: ForumPost) => {
+            if (post.uid === currentUid && post.category === 'links' && (
+              post.link?.previewStatus === 'pending' ||
+              (platformForLink(post.link) === 'bilibili' && post.link.bvid && !post.link.coverUrl)
+            )) enrichLink(post.id);
+          });
         }
       })
       .catch(() => undefined);
@@ -634,7 +664,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       })
       .catch(() => undefined);
 
-  }, []);
+  }, [currentUid]);
 
   const persist = (next: ForumPost[]) => {
     setPosts(next);
@@ -831,13 +861,35 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     onShowToast('评论已删除');
   };
 
-  const handleImage = (file?: File) => {
-    if (!file) return;
-    if (!file.type.startsWith('image/')) return onShowToast('仅支持图片');
-    if (file.size > 2 * 1024 * 1024) return onShowToast('图片不能超过 2MB');
-    const reader = new FileReader();
-    reader.onload = () => setImage(typeof reader.result === 'string' ? reader.result : undefined);
-    reader.readAsDataURL(file);
+  const handleForumImages = async (files: FileList | null) => {
+    if (!files?.length || imageProcessing) return;
+    if (forumImages.length + files.length > 9) return onShowToast('一条帖子最多上传 9 张图片');
+    setImageProcessing(true);
+    try {
+      const converted: string[] = [];
+      for (const file of Array.from(files)) converted.push(await toForumWebp(file));
+      setForumImages((current) => [...current, ...converted]);
+    } catch (error) {
+      onShowToast(error instanceof Error ? error.message : '图片转换失败');
+    } finally {
+      setImageProcessing(false);
+    }
+  };
+
+  const uploadForumImages = async (images: string[]): Promise<string[]> => {
+    const urls = new Array<string>(images.length);
+    let nextIndex = 0;
+    let completed = 0;
+    await Promise.all(Array.from({ length: Math.min(3, images.length) }, async () => {
+      while (nextIndex < images.length) {
+        const index = nextIndex++;
+        const result = await api('forumImageUpload', { imageBase64: images[index].split(',')[1] || '' });
+        urls[index] = String(result.url || '');
+        completed += 1;
+        setUploadProgress(`${completed}/${images.length}`);
+      }
+    }));
+    return urls;
   };
 
   const handleClaimQuill = async (postId: string) => {
@@ -886,47 +938,36 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     onShowToast('羽毛笔已归还');
   };
 
-  /** 安利墙：粘贴链接后点识别 —— 服务端代抓 OG 元数据（浏览器跨域抓不到），失败则降级为手填 */
+  const fetchLinkPreview = async (url: string): Promise<LinkShare | null> => {
+    const result = await api('linkPreview', { url });
+    const raw = result.preview as {
+      url?: string; platform?: string; tier?: 'A' | 'B' | 'C'; bvid?: string;
+      coverUrl?: string; title?: string; description?: string;
+    } | undefined;
+    if (!raw) return null;
+    return {
+      url: raw.url || url,
+      platform: raw.platform || 'web',
+      tier: raw.tier || 'C',
+      bvid: raw.bvid,
+      coverUrl: raw.coverUrl,
+      ogTitle: raw.title,
+      ogDesc: raw.description,
+      previewStatus: raw.coverUrl || raw.title || raw.description ? 'ready' : 'unavailable',
+    };
+  };
+
   const detectLink = async () => {
-    const normalized = normalizeShareLink(linkUrl);
-    if (!normalized) {
-      return onShowToast('请粘贴网页链接或 App 分享链接（裸域名也行，会自动补 https）');
-    }
-    if (normalized !== linkUrl) setLinkUrl(normalized); // 回写归一化结果，发布时用同一个值
+    const url = normalizeShareLink(linkUrl);
+    if (!url) return onShowToast('请先粘贴外链');
     setLinkDetecting(true);
     try {
-      const result = await api('linkPreview', { url: normalized });
-      // 云函数返回 OG 用 title/description 命名，落地到帖子里统一叫 ogTitle/ogDesc
-      const raw = result.preview as
-        | { url: string; platform: string; tier: 'A' | 'B' | 'C'; bvid?: string; coverUrl?: string; title?: string; description?: string }
-        | undefined;
-      if (!raw) throw new Error('识别失败');
-      const preview: LinkShare = {
-        url: raw.url,
-        platform: raw.platform,
-        tier: raw.tier,
-        bvid: raw.bvid,
-        coverUrl: raw.coverUrl,
-        ogTitle: raw.title,
-        ogDesc: raw.description,
-      };
+      const preview = await fetchLinkPreview(url);
       setLinkPreview(preview);
-      if (!title.trim() && preview.ogTitle) setTitle(preview.ogTitle.slice(0, 100));
-      soundManager.playCopySuccess();
-      onShowToast(
-        preview.platform === 'ao3'
-          ? '识别到 AO3：站内不预览，请照抄作品名，卡片会给镜像站入口'
-          : preview.tier === 'A'
-            ? `已识别 ${platformLabel(preview.platform)} 视频 · 站内可直接播放`
-            : preview.tier === 'B'
-              ? `已识别 ${platformLabel(preview.platform)} · 可站内预览`
-              : isAppSchemeLink(preview.url)
-                ? 'App 分享链接：将生成跳转卡，点卡片可唤起对应 App'
-                : `${platformLabel(preview.platform)} 限制抓取：已降级为跳转卡，标题请手动填写`
-      );
+      onShowToast(preview?.coverUrl ? '已识别封面与链接' : '未获取到封面，可选填上传图片');
     } catch (error) {
       setLinkPreview(null);
-      onShowToast(error instanceof Error ? error.message : '识别失败，可手动填写标题后发布');
+      onShowToast(error instanceof Error ? error.message : '识别失败');
     } finally {
       setLinkDetecting(false);
     }
@@ -942,73 +983,52 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       return;
     }
 
-    // 安利墙（外链分享）发布：链接必填（网页链接或 App 分享链接），推荐语选填；平台/级别以服务端判定为准
+    // 采用初版流程：先抓取链接预览，再把封面与摘要随帖子一起持久化。
     if (composeCategory === 'links') {
       const authorName = nickname.trim() || '调查兵';
       const url = normalizeShareLink(linkUrl);
       if (!url) {
         return onShowToast('请粘贴网页链接或 App 分享链接（裸域名也行，会自动补 https）');
       }
-      if (url !== linkUrl) setLinkUrl(url);
-      const finalTitle = title.trim() || linkPreview?.ogTitle || url;
-      if (!finalTitle.trim()) {
-        return onShowToast('请填写标题（对方站点不给预览时需要手动填）');
-      }
-
       setPublishing(true);
       try {
-        const newPost: ForumPost = {
-          id: `post-${Date.now()}`,
-          category: 'links',
+        let preview = linkPreview;
+        if (!preview) {
+          try { preview = await fetchLinkPreview(url); }
+          catch { /* 外站抓取失败时仍允许发布链接。 */ }
+        }
+        const imageUrls = await uploadForumImages(forumImages);
+        const result = await api('forumPublish', {
           author: authorName,
-          uid: currentUid || undefined,
-          title: finalTitle,
+          category: 'links',
           body: body.trim(),
-          potatoes: 1,
-          potatoGiven: false,
-          createdAt: '刚刚',
-          comments: [],
-          link: {
-            url: linkPreview?.url || url,
-            platform: linkPreview?.platform || 'web',
-            tier: linkPreview?.tier || 'C',
-            bvid: linkPreview?.bvid,
-            coverUrl: linkPreview?.coverUrl,
-            ogTitle: linkPreview?.ogTitle,
-            ogDesc: linkPreview?.ogDesc,
-          },
-        };
-
-        persist([newPost, ...posts]);
-        setTitle('');
+          linkUrl: preview?.url || url,
+          linkPreview: preview ? {
+            coverUrl: preview.coverUrl || '',
+            ogTitle: preview.ogTitle || '',
+            ogDesc: preview.ogDesc || '',
+          } : undefined,
+          images: imageUrls,
+        });
+        if (!result.post) throw new Error('发布结果缺少帖子');
+        setPosts((current) => {
+          const next = [result.post as ForumPost, ...current];
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* storage fallback */ }
+          return next;
+        });
         setBody('');
+        setForumImages([]);
         setLinkUrl('');
         setLinkPreview(null);
         setShowComposer(false);
         soundManager.playCoin();
         onShowToast('安利已上墙 📌');
-
-        void api('forumPublish', {
-          author: authorName,
-          category: 'links',
-          title: finalTitle,
-          body: body.trim(),
-          linkUrl: url,
-          linkPreview: {
-            coverUrl: linkPreview?.coverUrl || '',
-            ogTitle: linkPreview?.ogTitle || '',
-            ogDesc: linkPreview?.ogDesc || '',
-          },
-        }).then((result) => {
-          const serverPost = (result && result.post) as ForumPost | undefined;
-          if (serverPost && serverPost.id) {
-            setPosts((cur) => cur.map((p) => (p.id === newPost.id ? { ...p, ...serverPost, id: p.id } : p)));
-          }
-        }).catch(() => onShowToast('⚠️ 帖子同步失败（只保存在本机，其他设备看不到）'));
+        if (!preview) enrichLink((result.post as ForumPost).id);
       } catch (error) {
         onShowToast(error instanceof Error ? error.message : '发布失败');
       } finally {
         setPublishing(false);
+        setUploadProgress('');
       }
       return;
     }
@@ -1081,53 +1101,39 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     // 闲聊茶歇发布
     if (composeCategory === 'chat') {
       const authorName = nickname.trim() || '调查兵';
-      if (!body.trim() && !image) {
+      if (!body.trim() && forumImages.length === 0) {
         return onShowToast('请输入闲聊内容');
       }
 
       setPublishing(true);
       try {
         const postTitle = title.trim() || (body.trim().length > 18 ? body.trim().slice(0, 18) + '…' : '茶歇闲聊');
-        const newPost: ForumPost = {
-          id: `post-${Date.now()}`,
-          category: 'chat',
+        const imageUrls = await uploadForumImages(forumImages);
+        const result = await api('forumPublish', {
           author: authorName,
-          uid: currentUid || undefined,
           title: postTitle,
           body: body.trim(),
-          image: image,
-          potatoes: 1,
-          potatoGiven: false,
-          createdAt: '刚刚',
-          comments: [],
-        };
-
-        const updated = [newPost, ...posts];
-        persist(updated);
+          category: 'chat',
+          images: imageUrls,
+        });
+        if (!result.post) throw new Error('发布结果缺少帖子');
+        setPosts((current) => {
+          const next = [result.post as ForumPost, ...current];
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* storage fallback */ }
+          return next;
+        });
 
         setTitle('');
         setBody('');
-        setImage(undefined);
+        setForumImages([]);
         setShowComposer(false);
         soundManager.playCoin();
         onShowToast('闲聊已发布');
-
-        void api('forumPublish', {
-          author: authorName,
-          title: postTitle,
-          body: body.trim(),
-          category: 'chat',
-          imageBase64: image?.split(',')[1] || '',
-        }).then((result) => {
-          const serverPost = (result && result.post) as ForumPost | undefined;
-          if (serverPost && serverPost.id) {
-            setPosts((cur) => cur.map((p) => (p.id === newPost.id ? { ...p, ...serverPost, id: p.id } : p)));
-          }
-        }).catch(() => onShowToast('⚠️ 帖子同步失败（只保存在本机，其他设备看不到）'));
       } catch (error) {
         onShowToast(error instanceof Error ? error.message : '发布失败');
       } finally {
         setPublishing(false);
+        setUploadProgress('');
       }
       return;
     }
@@ -1259,30 +1265,32 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   };
 
   const givePotato = async (id: string) => {
+    if (pendingPotatoes.current.has(id)) return;
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再点赞');
       openLogin();
       return;
     }
-    let nowGiven = false;
-    persist(
-      posts.map((post) => {
-        if (post.id === id) {
-          nowGiven = !post.potatoGiven;
-          return {
-            ...post,
-            potatoGiven: !post.potatoGiven,
-            potatoes: Math.max(0, post.potatoes + (post.potatoGiven ? -1 : 1)),
-          };
-        }
-        return post;
-      })
-    );
-    soundManager.playCoin();
-    void api('forumPotato', { target: 'post', id, give: nowGiven }).catch(() => undefined);
-    if (nowGiven) {
-      onShowToast('投喂了 1 份蛋糕！🍰');
+    const post = posts.find((item) => item.id === id);
+    if (!post) return;
+    const give = !post.potatoGiven;
+    pendingPotatoes.current.add(id);
+    try {
+      const result = await api('forumPotato', { target: 'post', id, give });
+      setPosts((current) => {
+        const next = current.map((item) => item.id === id
+          ? { ...item, potatoes: result.potatoes, potatoGiven: result.potatoGiven }
+          : item);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* storage fallback */ }
+        return next;
+      });
+      soundManager.playCoin();
+      if (give) onShowToast('投喂了 1 份蛋糕！🍰');
+    } catch {
+      onShowToast('点赞同步失败，请重试');
+    } finally {
+      pendingPotatoes.current.delete(id);
     }
   };
 
@@ -1557,9 +1565,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                 setComposeCategory('chat');
                 // 每次打开都清掉上一次的安利墙残留（链接 / 识别结果 / 标题），避免串味
                 setLinkUrl('');
-                setLinkPreview(null);
                 setTitle('');
                 setBody('');
+                setImage(undefined);
+                setForumImages([]);
                 setShowComposer(true);
               }}
               className="px-3.5 py-1 rounded-full bg-[#1E4334] hover:bg-[#2C5C46] text-[#F9E79F] border border-[#163327] text-xs font-bold cursor-pointer flex items-center gap-1 active:scale-95 shadow-xs"
@@ -2047,7 +2056,11 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
             // ==================== 📌 安利墙卡片 (外链分享: 平台分级预览 + 土豆/评论照旧) ====================
             if (post.category === 'links') {
-              const link = post.link;
+              const link = post.link ? {
+                ...post.link,
+                platform: platformForLink(post.link),
+                uploadedImageUrl: post.link.uploadedImageUrl || (post.link.uploadedImageUrls?.length ? undefined : post.image),
+              } : undefined;
               return (
                 <article
                   key={post.id}
@@ -2090,12 +2103,11 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                     {link ? (
                       <LinkShareCard
                         link={link}
-                        title={post.title || link.ogTitle || link.url}
+                        title={link.ogTitle || ''}
                         note={post.body || undefined}
                         onOpen={() => {
                           soundManager.playActionClick();
-                          if (link.tier === 'A') setLinkModalPost(post);
-                          else if (link.tier === 'B' && link.coverUrl) setLinkModalPost(post);
+                          if (canEmbedLink(link)) setLinkModalPost(post);
                           else window.open(link.url, '_blank', 'noopener,noreferrer');
                         }}
                       />
@@ -2575,16 +2587,19 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                 </div>
 
                 {/* 正文 */}
-                <div className="relative z-10 mt-2 p-2.5 bg-[#F3E9D2]/60 rounded-xl text-xs sm:text-sm leading-relaxed text-[#3B2818] font-serif-title">
-                  {post.body}
-                </div>
+                {post.body && (
+                  <div className="relative z-10 mt-2 p-2.5 bg-[#F3E9D2]/60 rounded-xl text-xs sm:text-sm leading-relaxed text-[#3B2818] font-serif-title">
+                    {post.body}
+                  </div>
+                )}
 
-                {post.image && (
-                  <img
-                    src={post.image}
-                    alt="茶话配图"
-                    className="relative z-10 mt-2 max-h-[280px] w-full object-contain rounded-xl bg-[#F0E6D2] border border-[#DECDB3]"
-                  />
+                {(post.images?.length || post.image) && (
+                  <div className="relative z-10 mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {(post.images?.length ? post.images : [post.image!]).map((url, index) => (
+                      <img key={`${url}-${index}`} src={url} alt={`茶话配图 ${index + 1}`}
+                        className="max-h-[280px] w-full object-contain rounded-xl bg-[#F0E6D2] border border-[#DECDB3]" />
+                    ))}
+                  </div>
                 )}
 
                 {/* 底栏: 🍰 蛋糕按键 + 💬 评论数 + 🔗 分享 */}
@@ -3115,11 +3130,11 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                     {/* 署名输入已移除：发布人固定为账号昵称（mount 时自动载入，
                         未登录兜底 '调查兵'），不再提供手动输入。 */}
 
-                  {/* 安利墙：粘贴外链 → 服务端识别 OG（B站自动带出可站内播放的视频） */}
+                  {/* 安利墙：上墙前识别并核对封面；未主动识别时发布会自动尝试。 */}
                   {composeCategory === 'links' && (
                     <div className="relative z-10 bg-[#FDF6E7] p-2.5 rounded-xl border border-[#E0C48C] space-y-2">
                       <label className="text-[10px] font-bold text-[#8A5A12] block">
-                        🔗 外链地址 (必填 · 直接粘贴整段分享文案也行，会自动抽出链接):
+                        🔗 外链地址 (必填 · 可粘贴整段分享文案):
                       </label>
                       <div className="flex gap-2">
                         <input
@@ -3127,65 +3142,26 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           inputMode="url"
                           value={linkUrl}
                           onChange={(e) => { setLinkUrl(e.target.value); setLinkPreview(null); }}
-                          placeholder="链接或裸域名均可，如 xhslink.com/xxx"
+                          placeholder="粘贴 Pixiv / X / Instagram 等作品链接"
                           className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg border border-[#D1B88B] text-xs outline-none bg-white focus:border-[#B7791F] font-mono"
                         />
-                        <button
-                          type="button"
-                          onClick={detectLink}
-                          disabled={linkDetecting || !linkUrl.trim()}
-                          className="shrink-0 px-3 py-1.5 rounded-lg bg-[#B7791F] hover:bg-[#9A6519] disabled:opacity-45 text-[#FFFEEF] text-xs font-bold cursor-pointer transition-colors flex items-center gap-1"
-                        >
-                          <Search size={11} />
-                          <span>{linkDetecting ? '识别中…' : '识别'}</span>
+                        <button type="button" onClick={() => { void detectLink(); }} disabled={linkDetecting || !linkUrl.trim()}
+                          className="shrink-0 rounded-lg bg-[#B7791F] px-3 py-1.5 text-xs font-bold text-[#FFFEEF] disabled:opacity-45 cursor-pointer">
+                          {linkDetecting ? '识别中…' : '识别'}
                         </button>
                       </div>
-
-                      {linkPreview && linkPreview.platform === 'ao3' && (
-                        <div className="rounded-lg border border-[#D9A93B] bg-[#FDF3DC] px-2.5 py-2 space-y-1">
-                          <span className="text-[10px] font-bold text-[#8A5A12] flex items-center gap-1">
-                            ⚠ 识别到 AO3 外链
-                          </span>
-                          <p className="text-[10px] font-retro-jp text-[#7A5A22] leading-relaxed">
-                            AO3 原站在国内不可达，站内不做预览，卡片只给「打开原文 / 复制名称」。
-                            复制名称后会就地展开一组可直连的镜像站入口，方便同好打开这篇。
-                          </p>
-                          <p className="text-[10px] font-retro-jp text-[#8A5A12]">
-                            请把作品名照抄进下面的「安利标题」（会同时用于镜像站与复制）。
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => { void detectLink(); }}
-                            disabled={linkDetecting}
-                            className="text-[10px] font-bold text-[#8A5A12] underline underline-offset-2 cursor-pointer disabled:opacity-50"
-                          >
-                            重新识别
-                          </button>
+                      {linkPreview && (
+                        <div className="flex items-center gap-2 rounded-lg border border-[#D8C7AA] bg-white/80 p-2">
+                          {linkPreview.coverUrl && <img src={linkPreview.coverUrl} alt="链接封面预览" referrerPolicy="no-referrer"
+                            className="h-16 w-24 shrink-0 rounded-md object-cover" />}
+                          <div className="min-w-0 text-[10px] text-[#6B5B4A]">
+                            <p className="font-bold text-[#1E4334]">{platformLabel(linkPreview.platform)} · {linkPreview.coverUrl ? '封面已获取' : '暂无封面'}</p>
+                            {linkPreview.ogTitle && <p className="mt-1 line-clamp-2">{linkPreview.ogTitle}</p>}
+                            {!linkPreview.coverUrl && <p className="mt-1">可上传图片作为卡片封面</p>}
+                          </div>
                         </div>
                       )}
-
-                      {linkPreview && linkPreview.platform !== 'ao3' && (
-                        <div className="flex items-center gap-2 flex-wrap text-[10px]">
-                          <span className="px-2 py-0.5 rounded-full bg-[#1E4334] text-[#F9E79F] font-bold">
-                            {platformLabel(linkPreview.platform)}
-                            {linkPreview.bvid ? ` · ${linkPreview.bvid}` : ''}
-                          </span>
-                          <span className="text-[#8A5A12]">
-                            {linkPreview.tier === 'A'
-                              ? '识别成功：站内可直接播放'
-                              : linkPreview.tier === 'B'
-                                ? '识别成功：可站内预览封面与摘要'
-                                : '对方限制抓取：将生成跳转卡，请手动填写标题'}
-                          </span>
-                          {linkPreview.coverUrl && (
-                            <img
-                              src={linkPreview.coverUrl}
-                              alt="封面预览"
-                              className="w-14 h-14 rounded-md object-cover border border-[#D1B88B]"
-                            />
-                          )}
-                        </div>
-                      )}
+                      <p className="text-[10px] text-[#8A5A12]">发布时也会自动识别；抓不到封面时可选填上传图片。</p>
                     </div>
                   )}
 
@@ -3200,23 +3176,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           onChange={(e) => setTitle(e.target.value)}
                           placeholder="例如：墙外森林的古旧钟塔…"
                           className="w-full px-3 py-2 rounded-lg border border-[#C5B498] text-xs sm:text-sm font-bold outline-none bg-white focus:border-[#235340]"
-                        />
-                      </div>
-                    )}
-
-                    {/* 安利墙：标题（识别成功会预填，可改；AO3 抓不到须手填） */}
-                    {composeCategory === 'links' && (
-                      <div>
-                        <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">
-                          {linkPreview?.platform === 'ao3'
-                            ? '安利标题 (必填 · AO3 抓不到，请照抄作品名):'
-                            : '安利标题 (必填 · 识别成功后已自动填好，可改):'}
-                        </label>
-                        <input
-                          value={title}
-                          onChange={(e) => setTitle(e.target.value)}
-                          placeholder={linkPreview?.platform === 'ao3' ? '例如：堆堆利韩压抑（照抄 AO3 原标题）' : '例如：利威尔兵长名场面混剪'}
-                          className="w-full px-3 py-2 rounded-lg border border-[#C5B498] text-xs sm:text-sm font-bold outline-none bg-white focus:border-[#B7791F]"
                         />
                       </div>
                     )}
@@ -3246,10 +3205,34 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       />
                     </div>
 
+                    {(composeCategory === 'chat' || composeCategory === 'links') && (
+                      <div className="rounded-xl border border-dashed border-[#C5B498] bg-white/60 p-2.5">
+                        <label className="inline-flex items-center gap-1.5 text-xs font-bold text-[#6D5A46] cursor-pointer">
+                          <Upload size={13} /> 选填图片（最多 9 张，原图不限大小，自动转 WebP）
+                          <input type="file" accept="image/*" multiple disabled={imageProcessing || publishing} className="hidden"
+                            onChange={(e) => { void handleForumImages(e.target.files); e.target.value = ''; }} />
+                        </label>
+                        {imageProcessing && <span className="ml-2 text-[10px] text-[#8C6D4F]">正在转换…</span>}
+                        {forumImages.length > 0 && (
+                          <div className="mt-2 grid grid-cols-3 gap-2">
+                            {forumImages.map((url, index) => (
+                              <div key={`${index}-${url.length}`} className="relative">
+                                <img src={url} alt={`待发布图片 ${index + 1}`} className="h-24 w-full rounded-lg object-contain bg-[#F3E9D2]" />
+                                <button type="button" onClick={() => setForumImages((current) => current.filter((_, i) => i !== index))}
+                                  className="absolute top-0.5 right-0.5 rounded-full bg-[#2C2016]/80 p-0.5 text-white cursor-pointer" aria-label={`移除第 ${index + 1} 张图片`}>
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-end pt-1">
                       <button
                         type="submit"
-                        disabled={publishing}
+                        disabled={publishing || imageProcessing}
                         className={`px-5 py-2 rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-xs ${
                           composeCategory === 'roleplay'
                             ? 'bg-[#16273B] hover:bg-[#223B56] text-[#F9E79F]'
@@ -3260,7 +3243,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                             : 'bg-[#1E4334] hover:bg-[#2C5C46] text-[#FAF5EA]'
                         }`}
                       >
-                        {publishing ? '发布中…' : composeCategory === 'links' ? '安利上墙' : '确认发布'}
+                        {publishing ? uploadProgress ? `上传图片 ${uploadProgress}` : '发布中…' : composeCategory === 'links' ? '安利上墙' : '确认发布'}
                       </button>
                     </div>
                   </form>
@@ -3671,7 +3654,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       {linkModalPost?.link && (
         <LinkShareModal
           link={linkModalPost.link}
-          title={linkModalPost.title || linkModalPost.link.ogTitle || linkModalPost.link.url}
+          title={linkModalPost.link.ogTitle || platformLabel(linkModalPost.link.platform)}
           note={linkModalPost.body || undefined}
           onClose={() => setLinkModalPost(null)}
         />

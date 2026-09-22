@@ -293,6 +293,22 @@ async function writeForum(items) {
     Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'), ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache' });
 }
 
+// 点赞账号只保存在服务端，列表里的选中状态按当前登录账号生成。
+function forumView(posts, uid) {
+  return posts.map((post) => {
+    const viewItem = (item) => {
+      const { potatoVoters, potatoGiven, ...publicItem } = item;
+      return { ...publicItem, potatoGiven: !!uid && Array.isArray(potatoVoters) && potatoVoters.includes(uid) };
+    };
+    return { ...viewItem(post), comments: Array.isArray(post.comments) ? post.comments.map(viewItem) : [] };
+  });
+}
+function forumResultView(result, uid) {
+  if (!result || !Array.isArray(result.posts)) return result;
+  const posts = forumView(result.posts, uid);
+  return { ...result, posts, ...(result.post ? { post: posts.find((post) => post.id === result.post.id) || result.post } : {}) };
+}
+
 /* ==================== 安利墙（外链分享） ==================== */
 
 /** 按域名识别平台与预览级别：A=B站可站内播放，B=OG 卡片可预览，C=仅跳转 */
@@ -303,7 +319,10 @@ function detectLinkPlatform(rawUrl) {
   if (host === 'b23.tv' || host.endsWith('.bilibili.com') || host === 'bilibili.com') return { platform: 'bilibili', tier: 'A' };
   if (host.endsWith('.lofter.com') || host === 'lofter.com') return { platform: 'lofter', tier: 'B' };
   if (host.endsWith('.xiaohongshu.com') || host === 'xiaohongshu.com' || host === 'xhslink.com') return { platform: 'xiaohongshu', tier: 'C' };
-  if (host.endsWith('.weibo.com') || host === 'weibo.com' || host === 'weibo.cn') return { platform: 'weibo', tier: 'B' };
+  if (host === 'weibo.com' || host.endsWith('.weibo.com') || host === 'weibo.cn' || host.endsWith('.weibo.cn') || host === 't.cn') return { platform: 'weibo', tier: 'B' };
+  if (host === 'pixiv.net' || host.endsWith('.pixiv.net')) return { platform: 'pixiv', tier: 'B' };
+  if (host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com') || host === 't.co') return { platform: 'x', tier: 'B' };
+  if (host === 'instagram.com' || host.endsWith('.instagram.com') || host === 'instagr.am') return { platform: 'instagram', tier: 'B' };
   // AO3 及其镜像：站点在国内不可达（云函数抓不到 OG），且原站带 X-Frame-Options 禁止内嵌，
   // 一律落 C 级跳转卡；前端另给「复制名称 + 镜像站面板」兜底。
   if (host === 'archiveofourown.org' || host.endsWith('.archiveofourown.org') || host === 'ao3.org' || host.endsWith('.ao3.org')) return { platform: 'ao3', tier: 'C' };
@@ -410,7 +429,7 @@ async function transferCoverToCos(coverUrl, pageUrl) {
       headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1', Referer: pageUrl || coverUrl },
     });
     if (!res.ok) return '';
-    const type = String(res.headers['content-type'] || 'image/jpeg');
+    const type = String(res.headers.get('content-type') || 'image/jpeg');
     if (!/^image\//.test(type)) return '';
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length === 0 || buf.length > 3 * 1024 * 1024) return '';
@@ -516,6 +535,12 @@ async function buildLinkPreview(rawUrl) {
     }
   }
 
+  // 微博分享短链 t.cn：先取跳转地址，再抓真实微博页的 OG 元数据。
+  if (new URL(rawUrl).hostname.toLowerCase() === 't.cn') {
+    const loc = await resolveShortLink(rawUrl);
+    if (isSafeExternalUrl(loc) && detectLinkPlatform(loc)?.platform === 'weibo') finalUrl = loc;
+  }
+
   if (detected.platform === 'bilibili') {
     const bvid = extractBvid(finalUrl) || bvidHint;
     if (bvid) {
@@ -543,8 +568,12 @@ async function buildLinkPreview(rawUrl) {
 
   const bvid = detected.platform === 'bilibili' ? (extractBvid(finalUrl) || bvidHint) : '';
   let coverUrl = '';
-  if (meta.image) coverUrl = await transferCoverToCos(meta.image, detected.platform === 'bilibili' ? 'https://www.bilibili.com/' : finalUrl);
-  const tier = detected.tier === 'A' && !bvid ? 'C' : detected.tier;
+  if (meta.image) {
+    coverUrl = await transferCoverToCos(meta.image, detected.platform === 'bilibili' ? 'https://www.bilibili.com/' : finalUrl);
+    // B 站封面转存偶尔失败，保留官方图片地址供前端直接尝试加载。
+    if (!coverUrl && detected.platform === 'bilibili' && isSafeExternalUrl(meta.image)) coverUrl = meta.image;
+  }
+  const tier = detected.tier === 'A' && !bvid ? 'C' : detected.tier === 'B' && !meta.title && !meta.description && !coverUrl ? 'C' : detected.tier;
   return {
     platform: detected.platform,
     tier,
@@ -1246,7 +1275,7 @@ const USER_ACTIONS = new Set([
    - linkPreview = 前台发布安利与后台发布安利都要用
    - forumPublish = 站长代发公告型帖子（如安利墙的整理合集，署编者名）也要能发
    管理员没有用户会话，走普通 USER_ACTIONS 会被 401 挡死。 */
-const USER_OR_ADMIN_ACTIONS = new Set(['novelCommentDelete', 'linkPreview', 'forumDelete', 'forumPublish', 'forumCommentEdit']);
+const USER_OR_ADMIN_ACTIONS = new Set(['novelCommentDelete', 'linkPreview', 'forumDelete', 'forumPublish', 'forumEnrichLink', 'forumImageUpload', 'forumCommentEdit']);
 
 /* ------------------------------ 头号玩家排行榜 ------------------------------ */
 
@@ -1597,6 +1626,16 @@ async function handle(action, payload) {
       return { ok: true, posts };
     }
 
+    case 'forumImageUpload': {
+      const b64 = String(payload.imageBase64 || '');
+      if (!b64 || Math.floor((b64.length * 3) / 4) > MAX_BYTES) throw httpError('WebP 图片转换后超过单次传输容量', 413);
+      const bytes = Buffer.from(b64, 'base64');
+      if (bytes.toString('ascii', 0, 4) !== 'RIFF' || bytes.toString('ascii', 8, 12) !== 'WEBP') throw httpError('仅支持 WebP 图片', 400);
+      const key = `${FORUM_DIR}uploads/${Date.now()}-${crypto.randomBytes(8).toString('hex')}.webp`;
+      await putObject({ Bucket: BUCKET, Region: REGION, Key: key, Body: bytes, ContentType: 'image/webp', CacheControl: 'public, max-age=31536000' });
+      return { ok: true, url: `https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${key}` };
+    }
+
     case 'forumPublish': {
       const category = String(payload.category || 'chat').trim();
       if (!['chat', 'relay', 'roleplay', 'market', 'links'].includes(category)) throw httpError('帖子分类无效', 400);
@@ -1605,48 +1644,60 @@ async function handle(action, payload) {
       const author = String(payload.author || '').trim().slice(0, 40);
       const prompt = String(payload.prompt || '').trim().slice(0, 2000);
       const characterName = String(payload.characterName || '').trim().slice(0, 40);
-      // 安利墙：必须带合法外链（网页链接或 App 分享链接），正文（推荐语）反而选填；其余板块要求正文或图片，昵称一律必填
+      const uploadedImages = Array.isArray(payload.images) ? payload.images : [];
+      if (uploadedImages.length > 9) throw httpError('一条帖子最多上传 9 张图片', 400);
+      const uploadPrefix = `https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${FORUM_DIR}uploads/`;
+      if (uploadedImages.some((url) => typeof url !== 'string' || !url.startsWith(uploadPrefix) || !/\.webp$/.test(url))) throw httpError('图片地址无效', 400);
+      // 安利墙先落库，外站预览由 forumEnrichLink 在发布后补抓。
       let link;
       if (category === 'links') {
         const linkUrl = normalizeExternalLink(payload.linkUrl);
         if (!linkUrl) throw httpError('请粘贴网页链接或 App 分享链接', 400);
-        const preview = payload.linkPreview && typeof payload.linkPreview === 'object' ? payload.linkPreview : {};
-        // 以前端识别结果为基础，但平台/级别/bvid 一律以服务端重新判定为准，避免伪造。
-        // App 自定义 scheme（bilibili:// 等）抓不了预览，一律 C 级跳转卡。
-        const fetchable = isFetchableLink(linkUrl) && isSafeExternalUrl(linkUrl);
-        const detected = fetchable ? (detectLinkPlatform(linkUrl) || { platform: 'web', tier: 'B' }) : { platform: 'web', tier: 'C' };
-        const bvid = fetchable && detected.platform === 'bilibili' ? extractBvid(linkUrl) : '';
-        const tier = detected.tier === 'A' && !bvid ? 'C' : detected.tier;
+        if (isFetchableLink(linkUrl) && !isSafeExternalUrl(linkUrl)) throw httpError('仅支持公开的 http(s) 链接', 400);
+        const detected = isFetchableLink(linkUrl) ? (detectLinkPlatform(linkUrl) || { platform: 'web', tier: 'B' }) : { platform: 'web', tier: 'C' };
+        const supplied = payload.linkPreview && typeof payload.linkPreview === 'object' ? payload.linkPreview : null;
+        const bvid = detected.platform === 'bilibili' ? extractBvid(linkUrl) : '';
+        const coverUrl = supplied && isSafeExternalUrl(String(supplied.coverUrl || '')) ? String(supplied.coverUrl) : '';
+        const ogTitle = supplied ? String(supplied.ogTitle || '').trim().slice(0, 200) : '';
+        const ogDesc = supplied ? String(supplied.ogDesc || '').trim().slice(0, 500) : '';
         link = {
           url: linkUrl,
           platform: detected.platform,
-          tier,
+          tier: supplied ? (detected.tier === 'A' && !bvid ? 'C' : detected.tier === 'B' && !ogTitle && !ogDesc && !coverUrl ? 'C' : detected.tier) : 'C',
           bvid: bvid || undefined,
-          coverUrl: isSafeExternalUrl(String(preview.coverUrl || '')) ? String(preview.coverUrl) : undefined,
-          ogTitle: String(preview.ogTitle || '').trim().slice(0, 200) || undefined,
-          ogDesc: String(preview.ogDesc || '').trim().slice(0, 500) || undefined,
+          coverUrl: coverUrl || undefined,
+          ogTitle: ogTitle || undefined,
+          ogDesc: ogDesc || undefined,
+          previewStatus: supplied ? (coverUrl || ogTitle || ogDesc ? 'ready' : 'unavailable') : 'pending',
         };
       }
       if (!author) throw httpError('昵称不能为空', 400);
-      if (category !== 'links' && !body && !payload.imageBase64) throw httpError('正文或图片不能为空', 400);
+      if (category !== 'links' && !body && !payload.imageBase64 && uploadedImages.length === 0) throw httpError('正文或图片不能为空', 400);
       const id = `post-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
       let image = '';
       const b64 = String(payload.imageBase64 || '');
       if (b64) {
         if (Math.floor((b64.length * 3) / 4) > MAX_BYTES) throw httpError('帖子图片超过 4MB', 413);
-        const key = `${FORUM_DIR}${id}.webp`;
-        await putObject({ Bucket: BUCKET, Region: REGION, Key: key, Body: Buffer.from(b64, 'base64'), ContentType: 'image/webp', CacheControl: 'public, max-age=31536000' });
+        const mime = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(payload.imageMime) ? payload.imageMime : 'image/webp';
+        const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }[mime];
+        const key = `${FORUM_DIR}${id}.${ext}`;
+        await putObject({ Bucket: BUCKET, Region: REGION, Key: key, Body: Buffer.from(b64, 'base64'), ContentType: mime, CacheControl: 'public, max-age=31536000' });
         image = `https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${key}`;
+      }
+      if (category === 'links') {
+        if (uploadedImages.length) link.uploadedImageUrls = uploadedImages;
+        else if (image) link.uploadedImageUrl = image;
       }
       const posts = await readForum();
       const post = {
-        id, category, author, title: category === 'links' ? (title || link.ogTitle || link.url) : title, body,
+        id, category, author, title: category === 'links' ? (link.ogTitle || '') : title, body,
         uid: payload.__uid,
         prompt: prompt || undefined,
         characterName: characterName || undefined,
         characterImage: String(payload.characterImage || '').trim().slice(0, 500) || undefined,
         link,
-        image, potatoes: 0, potatoGiven: false,
+        image: uploadedImages[0] || image, images: uploadedImages.length ? uploadedImages : undefined,
+        potatoes: 0, potatoGiven: false,
         createdAt: new Date().toISOString(), comments: [],
       };
       posts.unshift(post); await writeForum(posts.slice(0, 300));
@@ -1656,6 +1707,42 @@ async function handle(action, payload) {
         catch (e) { console.error('[relay] 建立合订本失败', e && e.message); }
       }
       return { ok: true, post, posts };
+    }
+
+    case 'forumEnrichLink': {
+      const id = String(payload.id || '').trim();
+      const posts = await readForum();
+      const post = posts.find((item) => item && item.id === id && item.category === 'links');
+      if (!post) throw httpError('安利不存在', 404);
+      if (post.uid !== payload.__uid && payload.__uid !== '__admin__') throw httpError('无权更新这条安利', 403);
+      const originalUrl = post.link?.url;
+      if (!originalUrl) throw httpError('安利链接缺失', 400);
+      let preview;
+      try { preview = await buildLinkPreview(originalUrl); }
+      catch { preview = null; }
+      if (preview) {
+        // 抓取期间帖子可能已被编辑或删除；只合并链接字段，不覆盖上传图片。
+        const latestPosts = await readForum();
+        const latestPost = latestPosts.find((item) => item && item.id === id && item.category === 'links' && (item.uid === payload.__uid || payload.__uid === '__admin__'));
+        if (!latestPost || latestPost.link?.url !== originalUrl) throw httpError('安利已变化', 409);
+        latestPost.link = {
+          ...latestPost.link,
+          url: preview.url || originalUrl,
+          platform: preview.platform || latestPost.link.platform,
+          tier: preview.tier || 'C',
+          bvid: preview.bvid || undefined,
+          coverUrl: preview.coverUrl || undefined,
+          ogTitle: String(preview.title || '').trim().slice(0, 200) || undefined,
+          ogDesc: String(preview.description || '').trim().slice(0, 500) || undefined,
+          previewStatus: preview.tier === 'C' ? 'unavailable' : 'ready',
+        };
+        latestPost.title = latestPost.link.ogTitle || '';
+        await writeForum(latestPosts);
+        return { ok: true, id, link: latestPost.link, title: latestPost.title };
+      }
+      post.link.previewStatus = 'unavailable';
+      await writeForum(posts);
+      return { ok: true, id, link: post.link, title: post.title || '' };
     }
 
     case 'forumComment': {
@@ -1697,27 +1784,28 @@ async function handle(action, payload) {
     case 'forumPotato': {
       const target = String(payload.target || '').trim();   // 'post' | 'comment'
       const id = String(payload.id || '').trim();
-      const give = payload.give !== false;                   // 默认是给土豆，false = 取消
+      const give = payload.give !== false;
       if (!id || !['post', 'comment'].includes(target)) throw httpError('参数无效', 400);
       const posts = await readForum();
-      let hit = false;
+      let hit = null;
       for (const p of posts) {
         if (target === 'post' && p && p.id === id) {
-          p.potatoes = Math.max(0, (Number(p.potatoes) || 0) + (give ? 1 : -1));
-          if (give) p.potatoGiven = true;
-          hit = true; break;
+          hit = p; break;
         }
         if (target === 'comment' && p && Array.isArray(p.comments)) {
           const c = p.comments.find((x) => x && x.id === id);
-          if (c) {
-            c.potatoes = Math.max(0, (Number(c.potatoes) || 0) + (give ? 1 : -1));
-            if (give) c.potatoGiven = true;
-            hit = true; break;
-          }
+          if (c) { hit = c; break; }
         }
       }
       if (!hit) throw httpError('目标不存在', 404);
-      await writeForum(posts); return { ok: true, posts };
+      const voters = Array.isArray(hit.potatoVoters) ? hit.potatoVoters : [];
+      const alreadyGiven = voters.includes(payload.__uid);
+      if (give !== alreadyGiven) {
+        hit.potatoVoters = give ? [...voters, payload.__uid] : voters.filter((uid) => uid !== payload.__uid);
+        hit.potatoes = Math.max(0, (Number(hit.potatoes) || 0) + (give ? 1 : -1));
+        await writeForum(posts);
+      }
+      return { ok: true, id, potatoes: Number(hit.potatoes) || 0, potatoGiven: give };
     }
 
     case 'forumClaim': {
@@ -2419,13 +2507,13 @@ const server = http.createServer(async (req, res) => {
       payload.__uid = await authUid(bearer);
       if (!payload.__uid && verifyToken(token)) payload.__uid = '__admin__';
       if (!payload.__uid) throw httpError('请先登录账号', 401);
-    } else if (action === 'leaderboard') {
+    } else if (action === 'leaderboard' || action === 'forumList') {
       // 读榜公开：带 Bearer 时顺带算出「我的战绩」，拿不到身份就当游客（不报错）
       payload.__uid = await authUid(bearer);
     } else if (!PUBLIC_ACTIONS.has(action) && !verifyToken(token)) {
       throw httpError('未授权或登录已过期，请重新登录', 401);
     }
-    send(res, 200, await handle(action, payload), origin);
+    send(res, 200, forumResultView(await handle(action, payload), payload.__uid), origin);
   } catch (err) {
     send(res, (err && err.httpStatus) || 500, { ok: false, error: (err && err.message) || String(err), status: (err && err.httpStatus) || 500 }, origin);
   }
@@ -2487,13 +2575,13 @@ exports.main = async (event) => {
       payload.__uid = await authUid(bearer);
       if (!payload.__uid && verifyToken(token)) payload.__uid = '__admin__';
       if (!payload.__uid) throw httpError('请先登录账号', 401);
-    } else if (action === 'leaderboard') {
+    } else if (action === 'leaderboard' || action === 'forumList') {
       // 读榜公开：带 Bearer 时顺带算出「我的战绩」，拿不到身份就当游客（不报错）
       payload.__uid = await authUid(bearer);
     } else if (!PUBLIC_ACTIONS.has(action) && !verifyToken(token)) {
       throw httpError('未授权或登录已过期，请重新登录', 401);
     }
-    return respond(200, await handle(action, payload));
+    return respond(200, forumResultView(await handle(action, payload), payload.__uid));
   } catch (err) {
     const status = (err && err.httpStatus) || 500;
     return respond(status, { ok: false, error: (err && err.message) || String(err), status });

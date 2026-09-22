@@ -1,8 +1,8 @@
 import React, { FormEvent, useRef, useState } from 'react';
 import { PixelStar } from './PixelIcons';
 import { soundManager } from '../utils/audio';
+import { DOUJIN_SESSION_KEY } from '../utils/doujinAccess';
 
-export const DOUJIN_SESSION_KEY = 'doujin_unlocked';
 const CLICK_WINDOW_MS = 2500;
 
 interface Props {
@@ -11,9 +11,11 @@ interface Props {
   onUnlock?: () => void;
   loginRequired?: boolean;
   onLogin?: () => void;
+  allowAdmin?: boolean;
+  unlockOnTripleClick?: boolean;
 }
 
-export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = true, onUnlock, loginRequired = false, onLogin }) => {
+export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = true, onUnlock, loginRequired = false, onLogin, allowAdmin = true, unlockOnTripleClick = false }) => {
   const [isUnlocked, setIsUnlocked] = useState(() => {
     try {
       return window.sessionStorage.getItem(DOUJIN_SESSION_KEY) === 'true';
@@ -28,7 +30,7 @@ export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = tru
   const clickCountRef = useRef(0);
   const lastClickRef = useRef(0);
 
-  if (!enabled || isUnlocked) return <>{children}</>;
+  if (!enabled || ((allowAdmin || unlockOnTripleClick) && isUnlocked)) return <>{children}</>;
 
   const handleSecretClick = () => {
     const now = Date.now();
@@ -42,6 +44,12 @@ export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = tru
     if (clickCountRef.current === 3) {
       soundManager.playChestOpen();
       clickCountRef.current = 0;
+      if (unlockOnTripleClick) {
+        try { window.sessionStorage.setItem(DOUJIN_SESSION_KEY, 'true'); } catch { /* 仅本次挂载有效 */ }
+        setIsUnlocked(true);
+        onUnlock?.();
+        return;
+      }
       setError('');
       setShowAdmin(true);
     } else {
@@ -102,11 +110,11 @@ export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = tru
           <span className="absolute -right-4 sm:-right-8 top-[52%] text-xl sm:text-2xl rotate-12 pointer-events-none" aria-hidden="true">🥔</span>
           <button
             type="button"
-            onClick={loginRequired ? undefined : handleSecretClick}
+            onClick={loginRequired || (!allowAdmin && !unlockOnTripleClick) ? undefined : handleSecretClick}
             onContextMenu={(event) => event.preventDefault()}
             className="inline-flex items-center justify-center w-52 h-48 sm:w-72 sm:h-64 cursor-default select-none touch-manipulation pixel-art"
             style={{ WebkitTouchCallout: 'none' }}
-            aria-label="像素人物装饰"
+            aria-label={unlockOnTripleClick ? '维护中图片' : '像素人物装饰'}
           >
             <img
               src="/images/archive-maintenance.webp"
@@ -150,7 +158,7 @@ export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = tru
         </div>}
       </div>
 
-      {!loginRequired && showAdmin && (
+      {!loginRequired && allowAdmin && showAdmin && (
         <div
           className="fixed inset-0 z-[100] bg-[#1E2B24]/55 flex items-center justify-center p-4 overflow-y-auto"
           role="dialog"

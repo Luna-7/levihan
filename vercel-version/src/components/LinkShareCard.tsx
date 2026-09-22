@@ -1,13 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { Play, ExternalLink, Link as LinkIcon, X, Copy, Check, EyeOff, ShieldAlert } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Play, ExternalLink, Link as LinkIcon, X, Copy, Check, ShieldAlert } from 'lucide-react';
 
 /** 安利墙外链数据（与云函数 forumPublish 的 post.link 结构一一对应） */
 export interface LinkShare {
   url: string;
-  platform: string; // bilibili | lofter | xiaohongshu | weibo | ao3 | web
+  platform: string; // bilibili | lofter | xiaohongshu | weibo | pixiv | x | instagram | ao3 | web
   tier: 'A' | 'B' | 'C';
   bvid?: string;
   coverUrl?: string;
+  uploadedImageUrl?: string;
+  uploadedImageUrls?: string[];
+  previewStatus?: 'pending' | 'ready' | 'unavailable';
   ogTitle?: string;
   ogDesc?: string;
 }
@@ -17,6 +20,9 @@ export const PLATFORM_LABEL: Record<string, string> = {
   lofter: 'LOFTER',
   xiaohongshu: '小红书',
   weibo: '微博',
+  pixiv: 'Pixiv',
+  x: 'X',
+  instagram: 'Instagram',
   ao3: 'AO3',
   web: '网页',
 };
@@ -26,17 +32,99 @@ const PLATFORM_STYLE: Record<string, string> = {
   lofter: 'bg-[#0F6E56] text-[#FFFEEF]',
   xiaohongshu: 'bg-[#D85A30] text-[#FFFEEF]',
   weibo: 'bg-[#A32D2D] text-[#FFFEEF]',
+  pixiv: 'bg-[#287DCB] text-white',
+  x: 'bg-[#171717] text-white',
+  instagram: 'bg-[#A93375] text-white',
   ao3: 'bg-[#8A1F1F] text-[#FFFEEF]',
   web: 'bg-[#5F5E5A] text-[#FFFEEF]',
 };
 
 const tierHint = (tier: string): string =>
-  tier === 'A' ? '站内直接播放' : tier === 'B' ? '站内预览 · 可跳原文' : '对方限制抓取 · 仅跳转';
+  tier === 'A' ? '站内查看' : tier === 'B' ? '已读取链接摘要' : '前往原站查看';
 
 const isIOS = (): boolean =>
   typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 export const platformLabel = (platform: string): string => PLATFORM_LABEL[platform] || '网页';
+
+/** 旧安利可能把平台存成 web，展示时依据原链接补回真实平台。 */
+export const platformForLink = (link: LinkShare): string => {
+  if (link.platform && link.platform !== 'web') return link.platform;
+  try {
+    const host = new URL(link.url).hostname.toLowerCase().replace(/^www\./, '');
+    if (host === 'pixiv.net' || host.endsWith('.pixiv.net')) return 'pixiv';
+    if (host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com')) return 'x';
+    if (host === 'instagram.com' || host.endsWith('.instagram.com')) return 'instagram';
+    if (host === 'weibo.com' || host.endsWith('.weibo.com') || host === 'weibo.cn' || host.endsWith('.weibo.cn') || host === 't.cn') return 'weibo';
+  } catch { /* App scheme 或旧链接保持原平台 */ }
+  return link.platform || 'web';
+};
+
+export const canEmbedLink = (link: LinkShare): boolean => {
+  if (platformForLink(link) === 'bilibili') return Boolean(link.bvid);
+  const platform = platformForLink(link);
+  try {
+    const path = new URL(link.url).pathname;
+    if (platform === 'x') return /\/status\/\d+(?:\/|$)/.test(path);
+    if (platform === 'instagram') return /^\/(p|reel|tv)\/[A-Za-z0-9_-]+\/?$/.test(path);
+    return false;
+  }
+  catch { return false; }
+};
+
+const XPostEmbed: React.FC<{ url: string }> = ({ url }) => {
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const render = () => {
+      const api = (window as Window & { twttr?: { widgets?: { load: (node?: HTMLElement) => void } } }).twttr;
+      if (container.current && api?.widgets) api.widgets.load(container.current);
+    };
+    let script = document.querySelector<HTMLScriptElement>('script[data-x-widgets]');
+    if (!script) {
+      script = document.createElement('script');
+      script.src = 'https://platform.twitter.com/widgets.js';
+      script.async = true;
+      script.dataset.xWidgets = 'true';
+      document.head.appendChild(script);
+    }
+    script.addEventListener('load', render);
+    render();
+    return () => script?.removeEventListener('load', render);
+  }, [url]);
+  return (
+    <div ref={container} className="max-h-[68vh] overflow-y-auto bg-white p-3 text-center">
+      <blockquote className="twitter-tweet"><a href={url} target="_blank" rel="noopener noreferrer nofollow">在 X 查看这条帖子</a></blockquote>
+    </div>
+  );
+};
+
+const InstagramPostEmbed: React.FC<{ url: string }> = ({ url }) => {
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const render = () => {
+      const api = (window as Window & { instgrm?: { Embeds?: { process: () => void } } }).instgrm;
+      if (container.current && api?.Embeds) api.Embeds.process();
+    };
+    let script = document.querySelector<HTMLScriptElement>('script[data-instagram-embeds]');
+    if (!script) {
+      script = document.createElement('script');
+      script.src = 'https://www.instagram.com/embed.js';
+      script.async = true;
+      script.dataset.instagramEmbeds = 'true';
+      document.head.appendChild(script);
+    }
+    script.addEventListener('load', render);
+    render();
+    return () => script?.removeEventListener('load', render);
+  }, [url]);
+  return (
+    <div ref={container} className="max-h-[68vh] overflow-y-auto bg-white p-3 text-center">
+      <blockquote className="instagram-media" data-instgrm-permalink={url} data-instgrm-version="14">
+        <a href={url} target="_blank" rel="noopener noreferrer nofollow">在 Instagram 查看这条内容</a>
+      </blockquote>
+    </div>
+  );
+};
 
 /**
  * AO3 镜像站表（配置表，后续镜像失效/新增只改这里）。
@@ -177,15 +265,21 @@ interface CardProps {
   onOpen: () => void;
 }
 
-/** 安利墙卡片主体：封面 + 平台徽章 + 标题 + 摘要 + 推荐语 + 操作 */
+/** 有抓取结果时展示预览；抓取失败时只保留链接操作。 */
 export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }) => {
   const [copied, setCopied] = useState(false);
   const [copiedName, setCopiedName] = useState(false);
   const [showMirrors, setShowMirrors] = useState(false);
-  const isPlayable = link.tier === 'A';
-  const playOnOriginalSite = isPlayable && isIOS();
+  const [failedCovers, setFailedCovers] = useState<string[]>([]);
+  const canViewInside = canEmbedLink(link);
+  const isPlayable = platformForLink(link) === 'bilibili' && Boolean(link.bvid);
   const isAo3 = link.platform === 'ao3';
-  const withoutCover = !link.coverUrl;
+  const uploadedUrls = link.uploadedImageUrls?.length ? link.uploadedImageUrls : link.uploadedImageUrl ? [link.uploadedImageUrl] : [];
+  const directLink = !isAo3 && !canViewInside;
+  const appLink = ['x', 'pixiv'].includes(platformForLink(link));
+  const coverCandidate = link.coverUrl || link.uploadedImageUrls?.[0] || link.uploadedImageUrl || '';
+  const previewCover = coverCandidate && !failedCovers.includes(coverCandidate) ? coverCandidate : '';
+  const hasPreview = !isAo3 && Boolean(previewCover || title || link.ogDesc || isPlayable);
 
   const copy = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -207,66 +301,50 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
 
   return (
     <div className="space-y-2.5">
-      {/* AO3 走紧凑卡片：没有封面可放，大视窗只会是一整块空白 */}
-      {!isAo3 && (
-      <div
-        onClick={onOpen}
-        className={`relative w-full aspect-video overflow-hidden rounded-lg border border-[#D8C7AA] cursor-pointer group/cover ${
-          withoutCover ? 'bg-[#EFE5D2]' : 'bg-[#1E4334]'
-        }`}
-      >
-        {link.coverUrl ? (
-          <img
-            src={link.coverUrl}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            className="w-full h-full object-cover transition-transform duration-500 group-hover/cover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-[#8C6D4F]">
-            <EyeOff size={22} />
-            <span className="text-[11px] font-retro-jp">链接方未提供可预览封面</span>
-          </div>
-        )}
-
-        <span className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-2xs ${PLATFORM_STYLE[link.platform] || PLATFORM_STYLE.web}`}>
-          {platformLabel(link.platform)}
-        </span>
-
-        {isPlayable && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="w-14 h-14 rounded-full border-2 border-[#F9E79F] bg-[#1E4334]/55 flex items-center justify-center transition-transform group-hover/cover:scale-110">
-              <Play size={22} className="text-[#F9E79F] translate-x-[1px]" />
+      {isPlayable ? (
+        previewCover ? (
+          <button type="button" onClick={onOpen} aria-label="站内播放 B 站视频"
+            className="group/cover relative block w-full aspect-video overflow-hidden rounded-lg border border-[#D8C7AA] bg-[#1E4334] cursor-pointer">
+            <img src={previewCover} alt="B站视频封面" loading="lazy" referrerPolicy="no-referrer"
+              onError={() => setFailedCovers((current) => [...current, previewCover])}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover/cover:scale-105" />
+            <span className="absolute top-2 left-2 rounded-full bg-[#B7791F] px-2 py-0.5 text-[10px] font-bold text-[#FFFEEF]">B站</span>
+            <span className="absolute inset-0 flex items-center justify-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#F9E79F] bg-[#1E4334]/70 transition-transform group-hover/cover:scale-110">
+                <Play size={22} className="translate-x-[1px] text-[#F9E79F]" />
+              </span>
             </span>
+            <span className="absolute bottom-2 right-2 rounded-md bg-[#2C2016]/85 px-2 py-0.5 text-[10px] text-[#F9E79F]">站内播放</span>
+          </button>
+        ) : null
+      ) : hasPreview ? (
+        <button type="button" onClick={onOpen}
+          className="block w-full overflow-hidden rounded-lg border border-[#D8C7AA] bg-[#FAF5E8] text-left cursor-pointer hover:border-[#A78348] transition-colors">
+          {previewCover && (
+            <div className="relative aspect-video overflow-hidden bg-[#1E4334]">
+              <img src={previewCover} alt="链接预览封面" loading="lazy" referrerPolicy="no-referrer"
+                onError={() => setFailedCovers((current) => [...current, previewCover])}
+                className="h-full w-full object-cover" />
+              {isPlayable && <span className="absolute inset-0 flex items-center justify-center"><Play size={32} fill="currentColor" className="text-white drop-shadow-lg" /></span>}
+            </div>
+          )}
+          <div className="space-y-1 px-3 py-2">
+            <span className="text-[10px] font-bold text-[#9A7338]">{platformLabel(platformForLink(link))} · {canViewInside ? '站内查看' : '链接预览'}</span>
+            {title && <p className="font-pixel text-[13px] sm:text-sm font-bold text-[#2C2016] leading-snug break-words">{title}</p>}
+            {link.ogDesc && <p className="text-[11px] font-retro-jp text-[#6B5B4A] leading-relaxed line-clamp-2 break-words">{link.ogDesc}</p>}
+            {!previewCover && !title && !link.ogDesc && isPlayable && <p className="text-[11px] text-[#6B5B4A]">B站视频 · {link.bvid}</p>}
           </div>
-        )}
+        </button>
+      ) : title ? (
+        <p className="font-pixel text-[13px] sm:text-sm font-bold text-[#2C2016] leading-snug break-words">{title}</p>
+      ) : null}
 
-        <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-[#2C2016]/85 text-[#F9E79F] text-[10px] font-retro-jp">
-          {playOnOriginalSite ? '前往 B 站播放' : tierHint(link.tier)}
-        </span>
-      </div>
+      {isPlayable && (title || link.ogDesc) && (
+        <div className="space-y-1">
+          {title && <p className="font-pixel text-[13px] sm:text-sm font-bold text-[#2C2016] leading-snug break-words">{title}</p>}
+          {link.ogDesc && <p className="text-[11px] font-retro-jp text-[#6B5B4A] leading-relaxed line-clamp-2 break-words">{link.ogDesc}</p>}
+        </div>
       )}
-
-      <div className="space-y-1">
-        {/* AO3：徽章 + 「需镜像打开」提示压在标题行，不再单开视窗 */}
-        {isAo3 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${PLATFORM_STYLE.ao3}`}>
-              {platformLabel(link.platform)}
-            </span>
-            <span className="text-[10px] font-retro-jp text-[#8C6D4F]">AO3 站外作品 · 复制名称或走镜像打开</span>
-          </div>
-        )}
-        <p className="font-pixel text-[13px] sm:text-sm font-bold text-[#2C2016] leading-snug break-words">
-          {title}
-        </p>
-        {link.ogDesc && (
-          <p className="text-[11px] font-retro-jp text-[#6B5B4A] leading-relaxed line-clamp-2 break-words">
-            {link.ogDesc}
-          </p>
-        )}
-      </div>
 
       {note && (
         <div className="border-l-2 border-[#C29641] bg-[#FAF5E8] rounded-r-md px-2.5 py-1.5">
@@ -276,7 +354,28 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
         </div>
       )}
 
+      {uploadedUrls.filter((url) => !failedCovers.includes(url)).length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {uploadedUrls.filter((url) => !failedCovers.includes(url)).map((url) => (
+            <img key={url} src={url} alt="发布者上传的配图" loading="lazy"
+              onError={() => setFailedCovers((current) => [...current, url])}
+              className="max-h-48 w-full rounded-lg border border-[#D8C7AA] object-contain bg-[#F3E9D2]" />
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center gap-2 flex-wrap pt-0.5">
+        {directLink ? (
+        <a
+          href={link.url}
+          target={appLink ? '_self' : '_blank'}
+          rel="noopener noreferrer nofollow"
+          onClick={(e) => e.stopPropagation()}
+          className="px-2.5 py-1 rounded-md bg-[#1E4334] text-[#F9E79F] text-[11px] font-bold flex items-center gap-1 hover:bg-[#2B5E4A] transition-colors"
+        >
+          <ExternalLink size={11} /> 打开链接
+        </a>
+        ) : (
         <button
           type="button"
           onClick={(e) => {
@@ -287,10 +386,11 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
           className="px-2.5 py-1 rounded-md bg-[#1E4334] text-[#F9E79F] text-[11px] font-bold flex items-center gap-1 cursor-pointer hover:bg-[#2B5E4A] transition-colors"
         >
           {isPlayable ? <Play size={11} /> : <ExternalLink size={11} />}
-          <span>{playOnOriginalSite ? '前往 B 站播放' : isPlayable ? '站内播放' : isAo3 ? '打开原文 / 镜像' : link.tier === 'B' ? '站内预览' : '打开原文'}</span>
+          <span>{isPlayable ? '站内播放' : canViewInside ? '站内查看' : '打开原文 / 镜像'}</span>
         </button>
+        )}
 
-        {isAo3 ? (
+        {isAo3 && title ? (
           <button
             type="button"
             onClick={copyName}
@@ -318,7 +418,7 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
       {/* AO3 专属：镜像站面板（复制名称或点封面后内联展开） */}
       {isAo3 && showMirrors && (
         <div onClick={(e) => e.stopPropagation()}>
-          <Ao3MirrorPanel originalUrl={link.url} title={title} />
+          <Ao3MirrorPanel originalUrl={link.url} title={title || hostOf(link.url)} />
         </div>
       )}
     </div>
@@ -340,8 +440,12 @@ export const LinkShareModal: React.FC<ModalProps> = ({ link, title, note, onClos
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const playable = link.tier === 'A' && Boolean(link.bvid);
+  const playable = platformForLink(link) === 'bilibili' && Boolean(link.bvid);
+  const xEmbeddable = platformForLink(link) === 'x' && canEmbedLink(link);
+  const instagramEmbeddable = platformForLink(link) === 'instagram' && canEmbedLink(link);
   const playOnOriginalSite = playable && isIOS();
+  const displayCover = link.coverUrl || link.uploadedImageUrls?.[0] || link.uploadedImageUrl;
+  const platform = platformForLink(link);
 
   return (
     <div
@@ -364,7 +468,7 @@ export const LinkShareModal: React.FC<ModalProps> = ({ link, title, note, onClos
         <div className="bg-[#2C2016]">
           {playOnOriginalSite ? (
             <div className="relative w-full aspect-video flex flex-col items-center justify-center gap-3 bg-[#2C2016]">
-              {link.coverUrl && <img src={link.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-35" referrerPolicy="no-referrer" />}
+              {displayCover && <img src={displayCover} alt="" className="absolute inset-0 w-full h-full object-cover opacity-35" referrerPolicy="no-referrer" />}
               <p className="relative text-sm text-[#FFFEEF] font-retro-jp">iOS 请在 B 站页面播放视频</p>
               <a href={link.url} target="_blank" rel="noopener noreferrer nofollow" className="relative px-4 py-2 rounded-md bg-[#B7791F] text-white text-sm font-bold flex items-center gap-2">
                 <Play size={16} /> 前往 B 站播放
@@ -374,18 +478,23 @@ export const LinkShareModal: React.FC<ModalProps> = ({ link, title, note, onClos
             <div className="relative w-full" style={{ aspectRatio: '16 / 9' }}>
               <iframe
                 title={title}
-                src={`https://player.bilibili.com/player.html?bvid=${link.bvid}&autoplay=0&danmaku=0&high_quality=1`}
+                src={`https://player.bilibili.com/player.html?bvid=${link.bvid}&autoplay=1&danmaku=0&high_quality=1`}
                 className="absolute inset-0 w-full h-full"
                 allowFullScreen
                 allow="fullscreen; picture-in-picture"
                 scrolling="no"
                 frameBorder="0"
                 sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
+                referrerPolicy="no-referrer"
               />
             </div>
-          ) : link.coverUrl ? (
+          ) : xEmbeddable ? (
+            <XPostEmbed url={link.url} />
+          ) : instagramEmbeddable ? (
+            <InstagramPostEmbed url={link.url} />
+          ) : displayCover ? (
             <div className="w-full max-h-[62vh] overflow-hidden flex items-center justify-center">
-              <img src={link.coverUrl} alt="" className="max-h-[62vh] w-auto object-contain" referrerPolicy="no-referrer" />
+              <img src={displayCover} alt="" className="max-h-[62vh] w-auto object-contain" referrerPolicy="no-referrer" />
             </div>
           ) : (
             <div className="p-10 text-center text-[#D3D1C7] text-xs font-retro-jp">
@@ -396,11 +505,11 @@ export const LinkShareModal: React.FC<ModalProps> = ({ link, title, note, onClos
 
         <div className="p-3 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${PLATFORM_STYLE[link.platform] || PLATFORM_STYLE.web}`}>
-              {platformLabel(link.platform)}
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${PLATFORM_STYLE[platform] || PLATFORM_STYLE.web}`}>
+              {platformLabel(platform)}
             </span>
             <span className="text-[10px] font-retro-jp text-[#8C6D4F]">
-              {playOnOriginalSite ? 'iOS 使用 B 站页面播放' : link.platform === 'ao3' ? 'AO3 站外 · 需镜像打开' : tierHint(link.tier)}
+              {playOnOriginalSite ? 'iOS 使用 B 站页面播放' : platform === 'ao3' ? 'AO3 站外 · 需镜像打开' : tierHint(link.tier)}
             </span>
           </div>
           {link.ogDesc && (
@@ -414,7 +523,7 @@ export const LinkShareModal: React.FC<ModalProps> = ({ link, title, note, onClos
           <div className="flex items-center gap-2">
             <a
               href={link.url}
-              target="_blank"
+              target={['x', 'pixiv'].includes(platform) ? '_self' : '_blank'}
               rel="noopener noreferrer nofollow"
               className="px-3 py-1.5 rounded-md bg-[#B7791F] text-[#FFFEEF] text-[11px] font-bold flex items-center gap-1 hover:bg-[#9A6519] transition-colors"
             >

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   DOUJIN_ARCHIVE_DATA,
 } from '../data/doujinArchiveData';
@@ -22,10 +22,9 @@ interface Props {
   onCopyCode?: (code: string) => void;
   onShowToast: (msg: string) => void;
   onGoToResources?: () => void;
-  comicsOnly?: boolean;
 }
 
-export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources, comicsOnly = false }) => {
+export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources }) => {
   // 归档数据状态（优先加载远端 COS archive.json，兜底使用本地 Excel 录入数据）
   const [books, setBooks] = useState<DoujinBookItem[]>(DOUJIN_ARCHIVE_DATA);
   const [isLoadingArchive, setIsLoadingArchive] = useState<boolean>(false);
@@ -33,14 +32,12 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
   // 搜索与多维筛选
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>(comicsOnly ? '漫画本' : '小说本');
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => useAuthStore.getState().profile ? '漫画本' : '小说本');
   const [selectedTag, setSelectedTag] = useState<string>('全部');
-  const [selectedAuthor, setSelectedAuthor] = useState<string>('全部');
   // 排序方式：'pages' = 从页数多到页数少（默认），'new' = 从新到旧
   const [sortBy, setSortBy] = useState<'pages' | 'new'>('pages');
-  const previewLoggedIn = import.meta.env.DEV && new URLSearchParams(window.location.search).get('previewAuth') === '1';
-  const hasSession = useAuthStore((state) => state.hasSession);
-  const isMangaUnlocked = previewLoggedIn || hasSession;
+  const isMangaVisible = useAuthStore((state) => Boolean(state.profile));
+  const wasMangaVisible = useRef(isMangaVisible);
 
   // 当前正在无缝长图阅读的书籍
   const [readingBook, setReadingBook] = useState<DoujinBookItem | null>(null);
@@ -58,23 +55,21 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const [novels, setNovels] = useState<GroupNovel[]>([]);
 
   // 统计所有标签（动态汇总当前数据中的所有标签）
-  const allCategories = comicsOnly ? ['漫画本'] : ['小说本', '插画集'];
-  const dynamicTags = Array.from(new Set(books.flatMap((b) => b.tags || [])));
+  const allCategories = isMangaVisible ? ['漫画本', '小说本', '插画集'] : ['小说本', '插画集'];
+  const categoryBooks = books.filter((book) => (book.category || '漫画本') === selectedCategory);
+  const dynamicTags = Array.from(new Set(categoryBooks.flatMap((b) => b.tags || [])));
   const allTags = ['全部', ...dynamicTags];
 
-  // 统计所有作者（动态汇总当前数据中的 circle，去重并按作品数降序）
-  const dynamicAuthors = Array.from(
-    books
-      .reduce((acc, b) => {
-        const name = (b.circle || '未知').trim();
-        acc.set(name, (acc.get(name) || 0) + 1);
-        return acc;
-      }, new Map<string, number>())
-      .entries()
-  )
-    .sort((a, b) => b[1] - a[1])
-    .map(([name]) => name);
-  const allAuthors = ['全部', ...dynamicAuthors];
+  useEffect(() => {
+    if (isMangaVisible && !wasMangaVisible.current) {
+      setSelectedCategory('漫画本');
+    } else if (!isMangaVisible) {
+      if (selectedCategory === '漫画本') setSelectedCategory('小说本');
+      setReadingBook((book) => (book?.category || '漫画本') === '漫画本' ? null : book);
+      setSecureBook((book) => (book?.category || '漫画本') === '漫画本' ? null : book);
+    }
+    wasMangaVisible.current = isMangaVisible;
+  }, [isMangaVisible, selectedCategory]);
 
   // 组件挂载时自动尝试同步 COS 远端归档（在线小说索引并行加载，失败静默降级）
   useEffect(() => {
@@ -97,7 +92,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     if (pendingNovelCategory === 0) return;
     setSelectedCategory('小说本');
     setSelectedTag('全部');
-    setSelectedAuthor('全部');
     // 只关注意图信号的跳变。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingNovelCategory]);
@@ -122,10 +116,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
   // 点击卡片直接进入查看来源于 COS 的无缝长图
   const handleOpenBookReader = async (book: DoujinBookItem) => {
+    if ((book.category || '漫画本') === '漫画本' && !isMangaVisible) return;
     soundManager.playPageTurn();
 
     // 加密归档的本子：正文只有 comic_vault/{id}_secure.txt，没有可读的图片，
-    // 所以不进长图画廊，改走 SecureComicReader（403 伪装页 → 校验码 → 内存解密 → Canvas）
+    // 所以不进长图画廊，改走 SecureComicReader（维护页 → 校验码 → 内存解密 → Canvas）
     if (book.secure) {
       setSecureBook(book);
       onShowToast(`《${book.titleZh}》资源已被安全隔离，需校验码解析 🔒`);
@@ -165,8 +160,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const filteredBooks = books.filter((book) => {
     const matchCat = (book.category || '漫画本') === selectedCategory;
     const matchTag = selectedTag === '全部' || book.tags.includes(selectedTag);
-    const matchAuthor =
-      selectedAuthor === '全部' || (book.circle || '未知').trim() === selectedAuthor;
     const q = searchQuery.trim().toLowerCase();
     const matchSearch =
       !q ||
@@ -178,7 +171,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
       (book.typesetter && book.typesetter.toLowerCase().includes(q)) ||
       book.tags.some((t) => t.toLowerCase().includes(q));
 
-    return matchCat && matchTag && matchAuthor && matchSearch;
+    return matchCat && matchTag && matchSearch;
   });
 
   // 排序：默认「页数多→少」；「从新到旧」按 updatedAt/createdAt 降序；
@@ -207,14 +200,14 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   };
 
   // ==========================================
-  // 🔒 加密归档阅读模式（403 伪装页 → 校验码 → 双重解密 → Canvas 瀑布流）
+  // 🔒 加密归档阅读模式（维护页 → 校验码 → 解密 → Canvas 瀑布流）
   // 放在长图模式之前：敏感本子绝不允许落到任何图片直链渲染路径上
   // ==========================================
-  if (secureBook) {
+  if (secureBook && isMangaVisible) {
     return (
       <React.Suspense
         fallback={
-          // 冷灰色，和 403 伪装页同一套视觉：加载解码器时也不露馅
+          // 冷灰色，和维护页同一套视觉：加载解码器时也不露馅
           <div className="flex flex-col items-center justify-center w-full h-full bg-[#F2F3F5] gap-2">
             <div className="font-mono text-xs text-[#5F6368] tracking-widest">SECURE NODE GATEWAY</div>
             <div className="font-mono text-[11px] text-[#9AA0A6]">正在加载安全解析节点…</div>
@@ -236,7 +229,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   // ==========================================
   // 📖 无缝长图阅读模式 (基于 腾讯云 COS CDN 映射 + react-pinch-zoom-pan)
   // ==========================================
-  if (readingBook) {
+  if (readingBook && ((readingBook.category || '漫画本') !== '漫画本' || isMangaVisible)) {
     const totalPages = detectedPages || readingBook.pages || 30;
     const pagesList = Array.from({ length: totalPages }, (_, i) => i + 1);
 
@@ -338,7 +331,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                   soundManager.playBlip();
                   setSelectedCategory(cat);
                   setSelectedTag('全部');
-                  setSelectedAuthor('全部');
                 }}
                 className={`px-2.5 py-1 rounded-xs border transition-all cursor-pointer text-xs shrink-0 whitespace-nowrap select-none active:scale-95 ${
                   selectedCategory === cat
@@ -352,7 +344,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           </div>
 
           {/* 标签行：漫画本的标签与小说本不通用，小说本模块有自己的题材筛选，此处隐藏 */}
-          {(selectedCategory === '插画集' || (selectedCategory === '漫画本' && isMangaUnlocked)) && (
+          {selectedCategory === '插画集' && (
             <div className="flex flex-wrap items-center gap-1 pt-1 sm:pt-0 sm:border-l sm:border-dashed sm:border-[#D5C9AF] sm:pl-2">
               <span className="text-[11px] font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">标签:</span>
               <div className="flex flex-wrap items-center gap-1">
@@ -378,7 +370,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         </div>
 
         {/* 搜索框 */}
-        {(selectedCategory !== '漫画本' || isMangaUnlocked) && (
+        {selectedCategory !== '漫画本' && (
         <div className="flex items-center gap-1.5 pt-1 border-t border-dashed border-[#E0D5BE]">
           <input
             type="text"
@@ -398,29 +390,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         </div>
         )}
 
-        {/* 作者筛选：仅漫画本显示，主题同款下拉框，动态汇总 circle 去重（作品数降序） */}
-        {(selectedCategory === '漫画本' && isMangaUnlocked) && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-dashed border-[#E0D5BE]">
-            <span className="text-[11px] font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">作者:</span>
-            <select
-              value={selectedAuthor}
-              onChange={(e) => {
-                soundManager.playBlip();
-                setSelectedAuthor(e.target.value);
-              }}
-              className="w-auto min-w-[120px] max-w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2 py-1.5 text-xs outline-hidden cursor-pointer font-retro-jp text-[#3B2818]"
-            >
-              {allAuthors.map((author) => (
-                <option key={author} value={author}>
-                  {author}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
         {/* 排序：漫画本/插画集卡片网格通用；小说本使用自己的模块，此处隐藏 */}
-        {selectedCategory !== '小说本' && (
+        {selectedCategory === '插画集' && (
           <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-dashed border-[#E0D5BE]">
             <span className="text-[11px] font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">排序:</span>
             <div className="flex flex-wrap items-center gap-1">
@@ -461,12 +432,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
       )}
 
       {/* 典藏本卡片网格：2*2 的规整摆放，点击直接进入查看长图 */}
-      {selectedCategory !== '小说本' && (
+      {selectedCategory !== '小说本' && (selectedCategory !== '漫画本' || isMangaVisible) && (
         <DoujinMaintenanceGate
-          enabled={selectedCategory === '漫画本' && !isMangaUnlocked}
-          onUnlock={() => undefined}
-          loginRequired
-          onLogin={() => useAppShellStore.getState().openLogin()}
+          enabled={selectedCategory === '漫画本'}
+          allowAdmin={false}
+          unlockOnTripleClick={selectedCategory === '漫画本'}
         >
           <div className="columns-1 sm:columns-2 gap-3.5 sm:gap-4.5 w-full">
         {sortedBooks.map((book) => {
