@@ -69,7 +69,7 @@ interface Props {
 const CARD_W = 48;
 const CARD_H = 56;
 const BOARD_W = 360;
-const BOARD_H = 500;
+const BOARD_H = 580;
 const TRAY_CAPACITY = 7;
 const EXPOSED_THRESHOLD = 0.95;
 
@@ -78,6 +78,8 @@ const EXPOSED_THRESHOLD = 0.95;
 const TOTAL_CARDS = 351;
 // 每个布局位点是一个「暗堆」：同位点多张牌摞在一起，深浅错开一点点，肉眼只能看到最上面那张。
 const STACK_OFFSET = 2;
+// 暗堆错位的上限：再深的堆也不会继续往外长，避免顶到棋盘外或糊成一团。
+const MAX_STACK_SHIFT = 12;
 // 位点的基础层号乘以它，保证暗堆内部的层不会和别的一组混在一起（保持原有遮挡顺序）。
 const LAYER_BAND = 8;
 
@@ -141,7 +143,8 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
     return map;
   }, []);
 
-  // 351 张 = 117 组三消：布局位点本身 108 个，每个位点摞成一个 3～4 层的暗堆。
+  // 351 张 = 117 组三消：79 个布局位点（7×9 牌阵 + 两侧盲盒柱 14 + 顶部辅助牌 2）。
+  // 牌阵从上往下越摞越深、差额补在最底下，玩家体感就是「上面一大片随便点，越往下越难挖」。
   const generateHardestDeck = useCallback((): CardInstance[] => {
     const newCards: CardInstance[] = [];
     let idCounter = 1;
@@ -168,68 +171,62 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
       [deck[i], deck[j]] = [deck[j], deck[i]];
     }
 
-    const allPos: { x: number; y: number; layer: number; pile?: 'left' | 'right' }[] = [];
+    // 布局：一整片 7×9 牌阵，每个位点从上往下越摞越深——「从易到难」就靠这个。
+    // 顶部每个位点最上面那张都没有遮挡（开局就是一大片可点的简单区），越往下越是要一层层挖的硬骨头。
+    type Pos = { x: number; y: number; layer: number; depth: number; pile?: 'left' | 'right' };
+    const COLS = 7;
+    const ROW_DEPTHS = [1, 1, 2, 3, 4, 6, 8, 10, 12]; // 第 0 行最浅（易）→ 最后一行最深（难）
+    const GRID_X0 = 14;
+    const GRID_Y0 = 108;
+    const STEP_X = 48;
+    const STEP_Y = 52;
 
-    // 开局先露出六列六排及几张分散的上层牌，保留较多选择。
-    const layers = [
-      { cols: 6, rows: 6, x: 37, y: 99 },
-      { cols: 4, rows: 3, x: 83, y: 126 },
-    ] as const;
-    layers.forEach(({ cols, rows, x, y }, layerIndex) => {
-      for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-          allPos.push({ x: x + col * 47, y: y + row * 48, layer: layerIndex + 4 });
-        }
+    const gridPos: Pos[] = [];
+    ROW_DEPTHS.forEach((depth, row) => {
+      for (let col = 0; col < COLS; col++) {
+        gridPos.push({ x: GRID_X0 + col * STEP_X, y: GRID_Y0 + row * STEP_Y, layer: 4, depth });
       }
     });
-    for (const [x, y] of [[107, 180], [201, 180], [107, 270], [201, 270]]) {
-      allPos.push({ x, y, layer: 6 });
-    }
-    for (const [x, y] of [[152, 207], [152, 255]]) {
-      allPos.push({ x, y, layer: 7 });
-    }
 
-    // 四边环埋在外层下方；越往后越集中，最后才逐圈揭开紧密叠牌。
-    for (const [layer, dx, dy] of [[1, 0, 0], [2, 12, 12], [3, -12, 24]] as const) {
-      const xs = Array.from({ length: 4 }, (_, i) => 70 + i * 50 + dx);
-      const top = 140 + dy;
-      const bottom = 284 + dy;
-      xs.forEach((x) => allPos.push({ x, y: top, layer }));
-      for (const y of [top + 48, top + 96]) allPos.push({ x: xs[3], y, layer });
-      xs.forEach((x) => allPos.push({ x, y: bottom, layer }));
-      for (const y of [top + 48, top + 96]) allPos.push({ x: xs[0], y, layer });
-    }
-
-    // 两侧横向牌堆与参考图一致：下层边缘沿水平方向依次露出。
+    // 两侧盲盒柱：开局就能点，但点下去才知道是什么——纯粹的赌。保持单张。
+    // y=52 时下沿正好落在牌阵第一排（y=108）上，不压住任何一张牌。
+    const pilePos: Pos[] = [];
     for (const pile of ['left', 'right'] as const) {
       for (let i = 0; i < 7; i++) {
-        allPos.push({ x: pile === 'left' ? 12 + i * 10 : 296 - i * 10, y: 52, layer: 10 + i, pile });
+        pilePos.push({ x: pile === 'left' ? 12 + i * 10 : 296 - i * 10, y: 52, layer: 10 + i, depth: 1, pile });
       }
     }
 
-    // 下方四张辅助牌分散摆放，形成前后纵深。
-    for (const [x, y] of [[12, 390], [296, 390], [100, 429], [214, 429]]) {
-      allPos.push({ x, y, layer: 20 });
+    // 顶部两张悬空辅助牌：不压任何牌、随时可点（tray 快满时最后的确定逃生项）。
+    // x 必须落在左右盲盒柱之间的空档（120~236）里，否则会盖住盲盒柱顶端那张，让它点不了。
+    const helperPos: Pos[] = [132, 180].map((x) => ({ x, y: 52, layer: 20, depth: 1 }));
+
+    // 凑满总牌数：差额全部补在牌阵上，且从最底下一行往上轮流加（越下面越深）。
+    let deficit = TOTAL_CARDS - (pilePos.length + helperPos.length)
+      - gridPos.reduce((sum, p) => sum + p.depth, 0);
+    let growIdx = gridPos.length - 1;
+    while (deficit > 0 && gridPos.length > 0) {
+      gridPos[growIdx].depth += 1;
+      deficit -= 1;
+      growIdx = growIdx > 0 ? growIdx - 1 : gridPos.length - 1;
+    }
+    while (deficit < 0) {
+      const target = gridPos.find((p) => p.depth > 1);
+      if (!target) break;
+      target.depth -= 1;
+      deficit += 1;
     }
 
-    // 每个位点摞成一个暗堆：默认 baseDepth 层，随机挑几个位点再加深一层，正好凑满 TOTAL_CARDS。
-    // 同一堆里的牌只差 2px，肉眼只能看到最上面那张——下面就全是未知。
-    const baseDepth = Math.max(1, Math.floor(TOTAL_CARDS / allPos.length));
-    const depthOrder = allPos.map((_, i) => i);
-    for (let i = depthOrder.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [depthOrder[i], depthOrder[j]] = [depthOrder[j], depthOrder[i]];
-    }
-    const deepened = new Set(depthOrder.slice(0, TOTAL_CARDS - baseDepth * allPos.length));
+    const allPos: Pos[] = [...gridPos, ...pilePos, ...helperPos];
 
     let cursor = 0;
-    allPos.forEach((pos, index) => {
-      const depth = baseDepth + (deepened.has(index) ? 1 : 0);
-      for (let k = 0; k < depth; k++) {
-        // k=0 是这一堆的顶层：层号与坐标都和原来一致，保证开局可见面不被邻居误判为被压。
-        // 下面的暗牌层号依次递减（不会跨到别的一组），位置往左上偏 2px 露一条边：看得出厚度，认不出是什么。
-        const x = pos.x - k * STACK_OFFSET;
-        const y = pos.y - k * STACK_OFFSET;
+    allPos.forEach((pos) => {
+      for (let k = 0; k < pos.depth; k++) {
+        // k=0 是这一堆的顶层：停在原位、层号统一，所以全盘顶层互不遮挡——开局就是一大片可点区。
+        // 下面的暗牌层号依次递减（不会跨到别的一组），位置往左上错开 2px 露一条边：看得出厚度，认不出是什么。
+        const shift = Math.min(k * STACK_OFFSET, MAX_STACK_SHIFT);
+        const x = pos.x - shift;
+        const y = pos.y - shift;
         const layer = pos.layer * LAYER_BAND - k;
         newCards.push({
           id: idCounter++,
@@ -244,14 +241,14 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
       }
     });
 
-    // 开局露出的牌安排八组三消；深层不预排，逐步增加选择压力。
+    // 开局那片简单区铺足十二组三消，让上手阶段真的有得消；越往下越不预排，逐步变成纯赌。
     const initialExposure = calculateExposureMap(newCards);
     const firstLayer = newCards.filter((card) => (initialExposure.get(card.id) ?? 0) >= EXPOSED_THRESHOLD);
     for (let i = firstLayer.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [firstLayer[i], firstLayer[j]] = [firstLayer[j], firstLayer[i]];
     }
-    firstLayer.length = Math.min(firstLayer.length, 24);
+    firstLayer.length = Math.min(firstLayer.length, 36);
     const starterTypes = [...CARD_TYPES];
     for (let i = starterTypes.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -352,7 +349,7 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
     processTrayMatches(nextTray, updatedCards);
   };
 
-  // 点击备战区卡牌重新放回槽位
+  // 点击卡槽上方那排临时牌，重新放回槽位
   const handleStagedCardClick = (card: CardInstance) => {
     if (tray.length >= TRAY_CAPACITY) {
       onShowToast('⚠️ 卡槽已满！请先消除卡槽内的卡牌');
@@ -453,7 +450,7 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
     setCards((prev) =>
       prev.map((c) => (movedIds.includes(c.id) ? { ...c, state: 'staging' as const } : c))
     );
-    onShowToast('📦 已移出卡牌至备战区！');
+    onShowToast('📦 已移出卡牌，暂放在卡槽上方');
   };
 
   // 道具 2: 战术撤回
@@ -596,33 +593,11 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
         </div>
       </div>
 
-      {/* 备战整备区 (移出道具触发后) */}
-      {stagingArea.length > 0 && (
-        <div className="w-full min-w-0 shrink-0 p-1 bg-[#3D5D24] border-2 border-[#233D12] shadow-[2px_2px_0px_#233D12] flex items-center gap-1.5 animate-fadeIn">
-          <div className="shrink-0 text-[10px] text-[#F5FFCD] font-pixel flex items-center gap-1 pl-1">
-            <span>📦 备战</span>
-          </div>
-          <div className="min-w-0 flex-1 flex items-center gap-1.5 overflow-x-auto overscroll-x-contain touch-pan-x">
-            {stagingArea.map((card) => {
-              const cardInfo = cardTypeMap.get(card.typeId) || CARD_TYPES[0];
-              return (
-                <div
-                  key={card.id}
-                  onClick={() => handleStagedCardClick(card)}
-                  className="w-9 h-11 shrink-0 cursor-pointer hover:scale-108 active:scale-95 transition-transform"
-                >
-                  <TileFace cardInfo={cardInfo} />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 底部 7 格麻将收集槽（卡槽图为雪碧图切片，卡牌按实测内槽位置叠加） */}
+      {/* 底部 7 格麻将收集槽（卡槽图为雪碧图切片，卡牌按实测内槽位置叠加）。
+          移出/救援出来的牌不再单独占一行「备战」栏，而是直接浮在卡槽上方，牌面尺寸不缩小。 */}
       <div
         ref={trayRef}
-        className="relative w-full max-w-[440px] mx-auto shrink-0 select-none scale-[1.03]"
+        className="relative z-[1700] w-full max-w-[440px] mx-auto shrink-0 select-none scale-[1.03]"
         style={{
           aspectRatio: '3 / 1',
           boxSizing: 'content-box',
@@ -634,6 +609,23 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
           backgroundRepeat: 'no-repeat',
         }}
       >
+        {stagingArea.length > 0 && (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-40 flex items-end gap-1.5">
+            {stagingArea.map((card) => {
+              const cardInfo = cardTypeMap.get(card.typeId) || CARD_TYPES[0];
+              return (
+                <div
+                  key={card.id}
+                  onClick={() => handleStagedCardClick(card)}
+                  className="w-12 h-14 shrink-0 cursor-pointer hover:scale-105 active:scale-95 transition-transform"
+                  title="点一下放回卡槽"
+                >
+                  <TileFace cardInfo={cardInfo} />
+                </div>
+              );
+            })}
+          </div>
+        )}
         {tray.map((card, index) => {
           const slot = TRAY_SLOTS[index] ?? TRAY_SLOTS[TRAY_SLOTS.length - 1];
           const cardInfo = cardTypeMap.get(card.typeId) || CARD_TYPES[0];
@@ -674,7 +666,7 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
               ? 'bg-gradient-to-b from-[#C7CDD4] to-[#9AA3AD] border-[#7B848D] cursor-not-allowed opacity-70'
               : 'bg-gradient-to-b from-[#54C0FF] to-[#1B8FE8] border-[#0E6BB8] shadow-[0_3px_0px_#0E5E9E] hover:from-[#6BCBFF] hover:to-[#2F9EF2] cursor-pointer'
           }`}
-          title="移出 3 张到备战区"
+          title="移出 3 张暂放到卡槽上方"
         >
           <PackagePlus className="w-4 h-4 text-white" strokeWidth={2.5} />
           <span className="font-bold text-[11px] text-white leading-none">移出</span>
