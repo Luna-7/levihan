@@ -10,9 +10,34 @@
  *   cloudbase/functions/submitGameScore/index.js → meritOf()
  * 改任一端都要同步改另一端，否则本地预估值与入库值会对不上。
  */
-import { cloudbase } from './cloudbase';
+import { GAME_LEADERBOARD_ENDPOINT } from './cloudbaseEndpoint';
 import { getSessionToken } from './cloudbaseToken';
 import { FALLBACK_TRACK_SECONDS } from '../save-hange/constants';
+
+/**
+ * 为什么不用 @cloudbase/js-sdk 的 callFunction：
+ * SDK 走的是 <env>.<region>.tcb-api 网关，要校验「WEB 安全域名」，
+ * 而控制台那份白名单里只有 tcloudbaseapp / *.preview.cloudbase.net 等，
+ * 没有 levihan.asia —— 浏览器端一律回 INVALID_REQUEST_SOURCE。
+ * 且全站登录是自建会话（Authorization: Bearer），SDK 侧并没有 CloudBase 登录态，
+ * 云函数里的 app.auth().getUserInfo() 恒为空。
+ * 所以这里跟公告/论坛/市集一样，统一走 HTTP 访问服务直连。
+ */
+async function postLeaderboard(
+  body: Record<string, unknown>,
+  token?: string | null
+): Promise<Record<string, unknown> | null> {
+  const headers: Record<string, string> = { 'Content-Type': 'text/plain;charset=UTF-8' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(GAME_LEADERBOARD_ENDPOINT, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  const result = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!response.ok || !result || result.ok !== true) return null;
+  return result;
+}
 
 export type GameKey = 'daxigua' | 'hange';
 
@@ -117,9 +142,9 @@ export interface SubmitResult {
   localOnly: boolean;
 }
 
-async function currentUid(): Promise<string | null> {
-  // 自建会话：有 token 即视为已登录（uid 由后端凭 token 解析）
-  return getSessionToken() ? 'authed' : null;
+/** 自建会话 token；uid 由后端凭 token 反查，前端只判断「有没有登录」 */
+function currentToken(): string | null {
+  return getSessionToken();
 }
 
 /**
@@ -132,16 +157,13 @@ export async function submitScore(gameKey: GameKey, raw: GameRaw): Promise<Submi
   if (merit <= 0) return { merit: 0, improved: false, localOnly: true };
 
   const localImproved = writeLocalBest(gameKey, merit);
-  const uid = await currentUid();
-  if (!uid) return { merit, improved: localImproved, localOnly: true };
+  const token = currentToken();
+  if (!token) return { merit, improved: localImproved, localOnly: true };
 
-  try {
-    const response = await cloudbase.callFunction({ name: 'submitGameScore', data: { gameKey, raw } });
-    const result = (response as { result?: { improved?: boolean } })?.result || (response as { improved?: boolean });
-    return { merit, improved: result?.improved === true, localOnly: false };
-  } catch {
-    return { merit, improved: localImproved, localOnly: true };
-  }
+  const result = await postLeaderboard({ action: 'submitScore', gameKey, raw }, token);
+  // 云端不可用时静默退回本机成绩，绝不打断正在打游戏的人
+  if (!result) return { merit, improved: localImproved, localOnly: true };
+  return { merit, improved: result.improved === true, localOnly: false };
 }
 
 export interface LeaderboardRow {
@@ -166,14 +188,8 @@ export interface LeaderboardData {
  * 拉取榜单。云函数尚未部署时返回 null，由 UI 显示「尚未开通」而不是报错。
  */
 export async function fetchLeaderboard(): Promise<LeaderboardData | null> {
-  try {
-    const response = await cloudbase.callFunction({ name: 'getGameLeaderboard', data: {} });
-    // 云函数返回体可能直接是数据，也可能包一层 { result }，两种都兼容
-    const payload = (response as unknown as { result?: unknown } | null)?.result;
-    const result = (payload ?? response) as LeaderboardData | null;
-    if (!result || !Array.isArray(result.total)) return null;
-    return result;
-  } catch {
-    return null;
-  }
+  // 带 token 时后端会额外返回「我的战绩」，游客也能看公开榜
+  const result = await postLeaderboard({ action: 'leaderboard' }, currentToken()).catch(() => null);
+  if (!result || !Array.isArray(result.total)) return null;
+  return result as unknown as LeaderboardData;
 }

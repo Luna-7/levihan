@@ -1230,6 +1230,7 @@ const PUBLIC_ACTIONS = new Set([
   'announcementList', 'announcementImageUpload',
   'forumList', 'forumTodayRelay', 'marketList',
   'novelCommentList',
+  'leaderboard',
 ]);
 // 需用户登录（CloudBase access_token 换 uid）：发布/互动/删除自己的内容
 const USER_ACTIONS = new Set([
@@ -1238,6 +1239,7 @@ const USER_ACTIONS = new Set([
   'marketPublish', 'marketDelete',
   'novelDirectPublish', 'novelUpdate', 'novelCommentAdd',
   'novelBody',
+  'submitScore',
 ]);
 /* 用户会话**或**管理员令牌任一即可：
    - 删评论 / 删帖子 = 本人（uid 比对）或管理员（管理员可清理任意垃圾贴）
@@ -1246,8 +1248,198 @@ const USER_ACTIONS = new Set([
    管理员没有用户会话，走普通 USER_ACTIONS 会被 401 挡死。 */
 const USER_OR_ADMIN_ACTIONS = new Set(['novelCommentDelete', 'linkPreview', 'forumDelete', 'forumPublish', 'forumCommentEdit']);
 
+/* ------------------------------ 头号玩家排行榜 ------------------------------ */
+
+/**
+ * 参与榜单的游戏只有两款：daxigua（合成大西皮，全难度）、hange（拯救韩吉，仅绝境难度）。
+ * 利了个韩（lihan）暂不参与，因此不在白名单里，避免脏数据入库。
+ */
+const GAME_KEYS = ['daxigua', 'hange'];
+const LEADERBOARD_TOP = 50;
+/** 每人每游戏每日最多提交次数，防脚本刷榜 */
+const SCORE_DAILY_LIMIT = 30;
+/** 与 save-hange 的 FALLBACK_TRACK_SECONDS 保持一致（终曲全长 3:56） */
+const FALLBACK_TRACK_SECONDS = 236;
+
+/**
+ * 归一化公式必须与前端保持一致：src/utils/gameScores.ts → meritOf() / MERIT_TUNING
+ * 改任一端都要同步改另一端，否则本地预估与入库值会对不上。〔待校准〕
+ */
+const GAME_TUNING = {
+  daxiguaScoreCap: 3000,
+  hangeParMoves: 30,
+  hangeWinBase: 400,
+  hangeTimeBonusMax: 300,
+  hangeMoveBonusMax: 300,
+  meritCap: 1000,
+};
+
+const clamp01Game = (v) => Math.min(1, Math.max(0, v));
+const numGame = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+function gameMerit(gameKey, raw) {
+  if (gameKey === 'daxigua') {
+    const score = Math.max(0, Math.round(numGame(raw.score)));
+    return Math.round((Math.min(score, GAME_TUNING.daxiguaScoreCap) / GAME_TUNING.daxiguaScoreCap) * GAME_TUNING.meritCap);
+  }
+  const duration = numGame(raw.duration) > 0 ? numGame(raw.duration) : FALLBACK_TRACK_SECONDS;
+  const used = Math.max(0, Math.min(numGame(raw.timeUsedSeconds), duration));
+  const timeFactor = clamp01Game((duration - used) / duration);
+  const moveFactor = clamp01Game(1 - (numGame(raw.moves) - GAME_TUNING.hangeParMoves) / GAME_TUNING.hangeParMoves);
+  return Math.round(
+    GAME_TUNING.hangeWinBase +
+      GAME_TUNING.hangeTimeBonusMax * timeFactor +
+      GAME_TUNING.hangeMoveBonusMax * moveFactor
+  );
+}
+
+/** 取用户在榜单上的展示名（app_users.username），查不到就退回无名士兵 */
+async function gameNicknameOf(db, uid) {
+  if (!uid) return null;
+  const users = await db.from('app_users').select('id,username').eq('id', uid).limit(1);
+  const user = Array.isArray(users.data) ? users.data[0] : users.data;
+  return (user && user.username) || null;
+}
+
+const gameRows = (value) => (Array.isArray(value) ? value : value ? [value] : []);
+
+/** 读榜：uid 为空时只返回公开榜单（游客可看） */
+async function readLeaderboard(uid) {
+  const db = inboxDb();
+  const best = gameRows(
+    assertDbResult(
+      await db
+        .from('game_best')
+        .select('uid,game_key,merit,achieved_at')
+        .order('merit', { ascending: false })
+        .limit(500)
+    )
+  );
+
+  // 昵称统一从 app_users 取（game_best 只存 uid，避免改名后榜单对不上）
+  const nicknameMap = {};
+  const uids = [...new Set(best.map((row) => row.uid))];
+  if (uids.length) {
+    const users = gameRows(assertDbResult(await db.from('app_users').select('id,username').in('id', uids)));
+    users.forEach((user) => {
+      if (user) nicknameMap[String(user.id)] = user.username || '无名士兵';
+    });
+  }
+  const nameOf = (id) => nicknameMap[String(id)] || '无名士兵';
+
+  // 分榜（best 已按 merit 降序，过滤后顺序保持）
+  const ranked = {};
+  GAME_KEYS.forEach((key) => {
+    ranked[key] = best.filter((row) => row.game_key === key);
+  });
+
+  // 总榜：按 uid 聚合各游戏积分
+  const totalsMap = new Map();
+  best.forEach((row) => {
+    const entry = totalsMap.get(row.uid) || { uid: row.uid, merit: 0, breakdown: {} };
+    entry.merit += row.merit;
+    entry.breakdown[row.game_key] = row.merit;
+    totalsMap.set(row.uid, entry);
+  });
+  const rankedTotal = [...totalsMap.values()].sort((a, b) => b.merit - a.merit);
+
+  const shape = (entry) => ({
+    uid: entry.uid,
+    nickname: nameOf(entry.uid),
+    merit: entry.merit,
+    achievedAt: entry.achieved_at,
+  });
+
+  const total = rankedTotal.slice(0, LEADERBOARD_TOP).map((entry) => ({ ...shape(entry), breakdown: entry.breakdown }));
+  const daxigua = ranked.daxigua.slice(0, LEADERBOARD_TOP).map(shape);
+  const hange = ranked.hange.slice(0, LEADERBOARD_TOP).map(shape);
+
+  let me = null;
+  if (uid && totalsMap.has(uid)) {
+    const mine = totalsMap.get(uid);
+    const indexOf = (list) => {
+      const index = list.findIndex((entry) => entry.uid === uid);
+      return index >= 0 ? index + 1 : null;
+    };
+    me = {
+      uid,
+      nickname: nameOf(uid),
+      merit: mine.merit,
+      breakdown: mine.breakdown,
+      ranks: {
+        total: indexOf(rankedTotal),
+        daxigua: indexOf(ranked.daxigua),
+        hange: indexOf(ranked.hange),
+      },
+    };
+  }
+
+  return { ok: true, total, daxigua, hange, me };
+}
+
+/** 提交成绩：需登录（uid 由调用方用 authUid 解析后注入 payload.__uid） */
+async function submitGameScore(uid, payload) {
+  const gameKey = String(payload.gameKey || '');
+  if (!GAME_KEYS.includes(gameKey)) throw httpError('未知的游戏类型', 400);
+
+  const raw = payload.raw && typeof payload.raw === 'object' ? payload.raw : {};
+  const merit = gameMerit(gameKey, raw);
+  if (merit <= 0) throw httpError('本次成绩无效', 400);
+
+  const db = inboxDb();
+  const nickname = (await gameNicknameOf(db, uid)) || '无名士兵';
+
+  // 每日提交上限，防脚本刷榜
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const today = gameRows(
+    assertDbResult(
+      await db
+        .from('game_scores')
+        .select('id')
+        .eq('uid', uid)
+        .eq('game_key', gameKey)
+        .gte('created_at', startOfDay.toISOString())
+    )
+  );
+  if (today.length >= SCORE_DAILY_LIMIT) throw httpError('今日提交次数已达上限，明天再来', 429);
+
+  const now = new Date().toISOString();
+  assertDbResult(
+    await db.from('game_scores').insert({
+      uid,
+      nickname,
+      game_key: gameKey,
+      merit,
+      raw_score: raw,
+      created_at: now,
+    })
+  );
+
+  const existing = gameRows(
+    assertDbResult(await db.from('game_best').select('merit').eq('uid', uid).eq('game_key', gameKey).limit(1))
+  );
+  const prev = existing[0];
+  const improved = !prev || merit > prev.merit;
+
+  if (improved) {
+    const record = { uid, game_key: gameKey, merit, raw_score: raw, achieved_at: now };
+    if (prev) {
+      assertDbResult(await db.from('game_best').update(record).eq('uid', uid).eq('game_key', gameKey));
+    } else {
+      assertDbResult(await db.from('game_best').insert(record));
+    }
+  }
+
+  return { ok: true, merit, improved, best: improved ? merit : prev.merit };
+}
+
 async function handle(action, payload) {
   switch (action) {
+    // 头号玩家排行榜：读榜公开，提分需登录（uid 走 authUid → app_users.id）
+    case 'leaderboard': return readLeaderboard(payload.__uid);
+    case 'submitScore': return submitGameScore(payload.__uid, payload);
+
     case 'submitNovel': return submitToInbox('novel', payload);
     case 'submitContact': return submitToInbox('contact', payload);
 
@@ -2227,6 +2419,9 @@ const server = http.createServer(async (req, res) => {
       payload.__uid = await authUid(bearer);
       if (!payload.__uid && verifyToken(token)) payload.__uid = '__admin__';
       if (!payload.__uid) throw httpError('请先登录账号', 401);
+    } else if (action === 'leaderboard') {
+      // 读榜公开：带 Bearer 时顺带算出「我的战绩」，拿不到身份就当游客（不报错）
+      payload.__uid = await authUid(bearer);
     } else if (!PUBLIC_ACTIONS.has(action) && !verifyToken(token)) {
       throw httpError('未授权或登录已过期，请重新登录', 401);
     }
@@ -2292,6 +2487,9 @@ exports.main = async (event) => {
       payload.__uid = await authUid(bearer);
       if (!payload.__uid && verifyToken(token)) payload.__uid = '__admin__';
       if (!payload.__uid) throw httpError('请先登录账号', 401);
+    } else if (action === 'leaderboard') {
+      // 读榜公开：带 Bearer 时顺带算出「我的战绩」，拿不到身份就当游客（不报错）
+      payload.__uid = await authUid(bearer);
     } else if (!PUBLIC_ACTIONS.has(action) && !verifyToken(token)) {
       throw httpError('未授权或登录已过期，请重新登录', 401);
     }
