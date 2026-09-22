@@ -187,33 +187,36 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
     //          看得见图案但点不了；等上面的 A 清掉才会翻上来。
     // 行距/列距都大于牌面尺寸，所以 A 格之间留出真正的砖缝，F 格才有得露。
     type Pos = { x: number; y: number; layer: number; depth: number; pile?: 'left' | 'right' };
-    const COLS_A = 5;
-    const ROWS_A = 5;
     const PITCH_AX = 68;   // 列距（牌宽 62 ⇒ 6px 竖砖缝 ≈ 参考图的 1/10 牌宽）
     const PITCH_AY = 78;   // 行距（牌高 72 ⇒ 6px 横砖缝）
     const XA = 2;          // 整片横向靠左，右侧留出暗牌凸边（最多 24px）
     const Y0 = 86;         // 牌阵顶端，上方 6~78 留给盲盒柱与辅助牌
+    const STAGGER = PITCH_AX / 2;   // 34：相邻行横向错开半张（砖墙错缝）
+    // 逐行格位数 5/4 交替 + 错开半张 ⇒ 左右两侧自然形成台阶状的参差边，
+    // 不再是四四方方的整齐网格，整体仍是一整片矩形砖墙（参考图的观感）。
+    const ROW_COLS = [5, 4, 5, 4, 5];
 
     const gridPos: Pos[] = [];
-    // A 格：顶层整片矩形，越往下摞得越深
-    for (let row = 0; row < ROWS_A; row++) {
-      for (let col = 0; col < COLS_A; col++) {
-        gridPos.push({
-          x: XA + col * PITCH_AX,
-          y: Y0 + row * PITCH_AY,
-          layer: 6,
-          depth: 4 + row,
-        });
+    const rowMeta: { x0: number; cols: number; y: number }[] = [];
+    ROW_COLS.forEach((cols, row) => {
+      const x0 = XA + (row % 2) * STAGGER;
+      const y = Y0 + row * PITCH_AY;
+      rowMeta.push({ x0, cols, y });
+      // A 格：顶层，越往下摞得越深
+      for (let col = 0; col < cols; col++) {
+        gridPos.push({ x: x0 + col * PITCH_AX, y, layer: 6, depth: 6 + row });
       }
-    }
-    // F 格：嵌格，低一层（layer 基准 4 ⇒ 32），越往下越深
-    for (let row = 0; row < ROWS_A - 1; row++) {
-      for (let col = 0; col < COLS_A - 1; col++) {
+    });
+    // F 格：嵌格，落在上一行的砖缝正下方、正好低一层（layer 基准 4 ⇒ 32），
+    // 只在行间 6px 缝 + 6px 竖缝里露出一条 ⇒ 看得见图案但点不了。
+    for (let row = 0; row < ROW_COLS.length - 1; row++) {
+      const { x0, cols, y } = rowMeta[row];
+      for (let col = 0; col < cols - 1; col++) {
         gridPos.push({
-          x: XA + col * PITCH_AX + PITCH_AX / 2,
-          y: Y0 + row * PITCH_AY + PITCH_AY / 2,
+          x: x0 + col * PITCH_AX + STAGGER,
+          y: y + PITCH_AY / 2,
           layer: 4,
-          depth: 6 + row,
+          depth: 8 + row,
         });
       }
     }
@@ -658,14 +661,19 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
         }}
       >
         {stagingArea.length > 0 && (
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-40 flex items-end gap-1.5">
+          <div
+            className="absolute left-1/2 -translate-x-1/2 z-40 flex items-end gap-1.5"
+            // 往下坐到卡槽边沿（对齐槽口顶线），不再飘在牌阵里挡住底排；
+            // 尺寸跟棋盘上的牌一致——移出只是「挪出来」，只有真正进卡槽才缩成小牌。
+            style={{ bottom: `${100 - TRAY_SLOTS[0].top}%` }}
+          >
             {stagingArea.map((card) => {
               const cardInfo = cardTypeMap.get(card.typeId) || CARD_TYPES[0];
               return (
                 <div
                   key={card.id}
                   onClick={() => handleStagedCardClick(card)}
-                  style={{ width: `${trayCardW}px`, height: `${trayCardW * CARD_H / CARD_W}px` }}
+                  style={{ width: `${CARD_W * scale}px`, height: `${CARD_H * scale}px` }}
                   className="shrink-0 cursor-pointer hover:scale-105 active:scale-95 transition-transform"
                   title="点一下放回卡槽"
                 >
