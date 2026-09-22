@@ -73,6 +73,14 @@ const BOARD_H = 500;
 const TRAY_CAPACITY = 7;
 const EXPOSED_THRESHOLD = 0.95;
 
+// 一局总牌数。⚠️ 必须是 3 的倍数：三张一组才能消除，总数除不尽就必然剩牌 ⇒ 死局。
+// 350 % 3 = 2 不成立，故取最近的合法值 351 = 117 组三消（比 350 只多 1 张）。
+const TOTAL_CARDS = 351;
+// 每个布局位点是一个「暗堆」：同位点多张牌摞在一起，深浅错开一点点，肉眼只能看到最上面那张。
+const STACK_OFFSET = 2;
+// 位点的基础层号乘以它，保证暗堆内部的层不会和别的一组混在一起（保持原有遮挡顺序）。
+const LAYER_BAND = 8;
+
 const calculateExposureMap = (cards: CardInstance[]): Map<number, number> => {
   const map = new Map<number, number>();
   const active = cards.filter((card) => card.state === 'board');
@@ -133,14 +141,25 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
     return map;
   }, []);
 
-  // 108 张：外层可见牌 54 + 后期环形叠层 36 + 两侧牌堆 14 + 辅助牌 4。
+  // 351 张 = 117 组三消：布局位点本身 108 个，每个位点摞成一个 3～4 层的暗堆。
   const generateHardestDeck = useCallback((): CardInstance[] => {
     const newCards: CardInstance[] = [];
     let idCounter = 1;
 
+    // 每种图案的张数也必须是 3 的倍数，否则该花色永远清不完。
+    // 11 种 × 21 张 + 5 种 × 24 张 = 351（哪 5 种多给一组随机决定）。
+    const counts = CARD_TYPES.map(() => 21);
+    const lottery = CARD_TYPES.map((_, i) => i);
+    for (let i = lottery.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [lottery[i], lottery[j]] = [lottery[j], lottery[i]];
+    }
+    const extraGroups = (TOTAL_CARDS - counts.length * 21) / 3;
+    lottery.slice(0, extraGroups).forEach((i) => { counts[i] += 3; });
+
     const deck: string[] = [];
-    CARD_TYPES.forEach((ct, index) => {
-      for (let i = 0; i < (index < 12 ? 6 : 9); i++) deck.push(ct.id);
+    counts.forEach((count, index) => {
+      for (let i = 0; i < count; i++) deck.push(CARD_TYPES[index].id);
     });
 
     // 随机充分洗牌
@@ -193,18 +212,37 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
       allPos.push({ x, y, layer: 20 });
     }
 
-    for (let i = 0; i < deck.length && i < allPos.length; i++) {
-      newCards.push({
-        id: idCounter++,
-        typeId: deck[i],
-        x: allPos[i].x,
-        y: allPos[i].y,
-        layer: allPos[i].layer,
-        pile: allPos[i].pile,
-        state: 'board',
-        originBoardState: { x: allPos[i].x, y: allPos[i].y, layer: allPos[i].layer },
-      });
+    // 每个位点摞成一个暗堆：默认 baseDepth 层，随机挑几个位点再加深一层，正好凑满 TOTAL_CARDS。
+    // 同一堆里的牌只差 2px，肉眼只能看到最上面那张——下面就全是未知。
+    const baseDepth = Math.max(1, Math.floor(TOTAL_CARDS / allPos.length));
+    const depthOrder = allPos.map((_, i) => i);
+    for (let i = depthOrder.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [depthOrder[i], depthOrder[j]] = [depthOrder[j], depthOrder[i]];
     }
+    const deepened = new Set(depthOrder.slice(0, TOTAL_CARDS - baseDepth * allPos.length));
+
+    let cursor = 0;
+    allPos.forEach((pos, index) => {
+      const depth = baseDepth + (deepened.has(index) ? 1 : 0);
+      for (let k = 0; k < depth; k++) {
+        // k=0 是这一堆的顶层：层号与坐标都和原来一致，保证开局可见面不被邻居误判为被压。
+        // 下面的暗牌层号依次递减（不会跨到别的一组），位置往左上偏 2px 露一条边：看得出厚度，认不出是什么。
+        const x = pos.x - k * STACK_OFFSET;
+        const y = pos.y - k * STACK_OFFSET;
+        const layer = pos.layer * LAYER_BAND - k;
+        newCards.push({
+          id: idCounter++,
+          typeId: deck[cursor++],
+          x,
+          y,
+          layer,
+          pile: pos.pile,
+          state: 'board',
+          originBoardState: { x, y, layer },
+        });
+      }
+    });
 
     // 开局露出的牌安排八组三消；深层不预排，逐步增加选择压力。
     const initialExposure = calculateExposureMap(newCards);
