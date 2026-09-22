@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { CLOUDBASE_API_BASE } from '../utils/cloudbaseEndpoint';
+import { CLOUDBASE_API_BASE, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { getSessionToken, setSessionToken, type AuthProfile } from '../utils/cloudbaseToken';
 import { clearVerifiedComicCode } from '../utils/secureComicCode';
 import { clearDoujinSessionUnlock } from '../utils/doujinAccess';
@@ -40,7 +40,7 @@ const postAuth = async (action: string, body: Record<string, unknown>, token?: s
   const timeout = globalThis.setTimeout(() => controller.abort(), 15_000);
   let response: Response;
   try {
-    response = await fetch(`${CLOUDBASE_API_BASE}/auth`, {
+    response = await fetchBackend(`${CLOUDBASE_API_BASE}/auth`, {
       method: 'POST', headers, body: JSON.stringify({ action, ...body }), signal: controller.signal,
     });
   } catch (error) {

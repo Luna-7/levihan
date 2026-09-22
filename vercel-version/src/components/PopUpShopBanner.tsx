@@ -5,7 +5,7 @@ import { SvgBaroqueCorner } from './PopUpShopDecorations';
 import { soundManager } from '../utils/audio';
 import { UiSprite } from './UiSprite';
 import { submitToInbox } from '../utils/submissionInbox';
-import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
+import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
 
 export interface AnnouncementItem {
@@ -91,7 +91,7 @@ export const PopUpShopBanner: React.FC<Props> = ({
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(ADMIN_UPLOAD_ENDPOINT, {
+    fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
       method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body: JSON.stringify({ action: 'announcementList' }), signal: controller.signal,
     }).then((response) => response.ok ? response.json() : Promise.reject(new Error('公告读取失败')))
@@ -159,7 +159,7 @@ export const PopUpShopBanner: React.FC<Props> = ({
         const cropped = await new Promise<string>((resolve, reject) => {
           const img = new Image(); img.onload = () => { try { const ratio=16/9; let sw=img.naturalWidth,sh=sw/ratio;if(sh>img.naturalHeight){sh=img.naturalHeight;sw=sh*ratio;}sw/=proposalCrop.zoom;sh/=proposalCrop.zoom;const sx=(img.naturalWidth-sw)*proposalCrop.x/100,sy=(img.naturalHeight-sh)*proposalCrop.y/100;const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=675;canvas.getContext('2d')!.drawImage(img,sx,sy,sw,sh,0,0,1200,675);resolve(canvas.toDataURL('image/webp',.86).split(',')[1]||''); } catch(error){reject(error);} }; img.onerror=reject; img.src=proposalPreview;
         });
-        const response = await fetch(ADMIN_UPLOAD_ENDPOINT,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({action:'announcementImageUpload',imageBase64:cropped})});
+        const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({action:'announcementImageUpload',imageBase64:cropped})});
         const result=await response.json(); if(!response.ok||!result.ok)throw new Error(result.error||'图片上传失败'); image=result.url;
       }
       await submitToInbox('submitAnnouncement', { ...proposal, image, tag: '利韩企划' });

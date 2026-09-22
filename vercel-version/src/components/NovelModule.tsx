@@ -8,7 +8,7 @@ import { newestNovelsFirst } from '../utils/workSort';
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { useAuthStore } from '../stores/authStore';
 import { useAppShellStore } from '../stores/appShellStore';
-import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
+import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { cosService } from '../services/cosClient';
 import { CardPatternOverlay } from './CardPatternOverlay';
 
@@ -176,7 +176,7 @@ export const NovelModule: React.FC<Props> = ({
     if (novel.encrypted) {
       const token = await getAccessToken();
       if (!token) throw new Error('请先登录账号后再编辑');
-      const resp = await fetch(ADMIN_UPLOAD_ENDPOINT, {
+      const resp = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ action: 'novelBody', id: novel.id }),
@@ -253,7 +253,7 @@ export const NovelModule: React.FC<Props> = ({
     }
     setIsUploading(true);
     try {
-      const response = await fetch(ADMIN_UPLOAD_ENDPOINT, {
+      const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
         body: JSON.stringify({

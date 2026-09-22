@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Calendar, Megaphone, FileText, AlertCircle, ArrowRight } from 'lucide-react';
 import { soundManager } from '../utils/audio';
 import { submitToInbox } from '../utils/submissionInbox';
-import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
+import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 
 /** 与后台 announcementSave 的字段契约保持一致（id/tag/title/author/time/link/description/image） */
 export interface AnnouncementItem {
@@ -57,7 +57,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
 
     const load = (silent: boolean) => {
       if (!silent) setLoadingAnnouncements(true);
-      fetch(ADMIN_UPLOAD_ENDPOINT, {
+      fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body: JSON.stringify({ action: 'announcementList' }),
@@ -167,7 +167,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
           img.onerror = reject;
           img.src = proposalPreview;
         });
-        const response = await fetch(ADMIN_UPLOAD_ENDPOINT, {
+        const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
           body: JSON.stringify({ action: 'announcementImageUpload', imageBase64: cropped }),

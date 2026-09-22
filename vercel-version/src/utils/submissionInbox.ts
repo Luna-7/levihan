@@ -1,10 +1,10 @@
-import { ADMIN_UPLOAD_ENDPOINT } from './cloudbaseEndpoint';
+import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from './cloudbaseEndpoint';
 
 export async function submitToInbox(
   action: 'submitNovel' | 'submitContact' | 'submitAnnouncement' | 'submitRecommend' | 'submitCustomOrderEmail',
   fields: Record<string, unknown>
 ) {
-  const response = await fetch(ADMIN_UPLOAD_ENDPOINT, {
+  const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
     body: JSON.stringify({ action, ...fields }),

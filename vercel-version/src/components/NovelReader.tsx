@@ -4,7 +4,7 @@ import { cosService } from '../services/cosClient';
 import { soundManager } from '../utils/audio';
 import { AuthorWithLink } from '../utils/authorLink';
 import { getAccessToken } from '../utils/cloudbaseToken';
-import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
+import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { NovelComments } from './NovelComments';
 
 interface Props {
@@ -54,7 +54,7 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
             }
             return;
           }
-          const resp = await fetch(ADMIN_UPLOAD_ENDPOINT, {
+          const resp = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
             body: JSON.stringify({ action: 'novelBody', id: novel.id }),

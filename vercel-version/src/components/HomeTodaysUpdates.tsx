@@ -4,7 +4,7 @@ import { cosService } from '../services/cosClient';
 import { GroupNovel } from '../types/doujinArchive';
 import { fmtTime } from '../utils/forumFormat';
 import type { ForumPost } from './RestaurantForum';
-import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
+import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { useAppShellStore } from '../stores/appShellStore';
 
 /** 三种更新来源的归类 */
@@ -82,7 +82,7 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onShowToast 
               });
 
               // 接力棒：论坛接龙帖 comments 里今天新增的棒（含开头第 1 棒）
-              const requestForum = (action: 'forumTodayRelay' | 'forumList') => fetch(ADMIN_UPLOAD_ENDPOINT, {
+              const requestForum = (action: 'forumTodayRelay' | 'forumList') => fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
                 body: JSON.stringify({ action, since: start }),

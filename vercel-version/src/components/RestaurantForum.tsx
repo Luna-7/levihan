@@ -10,7 +10,7 @@ import { soundManager } from '../utils/audio';
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { useAuthStore } from '../stores/authStore';
 import { useAppShellStore } from '../stores/appShellStore';
-import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
+import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { CharacterArt, spriteRef } from './CharacterArt';
 import { TeaPartyInteractiveZipline } from './TeaPartyInteractiveZipline';
@@ -621,7 +621,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const headers: Record<string, string> = { 'Content-Type': 'text/plain;charset=UTF-8' };
     const at = await getAccessToken();
     if (at) headers['Authorization'] = `Bearer ${at}`;
-    const response = await fetch(ADMIN_UPLOAD_ENDPOINT, {
+    const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
       method: 'POST',
       headers,
       body: JSON.stringify({ action, ...fields }),

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ADMIN_UPLOAD_ENDPOINT } from '../utils/cloudbaseEndpoint';
+import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { useAuthStore } from '../stores/authStore';
 import { useAppShellStore } from '../stores/appShellStore';
@@ -24,7 +24,7 @@ interface Props {
 async function callNovelApi(payload: Record<string, unknown>, token?: string | null) {
   const headers: Record<string, string> = { 'Content-Type': 'text/plain;charset=UTF-8' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const resp = await fetch(ADMIN_UPLOAD_ENDPOINT, {
+  const resp = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
