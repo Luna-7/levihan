@@ -12,7 +12,8 @@ interface Props {
   onExit?: () => void;
 }
 
-// 塔塔开（合成大西皮）原版专属背景音乐：经典街机像素主题曲（同时保留利韩战歌供切换）
+// 塔塔开（合成大西皮）原版专属背景音乐：经典街机像素主题曲；利了个韩用专属曲，按游戏自动路由。
+// 顶栏不再提供手动切歌按钮（曲目由 selectedGame 决定），只留一个音乐符号开关。
 const BGM_TRACKS = [
   { id: 'classic', label: '塔塔开经典', fullName: '塔塔开·合成大西皮原版街机曲', src: '/sounds/bgm.mp3' },
   { id: 'lihan', label: '利了个韩专属', fullName: '利了个韩专属对局曲', src: '/sounds/lihan-bgm.mp3' },
@@ -151,17 +152,8 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
     onShowToast(next ? `🎵 对局音乐已开启（${BGM_TRACKS[trackIdx].label}）` : '🔇 对局音乐已关闭');
   };
 
-  // 切换背景音乐曲目
-  const handleSwitchTrack = () => {
-    soundManager.playFilterClick();
-    const nextIdx = (trackIdx + 1) % BGM_TRACKS.length;
-    setTrackIdx(nextIdx);
-    const nextTrack = BGM_TRACKS[nextIdx];
-    try {
-      window.localStorage.setItem(BGM_TRACK_KEY, nextTrack.id);
-    } catch {}
-    onShowToast(`🎵 切换音乐：${nextTrack.fullName}`);
-  };
+  // 曲目切换按钮已删除：对局音乐按游戏自动路由（利了个韩 → 专属曲，其余 → 塔塔开经典），
+  // 顶栏只留一个音乐符号开关（🔊/🔇），手动切歌不再需要。
 
   // 本局成绩暂存：退出对局时统一提交到头号玩家
   // 大西皮在一次进入里可能玩多局，取其中最高分
@@ -296,29 +288,18 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
         {/* 工具栏: 街机式 BGM + 切歌 + 全屏 */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           {(selectedGame === 'daxigua' || selectedGame === 'lihan') && (
-            <>
-              <button
-                onClick={handleToggleBgm}
-                className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-none transition-transform flex items-center gap-1 text-[10px] sm:text-xs font-pixel border-2 ${
-                  bgmOn
-                    ? 'bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] border-[#37755c] shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
-                    : 'bg-[#142B21] text-[#8A7968] border-[#2B5E4A] shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
-                }`}
-                title={bgmOn ? '关闭对局音乐' : '开启对局音乐'}
-              >
-                <span>{bgmOn ? '🔊' : '🔇'}</span>
-                <span className="hidden xs:inline">{bgmOn ? 'BGM' : '静音'}</span>
-              </button>
-
-              <button
-                onClick={handleSwitchTrack}
-                className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-none bg-[#142B21] hover:bg-[#1E4334] text-[#F9E79F] border-2 border-[#2B5E4A] shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer transition-transform flex items-center gap-1 text-[10px] sm:text-xs font-pixel select-none"
-                title={`当前曲目：${BGM_TRACKS[trackIdx].fullName}（点击切换）`}
-              >
-                <span>🎶</span>
-                <span className="hidden sm:inline">{BGM_TRACKS[trackIdx].label}</span>
-              </button>
-            </>
+            <button
+              onClick={handleToggleBgm}
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-none flex items-center justify-center text-sm sm:text-base font-pixel border-2 transition-transform ${
+                bgmOn
+                  ? 'bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] border-[#37755c] shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
+                  : 'bg-[#142B21] text-[#8A7968] border-[#2B5E4A] shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
+              }`}
+              title={bgmOn ? `关闭对局音乐（${BGM_TRACKS[trackIdx].fullName}）` : '开启对局音乐'}
+              aria-label={bgmOn ? '关闭对局音乐' : '开启对局音乐'}
+            >
+              <span>{bgmOn ? '🔊' : '🔇'}</span>
+            </button>
           )}
 
           <button
@@ -350,25 +331,14 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
             </div>
             <div className="flex items-center gap-2">
               {(selectedGame === 'daxigua' || selectedGame === 'lihan') && (
-                <>
-                  <button
-                    onClick={handleToggleBgm}
-                    className="px-2 py-0.5 border-2 rounded-none text-xs font-pixel bg-[#1E4334] text-[#F9E79F] border-[#3B7E64] cursor-pointer flex items-center gap-1"
-                    title={bgmOn ? '关闭对局音乐' : '开启对局音乐'}
-                  >
-                    <span>{bgmOn ? '🔊' : '🔇'}</span>
-                    <span className="hidden xs:inline">{bgmOn ? 'BGM' : '静音'}</span>
-                  </button>
-
-                  <button
-                    onClick={handleSwitchTrack}
-                    className="px-2 py-0.5 border-2 rounded-none text-xs font-pixel bg-[#142B21] hover:bg-[#1E4334] text-[#F9E79F] border-[#2B5E4A] cursor-pointer flex items-center gap-1"
-                    title={`当前曲目：${BGM_TRACKS[trackIdx].fullName}（点击切换）`}
-                  >
-                    <span>🎶</span>
-                    <span className="hidden sm:inline">{BGM_TRACKS[trackIdx].label}</span>
-                  </button>
-                </>
+                <button
+                  onClick={handleToggleBgm}
+                  className="w-7 h-7 rounded-none text-sm font-pixel bg-[#1E4334] text-[#F9E79F] border-2 border-[#3B7E64] cursor-pointer flex items-center justify-center"
+                  title={bgmOn ? `关闭对局音乐（${BGM_TRACKS[trackIdx].fullName}）` : '开启对局音乐'}
+                  aria-label={bgmOn ? '关闭对局音乐' : '开启对局音乐'}
+                >
+                  <span>{bgmOn ? '🔊' : '🔇'}</span>
+                </button>
               )}
 
               <button

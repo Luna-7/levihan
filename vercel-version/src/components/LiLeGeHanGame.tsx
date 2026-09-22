@@ -66,10 +66,12 @@ interface Props {
   isFullscreen?: boolean;
 }
 
-const CARD_W = 48;
-const CARD_H = 56;
-const BOARD_W = 360;
-const BOARD_H = 620;
+// 牌面整体等比例放大 ~30%（48×56 → 62×72，比例仍是 6:7）。
+// ⚠️ 棋盘与卡槽的缩放已解耦：棋盘按可用宽高自由放大，进了卡槽再按槽格缩回去。
+const CARD_W = 62;
+const CARD_H = 72;
+const BOARD_W = 362;
+const BOARD_H = 500;
 const TRAY_CAPACITY = 7;
 const EXPOSED_THRESHOLD = 0.95;
 
@@ -138,6 +140,8 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
   const boardAreaRef = useRef<HTMLDivElement>(null);
   const trayRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState<number>(1);
+  // 卡槽（含浮在卡槽上方的临时牌）里那张牌的实测宽度：棋盘牌放大后，进槽自动缩到槽格大小。
+  const [trayCardW, setTrayCardW] = useState<number>(40);
 
   // 音效防抖
   const soundThrottleRef = useRef<number>(0);
@@ -176,40 +180,63 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
       [deck[i], deck[j]] = [deck[j], deck[i]];
     }
 
-    // 布局参考羊了个羊：行数往下越来越窄（整体是个倒三角），行内的位点越往下摞得越深，
-    // 所以最底层重叠的最多。每行位点最上面那张都没有遮挡——开局仍是一大片可点的简单区。
+    // ===== 矩形砖阵（羊了个羊同款，参考图版）=====
+    // 两层格位咬合成一整片砖墙：
+    //   A 格 = 顶层的整片矩形（4 列 × 5 行），全部共用一个层号 ⇒ 开局整片都能点。
+    //   F 格 = 嵌在每 4 张 A 之间、正好低一层 ⇒ 半张错位，从砖缝里露出 20px 宽的一条，
+    //          看得见图案但点不了；等上面的 A 清掉才会翻上来。
+    // 行距/列距都大于牌面尺寸，所以 A 格之间留出真正的砖缝，F 格才有得露。
     type Pos = { x: number; y: number; layer: number; depth: number; pile?: 'left' | 'right' };
-    const ROW_SHAPE: [number, number][] = [
-      // [这一行几个位点, 每个位点摞几张]，从上往下
-      [7, 1], [7, 1], [7, 2], [7, 4], [6, 6], [6, 9], [5, 12], [4, 16], [3, 20],
-    ];
-    const PITCH_X = 46;
-    const PITCH_Y = 52;
-    const Y0 = 110;
-    // 砖块步进只往右下长，所以整片牌阵要预先左移半个步进的一半，视觉上才是居中的。
-    const BAND_INSET_X = STACK_STEPS[1][0] / 2;
+    const COLS_A = 5;
+    const ROWS_A = 5;
+    const PITCH_AX = 68;   // 列距（牌宽 62 ⇒ 6px 竖砖缝 ≈ 参考图的 1/10 牌宽）
+    const PITCH_AY = 78;   // 行距（牌高 72 ⇒ 6px 横砖缝）
+    const XA = 2;          // 整片横向靠左，右侧留出暗牌凸边（最多 24px）
+    const Y0 = 86;         // 牌阵顶端，上方 6~78 留给盲盒柱与辅助牌
 
     const gridPos: Pos[] = [];
-    ROW_SHAPE.forEach(([cols, depth], row) => {
-      const rowWidth = (cols - 1) * PITCH_X + CARD_W;
-      const left = (BOARD_W - rowWidth) / 2 - BAND_INSET_X;
-      for (let col = 0; col < cols; col++) {
-        gridPos.push({ x: left + col * PITCH_X, y: Y0 + row * PITCH_Y, layer: 4, depth });
+    // A 格：顶层整片矩形，越往下摞得越深
+    for (let row = 0; row < ROWS_A; row++) {
+      for (let col = 0; col < COLS_A; col++) {
+        gridPos.push({
+          x: XA + col * PITCH_AX,
+          y: Y0 + row * PITCH_AY,
+          layer: 6,
+          depth: 4 + row,
+        });
       }
-    });
+    }
+    // F 格：嵌格，低一层（layer 基准 4 ⇒ 32），越往下越深
+    for (let row = 0; row < ROWS_A - 1; row++) {
+      for (let col = 0; col < COLS_A - 1; col++) {
+        gridPos.push({
+          x: XA + col * PITCH_AX + PITCH_AX / 2,
+          y: Y0 + row * PITCH_AY + PITCH_AY / 2,
+          layer: 4,
+          depth: 6 + row,
+        });
+      }
+    }
 
-    // 两侧盲盒柱：开局就能点，但点下去才知道是什么——纯粹的赌。保持单张。
-    // y=52 时下沿 108，正好落在牌阵第一排（y=110）上方，不压住任何一张牌。
+    // 两侧盲盒柱：开局只露最外面那张，点下去才知道是什么——纯粹的赌。保持单张。
+    // y=6 时下沿 78，正好落在牌阵第一排（y=86）上方，不压住任何一张牌。
     const pilePos: Pos[] = [];
     for (const pile of ['left', 'right'] as const) {
       for (let i = 0; i < 7; i++) {
-        pilePos.push({ x: pile === 'left' ? 12 + i * 10 : 296 - i * 10, y: 52, layer: 10 + i, depth: 1, pile });
+        pilePos.push({
+          x: pile === 'left' ? 6 + i * 9 : BOARD_W - 68 - i * 9,
+          y: 6,
+          layer: 16 - i,
+          depth: 1,
+          pile,
+        });
       }
     }
 
     // 顶部两张悬空辅助牌：不压任何牌、随时可点（tray 快满时最后的确定逃生项）。
-    // x 必须落在左右盲盒柱之间的空档（120~236）里，否则会盖住盲盒柱顶端那张，让它点不了。
-    const helperPos: Pos[] = [132, 180].map((x) => ({ x, y: 52, layer: 20, depth: 1 }));
+    // x 必须落在左右盲盒柱「顶牌」之间的空档（68~294）里，否则会盖住柱子顶端那张。
+    // 114/186 是该空档内居中摆放（整体宽 134，两侧各留 46）的结果。
+    const helperPos: Pos[] = [114, 186].map((x) => ({ x, y: 6, layer: 20, depth: 1 }));
 
     // 凑满总牌数：差额全部补在牌阵上，且从最底下一行往上轮流加（越下面越深）。
     let deficit = TOTAL_CARDS - (pilePos.length + helperPos.length)
@@ -299,7 +326,8 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
     restartGame();
   }, [restartGame]);
 
-  // 以卡槽内宽作为牌面尺寸上限，棋盘与卡槽里的牌保持一致。
+  // 棋盘按可用宽高自由缩放（不再被卡槽槽宽拖住，牌面才放得大）；
+  // 卡槽与卡槽上方的临时牌另算一个尺寸，自动缩到槽格大小。
   useEffect(() => {
     const board = boardAreaRef.current;
     const trayElement = trayRef.current;
@@ -308,9 +336,18 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
       const width = board.clientWidth;
       const height = board.clientHeight;
       const slotWidth = trayElement.clientWidth * TRAY_SLOTS[0].width / 100;
-      if (width <= 0 || height <= 0 || slotWidth <= 0) return;
-      const nextScale = Math.min((width - 16) / BOARD_W, (height - 28) / BOARD_H, slotWidth * 1.2 / CARD_W, 1.6);
+      const slotHeight = trayElement.clientHeight * TRAY_SLOTS[0].height / 100;
+      if (width <= 0 || height <= 0) return;
+      // 牌面整体放大后棋盘只受可用宽高约束。
+      const nextScale = Math.min((width - 8) / BOARD_W, (height - 8) / BOARD_H, 1.6);
       setScale(Math.max(0.1, nextScale));
+      // 槽内牌：按槽格的宽/高双约束等比缩小，牌面不溢出卡槽。
+      if (slotWidth > 0 && slotHeight > 0) {
+        const fitW = slotWidth * 0.94;
+        const fitH = slotHeight * 0.96;
+        const nextCardW = Math.min(fitW, fitH * CARD_W / CARD_H);
+        setTrayCardW(Math.max(18, nextCardW));
+      }
     };
     const ro = new ResizeObserver(updateScale);
     ro.observe(board);
@@ -541,7 +578,7 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
       {/* 横向盲盒 + 中央交错牌阵，自适应视口大小（背景透出草丛底图，不做硬边框） */}
       <div
         ref={boardAreaRef}
-        className="relative flex-1 min-h-0 w-full overflow-hidden select-none flex items-start justify-center pt-[14px]"
+        className="relative flex-1 min-h-0 w-full overflow-hidden select-none flex items-start justify-center pt-[38px]"
       >
         {/* 重整按钮居中放在牌阵上方，避免挡住右上角的辅助牌。 */}
         <button
@@ -628,7 +665,8 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
                 <div
                   key={card.id}
                   onClick={() => handleStagedCardClick(card)}
-                  className="w-12 h-14 shrink-0 cursor-pointer hover:scale-105 active:scale-95 transition-transform"
+                  style={{ width: `${trayCardW}px`, height: `${trayCardW * CARD_H / CARD_W}px` }}
+                  className="shrink-0 cursor-pointer hover:scale-105 active:scale-95 transition-transform"
                   title="点一下放回卡槽"
                 >
                   <TileFace cardInfo={cardInfo} />
@@ -653,12 +691,15 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
                 height: `${slot.height}%`,
               }}
             >
-              {/* 卡牌按槽宽等比缩放，牌面不溢出卡槽。 */}
+              {/* 卡槽牌按槽格实测尺寸等比缩小（棋盘上是大牌，进槽变小牌）。 */}
               <div
-                className={`relative w-full max-h-full transition-all duration-150 ${
+                className={`relative transition-all duration-150 ${
                   isEliminating ? 'scale-125 animate-ping' : 'animate-scaleUp'
                 }`}
-                style={{ aspectRatio: `${CARD_W} / ${CARD_H}` }}
+                style={{
+                  width: `${trayCardW}px`,
+                  height: `${trayCardW * CARD_H / CARD_W}px`,
+                }}
               >
                 <TileFace cardInfo={cardInfo} />
               </div>
