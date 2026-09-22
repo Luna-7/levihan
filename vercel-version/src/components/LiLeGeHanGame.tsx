@@ -69,17 +69,22 @@ interface Props {
 const CARD_W = 48;
 const CARD_H = 56;
 const BOARD_W = 360;
-const BOARD_H = 580;
+const BOARD_H = 620;
 const TRAY_CAPACITY = 7;
 const EXPOSED_THRESHOLD = 0.95;
 
 // 一局总牌数。⚠️ 必须是 3 的倍数：三张一组才能消除，总数除不尽就必然剩牌 ⇒ 死局。
 // 350 % 3 = 2 不成立，故取最近的合法值 351 = 117 组三消（比 350 只多 1 张）。
 const TOTAL_CARDS = 351;
-// 每个布局位点是一个「暗堆」：同位点多张牌摞在一起，深浅错开一点点，肉眼只能看到最上面那张。
-const STACK_OFFSET = 2;
-// 暗堆错位的上限：再深的堆也不会继续往外长，避免顶到棋盘外或糊成一团。
-const MAX_STACK_SHIFT = 12;
+// 暗牌的错位步进（羊了个羊同款砖块堆叠）：半张牌 = 横 24 / 纵 28，四步一循环。
+// 第 1 步往右、第 2 步往下、第 3 步右下，再深的牌回到第 0 步原位——所以堆多深都不会越堆越远，
+// 视觉上永远是「上层压住下层一半、下层露出半张脸」，看得见但点不了。
+const STACK_STEPS: [number, number][] = [
+  [0, 0],
+  [24, 0],
+  [0, 28],
+  [24, 28],
+];
 // 位点的基础层号乘以它，保证暗堆内部的层不会和别的一组混在一起（保持原有遮挡顺序）。
 const LAYER_BAND = 8;
 
@@ -143,8 +148,8 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
     return map;
   }, []);
 
-  // 351 张 = 117 组三消：79 个布局位点（7×9 牌阵 + 两侧盲盒柱 14 + 顶部辅助牌 2）。
-  // 牌阵从上往下越摞越深、差额补在最底下，玩家体感就是「上面一大片随便点，越往下越难挖」。
+  // 351 张 = 117 组三消：68 个布局位点（倒三角牌阵 52 + 两侧盲盒柱 14 + 顶部辅助牌 2）。
+  // 行数往下越来越窄、每行越摞越深，差额补在最底下一行 ⇒ 「上易下难、最底层重叠最多」。
   const generateHardestDeck = useCallback((): CardInstance[] => {
     const newCards: CardInstance[] = [];
     let idCounter = 1;
@@ -171,25 +176,30 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
       [deck[i], deck[j]] = [deck[j], deck[i]];
     }
 
-    // 布局：一整片 7×9 牌阵，每个位点从上往下越摞越深——「从易到难」就靠这个。
-    // 顶部每个位点最上面那张都没有遮挡（开局就是一大片可点的简单区），越往下越是要一层层挖的硬骨头。
+    // 布局参考羊了个羊：行数往下越来越窄（整体是个倒三角），行内的位点越往下摞得越深，
+    // 所以最底层重叠的最多。每行位点最上面那张都没有遮挡——开局仍是一大片可点的简单区。
     type Pos = { x: number; y: number; layer: number; depth: number; pile?: 'left' | 'right' };
-    const COLS = 7;
-    const ROW_DEPTHS = [1, 1, 2, 3, 4, 6, 8, 10, 12]; // 第 0 行最浅（易）→ 最后一行最深（难）
-    const GRID_X0 = 14;
-    const GRID_Y0 = 108;
-    const STEP_X = 48;
-    const STEP_Y = 52;
+    const ROW_SHAPE: [number, number][] = [
+      // [这一行几个位点, 每个位点摞几张]，从上往下
+      [7, 1], [7, 1], [7, 2], [7, 4], [6, 6], [6, 9], [5, 12], [4, 16], [3, 20],
+    ];
+    const PITCH_X = 46;
+    const PITCH_Y = 52;
+    const Y0 = 110;
+    // 砖块步进只往右下长，所以整片牌阵要预先左移半个步进的一半，视觉上才是居中的。
+    const BAND_INSET_X = STACK_STEPS[1][0] / 2;
 
     const gridPos: Pos[] = [];
-    ROW_DEPTHS.forEach((depth, row) => {
-      for (let col = 0; col < COLS; col++) {
-        gridPos.push({ x: GRID_X0 + col * STEP_X, y: GRID_Y0 + row * STEP_Y, layer: 4, depth });
+    ROW_SHAPE.forEach(([cols, depth], row) => {
+      const rowWidth = (cols - 1) * PITCH_X + CARD_W;
+      const left = (BOARD_W - rowWidth) / 2 - BAND_INSET_X;
+      for (let col = 0; col < cols; col++) {
+        gridPos.push({ x: left + col * PITCH_X, y: Y0 + row * PITCH_Y, layer: 4, depth });
       }
     });
 
     // 两侧盲盒柱：开局就能点，但点下去才知道是什么——纯粹的赌。保持单张。
-    // y=52 时下沿正好落在牌阵第一排（y=108）上，不压住任何一张牌。
+    // y=52 时下沿 108，正好落在牌阵第一排（y=110）上方，不压住任何一张牌。
     const pilePos: Pos[] = [];
     for (const pile of ['left', 'right'] as const) {
       for (let i = 0; i < 7; i++) {
@@ -223,10 +233,11 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
     allPos.forEach((pos) => {
       for (let k = 0; k < pos.depth; k++) {
         // k=0 是这一堆的顶层：停在原位、层号统一，所以全盘顶层互不遮挡——开局就是一大片可点区。
-        // 下面的暗牌层号依次递减（不会跨到别的一组），位置往左上错开 2px 露一条边：看得出厚度，认不出是什么。
-        const shift = Math.min(k * STACK_OFFSET, MAX_STACK_SHIFT);
-        const x = pos.x - shift;
-        const y = pos.y - shift;
+        // 下面的暗牌按半张牌步进错开（右 / 下 / 右下，四步一循环），层号依次递减：
+        // 上层压住下层一半，下层露出的那半张既是线索（认得出图案）又点不了（还是被压着）。
+        const [dx, dy] = STACK_STEPS[k % STACK_STEPS.length];
+        const x = pos.x + dx;
+        const y = pos.y + dy;
         const layer = pos.layer * LAYER_BAND - k;
         newCards.push({
           id: idCounter++,
