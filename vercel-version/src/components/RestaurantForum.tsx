@@ -553,9 +553,17 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   };
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+    const latestClaimExpiry = posts.reduce((latest, post) => Math.max(latest, post.quillClaim?.expiresAt || 0), 0);
+    if (latestClaimExpiry <= Date.now()) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      const currentTime = Date.now();
+      setNow(currentTime);
+      if (currentTime >= latestClaimExpiry) window.clearInterval(timer);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [posts]);
 
   const allCharacters = useMemo(() => {
     return [...PRESET_CHARACTERS, ...customChars];

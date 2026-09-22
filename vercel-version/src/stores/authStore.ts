@@ -36,9 +36,20 @@ type AuthResponse = {
 const postAuth = async (action: string, body: Record<string, unknown>, token?: string | null): Promise<AuthResponse> => {
   const headers: Record<string, string> = { 'Content-Type': 'text/plain;charset=UTF-8' };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch(`${CLOUDBASE_API_BASE}/auth`, {
-    method: 'POST', headers, body: JSON.stringify({ action, ...body }),
-  });
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), 15_000);
+  let response: Response;
+  try {
+    response = await fetch(`${CLOUDBASE_API_BASE}/auth`, {
+      method: 'POST', headers, body: JSON.stringify({ action, ...body }), signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error('账号服务连接超时，请检查网络后重试');
+    if (error instanceof TypeError) throw new Error('无法连接账号服务，请检查网络后重试');
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
   const result = await response.json().catch(() => null);
   if (!response.ok || !result?.ok) {
     const error = new Error(result?.message || '账号服务暂时不可用，请稍后重试') as Error & { status?: number };

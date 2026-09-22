@@ -111,7 +111,7 @@ export const GameLeaderboard: React.FC<Props> = ({ onShowToast }) => {
 
         {status === 'unavailable' && (
           <p className="py-4 text-center font-retro-jp text-[11px] text-[#8A7968] leading-relaxed">
-            榜单服务尚未开通
+            榜单暂时无法加载
             <br />
             <span className="text-[#A09381]">成绩仍会记录在本机</span>
           </p>
@@ -159,7 +159,7 @@ export const GameLeaderboard: React.FC<Props> = ({ onShowToast }) => {
           <div className="flex items-center gap-2 bg-[#F5EFE0] border border-[#C5A059] rounded-lg px-2.5 py-1.5">
             <span className="font-pixel text-[11px] text-[#715431] shrink-0">我的战绩</span>
             <span className="flex-1 min-w-0 truncate font-retro-jp text-[12px] text-[#16273B]">
-              第 {data.me.ranks[tab] ?? '—'} 名 · 积分 <b className="font-pixel">{data.me.merit}</b>
+              第 {data.me.ranks[tab] ?? '—'} 名 · 积分 <b className="font-pixel">{tab === 'total' ? data.me.merit : data.me.breakdown[tab] ?? '—'}</b>
             </span>
             {tab === 'total' && <Breakdown row={data.me} />}
           </div>

@@ -90,7 +90,9 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
 
     // 首次加载 + 定时轮询（管理台改动后无需刷新页面即可同步）
     load(false);
-    const timer = window.setInterval(() => load(true), 120_000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') load(true);
+    }, 120_000);
 
     // 切回页面时立即静默刷新，保证看到最新公告
     const onVisibilityChange = () => {

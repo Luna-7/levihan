@@ -160,7 +160,7 @@ export async function submitScore(gameKey: GameKey, raw: GameRaw): Promise<Submi
   const token = currentToken();
   if (!token) return { merit, improved: localImproved, localOnly: true };
 
-  const result = await postLeaderboard({ action: 'submitScore', gameKey, raw }, token);
+  const result = await postLeaderboard({ action: 'submitScore', gameKey, raw }, token).catch(() => null);
   // 云端不可用时静默退回本机成绩，绝不打断正在打游戏的人
   if (!result) return { merit, improved: localImproved, localOnly: true };
   return { merit, improved: result.improved === true, localOnly: false };

@@ -295,9 +295,10 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                   type="button"
                   onClick={() => {
                     soundManager.playBlip();
-                    onShowToast('🥔「利了个韩」即将上线');
+                    setActiveModal(null);
+                    setActiveGame('lihan');
                   }}
-                  className="relative w-full group bg-[#F1EEE6] border-2 border-[#8C7A68] p-2.5 sm:p-3 cursor-pointer transition-all shadow-xs flex items-center gap-3 text-left overflow-hidden opacity-75"
+                  className="relative w-full group bg-white/80 hover:bg-white border-2 border-[#8FA69D] p-2.5 sm:p-3 cursor-pointer transition-all shadow-md active:scale-98 flex items-center gap-3 text-left overflow-hidden rounded-lg backdrop-blur-sm"
                   style={{
                     clipPath:
                       'polygon(0 8px, 10px 0, calc(100% - 10px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 8px))',
@@ -308,24 +309,18 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                     width={52}
                     role="img"
                     label="利了个韩"
-                    className="relative z-10 group-hover:scale-110 transition-transform shrink-0"
+                    className="relative z-10 group-hover:scale-110 transition-transform shrink-0 drop-shadow-sm"
                   />
                   <div className="relative z-10 min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="px-1.5 py-0.2 rounded bg-[#8C7A68] text-white font-pixel text-[9px]">
-                        PREVIEW
-                      </span>
-                      <span className="font-serif-title text-sm sm:text-base font-black text-[#16273B] truncate">
+                      <span className="font-serif-title text-sm sm:text-base font-black text-[#1E4334] truncate">
                         利韩 · 利了个韩
                       </span>
                     </div>
-                    <p className="text-[10px] text-[#8C7A68] mt-0.5">
-                      三消消除拼图测试 · 研发试作中
+                    <p className="text-[10px] text-[#557B6B] mt-0.5">
+                      卡牌堆叠三消 · 凑齐三张同款即消除
                     </p>
                   </div>
-                  <span className="px-2 py-0.5 rounded bg-[#8C7A68] text-white font-pixel text-[9px] font-bold shrink-0">
-                    即将上线
-                  </span>
                 </button>
               </div>
 

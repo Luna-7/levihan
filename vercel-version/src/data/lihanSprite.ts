@@ -1,32 +1,32 @@
-// 自动生成：利了个韩雪碧图常量（16 卡牌 + 方块底 + 卡槽，单文件 WebP 72KB）
-// 由 /tmp/lihan_sprite_data.json 数据生成，勿手改坐标
+// 卡槽继续使用原图；牌面使用带透明间隔、已清除相邻图案碎片的图集。
 export const LIHAN_SPRITE_SRC = '/images/lihan/lihan-sheet.webp';
+export const LIHAN_TILE_SPRITE_SRC = '/images/lihan/lihan-tiles-clean.webp';
 
 // 卡牌/方块单元格的 background-size（百分比）
-export const SPRITE_BG_SIZE = { x: 750.0, y: 620.37 };
+export const SPRITE_BG_SIZE = { x: 552.174, y: 433.333 };
 
 // 16 张卡牌的 background-position（百分比），顺序与 CARD_TYPES 对应
 export const CARD_SPRITE_POS: { x: number; y: number }[] = [
-  { x: 0.0, y: 0.0 },
-  { x: 15.385, y: 0.0 },
-  { x: 30.769, y: 0.0 },
-  { x: 46.154, y: 0.0 },
-  { x: 0.0, y: 19.217 },
-  { x: 15.385, y: 19.217 },
-  { x: 30.769, y: 19.217 },
-  { x: 46.154, y: 19.217 },
-  { x: 0.0, y: 38.434 },
-  { x: 15.385, y: 38.434 },
-  { x: 30.769, y: 38.434 },
-  { x: 46.154, y: 38.434 },
-  { x: 0.0, y: 57.651 },
-  { x: 15.385, y: 57.651 },
-  { x: 30.769, y: 57.651 },
-  { x: 46.154, y: 57.651 },
+  { x: 0, y: 0 },
+  { x: 25, y: 0 },
+  { x: 50, y: 0 },
+  { x: 75, y: 0 },
+  { x: 0, y: 33.333 },
+  { x: 25, y: 33.333 },
+  { x: 50, y: 33.333 },
+  { x: 75, y: 33.333 },
+  { x: 0, y: 66.667 },
+  { x: 25, y: 66.667 },
+  { x: 50, y: 66.667 },
+  { x: 75, y: 66.667 },
+  { x: 0, y: 100 },
+  { x: 25, y: 100 },
+  { x: 50, y: 100 },
+  { x: 75, y: 100 },
 ];
 
 // 方块底（block）的 background-position
-export const BLOCK_SPRITE_POS = { x: 61.538, y: 0.0 };
+export const BLOCK_SPRITE_POS = { x: 100, y: 0 };
 
 // 卡槽 7 个内槽的位置（相对卡槽图百分比）
 export const TRAY_SLOTS: { left: number; top: number; width: number; height: number }[] = [

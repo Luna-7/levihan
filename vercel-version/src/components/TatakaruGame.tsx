@@ -15,7 +15,7 @@ interface Props {
 // 塔塔开（合成大西皮）原版专属背景音乐：经典街机像素主题曲（同时保留利韩战歌供切换）
 const BGM_TRACKS = [
   { id: 'classic', label: '塔塔开经典', fullName: '塔塔开·合成大西皮原版街机曲', src: '/sounds/bgm.mp3' },
-  { id: 'lihan', label: '利韩战歌', fullName: '利韩专属对局曲', src: '/sounds/lihan-bgm.mp3' },
+  { id: 'lihan', label: '利了个韩专属', fullName: '利了个韩专属对局曲', src: '/sounds/lihan-bgm.mp3' },
 ] as const;
 
 const BGM_PREF_KEY = 'tatakaru-bgm-enabled';
@@ -79,18 +79,16 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
     }
   });
 
-  // 当在合成大西皮和利了个韩之间切换时，如果当前是合成大西皮且未特别选择过利韩战歌，确保播原版经典曲
+  // 每款游戏有自己的专属对局曲，进入时自动切过去：
+  // 合成大西皮 / 拯救韩吉 → 塔塔开经典；利了个韩 → 利了个韩专属曲
   useEffect(() => {
-    if (selectedGame === 'daxigua') {
-      try {
-        const saved = window.localStorage.getItem(BGM_TRACK_KEY);
-        // 如果此前未手动选过，或者保存的是原先写死的 lihan，纠正回合成大西皮原本的塔塔开音乐 classic
-        if (!saved || saved === 'lihan') {
-          setTrackIdx(0);
-          window.localStorage.setItem(BGM_TRACK_KEY, 'classic');
-        }
-      } catch {}
-    }
+    const wantId = selectedGame === 'lihan' ? 'lihan' : 'classic';
+    const idx = BGM_TRACKS.findIndex((t) => t.id === wantId);
+    if (idx < 0) return;
+    setTrackIdx((prev) => (prev === idx ? prev : idx));
+    try {
+      window.localStorage.setItem(BGM_TRACK_KEY, wantId);
+    } catch {}
   }, [selectedGame]);
 
   // Reset loading state when switching to hange game

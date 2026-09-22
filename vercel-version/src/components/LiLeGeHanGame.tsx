@@ -3,6 +3,7 @@ import { soundManager } from '../utils/audio';
 import { RotateCcw, Undo2, Shuffle, PackagePlus } from 'lucide-react';
 import {
   LIHAN_SPRITE_SRC,
+  LIHAN_TILE_SPRITE_SRC,
   SPRITE_BG_SIZE,
   CARD_SPRITE_POS,
   BLOCK_SPRITE_POS,
@@ -21,31 +22,29 @@ export const CARD_TYPES: CardType[] = Array.from({ length: 16 }, (_, index) => (
 }));
 
 const spriteCellStyle = (pos: { x: number; y: number }): React.CSSProperties => ({
-  backgroundImage: `url(${LIHAN_SPRITE_SRC})`,
+  backgroundImage: `url(${LIHAN_TILE_SPRITE_SRC})`,
   backgroundSize: `${SPRITE_BG_SIZE.x}% ${SPRITE_BG_SIZE.y}%`,
   backgroundPosition: `${pos.x}% ${pos.y}%`,
   backgroundRepeat: 'no-repeat' as const,
 });
 
-const TileFace: React.FC<{ cardInfo: CardType; isCovered?: boolean }> = ({ cardInfo, isCovered = false }) => {
+const TileFace: React.FC<{ cardInfo: CardType; exposure?: number; hiddenInPile?: boolean }> = ({
+  cardInfo, exposure = 1, hiddenInPile = false,
+}) => {
   const idx = Math.max(0, CARD_TYPES.findIndex((c) => c.id === cardInfo.id));
   const pos = CARD_SPRITE_POS[idx] ?? CARD_SPRITE_POS[0];
+  const covered = exposure < EXPOSED_THRESHOLD;
+  const isBadge = idx >= 12;
   return (
     <div
-      className="relative w-full h-full overflow-hidden rounded-[4px] shadow-[1px_2px_0px_#233D12]"
-      aria-label={cardInfo.name}
+      className={`relative w-full h-full overflow-hidden rounded-[4px] ${covered ? 'shadow-[1px_1px_0px_#233D12]' : 'shadow-[1px_3px_2px_#233D12]'}`}
+      aria-label={hiddenInPile ? '未翻开的牌' : cardInfo.name}
     >
       {/* 方块底（雪碧图切片，比例与元素一致无拉伸） */}
       <div className="absolute inset-0" style={spriteCellStyle(BLOCK_SPRITE_POS)} />
-      {/* 图案始终渲染：羊了个羊规则里被压住的牌也露出图案，只是不可点击 */}
-      <div className="absolute inset-0" style={spriteCellStyle(pos)} />
-      {isCovered && (
-        // 被压住时仅叠加一层浅暗化，提示不可点击（图案仍然可见）
-        <div
-          className="absolute inset-0 pointer-events-none rounded-[4px]"
-          style={{ background: 'rgba(28,38,24,0.32)' }}
-        />
-      )}
+      <div className={isBadge ? 'absolute inset-[18%]' : 'absolute inset-[8%]'} style={spriteCellStyle(pos)} />
+      {/* 遮罩覆盖整张彩色牌；露出的任何边缘仍可看到图案。 */}
+      {covered && <div className="absolute inset-0 rounded-[4px] bg-black/45 pointer-events-none" />}
     </div>
   );
 };
@@ -56,6 +55,7 @@ export interface CardInstance {
   x: number;
   y: number;
   layer: number;
+  pile?: 'left' | 'right';
   state: 'board' | 'tray' | 'staging' | 'eliminated';
   originBoardState?: { x: number; y: number; layer: number };
 }
@@ -66,22 +66,40 @@ interface Props {
   isFullscreen?: boolean;
 }
 
-const CARD_W = 46;
-const CARD_H = 54;
+const CARD_W = 48;
+const CARD_H = 56;
+const BOARD_W = 360;
+const BOARD_H = 500;
 const TRAY_CAPACITY = 7;
+const EXPOSED_THRESHOLD = 0.95;
 
-// 灰色空底板（装饰用占位牌，无交互）：铺在牌阵下方，模拟羊了个羊的底图
-const GHOST_TILES: { x: number; y: number }[] = (() => {
-  const arr: { x: number; y: number }[] = [];
-  for (let r = 0; r < 5; r++) {
-    for (let c = 0; c < 7; c++) {
-      const x = 17 + c * 46 + (r % 2) * 23;
-      const y = 76 + r * 44;
-      if (x + CARD_W <= 320 && y + CARD_H <= 310) arr.push({ x, y });
+const calculateExposureMap = (cards: CardInstance[]): Map<number, number> => {
+  const map = new Map<number, number>();
+  const active = cards.filter((card) => card.state === 'board');
+  for (const card of active) {
+    const blockers = active.filter((other) => other.layer > card.layer &&
+      other.x < card.x + CARD_W && other.x + CARD_W > card.x &&
+      other.y < card.y + CARD_H && other.y + CARD_H > card.y);
+    if (card.pile && blockers.some((other) => other.pile === card.pile)) {
+      map.set(card.id, 0);
+      continue;
     }
+    if (blockers.length === 0) {
+      map.set(card.id, 1);
+      continue;
+    }
+    let visible = 0;
+    for (let row = 0; row < 6; row++) {
+      for (let col = 0; col < 6; col++) {
+        const x = card.x + (col + 0.5) * CARD_W / 6;
+        const y = card.y + (row + 0.5) * CARD_H / 6;
+        if (!blockers.some((other) => x >= other.x && x < other.x + CARD_W && y >= other.y && y < other.y + CARD_H)) visible++;
+      }
+    }
+    map.set(card.id, visible / 36);
   }
-  return arr;
-})();
+  return map;
+};
 
 export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
   // 仅保留最难关卡（玛利亚决战·极难迷阵）
@@ -103,6 +121,7 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
 
   // 棋盘按实际可用空间缩放，手机地址栏及视口变化由 ResizeObserver 自动处理
   const boardAreaRef = useRef<HTMLDivElement>(null);
+  const trayRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState<number>(1);
 
   // 音效防抖
@@ -114,21 +133,14 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
     return map;
   }, []);
 
-  // 16 种图案共 72 张，每种图案数量都是 3 的倍数
+  // 108 张：外层可见牌 54 + 后期环形叠层 36 + 两侧牌堆 14 + 辅助牌 4。
   const generateHardestDeck = useCallback((): CardInstance[] => {
     const newCards: CardInstance[] = [];
     let idCounter = 1;
 
     const deck: string[] = [];
-    const bonusOrder = [...CARD_TYPES.keys()];
-    for (let i = bonusOrder.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [bonusOrder[i], bonusOrder[j]] = [bonusOrder[j], bonusOrder[i]];
-    }
-    const bonusTypes = new Set(bonusOrder.slice(0, 8));
     CARD_TYPES.forEach((ct, index) => {
-      const count = bonusTypes.has(index) ? 6 : 3;
-      for (let i = 0; i < count; i++) deck.push(ct.id);
+      for (let i = 0; i < (index < 12 ? 6 : 9); i++) deck.push(ct.id);
     });
 
     // 随机充分洗牌
@@ -137,45 +149,48 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
       [deck[i], deck[j]] = [deck[j], deck[i]];
     }
 
-    const allPos: { x: number; y: number; layer: number }[] = [];
+    const allPos: { x: number; y: number; layer: number; pile?: 'left' | 'right' }[] = [];
 
-    // 参考羊了个羊构图：中央层叠牌阵（相邻行错位半张、逐层上叠，下层被压住呈灰色暗牌）
-    // 第 1 层：4 行 × 5 列，奇数行右错半张
-    for (let r = 0; r < 4; r++) {
-      for (let c = 0; c < 5; c++) {
-        allPos.push({ x: 40 + c * 46 + (r % 2) * 23, y: 92 + r * 44, layer: 1 });
+    // 开局先露出六列六排及几张分散的上层牌，保留较多选择。
+    const layers = [
+      { cols: 6, rows: 6, x: 37, y: 99 },
+      { cols: 4, rows: 3, x: 83, y: 126 },
+    ] as const;
+    layers.forEach(({ cols, rows, x, y }, layerIndex) => {
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          allPos.push({ x: x + col * 47, y: y + row * 48, layer: layerIndex + 4 });
+        }
+      }
+    });
+    for (const [x, y] of [[107, 180], [201, 180], [107, 270], [201, 270]]) {
+      allPos.push({ x, y, layer: 6 });
+    }
+    for (const [x, y] of [[152, 207], [152, 255]]) {
+      allPos.push({ x, y, layer: 7 });
+    }
+
+    // 四边环埋在外层下方；越往后越集中，最后才逐圈揭开紧密叠牌。
+    for (const [layer, dx, dy] of [[1, 0, 0], [2, 12, 12], [3, -12, 24]] as const) {
+      const xs = Array.from({ length: 4 }, (_, i) => 70 + i * 50 + dx);
+      const top = 140 + dy;
+      const bottom = 284 + dy;
+      xs.forEach((x) => allPos.push({ x, y: top, layer }));
+      for (const y of [top + 48, top + 96]) allPos.push({ x: xs[3], y, layer });
+      xs.forEach((x) => allPos.push({ x, y: bottom, layer }));
+      for (const y of [top + 48, top + 96]) allPos.push({ x: xs[0], y, layer });
+    }
+
+    // 两侧横向牌堆与参考图一致：下层边缘沿水平方向依次露出。
+    for (const pile of ['left', 'right'] as const) {
+      for (let i = 0; i < 7; i++) {
+        allPos.push({ x: pile === 'left' ? 12 + i * 10 : 296 - i * 10, y: 52, layer: 10 + i, pile });
       }
     }
 
-    // 第 2 层：4 行 × 4 列，继续错位压在第 1 层上
-    for (let r = 0; r < 4; r++) {
-      for (let c = 0; c < 4; c++) {
-        allPos.push({ x: 52 + c * 46 + (r % 2) * 23, y: 106 + r * 44, layer: 2 });
-      }
-    }
-
-    // 第 3 层：2 行 × 4 列
-    for (let r = 0; r < 2; r++) {
-      for (let c = 0; c < 4; c++) {
-        allPos.push({ x: 75 + c * 46 + (r % 2) * 23, y: 120 + r * 44, layer: 3 });
-      }
-    }
-
-    // 第 4 层：核心 1 行 × 4 列，形成层叠视觉焦点
-    for (let c = 0; c < 4; c++) {
-      allPos.push({ x: 98 + c * 46, y: 142, layer: 4 });
-    }
-
-    // 顶部左右横向牌堆：牌底只露出窄边，逐张叠高（参考图上方的堆叠横排）
-    for (let i = 0; i < 7; i++) {
-      allPos.push({ x: 36 + i * 7, y: 14, layer: 6 + i });
-      allPos.push({ x: 236 - i * 7, y: 14, layer: 6 + i });
-    }
-
-    // 左右纵向牌堆：只露上边，压住牌阵两翼
-    for (let i = 0; i < 5; i++) {
-      allPos.push({ x: 14, y: 92 + i * 6, layer: 6 + i });
-      allPos.push({ x: 260, y: 92 + i * 6, layer: 6 + i });
+    // 下方四张辅助牌分散摆放，形成前后纵深。
+    for (const [x, y] of [[12, 390], [296, 390], [100, 429], [214, 429]]) {
+      allPos.push({ x, y, layer: 20 });
     }
 
     for (let i = 0; i < deck.length && i < allPos.length; i++) {
@@ -185,10 +200,35 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
         x: allPos[i].x,
         y: allPos[i].y,
         layer: allPos[i].layer,
+        pile: allPos[i].pile,
         state: 'board',
         originBoardState: { x: allPos[i].x, y: allPos[i].y, layer: allPos[i].layer },
       });
     }
+
+    // 开局露出的牌安排八组三消；深层不预排，逐步增加选择压力。
+    const initialExposure = calculateExposureMap(newCards);
+    const firstLayer = newCards.filter((card) => (initialExposure.get(card.id) ?? 0) >= EXPOSED_THRESHOLD);
+    for (let i = firstLayer.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [firstLayer[i], firstLayer[j]] = [firstLayer[j], firstLayer[i]];
+    }
+    firstLayer.length = Math.min(firstLayer.length, 24);
+    const starterTypes = [...CARD_TYPES];
+    for (let i = starterTypes.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [starterTypes[i], starterTypes[j]] = [starterTypes[j], starterTypes[i]];
+    }
+    const reserved = new Set<number>();
+    firstLayer.forEach((target, index) => {
+      const typeId = starterTypes[Math.floor(index / 3)]?.id;
+      if (!typeId) return;
+      const targetIndex = newCards.findIndex((card) => card.id === target.id);
+      const donorIndex = newCards.findIndex((card, i) => card.typeId === typeId && !reserved.has(i));
+      if (donorIndex < 0) return;
+      [newCards[targetIndex].typeId, newCards[donorIndex].typeId] = [newCards[donorIndex].typeId, newCards[targetIndex].typeId];
+      reserved.add(targetIndex);
+    });
 
     return newCards;
   }, []);
@@ -213,46 +253,33 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
     restartGame();
   }, [restartGame]);
 
-  // 使用棋盘实际宽高，留出边缘余量，保证最外侧麻将始终在可点击范围内。
+  // 以卡槽内宽作为牌面尺寸上限，棋盘与卡槽里的牌保持一致。
   useEffect(() => {
     const board = boardAreaRef.current;
-    if (!board) return;
-    const ro = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      if (width <= 0 || height <= 0) return;
-      const nextScale = Math.min((width - 12) / 320, (height - 16) / 310, 1.6);
+    const trayElement = trayRef.current;
+    if (!board || !trayElement) return;
+    const updateScale = () => {
+      const width = board.clientWidth;
+      const height = board.clientHeight;
+      const slotWidth = trayElement.clientWidth * TRAY_SLOTS[0].width / 100;
+      if (width <= 0 || height <= 0 || slotWidth <= 0) return;
+      const nextScale = Math.min((width - 16) / BOARD_W, (height - 28) / BOARD_H, slotWidth * 1.2 / CARD_W, 1.6);
       setScale(Math.max(0.1, nextScale));
-    });
+    };
+    const ro = new ResizeObserver(updateScale);
     ro.observe(board);
+    ro.observe(trayElement);
+    updateScale();
     return () => ro.disconnect();
   }, []);
 
-  // 卡牌遮挡判定：若存在上层卡牌与当前卡牌发生空间重叠，则当前卡牌被遮挡不可点击
-  const coveredSet = useMemo(() => {
-    const set = new Set<number>();
-    const activeBoardCards = cards.filter((c) => c.state === 'board');
-
-    for (let i = 0; i < activeBoardCards.length; i++) {
-      const cardA = activeBoardCards[i];
-      for (let j = 0; j < activeBoardCards.length; j++) {
-        if (i === j) continue;
-        const cardB = activeBoardCards[j];
-        if (cardA.layer > cardB.layer) {
-          const overlapX = Math.abs(cardA.x - cardB.x) < CARD_W - 4;
-          const overlapY = Math.abs(cardA.y - cardB.y) < CARD_H - 4;
-          if (overlapX && overlapY) {
-            set.add(cardB.id);
-          }
-        }
-      }
-    }
-    return set;
-  }, [cards]);
+  // 真正位于最上方的牌没有阻挡者，始终以原色显示。
+  const exposureMap = useMemo(() => calculateExposureMap(cards), [cards]);
 
   // 点击卡牌移入槽位
   const handleCardClick = (card: CardInstance) => {
     if (card.state !== 'board') return;
-    if (coveredSet.has(card.id)) return;
+    if ((exposureMap.get(card.id) ?? 1) < EXPOSED_THRESHOLD) return;
     if (tray.length >= TRAY_CAPACITY) {
       onShowToast('⚠️ 卡槽已满！无法放入更多卡牌');
       return;
@@ -468,12 +495,12 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
       {/* 横向盲盒 + 中央交错牌阵，自适应视口大小（背景透出草丛底图，不做硬边框） */}
       <div
         ref={boardAreaRef}
-        className="relative flex-1 min-h-0 w-full overflow-hidden select-none flex items-center justify-center"
+        className="relative flex-1 min-h-0 w-full overflow-hidden select-none flex items-start justify-center pt-[14px]"
       >
-        {/* 浮动在背景图右上方的重整按钮 */}
+        {/* 重整按钮居中放在牌阵上方，避免挡住右上角的辅助牌。 */}
         <button
           onClick={restartGame}
-          className="absolute top-2 right-2 z-40 px-2.5 py-1 bg-[#46751E]/90 hover:bg-[#5D8A28] text-[#F5FFCD] border-2 border-[#254312] shadow-[2px_2px_0px_#254312] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer flex items-center gap-1 text-[11px] font-bold backdrop-blur-xs"
+          className="absolute top-2 left-1/2 -translate-x-1/2 z-40 px-2.5 py-1 bg-[#46751E]/90 hover:bg-[#5D8A28] text-[#F5FFCD] border-2 border-[#254312] shadow-[2px_2px_0px_#254312] cursor-pointer flex items-center gap-1 text-[11px] font-bold backdrop-blur-xs"
           title="重新开始"
         >
           <RotateCcw className="w-3.5 h-3.5" />
@@ -481,42 +508,32 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
         </button>
 
         {/* 虚拟画布保留牌阵比例，外层按手机宽高动态缩放 */}
-        <div
-          style={{
-            position: 'relative',
-            width: '320px',
-            height: '310px',
-            transform: `scale(${scale})`,
-            transformOrigin: 'center center',
-          }}
-        >
-          {/* 灰色空底板装饰层（无交互，垫在所有真实卡牌下方） */}
-          {GHOST_TILES.map((g, i) => (
-            <div
-              key={`ghost-${i}`}
-              className="absolute rounded-[4px] pointer-events-none"
-              style={{
-                left: `${g.x}px`,
-                top: `${g.y}px`,
-                width: `${CARD_W}px`,
-                height: `${CARD_H}px`,
-                zIndex: 0,
-                background: 'linear-gradient(180deg, #99A396 0%, #7C857A 100%)',
-                boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.18), 0 2px 0 rgba(52,60,48,0.35)',
-              }}
-            />
-          ))}
-
+        <div className="relative shrink-0" style={{ width: BOARD_W * scale, height: BOARD_H * scale }}>
+          <div
+            style={{
+              position: 'absolute',
+              width: `${BOARD_W}px`,
+              height: `${BOARD_H}px`,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+            }}
+          >
           {cards
             .filter((card) => card.state === 'board')
             .sort((a, b) => a.layer - b.layer || a.id - b.id)
             .map((card) => {
               const cardInfo = cardTypeMap.get(card.typeId) || CARD_TYPES[0];
-              const isCovered = coveredSet.has(card.id);
+              const exposure = exposureMap.get(card.id) ?? 1;
+              const isCovered = exposure < EXPOSED_THRESHOLD;
+              const hiddenInPile = Boolean(card.pile && cards.some((other) =>
+                other.state === 'board' && other.pile === card.pile && other.layer > card.layer));
 
               return (
-                <div
+                <button
                   key={card.id}
+                  type="button"
+                  disabled={isCovered}
+                  aria-label={hiddenInPile ? '未翻开的牌' : cardInfo.name}
                   onClick={() => handleCardClick(card)}
                   style={{
                     position: 'absolute',
@@ -524,18 +541,20 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
                     top: `${card.y}px`,
                     width: `${CARD_W}px`,
                     height: `${CARD_H}px`,
-                    zIndex: card.layer * 10 + (isCovered ? 0 : 5),
+                    zIndex: card.layer * 10,
+                    touchAction: 'manipulation',
                   }}
-                  className={`transition-transform duration-150 select-none ${
+                  className={`p-0 border-0 bg-transparent transition-transform duration-150 select-none ${
                     isCovered
-                      ? 'cursor-not-allowed pointer-events-auto'
-                      : 'cursor-pointer hover:scale-108 active:scale-95'
+                      ? 'cursor-default'
+                      : 'cursor-pointer hover:scale-108 active:scale-95 -translate-y-px'
                   }`}
                 >
-                  <TileFace cardInfo={cardInfo} isCovered={isCovered} />
-                </div>
+                  <TileFace cardInfo={cardInfo} exposure={exposure} hiddenInPile={hiddenInPile} />
+                </button>
               );
             })}
+          </div>
         </div>
       </div>
 
@@ -564,11 +583,16 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
 
       {/* 底部 7 格麻将收集槽（卡槽图为雪碧图切片，卡牌按实测内槽位置叠加） */}
       <div
-        className="relative w-full max-w-[440px] mx-auto shrink-0 select-none"
+        ref={trayRef}
+        className="relative w-full max-w-[440px] mx-auto shrink-0 select-none scale-[1.03]"
         style={{
           aspectRatio: '3 / 1',
+          boxSizing: 'content-box',
+          paddingBottom: '2px',
           backgroundImage: `url(${LIHAN_SPRITE_SRC})`,
-          backgroundSize: '100% 100%',
+          // 雪碧图底部 690×230 才是卡槽；按原始比例铺图并对齐底边，裁掉上方人物素材。
+          backgroundSize: '100% auto',
+          backgroundPosition: 'center bottom',
           backgroundRepeat: 'no-repeat',
         }}
       >
@@ -580,20 +604,20 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast }) => {
           return (
             <div
               key={card.id}
-              className="absolute"
+              className="absolute flex items-center justify-center"
               style={{
                 left: `${slot.left}%`,
-                top: `${slot.top}%`,
+                top: `calc(${slot.top}% - 1px)`,
                 width: `${slot.width}%`,
                 height: `${slot.height}%`,
               }}
             >
-              {/* 卡牌锁定 46:54 比例、按槽高适配、槽内水平居中，避免被槽位比例拉伸 */}
+              {/* 卡牌按槽宽等比缩放，牌面不溢出卡槽。 */}
               <div
-                className={`relative mx-auto h-full transition-all duration-150 ${
+                className={`relative w-full max-h-full transition-all duration-150 ${
                   isEliminating ? 'scale-125 animate-ping' : 'animate-scaleUp'
                 }`}
-                style={{ aspectRatio: '46 / 54' }}
+                style={{ aspectRatio: `${CARD_W} / ${CARD_H}` }}
               >
                 <TileFace cardInfo={cardInfo} />
               </div>
