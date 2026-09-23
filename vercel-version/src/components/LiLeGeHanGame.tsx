@@ -3,7 +3,7 @@ import { soundManager } from '../utils/audio';
 import { submitScore } from '../utils/gameScores';
 import { Undo2, Shuffle, PackagePlus } from 'lucide-react';
 import {
-  LIHAN_SPRITE_SRC,
+  LIHAN_TRAY_SPRITE_SRC,
   LIHAN_TILE_SPRITE_SRC,
   SPRITE_BG_SIZE,
   CARD_SPRITE_POS,
@@ -16,7 +16,7 @@ export interface CardType {
   name: string;
 }
 
-// 16 种图案全部来自单张雪碧图（lihan-sheet.webp），按 CARD_SPRITE_POS 切片
+// 16 种图案全部来自清理过透明间隔的牌面雪碧图，按 CARD_SPRITE_POS 切片。
 export const CARD_TYPES: CardType[] = Array.from({ length: 16 }, (_, index) => ({
   id: `card-${index + 1}`,
   name: `卡片${index + 1}`,
@@ -139,7 +139,10 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast, restartSig
   const [hasRevived, setHasRevived] = useState<boolean>(false);
 
   // 弹窗状态
-  const [isVictory, setIsVictory] = useState<boolean>(false);
+  const [isVictory, setIsVictory] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('victory-preview') === 'lihan';
+  });
   const [isDefeat, setIsDefeat] = useState<boolean>(false);
   const [eliminatingIds, setEliminatingIds] = useState<number[]>([]);
 
@@ -354,6 +357,9 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast, restartSig
 
   useEffect(() => {
     restartGame();
+    if (new URLSearchParams(window.location.search).get('victory-preview') === 'lihan') {
+      setIsVictory(true);
+    }
   }, [restartGame, restartSignal]);
 
   // 棋盘按可用宽高自由缩放（不再被卡槽槽宽拖住，牌面才放得大）；
@@ -681,10 +687,9 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast, restartSig
           aspectRatio: '3 / 1',
           boxSizing: 'content-box',
           paddingBottom: '2px',
-          backgroundImage: `url(${LIHAN_SPRITE_SRC})`,
-          // 雪碧图底部 690×230 才是卡槽；按原始比例铺图并对齐底边，裁掉上方人物素材。
-          backgroundSize: '100% auto',
-          backgroundPosition: 'center bottom',
+          backgroundImage: `url(${LIHAN_TRAY_SPRITE_SRC})`,
+          backgroundSize: '100% 100%',
+          backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
         }}
       >
@@ -802,7 +807,12 @@ export const LiLeGeHanGame: React.FC<Props> = ({ onBack, onShowToast, restartSig
       {isVictory && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
           <div className="bg-[#F8FFE7] border-4 border-[#46751E] p-5 max-w-[320px] w-full shadow-[6px_6px_0px_#254312] text-center space-y-3">
-            <div className="text-4xl animate-bounce">🏆</div>
+            <img
+              src="/lihan-victory.webp"
+              alt="利威尔与韩吉仓鼠造型"
+              decoding="async"
+              className="h-24 w-auto max-w-full mx-auto object-contain"
+            />
             <h3 className="text-base font-black text-[#46751E] font-pixel">
               奇迹！利了个韩 · 决战大捷！
             </h3>

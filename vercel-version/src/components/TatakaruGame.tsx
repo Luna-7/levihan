@@ -119,9 +119,26 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
     return () => {
       el.pause();
       el.removeAttribute('src');
+      el.load();
       audioRef.current = null;
     };
   }, [trackIdx]);
+
+  // iOS 切到后台后仍可能继续解码 HTMLAudio。隐藏时立即暂停，回到前台时
+  // 仅恢复用户原本开启且当前游戏需要的音乐。
+  useEffect(() => {
+    const handleVisibility = () => {
+      const el = audioRef.current;
+      if (!el) return;
+      if (document.visibilityState !== 'visible') {
+        el.pause();
+      } else if ((selectedGame === 'daxigua' || selectedGame === 'lihan') && bgmOn) {
+        void el.play().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [selectedGame, bgmOn]);
 
   useEffect(() => {
     const el = audioRef.current;

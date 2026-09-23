@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/* SAVE HANGE 运行在独立 iframe，继承不到主站的 ios-webkit class。
+   iOS 下直接取消大面积模糊和常驻脉冲，减少独立合成层。 */
+@supports (-webkit-touch-callout: none) {
+  [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .animate-pulse {
+    animation: none !important;
+  }
+}
+
 @layer utilities {
   .pixelated {
     image-rendering: pixelated;

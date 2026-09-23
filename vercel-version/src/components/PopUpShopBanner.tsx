@@ -118,6 +118,7 @@ export const PopUpShopBanner: React.FC<Props> = ({
   useEffect(() => {
     if (isPaused || showDetailModal || announcements.length < 2) return;
     const timer = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
       setCurrentIndex((prev) => (prev + 1) % announcements.length);
     }, 5500);
     return () => clearInterval(timer);

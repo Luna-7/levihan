@@ -27,6 +27,7 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
   const [failedReason, setFailedReason] = useState<string>('');
   const [progress, setProgress] = useState<number>(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollFrameRef = useRef<number | null>(null);
 
   // 按需加载正文（本地编译内容直接使用；加密篇拉密文解密；否则请求 novels/{id}.txt）
   useEffect(() => {
@@ -111,11 +112,19 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
   }, [onClose]);
 
   const handleScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const max = el.scrollHeight - el.clientHeight;
-    setProgress(max > 0 ? Math.min(1, el.scrollTop / max) : 0);
+    if (scrollFrameRef.current !== null) return;
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      const el = scrollRef.current;
+      if (!el) return;
+      const max = el.scrollHeight - el.clientHeight;
+      setProgress(max > 0 ? Math.min(1, el.scrollTop / max) : 0);
+    });
   };
+
+  useEffect(() => () => {
+    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
+  }, []);
 
   const changeFont = (idx: number) => {
     soundManager.playBlip();

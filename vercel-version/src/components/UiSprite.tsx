@@ -1,5 +1,5 @@
 import React from 'react';
-import { UI_SPRITES, UI_SPRITE_SIZE, UiSpriteName } from './uiSprite.generated';
+import { UI_SPRITES, UI_SPRITE_SIZES, UiSpriteName } from './uiSprite.generated';
 
 interface Props {
   name: UiSpriteName;
@@ -25,6 +25,8 @@ export const UiSprite: React.FC<Props> = ({
   const targetWidth = typeof width === 'number' && !Number.isNaN(width) ? width : sprite.width;
   const scale = sprite.width > 0 ? targetWidth / sprite.width : 1;
   const targetHeight = sprite.height * scale;
+  const sheetSize = UI_SPRITE_SIZES[sprite.sheet];
+  const sheetUrl = sprite.sheet === 'core' ? '/images/ui-sprite.webp' : `/images/ui-sprite-${sprite.sheet}.webp`;
 
   return (
     <span
@@ -34,8 +36,8 @@ export const UiSprite: React.FC<Props> = ({
       style={{
         width: targetWidth,
         height: targetHeight,
-        backgroundImage: 'url(/images/ui-sprite.webp)',
-        backgroundSize: `${UI_SPRITE_SIZE.width * scale}px ${UI_SPRITE_SIZE.height * scale}px`,
+        backgroundImage: `url(${sheetUrl})`,
+        backgroundSize: `${sheetSize.width * scale}px ${sheetSize.height * scale}px`,
         backgroundPosition: `${-sprite.x * scale}px ${-sprite.y * scale}px`,
         transform: flipX ? 'scaleX(-1)' : undefined,
         ...style,

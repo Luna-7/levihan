@@ -36,7 +36,8 @@ export default function App() {
   const [departingTab, setDepartingTab] = useState<NavigationTab | null>(null);
   useEffect(() => {
     if (departingTab === null) return;
-    const timer = window.setTimeout(() => setDepartingTab(null), 650);
+    // 旧页面只保留到横向切换完成，随后立即卸载其图片、观察器、音频与定时器。
+    const timer = window.setTimeout(() => setDepartingTab(null), 360);
     return () => window.clearTimeout(timer);
   }, [activeTab, departingTab]);
   const isMounted = (tab: NavigationTab) => activeTab === tab || departingTab === tab;
@@ -110,7 +111,7 @@ export default function App() {
          ==================================================== */}
       <div className="relative z-10 w-full flex-1 min-h-0 overflow-hidden">
         <div
-          className="flex w-[400%] h-full transition-transform duration-650 ease-out"
+          className="flex w-[400%] h-full transition-transform duration-350 ease-out"
           style={{
             transform: `translateX(-${activeIndex * 25}%)`,
           }}

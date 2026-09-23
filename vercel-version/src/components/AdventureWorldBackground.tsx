@@ -6,7 +6,7 @@ interface Props {
 }
 
 export const AdventureWorldBackground: React.FC<Props> = () => (
-  <div className="fixed inset-0 w-full h-full pointer-events-none z-0 overflow-hidden select-none bg-[#1A1614]">
+  <div className="adventure-world-bg fixed inset-0 w-full h-full pointer-events-none z-0 overflow-hidden select-none bg-[#1A1614]">
     <div
       className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-90 transition-opacity duration-500"
       style={{

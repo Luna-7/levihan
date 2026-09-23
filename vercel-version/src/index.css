@@ -55,6 +55,33 @@
     overflow: hidden;
   }
 
+  /* WebKit 会为每个 backdrop-filter 建立额外合成层。移动端改用已有的高不透明
+     背景色，保留视觉层级，同时避免滚动时反复重采样整屏。 */
+  html.ios-webkit [class*="backdrop-blur"],
+  html.ios-webkit .popup-frame-border,
+  html.ios-webkit .silver-retro-frame,
+  html.ios-webkit .mini-capsule-btn {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  /* 两处都是覆盖大面积像素的纯装饰无限动画；iOS 上静止可明显减少持续合成。 */
+  html.ios-webkit .adventure-world-bg .animate-pulse,
+  html.ios-webkit .lihan-themed-root::before {
+    animation: none !important;
+  }
+
+  /* Safari 后台页不会可靠停止所有 CSS 动画；统一暂停，避免锁屏或切换应用后
+     动画合成与电量消耗继续累积。 */
+  html.app-page-hidden *,
+  html.app-page-hidden *::before,
+  html.app-page-hidden *::after,
+  [aria-hidden="true"] *,
+  [aria-hidden="true"] *::before,
+  [aria-hidden="true"] *::after {
+    animation-play-state: paused !important;
+  }
+
   /* Disable scrollbar globally but allow it in specific containers if needed */
   .no-scrollbar::-webkit-scrollbar {
     display: none;

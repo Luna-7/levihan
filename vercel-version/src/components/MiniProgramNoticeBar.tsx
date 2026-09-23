@@ -43,6 +43,7 @@ export const MiniProgramNoticeBar: React.FC<Props> = ({
 
   useEffect(() => {
     const timer = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
       setIndex((prev) => (prev + 1) % NOTICE_ITEMS.length);
     }, 4500);
     return () => clearInterval(timer);

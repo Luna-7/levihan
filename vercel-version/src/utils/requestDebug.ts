@@ -27,7 +27,8 @@ class RequestDebug {
   private currentConcurrentImages = 0;
 
   constructor() {
-    if (import.meta.env.DEV) {
+    // 本地调试也默认静默，避免 iOS 真机预览每 5 秒被日志定时器唤醒。
+    if (import.meta.env.DEV && window.localStorage.getItem('levihan-request-debug') === '1') {
       this.initConsoleLogging();
     }
   }
@@ -35,6 +36,7 @@ class RequestDebug {
   private initConsoleLogging() {
     // 每 5 秒输出一次统计信息
     setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
       this.logStats();
     }, 5000);
   }

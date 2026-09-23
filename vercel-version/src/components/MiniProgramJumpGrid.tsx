@@ -34,31 +34,14 @@ export const MiniProgramJumpGrid: React.FC<Props> = ({
           id="btn-jump-tatakaru"
           title="进入塔塔开·街机训练"
         >
-          {/*
-              三层组装徽章（对齐「例图塔塔开」）：
-              圆框 (tatakaru-frame) → 人物 (tatakaru-crew，hover/点击微微放大) → 缎带 (tatakaru-ribbon)。
-              三张图共用 676×637 统一画布，absolute inset-0 叠加即精确对位；
-              人物层 transform-origin 取人物在画布中的中心 (50%, 51%)，放大时以人物为中心。
-          */}
-          <div className="relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[676/637] drop-shadow-[0_8px_18px_rgba(40,24,14,0.35)]">
+          {/* 三层原画已在构建资产中预合成，避免 WebKit 为一个按钮解码并合成三张大图。 */}
+          <div className="relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[676/637]">
             <img
-              src="/images/tatakaru-frame.webp"
-              alt=""
-              draggable={false}
-              className="absolute inset-0 w-full h-full pointer-events-none select-none"
-            />
-            <img
-              src="/images/tatakaru-crew.webp"
+              src="/images/tatakaru-button.webp"
               alt="塔塔开"
               draggable={false}
+              decoding="async"
               className="absolute inset-0 w-full h-full pointer-events-none select-none transition-transform duration-200 ease-out group-hover:scale-105 group-active:scale-110"
-              style={{ transformOrigin: '49.9% 51%' }}
-            />
-            <img
-              src="/images/tatakaru-ribbon.webp"
-              alt=""
-              draggable={false}
-              className="absolute inset-0 w-full h-full pointer-events-none select-none"
             />
           </div>
         </button>
@@ -74,31 +57,13 @@ export const MiniProgramJumpGrid: React.FC<Props> = ({
           id="btn-jump-cinema"
           title="影视厅 · 待定"
         >
-          {/*
-              三层组装徽章（与塔塔开同一拼贴方式）：
-              圆木框 (cinema-frame) → 人物 (cinema-crew，hover/点击微微放大) → 缎带 (cinema-ribbon)。
-              三张图共用 681×647 统一画布，absolute inset-0 叠加即精确对位；
-              人物层 transform-origin 取人物在画布中的中心 (50%, 51.1%)，放大时以人物为中心。
-          */}
-          <div className="relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[681/647] drop-shadow-[0_8px_18px_rgba(40,24,14,0.35)]">
+          <div className="relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[681/647]">
             <img
-              src="/images/cinema-frame.webp"
-              alt=""
-              draggable={false}
-              className="absolute inset-0 w-full h-full pointer-events-none select-none"
-            />
-            <img
-              src="/images/cinema-crew.webp"
+              src="/images/cinema-button.webp"
               alt="影视厅"
               draggable={false}
+              decoding="async"
               className="absolute inset-0 w-full h-full pointer-events-none select-none transition-transform duration-200 ease-out group-hover:scale-105 group-active:scale-110"
-              style={{ transformOrigin: '50% 51.1%' }}
-            />
-            <img
-              src="/images/cinema-ribbon.webp"
-              alt=""
-              draggable={false}
-              className="absolute inset-0 w-full h-full pointer-events-none select-none"
             />
 
             {/* 右上角「待定」小旗标 */}
@@ -119,31 +84,13 @@ export const MiniProgramJumpGrid: React.FC<Props> = ({
           id="btn-jump-resources"
           title="进入巨人资源·官方典藏"
         >
-          {/*
-              三层组装徽章（与塔塔开/影视厅同一拼贴方式）：
-              圆木框 (giant-frame) → 人物 (giant-crew，hover/点击微微放大) → 缎带 (giant-ribbon)。
-              三张图共用 714×678 统一画布，absolute inset-0 叠加即精确对位；
-              人物层 transform-origin 取人物在画布中的中心 (50%, 51.2%)，放大时以人物为中心。
-          */}
-          <div className="relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[714/678] drop-shadow-[0_8px_18px_rgba(40,24,14,0.35)]">
+          <div className="relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[714/678]">
             <img
-              src="/images/giant-frame.webp"
-              alt=""
-              draggable={false}
-              className="absolute inset-0 w-full h-full pointer-events-none select-none"
-            />
-            <img
-              src="/images/giant-crew.webp"
+              src="/images/giant-button.webp"
               alt="巨人资源"
               draggable={false}
+              decoding="async"
               className="absolute inset-0 w-full h-full pointer-events-none select-none transition-transform duration-200 ease-out group-hover:scale-105 group-active:scale-110"
-              style={{ transformOrigin: '50% 51.2%' }}
-            />
-            <img
-              src="/images/giant-ribbon.webp"
-              alt=""
-              draggable={false}
-              className="absolute inset-0 w-full h-full pointer-events-none select-none"
             />
           </div>
         </button>

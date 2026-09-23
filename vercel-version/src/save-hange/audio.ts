@@ -15,6 +15,11 @@
  */
 const SFX_MASTER_GAIN = 1.6;
 
+const IS_IOS_WEBKIT = typeof navigator !== 'undefined' && (
+  /iP(?:hone|ad|od)/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+);
+
 class SoundManager {
   private bgmAudio: HTMLAudioElement | null = null;
   private audioCtx: AudioContext | null = null;
@@ -54,6 +59,14 @@ class SoundManager {
     return !!audio && !audio.paused && !audio.ended;
   }
 
+  /**
+   * iOS WebKit 在 HTMLAudio 播放期间首次启动 WebAudio，可能抢占同一个音频会话，
+   * 表现为移动几次后背景音乐突然暂停。对局音乐播放时不再启动独立 SFX 音频图。
+   */
+  private shouldSkipSfx(): boolean {
+    return IS_IOS_WEBKIT && this.isBgmActive;
+  }
+
   constructor() {
     this.initAudioElement();
   }
@@ -64,7 +77,8 @@ class SoundManager {
       // Primary track: Bauklötze from <base>/assets/bauklotze.mp3（跟随部署子路径）
       this.bgmAudio = new Audio();
       this.bgmAudio.src = `${import.meta.env.BASE_URL}assets/bauklotze.mp3`;
-      this.bgmAudio.preload = 'auto';
+      // 首次有效移动才真正拉取并解码整首音乐，避免打开游戏就占用 iOS 媒体内存。
+      this.bgmAudio.preload = 'metadata';
 
       this.bgmAudio.addEventListener('loadedmetadata', () => {
         if (this.bgmAudio && !isNaN(this.bgmAudio.duration) && this.bgmAudio.duration > 0) {
@@ -157,6 +171,16 @@ class SoundManager {
     }
   }
 
+  /** 从当前位置继续，绝不归零；用于 WebKit 意外暂停后的下一次用户手势恢复。 */
+  public resumeBGM(): void {
+    const audio = this.bgmAudio;
+    if (!audio || this.isMuted || audio.ended || !audio.paused) return;
+    this.isBgmPlaying = true;
+    void audio.play().catch(() => {
+      this.isBgmPlaying = false;
+    });
+  }
+
   public stopBGM(): void {
     this.isBgmPlaying = false;
     if (this.bgmAudio) {
@@ -176,6 +200,7 @@ class SoundManager {
    * 选中棋子：极轻的一声"嗒"，只做存在感提示，绝不抢 Bauklötze。
    */
   public playSelectSound(): void {
+    if (this.shouldSkipSfx()) return;
     try {
       const ctx = this.getAudioContext();
       if (this.isMuted || !this.sfxGain) return;
@@ -202,6 +227,7 @@ class SoundManager {
    * 非法移动 / 回弹：短促低沉的"咚"，明显但不刺耳。
    */
   public playBlockedSound(): void {
+    if (this.shouldSkipSfx()) return;
     try {
       const ctx = this.getAudioContext();
       if (this.isMuted || !this.sfxGain) return;
@@ -252,6 +278,7 @@ class SoundManager {
    * 物理"刷刷"滑动音本体（playMoveSound 的实际实现）
    */
   private playSlideSound(): void {
+    if (this.shouldSkipSfx()) return;
     try {
       const ctx = this.getAudioContext();
       if (this.isMuted || !this.sfxGain) return;

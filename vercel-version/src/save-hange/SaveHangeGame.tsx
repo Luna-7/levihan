@@ -101,6 +101,8 @@ export const SaveHangeGame: React.FC = () => {
   /** 胜利终态锁；曲终练习态不会锁住棋盘 */
   const terminalRef = useRef<boolean>(false);
   const timerStartedAtRef = useRef<number | null>(null);
+  /** UI 时间只允许向前，抵御 WebKit audio.currentTime 偶发回跳。 */
+  const elapsedRef = useRef<number>(0);
   const timedOutRef = useRef<boolean>(false);
   const handleTimeoutRef = useRef<() => void>(() => {});
   const difficultyMenuRef = useRef<HTMLDivElement | null>(null);
@@ -132,9 +134,10 @@ export const SaveHangeGame: React.FC = () => {
         ? 0
         : (performance.now() - timerStartedAtRef.current) / 1000;
       const elapsed = Math.min(
-        Math.max(soundManager.bgmCurrentTime, wallElapsed, 0),
+        Math.max(soundManager.bgmCurrentTime, wallElapsed, elapsedRef.current, 0),
         duration
       );
+      elapsedRef.current = elapsed;
       const tenth = Math.floor(elapsed * 10);
 
       // 每 0.1 秒刷一次 UI，避免 60fps 触发整棵组件树重渲染
@@ -183,9 +186,10 @@ export const SaveHangeGame: React.FC = () => {
       ? 0
       : (performance.now() - timerStartedAtRef.current) / 1000;
     const elapsed = Math.min(
-      Math.max(soundManager.bgmCurrentTime, wallElapsed),
+      Math.max(soundManager.bgmCurrentTime, wallElapsed, elapsedRef.current),
       soundManager.bgmDuration
     );
+    elapsedRef.current = elapsed;
     soundManager.pauseBGM();
 
     const duration = soundManager.bgmDuration;
@@ -239,6 +243,7 @@ export const SaveHangeGame: React.FC = () => {
       if (next === current) return false;
 
       if (!startedRef.current) startGame();
+      else if (!timedOutRef.current) soundManager.resumeBGM();
 
       piecesRef.current = next;
       setPieces(next);
@@ -264,6 +269,7 @@ export const SaveHangeGame: React.FC = () => {
     soundManager.stopBGM();
     startedRef.current = false;
     timerStartedAtRef.current = null;
+    elapsedRef.current = 0;
     terminalRef.current = false;
     timedOutRef.current = false;
 

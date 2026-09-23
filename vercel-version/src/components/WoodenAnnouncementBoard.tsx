@@ -195,6 +195,7 @@ export const WoodenAnnouncementBoard: React.FC<Props> = ({ onShowToast }) => {
     if (isPaused || selectedNotice !== null) return;
 
     timerRef.current = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
       setCurrentIndex((prev) => prev + 1);
       setIsAnimating(true);
     }, 3200);

@@ -1,5 +1,5 @@
-// 卡槽继续使用原图；牌面使用带透明间隔、已清除相邻图案碎片的图集。
-export const LIHAN_SPRITE_SRC = '/images/lihan/lihan-sheet.webp';
+// 卡槽只加载原图底部实际使用的 690×230 区域，避免解码上方未显示的人物素材。
+export const LIHAN_TRAY_SPRITE_SRC = '/images/lihan/lihan-tray.webp';
 export const LIHAN_TILE_SPRITE_SRC = '/images/lihan/lihan-tiles-clean.webp';
 
 // 卡牌/方块单元格的 background-size（百分比）

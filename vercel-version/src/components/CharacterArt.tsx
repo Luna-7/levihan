@@ -1,5 +1,5 @@
 import React from 'react';
-import { UI_SPRITES, UI_SPRITE_SIZE, UiSpriteName } from './uiSprite.generated';
+import { UI_SPRITES, UI_SPRITE_SIZES, UiSpriteName } from './uiSprite.generated';
 
 /**
  * Roleplay (语C) character artwork comes from one of two places:
@@ -53,6 +53,8 @@ export const CharacterArt: React.FC<CharacterArtProps> = ({
   const sprite = isSpriteRef(src) ? atlasEntry(src) : undefined;
 
   if (sprite) {
+    const sheetSize = UI_SPRITE_SIZES[sprite.sheet];
+    const sheetUrl = sprite.sheet === 'core' ? '/images/ui-sprite.webp' : `/images/ui-sprite-${sprite.sheet}.webp`;
     // A viewBox crop reproduces object-contain / object-cover at any frame size.
     // A background-position sprite cannot: the frame here ranges from a 20px
     // circle to a fluid column, so the scale factor is unknown up front.
@@ -65,7 +67,7 @@ export const CharacterArt: React.FC<CharacterArtProps> = ({
           role={alt ? 'img' : 'presentation'}
           aria-label={alt || undefined}
         >
-          <image href="/images/ui-sprite.webp" width={UI_SPRITE_SIZE.width} height={UI_SPRITE_SIZE.height} />
+          <image href={sheetUrl} width={sheetSize.width} height={sheetSize.height} />
         </svg>
       </span>
     );

@@ -32,7 +32,10 @@ export const ImmersiveGameHome: React.FC<Props> = ({
   onToggleSound,
 }) => {
   // 选中的沉浸游戏（点击下方街机进入后全屏直接玩）
-  const [activeGame, setActiveGame] = useState<'daxigua' | 'hange' | 'lihan' | null>(null);
+  const [activeGame, setActiveGame] = useState<'daxigua' | 'hange' | 'lihan' | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('victory-preview') === 'lihan' ? 'lihan' : null;
+  });
   const [activeModal, setActiveModal] = useState<'game' | 'leaderboard' | 'rules' | 'doujinshi' | 'resources' | null>(null);
   const [isForumOpen, setIsForumOpen] = useState(false);
   const pendingDoujinOpen = useAppShellStore((state) => state.pendingDoujinOpen);

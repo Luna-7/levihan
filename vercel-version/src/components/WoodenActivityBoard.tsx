@@ -37,6 +37,7 @@ export const WoodenActivityBoard: React.FC<Props> = ({
   useEffect(() => {
     if (activities.length <= 1) return;
     const timer = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
       setActiveIdx((prev) => (prev + 1) % activities.length);
     }, 6000);
     return () => clearInterval(timer);

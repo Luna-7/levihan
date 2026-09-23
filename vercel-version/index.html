@@ -10,6 +10,10 @@
       // 必须换成 100vh；这里提前打标记，避免首帧按错误的高度绘制。
       (function () {
         try {
+          var ua = window.navigator.userAgent || '';
+          var isIOSWebKit = /iP(?:hone|ad|od)/.test(ua) ||
+            (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+          if (isIOSWebKit) document.documentElement.classList.add('ios-webkit');
           var isStandalone =
             window.navigator.standalone === true ||
             window.matchMedia('(display-mode: standalone)').matches;

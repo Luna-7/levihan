@@ -1016,7 +1016,17 @@ window.__require = function e(t, n, o) {
           if (this.gengduoyouxi) this.gengduoyouxi.active = false;
           if (this.adsButton2) this.adsButton2.active = false;
           if (this.bannerButton) this.bannerButton.active = false;
-          1 != e && (this.bencichengji.getComponent(cc.Sprite).spriteFrame = this.bencichengjiarr[e - 1], this.gengduoyouxi.getComponent(cc.Sprite).spriteFrame = this.gengduoyouxiarr[e - 1]), this.continueTip.getComponent(cc.Label).string = 1 == e ? "\u70b9\u51fb\u7ee7\u7eed" : 2 == e ? "\u9ede\u64ca\u7e7c\u7e8c" : 4 == e ? "\ud074\ub9ad \ud558\uc5ec \uacc4\uc18d" : "Click Continue", this.reStartBtn.runAction(cc.repeatForever(cc.sequence(cc.scaleTo(.5, 1.1), cc.scaleTo(.55, 1), cc.delayTime(.5))))
+          1 != e && (this.bencichengji.getComponent(cc.Sprite).spriteFrame = this.bencichengjiarr[e - 1], this.gengduoyouxi.getComponent(cc.Sprite).spriteFrame = this.gengduoyouxiarr[e - 1]), this.continueTip.active = !1, this.highScoreNode.active = !1, this.resultTxt.node.active = !1, this.installStaticRestartArt(), window.__DAXIGUA_RESULT_PREVIEW__ && this.scheduleOnce(function () { s.default.score = 627, this.ShowFailedUi(627, 627) }, .1)
+        }, t.prototype.installStaticRestartArt = function () {
+          var e = this.reStartBtn,
+            t = e.getComponent(cc.Sprite);
+          t && (t.enabled = !1), e.stopAllActions(), e.setContentSize(210, 280), cc.loader.load("res/victory-levihan.png", function (t, n) {
+            if (t || !n || !e || !e.isValid) return;
+            var o = n instanceof cc.Texture2D ? n : n.getContent ? n.getContent() : n;
+            if (!(o instanceof cc.Texture2D)) return;
+            var c = new cc.Node("victory-levihan-image"), a = c.addComponent(cc.Sprite);
+            a.spriteFrame = new cc.SpriteFrame(o), a.sizeMode = cc.Sprite.SizeMode.RAW, c.scale = .18, c.setPosition(0, 24), c.zIndex = 10, e.addChild(c)
+          })
         }, t.prototype.update = function (e) {
         }, t.prototype.adsButtonFunc2 = function () {
         }, t.prototype.bannerButtonFunc = function () {
@@ -1027,10 +1037,8 @@ window.__require = function e(t, n, o) {
           if (this.adsButton2) this.adsButton2.active = false;
           if (this.bannerButton) this.bannerButton.active = false;
           this.scheduleOnce(function () {
-            r.default.Instance.HideScorePanel(), n.levelTxt.string = r.default.Instance.level.toString(), n.scoreLabel.string = s.default.score.toString(), n.highScoreLabel.string = t, n.resultTxt.string = n.GetContentByScore(e), n.overTxt.string = "", n.canClick = !1, n.levelTxt.string = e, n.bgMask.runAction(cc.fadeTo(.36, 150)), n.scheduleOnce(function () {
-              i.default.CenteredUi(10, this.di, this.levelTxt.node, this.guan), this.failedUiBox.y = cc.winSize.height / 2 + this.failedUiBox.height / 2, this.failedUiBox.runAction(cc.sequence(cc.moveTo(.36, this.failedBoxPos).easing(cc.easeBackOut()), cc.callFunc(function () {
-                this.clickMask.on(cc.Node.EventType.TOUCH_START, this.OnClickCloseMask, this), this.continueTip.opacity = 0, this.continueTip.runAction(cc.repeatForever(cc.sequence(cc.fadeIn(.5), cc.delayTime(.5), cc.fadeOut(.5)))), this.canClick = !0
-              }, this)))
+            r.default.Instance.HideScorePanel(), n.levelTxt.string = r.default.Instance.level.toString(), n.scoreLabel.string = s.default.score.toString(), n.highScoreLabel.string = t, n.overTxt.string = "", n.canClick = !1, n.levelTxt.string = e, n.bgMask.opacity = 150, n.scheduleOnce(function () {
+              i.default.CenteredUi(10, this.di, this.levelTxt.node, this.guan), this.failedUiBox.setPosition(this.failedBoxPos), this.clickMask.on(cc.Node.EventType.TOUCH_START, this.OnClickCloseMask, this), this.canClick = !0
             }, 0)
           }, .5)
         }, t.prototype.HideFailedUi = function () {
