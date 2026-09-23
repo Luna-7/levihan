@@ -42,9 +42,6 @@ const PLATFORM_STYLE: Record<string, string> = {
 const tierHint = (tier: string): string =>
   tier === 'A' ? '站内查看' : tier === 'B' ? '已读取链接摘要' : '前往原站查看';
 
-const isIOS = (): boolean =>
-  typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
-
 export const platformLabel = (platform: string): string => PLATFORM_LABEL[platform] || '网页';
 
 /** 旧安利可能把平台存成 web，展示时依据原链接补回真实平台。 */
@@ -303,7 +300,7 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
     <div className="space-y-2.5">
       {isPlayable ? (
         previewCover ? (
-          <button type="button" onClick={onOpen} aria-label="站内播放 B 站视频"
+          <button type="button" onClick={onOpen} aria-label="预览 B 站视频"
             className="group/cover relative block w-full aspect-video overflow-hidden rounded-lg border border-[#D8C7AA] bg-[#1E4334] cursor-pointer">
             <img src={previewCover} alt="B站视频封面" loading="lazy" referrerPolicy="no-referrer"
               onError={() => setFailedCovers((current) => [...current, previewCover])}
@@ -314,7 +311,7 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
                 <Play size={22} className="translate-x-[1px] text-[#F9E79F]" />
               </span>
             </span>
-            <span className="absolute bottom-2 right-2 rounded-md bg-[#2C2016]/85 px-2 py-0.5 text-[10px] text-[#F9E79F]">站内播放</span>
+            <span className="absolute bottom-2 right-2 rounded-md bg-[#2C2016]/85 px-2 py-0.5 text-[10px] text-[#F9E79F]">视频预览</span>
           </button>
         ) : null
       ) : hasPreview ? (
@@ -386,7 +383,7 @@ export const LinkShareCard: React.FC<CardProps> = ({ link, title, note, onOpen }
           className="px-2.5 py-1 rounded-md bg-[#1E4334] text-[#F9E79F] text-[11px] font-bold flex items-center gap-1 cursor-pointer hover:bg-[#2B5E4A] transition-colors"
         >
           {isPlayable ? <Play size={11} /> : <ExternalLink size={11} />}
-          <span>{isPlayable ? '站内播放' : canViewInside ? '站内查看' : '打开原文 / 镜像'}</span>
+          <span>{isPlayable ? '打开播放' : canViewInside ? '站内查看' : '打开原文 / 镜像'}</span>
         </button>
         )}
 
@@ -443,7 +440,9 @@ export const LinkShareModal: React.FC<ModalProps> = ({ link, title, note, onClos
   const playable = platformForLink(link) === 'bilibili' && Boolean(link.bvid);
   const xEmbeddable = platformForLink(link) === 'x' && canEmbedLink(link);
   const instagramEmbeddable = platformForLink(link) === 'instagram' && canEmbedLink(link);
-  const playOnOriginalSite = playable && isIOS();
+  // B 站部分视频即使 iframe 页面成功加载，也会因 hd5=0/no_reprint 等
+  // 视频级策略拒绝媒体流。统一展示预览并由用户手势跳转原站，避免空白播放器。
+  const playOnOriginalSite = playable;
   const displayCover = link.coverUrl || link.uploadedImageUrls?.[0] || link.uploadedImageUrl;
   const platform = platformForLink(link);
 
@@ -469,7 +468,7 @@ export const LinkShareModal: React.FC<ModalProps> = ({ link, title, note, onClos
           {playOnOriginalSite ? (
             <div className="relative w-full aspect-video flex flex-col items-center justify-center gap-3 bg-[#2C2016]">
               {displayCover && <img src={displayCover} alt="" className="absolute inset-0 w-full h-full object-cover opacity-35" referrerPolicy="no-referrer" />}
-              <p className="relative text-sm text-[#FFFEEF] font-retro-jp">iOS 请在 B 站页面播放视频</p>
+              <p className="relative px-4 text-center text-sm text-[#FFFEEF] font-retro-jp">该视频限制外链播放，请前往 B 站观看</p>
               <a href={link.url} target="_blank" rel="noopener noreferrer nofollow" className="relative px-4 py-2 rounded-md bg-[#B7791F] text-white text-sm font-bold flex items-center gap-2">
                 <Play size={16} /> 前往 B 站播放
               </a>
@@ -478,14 +477,13 @@ export const LinkShareModal: React.FC<ModalProps> = ({ link, title, note, onClos
             <div className="relative w-full" style={{ aspectRatio: '16 / 9' }}>
               <iframe
                 title={title}
-                src={`https://player.bilibili.com/player.html?bvid=${link.bvid}&autoplay=1&danmaku=0&high_quality=1`}
+                src={`https://player.bilibili.com/player.html?isOutside=true&bvid=${encodeURIComponent(link.bvid || '')}&p=1&autoplay=0&danmaku=0&high_quality=1`}
                 className="absolute inset-0 w-full h-full"
                 allowFullScreen
-                allow="fullscreen; picture-in-picture"
+                allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
                 scrolling="no"
                 frameBorder="0"
-                sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
-                referrerPolicy="no-referrer"
+                referrerPolicy="strict-origin-when-cross-origin"
               />
             </div>
           ) : xEmbeddable ? (
@@ -509,7 +507,7 @@ export const LinkShareModal: React.FC<ModalProps> = ({ link, title, note, onClos
               {platformLabel(platform)}
             </span>
             <span className="text-[10px] font-retro-jp text-[#8C6D4F]">
-              {playOnOriginalSite ? 'iOS 使用 B 站页面播放' : platform === 'ao3' ? 'AO3 站外 · 需镜像打开' : tierHint(link.tier)}
+              {playOnOriginalSite ? 'B 站原页播放' : platform === 'ao3' ? 'AO3 站外 · 需镜像打开' : tierHint(link.tier)}
             </span>
           </div>
           {link.ogDesc && (

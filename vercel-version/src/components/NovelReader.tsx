@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { GroupNovel } from '../types/doujinArchive';
 import { cosService } from '../services/cosClient';
 import { soundManager } from '../utils/audio';
@@ -125,10 +126,10 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
   // 空行分段（连续空白视为一个分隔），并去掉每段首尾空白
   const paragraphs = (body ?? '')
     .split(/\n\s*\n/)
-    .map((p) => p.replace(/\s+/g, ' ').trim())
+    .map((p) => p.trim())
     .filter(Boolean);
 
-  return (
+  const reader = (
     <div className="fixed inset-0 z-[90] bg-[#F6F1E3] flex flex-col select-text" role="dialog" aria-modal="true">
       {/* 顶部栏：返回 / 标题 / 作者 / 字号 */}
       <div className="sticky top-0 z-10 px-3 py-2 bg-[#FAF5E8]/95 border-b border-[#1E4334] backdrop-blur-xs flex items-center justify-between gap-2 shrink-0">
@@ -209,7 +210,7 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
             </div>
           )}
 
-          {novel.authorNote && (
+          {novel.authorNote && !novel.isRelayCompiled && (
             <div className="border-l-3 border-[#C29641] bg-[#FAF5E8] rounded-r-xs p-2.5">
               <span className="font-retro-jp text-[11px] font-bold text-[#8C6B38]">作者说：</span>
               <span className="font-retro-jp text-[11px] text-[#5B4636] break-words leading-relaxed">{novel.authorNote}</span>
@@ -230,15 +231,18 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
 
           {body !== null && !failed && (
             <>
-              {paragraphs.map((p, i) => (
-                <p
-                  key={i}
-                  className="font-retro-jp text-[#3E342B]"
-                  style={{ fontSize: FONT_SIZES[fontIdx], lineHeight: 1.9, textIndent: '2em' }}
-                >
-                  {p}
-                </p>
-              ))}
+              {paragraphs.map((p, i) => {
+                const isHeading = p.startsWith('【') || p.startsWith('─');
+                return (
+                  <p
+                    key={i}
+                    className={`font-retro-jp whitespace-pre-wrap break-words ${isHeading ? 'text-[#5F3B17] font-bold' : 'text-[#3E342B]'}`}
+                    style={{ fontSize: FONT_SIZES[fontIdx], lineHeight: 1.9, textIndent: isHeading ? 0 : '2em' }}
+                  >
+                    {p}
+                  </p>
+                );
+              })}
               <div className="pt-6 pb-4 text-center font-retro-jp text-[11px] text-[#8C7A68]">
                 —— 全文完 · 共 {novel.chars || 0} 字 ——
               </div>
@@ -252,4 +256,8 @@ export const NovelReader: React.FC<Props> = ({ novel, onClose }) => {
       </div>
     </div>
   );
+
+  // App 主体使用横向 transform 切页；fixed 若留在该树内会以变换父级为坐标系，
+  // 在移动端表现为四倍宽内容被视口裁切。Portal 到 body 后才是真正的全屏阅读器。
+  return typeof document !== 'undefined' ? createPortal(reader, document.body) : reader;
 };

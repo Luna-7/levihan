@@ -117,7 +117,7 @@ export const DoujinMaintenanceGate: React.FC<Props> = ({ children, enabled = tru
             aria-label={unlockOnTripleClick ? '维护中图片' : '像素人物装饰'}
           >
             <img
-              src="/images/archive-maintenance.webp"
+              src="/images/archive-maintenance.webp?v=transparent-2"
               alt=""
               draggable={false}
               className="block w-full h-full object-contain pointer-events-none"

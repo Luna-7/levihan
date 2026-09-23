@@ -19,12 +19,13 @@ const TUNING = {
   hangeWinBase: 400,
   hangeTimeBonusMax: 300,
   hangeMoveBonusMax: 300,
+  lihanBenchmarkSeconds: 900,
   meritCap: 1000,
 };
 
 /** 与 save-hange 的 FALLBACK_TRACK_SECONDS 保持一致（终曲全长 3:56） */
 const FALLBACK_TRACK_SECONDS = 236;
-const VALID_KEYS = ['daxigua', 'hange'];
+const VALID_KEYS = ['daxigua', 'hange', 'lihan'];
 /** 每人每游戏每日最多提交次数，防脚本刷榜 */
 const DAILY_LIMIT = 30;
 
@@ -35,6 +36,11 @@ function meritOf(gameKey, raw) {
   if (gameKey === 'daxigua') {
     const score = Math.max(0, Math.round(num(raw.score)));
     return Math.round((Math.min(score, TUNING.daxiguaScoreCap) / TUNING.daxiguaScoreCap) * TUNING.meritCap);
+  }
+  if (gameKey === 'lihan') {
+    const used = num(raw.timeUsedSeconds);
+    if (used <= 0) return 0;
+    return Math.max(1, Math.round((1 - clamp01(used / TUNING.lihanBenchmarkSeconds)) * (TUNING.meritCap - 1)) + 1);
   }
   const duration = num(raw.duration) > 0 ? num(raw.duration) : FALLBACK_TRACK_SECONDS;
   const used = Math.max(0, Math.min(num(raw.timeUsedSeconds), duration));
@@ -85,9 +91,13 @@ exports.main = async (event) => {
     })
   );
 
-  const existing = data(await db.from('game_best').select('merit').eq('uid', uid).eq('game_key', gameKey).limit(1));
+  const existing = data(await db.from('game_best').select('merit,raw_score').eq('uid', uid).eq('game_key', gameKey).limit(1));
   const prev = Array.isArray(existing) ? existing[0] : existing;
-  const improved = !prev || merit > prev.merit;
+  const previousTime = num(prev && prev.raw_score && prev.raw_score.timeUsedSeconds);
+  const currentTime = num(raw.timeUsedSeconds);
+  const improved = gameKey === 'lihan'
+    ? (!prev || currentTime > 0 && (!previousTime || currentTime < previousTime))
+    : (!prev || merit > prev.merit);
 
   if (improved) {
     const payload = { uid, game_key: gameKey, merit, raw_score: raw, achieved_at: now };

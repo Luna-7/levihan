@@ -444,6 +444,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [prompt, setPrompt] = useState('天空');
+  const [roleplaySetting, setRoleplaySetting] = useState('');
   const [image, setImage] = useState<string | undefined>();
   const [forumImages, setForumImages] = useState<string[]>([]);
   const [imageProcessing, setImageProcessing] = useState(false);
@@ -453,7 +454,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   // 与初版一致：上墙前先读取链接元数据，供用户核对封面。
   const [linkUrl, setLinkUrl] = useState('');
   const [linkPreview, setLinkPreview] = useState<LinkShare | null>(null);
-  const [linkDetecting, setLinkDetecting] = useState(false);
   const [linkModalPost, setLinkModalPost] = useState<ForumPost | null>(null);
 
   // 故事接龙编辑弹窗（仅自己发布的接龙可编辑）
@@ -804,6 +804,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
         prompt: relayEditPrompt.trim(),
       });
       if (Array.isArray(result.posts)) persist(result.posts);
+      useAppShellStore.getState().invalidateNovelIndex();
       setEditingRelay(null);
       soundManager.playPageTurn();
       onShowToast('✏️ 接龙已更新，合订本已同步重编 📖');
@@ -843,6 +844,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
         body: nextBody,
       });
       if (Array.isArray(result.posts)) persist(result.posts);
+      useAppShellStore.getState().invalidateNovelIndex();
       setEditingStick(null);
       soundManager.playPageTurn();
       onShowToast(`✏️ 第 ${step} 棒已更新，合订本已同步重编 📖`);
@@ -864,12 +866,13 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     persist(updated);
     void api('forumCommentDelete', { postId, commentId }).then((result) => {
       if (Array.isArray(result.posts)) persist(result.posts);
+      useAppShellStore.getState().invalidateNovelIndex();
     }).catch((err) => onShowToast(err instanceof Error ? err.message : '删除失败'));
     soundManager.playWoodTap();
     onShowToast('评论已删除');
   };
 
-  const handleForumImages = async (files: FileList | null) => {
+  const handleForumImages = async (files: FileList | File[] | null) => {
     if (!files?.length || imageProcessing) return;
     if (forumImages.length + files.length > 9) return onShowToast('一条帖子最多上传 9 张图片');
     setImageProcessing(true);
@@ -882,6 +885,19 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     } finally {
       setImageProcessing(false);
     }
+  };
+
+  const handleForumImagePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const files: File[] = [];
+    for (let index = 0; index < event.clipboardData.items.length; index += 1) {
+      const item = event.clipboardData.items[index];
+      if (item.kind !== 'file' || !item.type.startsWith('image/')) continue;
+      const file = item.getAsFile();
+      if (file) files.push(file);
+    }
+    if (files.length === 0) return;
+    event.preventDefault();
+    void handleForumImages(files);
   };
 
   const uploadForumImages = async (images: string[]): Promise<string[]> => {
@@ -965,22 +981,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     };
   };
 
-  const detectLink = async () => {
-    const url = normalizeShareLink(linkUrl);
-    if (!url) return onShowToast('请先粘贴外链');
-    setLinkDetecting(true);
-    try {
-      const preview = await fetchLinkPreview(url);
-      setLinkPreview(preview);
-      onShowToast(preview?.coverUrl ? '已识别封面与链接' : '未获取到封面，可选填上传图片');
-    } catch (error) {
-      setLinkPreview(null);
-      onShowToast(error instanceof Error ? error.message : '识别失败');
-    } finally {
-      setLinkDetecting(false);
-    }
-  };
-
   const publish = async (event: React.FormEvent) => {
     event.preventDefault();
 
@@ -1051,13 +1051,14 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       // whichever 拟音人物 is selected.
       const charAvatar = activeChar.avatar;
 
-      if (!body.trim() && !image) {
+      if (!body.trim() && forumImages.length === 0) {
         return onShowToast('请输入对白或台词内容');
       }
 
       setPublishing(true);
       try {
         const postTitle = title.trim() || (body.trim().length > 18 ? body.trim().slice(0, 18) + '…' : `${charName}的心声`);
+        const imageUrls = await uploadForumImages(forumImages);
         const newPost: ForumPost = {
           id: `post-${Date.now()}`,
           category: 'roleplay',
@@ -1067,7 +1068,9 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
           characterImage: charAvatar,
           title: postTitle,
           body: body.trim(),
-          image,
+          prompt: roleplaySetting.trim() || undefined,
+          image: imageUrls[0],
+          images: imageUrls,
           potatoes: 1,
           potatoGiven: false,
           createdAt: '刚刚',
@@ -1079,6 +1082,8 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
         setTitle('');
         setBody('');
+        setRoleplaySetting('');
+        setForumImages([]);
         setImage(undefined);
         setShowComposer(false);
         soundManager.playCoin();
@@ -1088,20 +1093,27 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
           author: charName,
           title: postTitle,
           body: body.trim(),
+          prompt: roleplaySetting.trim(),
           category: 'roleplay',
           characterName: charName,
           characterImage: charAvatar,
-          imageBase64: image?.split(',')[1] || '',
+          images: imageUrls,
         }).then((result) => {
           const serverPost = (result && result.post) as ForumPost | undefined;
           if (serverPost && serverPost.id) {
-            setPosts((cur) => cur.map((p) => (p.id === newPost.id ? { ...p, ...serverPost, id: p.id } : p)));
+            setPosts((cur) => {
+              const next = cur.map((p) => (p.id === newPost.id ? { ...p, ...serverPost } : p));
+              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* storage fallback */ }
+              return next;
+            });
           }
+          useAppShellStore.getState().invalidateNovelIndex();
         }).catch(() => onShowToast('⚠️ 帖子同步失败（只保存在本机，其他设备看不到）'));
       } catch (error) {
         onShowToast(error instanceof Error ? error.message : '发布失败');
       } finally {
         setPublishing(false);
+        setUploadProgress('');
       }
       return;
     }
@@ -1195,7 +1207,11 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
           // 用后端返回的权威帖子（带 uid / 后端 id）回填本地
           const serverPost = (result && result.post) as ForumPost | undefined;
           if (serverPost && serverPost.id) {
-            setPosts((cur) => cur.map((p) => (p.id === newPost.id ? { ...p, ...serverPost, id: p.id } : p)));
+            setPosts((cur) => {
+              const next = cur.map((p) => (p.id === newPost.id ? { ...p, ...serverPost } : p));
+              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* storage fallback */ }
+              return next;
+            });
           }
         }).catch(() => undefined);
       } catch (error) {
@@ -1391,6 +1407,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       }).then((result) => {
         // 以服务端真值收敛本地状态（服务端已释放羽毛笔）
         if (Array.isArray(result.posts)) persist(result.posts);
+        useAppShellStore.getState().invalidateNovelIndex();
       }).catch(() => onShowToast('⚠️ 接棒同步失败（只保存在本机，其他设备看不到）'));
       onShowToast(`第 ${stepIndex} 棒已递交 (${text.length}字)，合订本已同步更新 📖`);
     } else {
@@ -2316,6 +2333,12 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                     {/* 左侧：文本框 */}
                     <div className="flex-1 min-w-0 flex flex-col justify-center">
                       <div className="h-full flex flex-col justify-center p-3 sm:p-3.5 rounded-xl bg-[#F3E9D2]/75 border border-[#DECDB3] shadow-2xs">
+                        {post.prompt && (
+                          <div className="mb-2 rounded-lg border border-[#D8C7AA] bg-[#FFF9EC]/75 px-2.5 py-2 text-[10px] sm:text-[11px] leading-relaxed text-[#6D5A46]">
+                            <span className="mr-1.5 font-bold text-[#433854]">背景设定</span>
+                            <span className="whitespace-pre-wrap">{post.prompt}</span>
+                          </div>
+                        )}
                         <p className="text-xs sm:text-sm leading-relaxed font-serif-title whitespace-pre-wrap text-[#3B2818] italic">
                           {post.body}
                         </p>
@@ -3104,7 +3127,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       )}
 
                       {/* 当前所选角色立绘与头像确认栏 */}
-                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#FAF4E4] border border-[#DECDB3] text-[11px] text-[#4A3525]">
+                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#FAF4E4] border border-[#DECDB3] text-[11px] text-[#4A3525] whitespace-nowrap overflow-hidden">
                         <span className="font-bold text-[#8C6D4F]">已选拟音形象:</span>
                         <CharacterArt
                           src={selectedChar?.avatar || PRESET_CHARACTERS[0].avatar}
@@ -3112,8 +3135,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           fit="cover"
                           className="w-5 h-5 rounded-full shrink-0"
                         />
-                        <span className="font-black text-[#1E4334]">{selectedChar?.name || PRESET_CHARACTERS[0].name}</span>
-                        <span className="text-[10px] text-[#8C6D4F]/80 ml-auto">（卡片文本框右侧将固定展示此图）</span>
+                        <span className="font-black text-[#1E4334] truncate">{selectedChar?.name || PRESET_CHARACTERS[0].name}</span>
                       </div>
                     </div>
                   )}
@@ -3134,7 +3156,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                     </div>
                   )}
 
-                  <form onSubmit={publish} className="relative z-10 space-y-2.5">
+                  <form onSubmit={publish} onPaste={handleForumImagePaste} className="relative z-10 space-y-2.5">
                     {/* 署名输入已移除：发布人固定为账号昵称（mount 时自动载入，
                         未登录兜底 '调查兵'），不再提供手动输入。 */}
 
@@ -3144,19 +3166,15 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       <label className="text-[10px] font-bold text-[#8A5A12] block">
                         🔗 外链地址 (必填 · 可粘贴整段分享文案):
                       </label>
-                      <div className="flex gap-2">
+                      <div>
                         <input
                           type="text"
                           inputMode="url"
                           value={linkUrl}
                           onChange={(e) => { setLinkUrl(e.target.value); setLinkPreview(null); }}
                           placeholder="粘贴 Pixiv / X / Instagram 等作品链接"
-                          className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg border border-[#D1B88B] text-xs outline-none bg-white focus:border-[#B7791F] font-mono"
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-[#D1B88B] text-xs outline-none bg-white focus:border-[#B7791F] font-mono"
                         />
-                        <button type="button" onClick={() => { void detectLink(); }} disabled={linkDetecting || !linkUrl.trim()}
-                          className="shrink-0 rounded-lg bg-[#B7791F] px-3 py-1.5 text-xs font-bold text-[#FFFEEF] disabled:opacity-45 cursor-pointer">
-                          {linkDetecting ? '识别中…' : '识别'}
-                        </button>
                       </div>
                       {linkPreview && (
                         <div className="flex items-center gap-2 rounded-lg border border-[#D8C7AA] bg-white/80 p-2">
@@ -3169,7 +3187,19 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           </div>
                         </div>
                       )}
-                      <p className="text-[10px] text-[#8A5A12]">发布时也会自动识别；抓不到封面时可选填上传图片。</p>
+                    </div>
+                  )}
+
+                  {composeCategory === 'roleplay' && (
+                    <div>
+                      <label className="text-[10px] font-bold text-[#6D5A46] block mb-1">背景设定 (选填):</label>
+                      <textarea
+                        rows={2}
+                        value={roleplaySetting}
+                        onChange={(e) => setRoleplaySetting(e.target.value)}
+                        placeholder="例如：雨夜的地下街，巡逻刚刚结束……"
+                        className="w-full px-3 py-2 rounded-lg border border-[#C5B498] text-xs sm:text-sm outline-none bg-white focus:border-[#235340] resize-none leading-relaxed"
+                      />
                     </div>
                   )}
 
@@ -3213,10 +3243,13 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       />
                     </div>
 
-                    {(composeCategory === 'chat' || composeCategory === 'links') && (
-                      <div className="rounded-xl border border-dashed border-[#C5B498] bg-white/60 p-2.5">
+                    {(composeCategory === 'chat' || composeCategory === 'links' || composeCategory === 'roleplay') && (
+                      <div
+                        tabIndex={0}
+                        className="rounded-xl border border-dashed border-[#C5B498] bg-white/60 p-2.5 outline-none focus:border-[#235340] focus:ring-2 focus:ring-[#235340]/15"
+                      >
                         <label className="inline-flex items-center gap-1.5 text-xs font-bold text-[#6D5A46] cursor-pointer">
-                          <Upload size={13} /> 选填图片（最多 9 张，原图不限大小，自动转 WebP）
+                          <Upload size={13} /> 选填图片（可点击选择或直接粘贴，最多 9 张）
                           <input type="file" accept="image/*" multiple disabled={imageProcessing || publishing} className="hidden"
                             onChange={(e) => { void handleForumImages(e.target.files); e.target.value = ''; }} />
                         </label>

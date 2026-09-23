@@ -53,6 +53,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
   // 在线小说索引（novels.json，含合订本与同好来稿）；读不到则为空 → 该段不渲染
   const [novels, setNovels] = useState<GroupNovel[]>([]);
+  const [requestedNovel, setRequestedNovel] = useState<GroupNovel | null>(null);
 
   // 统计所有标签（动态汇总当前数据中的所有标签）
   const allCategories = isMangaVisible ? ['漫画本', '小说本', '插画集'] : ['小说本', '插画集'];
@@ -88,6 +89,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
   // 首页「今日上新」点小说本 → 切到「小说本」分类（由 appShellStore 信号触发）
   const pendingNovelCategory = useAppShellStore((state) => state.pendingNovelCategory);
+  const pendingNovelId = useAppShellStore((state) => state.pendingNovelId);
   useEffect(() => {
     if (pendingNovelCategory === 0) return;
     setSelectedCategory('小说本');
@@ -95,6 +97,27 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     // 只关注意图信号的跳变。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingNovelCategory]);
+
+  // 故事接龙的「查看合订本」携带稳定 ID：强制拉取最新索引并直接打开对应阅读器。
+  useEffect(() => {
+    if (!pendingNovelId) return;
+    let cancelled = false;
+    setRequestedNovel(null);
+    setSelectedCategory('小说本');
+    setSelectedTag('全部');
+    void cosService.loadNovelList().then((latest) => {
+      if (cancelled) return;
+      setNovels(latest);
+      const target = latest.find((novel) => novel.id === pendingNovelId) || null;
+      setRequestedNovel(target);
+      if (!target) onShowToast('合订本正在同步，请稍后再试');
+      useAppShellStore.getState().clearPendingNovel();
+    }).catch(() => {
+      if (!cancelled) onShowToast('合订本索引加载失败，请稍后重试');
+      useAppShellStore.getState().clearPendingNovel();
+    });
+    return () => { cancelled = true; };
+  }, [pendingNovelId, onShowToast]);
 
   // 刷新归档数据 (尝试从 COS 获取 archive.json)
   const handleRefreshArchive = async (showToastNotice = true) => {
@@ -235,7 +258,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
     // 长图主体内容：无间隙、块级排列、消除所有图片缝隙
     const renderLongStripContent = () => (
-      <div className="w-full max-w-2xl mx-auto bg-[#181D1A] rounded-lg overflow-hidden border-2 border-[#1E4334] shadow-xl">
+      <div className="w-full max-w-2xl mx-auto bg-[#F6F1E3] rounded-lg overflow-hidden border-2 border-[#1E4334] shadow-xl">
         {pagesList.map((pageNum) => {
           const pageUrl = cosService.getPageUrl(readingBook, pageNum);
 
@@ -428,7 +451,12 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
       {/* 小说本 = 专属视图：分类切换（合订本 / 同好来稿）+ 瀑布流 */}
       {selectedCategory === '小说本' && (
-        <NovelModule searchQuery={searchQuery} novels={novels} onShowToast={onShowToast} />
+        <NovelModule
+          searchQuery={searchQuery}
+          novels={novels}
+          onShowToast={onShowToast}
+          initialReadingNovel={requestedNovel}
+        />
       )}
 
       {/* 典藏本卡片网格：2*2 的规整摆放，点击直接进入查看长图 */}

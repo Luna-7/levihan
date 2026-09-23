@@ -194,7 +194,7 @@ export class COSService {
     if (!this.config.cdnBaseUrl) return [];
     try {
       requestDebug.recordJsonRequest();
-      const resp = await fetch(this.getObjectUrl('novels.json'), { mode: 'cors', cache: 'default' });
+      const resp = await fetch(this.getObjectUrl('novels.json'), { mode: 'cors', cache: 'no-store' });
       if (resp.ok) {
         const data = await resp.json();
         if (Array.isArray(data)) return data;

@@ -1,10 +1,10 @@
 /**
  * 头号玩家（三游戏排行榜）· 前端数据层
  *
- * 参与榜单的游戏只有两款（2026-09-17 定）：
+ * 参与榜单的游戏共三款：
  *   - daxigua 利韩·合成大西皮（全难度都记）
  *   - hange   利韩·拯救韩吉（只有「绝境」难度突围成功才记）
- *   - lihan   利韩·利了个韩 —— 暂不参与头号玩家，不参与任何计算
+ *   - lihan   利韩·利了个韩（按通关时间升序）
  *
  * 归一化公式必须与云函数保持一致：
  *   cloudbase/functions/submitGameScore/index.js → meritOf()
@@ -39,13 +39,14 @@ async function postLeaderboard(
   return result;
 }
 
-export type GameKey = 'daxigua' | 'hange';
+export type GameKey = 'daxigua' | 'hange' | 'lihan';
 
-export const GAME_KEYS: readonly GameKey[] = ['daxigua', 'hange'] as const;
+export const GAME_KEYS: readonly GameKey[] = ['daxigua', 'hange', 'lihan'] as const;
 
 export const GAME_META: Record<GameKey, { short: string; emoji: string; color: string }> = {
   daxigua: { short: '大西皮', emoji: '🍉', color: '#3B6D11' },
   hange: { short: '拯救韩吉', emoji: '🛡️', color: '#534AB7' },
+  lihan: { short: '利了个韩', emoji: '🥔', color: '#B7791F' },
 };
 
 export interface DaxiguaRaw {
@@ -62,7 +63,12 @@ export interface HangeRaw {
   outcome: 'win';
 }
 
-export type GameRaw = DaxiguaRaw | HangeRaw;
+export interface LihanRaw {
+  timeUsedSeconds: number;
+  outcome: 'win';
+}
+
+export type GameRaw = DaxiguaRaw | HangeRaw | LihanRaw;
 
 /**
  * 归一化基准值 —— 〔待校准〕
@@ -76,6 +82,8 @@ export const MERIT_TUNING = {
   hangeWinBase: 400,
   hangeTimeBonusMax: 300,
   hangeMoveBonusMax: 300,
+  /** 利了个韩 15 分钟内通关按耗时折算综合榜积分；单项榜始终按真实耗时排序 */
+  lihanBenchmarkSeconds: 900,
   meritCap: 1000,
 } as const;
 
@@ -102,8 +110,16 @@ export function meritForHange(raw: HangeRaw): number {
   );
 }
 
+export function meritForLihan(raw: LihanRaw): number {
+  const used = Number.isFinite(raw?.timeUsedSeconds) ? Math.max(1, raw.timeUsedSeconds) : 0;
+  if (!used) return 0;
+  return Math.max(1, Math.round((1 - clamp01(used / MERIT_TUNING.lihanBenchmarkSeconds)) * (MERIT_TUNING.meritCap - 1)) + 1);
+}
+
 export function meritOf(gameKey: GameKey, raw: GameRaw): number {
-  return gameKey === 'daxigua' ? meritForDaxigua(raw as DaxiguaRaw) : meritForHange(raw as HangeRaw);
+  if (gameKey === 'daxigua') return meritForDaxigua(raw as DaxiguaRaw);
+  if (gameKey === 'hange') return meritForHange(raw as HangeRaw);
+  return meritForLihan(raw as LihanRaw);
 }
 
 /* ---------------- 本机最佳（未登录时的兜底） ---------------- */
@@ -171,6 +187,7 @@ export interface LeaderboardRow {
   nickname: string;
   merit: number;
   achievedAt?: string;
+  timeUsedSeconds?: number;
 }
 
 export interface TotalRow extends LeaderboardRow {
@@ -181,6 +198,7 @@ export interface LeaderboardData {
   total: TotalRow[];
   daxigua: LeaderboardRow[];
   hange: LeaderboardRow[];
+  lihan: LeaderboardRow[];
   me: (TotalRow & { ranks: Partial<Record<'total' | GameKey, number>> }) | null;
 }
 
@@ -191,5 +209,12 @@ export async function fetchLeaderboard(): Promise<LeaderboardData | null> {
   // 带 token 时后端会额外返回「我的战绩」，游客也能看公开榜
   const result = await postLeaderboard({ action: 'leaderboard' }, currentToken()).catch(() => null);
   if (!result || !Array.isArray(result.total)) return null;
-  return result as unknown as LeaderboardData;
+  const data = result as unknown as LeaderboardData;
+  return {
+    ...data,
+    total: Array.isArray(data.total) ? data.total : [],
+    daxigua: Array.isArray(data.daxigua) ? data.daxigua : [],
+    hange: Array.isArray(data.hange) ? data.hange : [],
+    lihan: Array.isArray(data.lihan) ? data.lihan : [],
+  };
 }

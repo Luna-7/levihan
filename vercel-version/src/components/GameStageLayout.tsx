@@ -23,7 +23,10 @@ export const GameStageLayout: React.FC<Props> = ({
         <CardPatternOverlay opacity={0.06} mode="multiply" />
 
         {/* 巨树餐厅与调查联络：全屏半透明磨砂底图，统一兵长茶会同款流动式舞台布局 */}
-        <main className="relative z-10 w-full max-w-7xl mx-auto flex-1 min-h-0 flex flex-col overflow-hidden px-2.5 sm:px-4 md:px-6">
+        <main
+          className="relative z-10 w-full max-w-7xl mx-auto flex-1 min-h-0 flex flex-col overflow-hidden px-2.5 sm:px-4 md:px-6"
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        >
           <div id={`${activeTab}-scroll-container`} className="clear-adventure-nav relative w-full h-full overflow-y-auto pt-2.5 sm:pt-3.5 pr-0.5 sm:pr-1 overflow-x-hidden custom-adventure-scrollbar">
             {children}
           </div>

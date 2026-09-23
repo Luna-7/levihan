@@ -9,7 +9,8 @@ function data(result) {
 
 /** 榜单展示条数（「我的战绩」的排名按全量数据计算，不受此限制） */
 const TOP = 50;
-const GAME_KEYS = ['daxigua', 'hange'];
+const GAME_KEYS = ['daxigua', 'hange', 'lihan'];
+const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 
 const rows = (value) => (Array.isArray(value) ? value : value ? [value] : []);
 
@@ -23,7 +24,7 @@ exports.main = async () => {
   }
 
   const best = rows(
-    data(await db.from('game_best').select('uid,game_key,merit,achieved_at').order('merit', { ascending: false }).limit(500))
+    data(await db.from('game_best').select('uid,game_key,merit,raw_score,achieved_at').order('merit', { ascending: false }).limit(500))
   );
 
   const uids = [...new Set(best.map((row) => row.uid))];
@@ -41,6 +42,7 @@ exports.main = async () => {
   GAME_KEYS.forEach((key) => {
     ranked[key] = best.filter((row) => row.game_key === key);
   });
+  ranked.lihan.sort((a, b) => num(a.raw_score && a.raw_score.timeUsedSeconds) - num(b.raw_score && b.raw_score.timeUsedSeconds));
 
   // 总榜：按 uid 聚合各游戏积分
   const totalsMap = new Map();
@@ -57,6 +59,7 @@ exports.main = async () => {
     nickname: nameOf(entry.uid),
     merit: entry.merit,
     achievedAt: entry.achieved_at,
+    ...(entry.game_key === 'lihan' ? { timeUsedSeconds: num(entry.raw_score && entry.raw_score.timeUsedSeconds) } : {}),
   });
 
   const total = rankedTotal.slice(0, TOP).map((entry) => ({
@@ -65,6 +68,7 @@ exports.main = async () => {
   }));
   const daxigua = ranked.daxigua.slice(0, TOP).map(shape);
   const hange = ranked.hange.slice(0, TOP).map(shape);
+  const lihan = ranked.lihan.slice(0, TOP).map(shape);
 
   let me = null;
   if (uid && totalsMap.has(uid)) {
@@ -82,9 +86,10 @@ exports.main = async () => {
         total: indexOf(rankedTotal),
         daxigua: indexOf(ranked.daxigua),
         hange: indexOf(ranked.hange),
+        lihan: indexOf(ranked.lihan),
       },
     };
   }
 
-  return { ok: true, total, daxigua, hange, me };
+  return { ok: true, total, daxigua, hange, lihan, me };
 };

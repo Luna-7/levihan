@@ -97,7 +97,7 @@ export default function App() {
   };
 
   return (
-    <main className="relative w-full h-[100dvh] max-h-[100dvh] pt-0 pb-0 px-0 flex flex-col items-center justify-start bg-transparent antialiased selection:bg-[#C5A059] selection:text-[#16273B] overflow-hidden">
+    <main className="relative w-full h-[var(--app-h)] max-h-[var(--app-h)] pt-0 pb-0 px-0 flex flex-col items-center justify-start bg-transparent antialiased selection:bg-[#C5A059] selection:text-[#16273B] overflow-hidden">
       {/* 勇者大冒险 · 完全固定优雅羊皮纸背景 (固定不移动) */}
       <AdventureWorldBackground activeTab={activeTab} />
 

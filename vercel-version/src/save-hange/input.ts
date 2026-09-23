@@ -72,7 +72,7 @@ export function resolveDragAxis(
  */
 export function clampDragOffset(rawPx: number, maxCells: number, cellPx: number): number {
   if (maxCells <= 0 || cellPx <= 0) return 0;
-  const limit = maxCells * cellPx;
+  const limit = Math.min(maxCells, 1) * cellPx;
   return Math.max(-limit, Math.min(limit, rawPx));
 }
 
@@ -82,5 +82,5 @@ export function clampDragOffset(rawPx: number, maxCells: number, cellPx: number)
  */
 export function resolveSnap(offsetPx: number, cellPx: number): number {
   if (cellPx <= 0) return 0;
-  return Math.round(offsetPx / cellPx);
+  return Math.max(-1, Math.min(1, Math.round(offsetPx / cellPx)));
 }

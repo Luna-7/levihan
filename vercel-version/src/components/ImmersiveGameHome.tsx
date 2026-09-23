@@ -74,7 +74,10 @@ export const ImmersiveGameHome: React.FC<Props> = ({
         />
 
         {/* 顶部控制条：悬浮在横幅上 (Avoid top notch / status bar) */}
-        <header className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 pt-3 sm:pt-4 px-1">
+        <header
+          className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 sm:pt-4 px-1"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
+        >
           {/* 左侧：无边框无背景音量键 */}
           <div className="flex items-center">
             <button
@@ -339,7 +342,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                     <span className="font-serif-title text-xs sm:text-sm font-bold text-[#16273B] block leading-tight">
                       全服头号玩家排行榜
                     </span>
-                    <span className="text-[9px] text-[#715431]">实时汇总西瓜与拯救韩吉通关纪录</span>
+                    <span className="text-[9px] text-[#715431]">实时汇总三款游戏的最佳纪录</span>
                   </div>
                 </span>
                 <span className="font-pixel text-[11px] text-[#8C6226] group-hover:translate-x-0.5 transition-transform font-bold">

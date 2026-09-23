@@ -154,7 +154,7 @@ export default function LazyComicPage({
               loading="lazy"
               decoding="async"
               draggable={false}
-              className="w-full h-auto block m-0 p-0 border-0 align-top select-none touch-pan-x touch-pan-y"
+              className="w-full h-auto block m-0 p-0 border-0 align-top select-none touch-pan-x touch-pan-y bg-[#F6F1E3]"
               style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
             />
           )}

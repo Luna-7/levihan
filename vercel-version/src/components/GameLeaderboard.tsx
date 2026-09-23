@@ -19,10 +19,17 @@ interface Props {
 const MEDALS = ['#C5A059', '#9CA3AF', '#B9770E'];
 
 const TABS: Array<{ key: Tab; label: string; title: string }> = [
-  { key: 'total', label: '总榜', title: '大西皮 + 拯救韩吉 积分之和' },
-  { key: 'daxigua', label: GAME_META.daxigua.emoji, title: `利韩 · 合成大西皮` },
-  { key: 'hange', label: GAME_META.hange.emoji, title: `利韩 · 拯救韩吉（仅绝境难度）` },
+  { key: 'total', label: '总榜', title: '三款游戏综合积分' },
+  { key: 'daxigua', label: '大西皮', title: '利韩 · 合成大西皮' },
+  { key: 'hange', label: '拯救韩吉', title: '利韩 · 拯救韩吉（仅绝境难度）' },
+  { key: 'lihan', label: '利了个韩', title: '利韩 · 利了个韩（按通关时间）' },
 ];
+
+const formatTime = (seconds?: number) => {
+  if (!seconds || !Number.isFinite(seconds)) return '—';
+  const rounded = Math.max(0, Math.round(seconds));
+  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, '0')}`;
+};
 
 const Breakdown = ({ row }: { row: TotalRow }) => (
   <span className="flex gap-2 text-[11px] font-pixel shrink-0">
@@ -63,7 +70,7 @@ export const GameLeaderboard: React.FC<Props> = ({ onShowToast }) => {
     ? []
     : tab === 'total'
       ? data.total
-      : data[tab].map((row) => ({ ...row, breakdown: { [tab]: row.merit } }));
+      : (data[tab] || []).map((row) => ({ ...row, breakdown: { [tab]: row.merit } }));
 
   const hasLocal = GAME_KEYS.some((key) => (localBest[key] || 0) > 0);
 
@@ -146,7 +153,9 @@ export const GameLeaderboard: React.FC<Props> = ({ onShowToast }) => {
                   {row.nickname}
                 </span>
                 {tab === 'total' && <Breakdown row={row} />}
-                <span className="w-9 text-right font-pixel text-[14px] text-[#16273B] shrink-0">{row.merit}</span>
+                <span className="min-w-9 text-right font-pixel text-[14px] text-[#16273B] shrink-0">
+                  {tab === 'lihan' ? formatTime(row.timeUsedSeconds) : row.merit}
+                </span>
               </div>
             ))}
           </div>
@@ -166,15 +175,14 @@ export const GameLeaderboard: React.FC<Props> = ({ onShowToast }) => {
         ) : (
           <div className="flex items-center gap-2">
             <span className="font-retro-jp text-[11px] text-[#8A7968]">
-              🥔 利了个韩暂未加入头号玩家
+              登录后成绩会同步到头号玩家
               {hasLocal && (
                 <>
                   {' · '}
                   本机最佳
                   {GAME_KEYS.filter((key) => (localBest[key] || 0) > 0).map((key) => (
                     <span key={key} className="font-pixel ml-1" style={{ color: GAME_META[key].color }}>
-                      {GAME_META[key].emoji}
-                      {localBest[key]}
+                      {GAME_META[key].short} {localBest[key]}
                     </span>
                   ))}
                 </>

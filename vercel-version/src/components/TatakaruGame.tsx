@@ -40,6 +40,7 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
   })();
 
   const [selectedGame, setSelectedGame] = useState<TatakaruGameKey | null>(initialKey);
+  const [lihanRestartSignal, setLihanRestartSignal] = useState(0);
 
   // 直入利了个韩（原生组件）时无需加载骨架屏
   const [isLoading, setIsLoading] = useState<boolean>(initialKey !== null && initialKey !== 'lihan');
@@ -287,6 +288,16 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
 
         {/* 工具栏: 街机式 BGM + 切歌 + 全屏 */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          {selectedGame === 'lihan' && (
+            <button
+              onClick={() => setLihanRestartSignal((value) => value + 1)}
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-none flex items-center justify-center text-sm sm:text-base bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] border-2 border-[#37755c] shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer transition-transform"
+              title="重新开始"
+              aria-label="重新开始"
+            >
+              <span>↻</span>
+            </button>
+          )}
           {(selectedGame === 'daxigua' || selectedGame === 'lihan') && (
             <button
               onClick={handleToggleBgm}
@@ -304,11 +315,11 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
 
           <button
             onClick={handleToggleFullscreen}
-            className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] border-2 border-[#37755c] rounded-none shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer transition-transform flex items-center gap-1 text-[10px] sm:text-xs font-pixel select-none"
+            className="w-7 h-7 sm:w-8 sm:h-8 bg-[#1E4334] hover:bg-[#2B5E4A] text-[#F9E79F] border-2 border-[#37755c] rounded-none shadow-[2px_2px_0px_#07140E] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer transition-transform flex items-center justify-center text-sm sm:text-base font-pixel select-none"
             title="全屏切换"
+            aria-label="全屏切换"
           >
             <span>⛶</span>
-            <span className="hidden xs:inline">{isFullscreen ? '还原' : '全屏'}</span>
           </button>
         </div>
       </div>
@@ -488,6 +499,7 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
                 onBack={handleBackToLobby}
                 onShowToast={onShowToast}
                 isFullscreen={isFullscreen}
+                restartSignal={lihanRestartSignal}
               />
             </div>
           )}

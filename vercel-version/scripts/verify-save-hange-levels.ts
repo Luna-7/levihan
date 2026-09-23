@@ -150,10 +150,10 @@ function neighborsOf(key: number, out: number[]): number {
     const maxUp = travel(i, x, y, meta.w, meta.h, 0, -1);
     const maxDown = travel(i, x, y, meta.w, meta.h, 0, 1);
 
-    for (let d = 1; d <= maxLeft; d++) out[count++] = key - d * meta.weight;
-    for (let d = 1; d <= maxRight; d++) out[count++] = key + d * meta.weight;
-    for (let d = 1; d <= maxUp; d++) out[count++] = key - d * BOARD_WIDTH * meta.weight;
-    for (let d = 1; d <= maxDown; d++) out[count++] = key + d * BOARD_WIDTH * meta.weight;
+    if (maxLeft > 0) out[count++] = key - meta.weight;
+    if (maxRight > 0) out[count++] = key + meta.weight;
+    if (maxUp > 0) out[count++] = key - BOARD_WIDTH * meta.weight;
+    if (maxDown > 0) out[count++] = key + BOARD_WIDTH * meta.weight;
   }
 
   out.length = count;

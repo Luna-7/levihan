@@ -3582,13 +3582,29 @@ window.__require = function e(t, n, o) {
         maxScoreText: cc.Label
       },
       onLoad: function () {
-        this.bgLayer.color = cc.color("#68b951"), this.standardScore = c.standScore, this.game_max_score = 200, this.rigthBtnGameName = null, this.rightBtnGameUrl = null, this.UIPosChange(), this.addClickBtns();
+        this.bgLayer.color = cc.color("#68b951"), this.standardScore = c.standScore, this.game_max_score = 200, this.rigthBtnGameName = null, this.rightBtnGameUrl = null, this.UIPosChange(), this.addClickBtns(), this.installLevihanTitle();
         var e = "\u6700\u9ad8\u7eaa\u5f55:",
           t = this.returnCurrentLanType();
         e = 1 == t ? "\u6700\u9ad8\u7eaa\u5f55:" : 2 == t ? "\u6700\u9ad8\u7d00\u9304:" : 4 == t ? "\ucd5c\uace0 \uae30\ub85d:" : "Highest Record:";
         var n = c.gameScore,
           o = this.getHighScore();
         o ? o < c.gameScore && (this.setHisSocre(c.gameScore), o = c.gameScore) : (this.setHisSocre(c.gameScore), o = n), this.maxScoreText.string = e + o
+      },
+      installLevihanTitle: function () {
+        var e = this.node;
+        cc.loader.load("res/levihan-title.png", function (t, n) {
+          if (t || !n || !e || !e.isValid) return;
+          var o = n instanceof cc.Texture2D ? n : n.getContent ? n.getContent() : n;
+          if (!(o instanceof cc.Texture2D)) return;
+          var c = new cc.Node("levihan-title-image"), a = c.addComponent(cc.Sprite);
+          a.spriteFrame = new cc.SpriteFrame(o);
+          a.sizeMode = cc.Sprite.SizeMode.RAW;
+          c.setContentSize(104, 176);
+          c.setPosition(0, 105);
+          c.scale = .92;
+          c.zIndex = 50;
+          e.addChild(c);
+        });
       },
       returnCurrentLanType: function () {
         var e = 1;

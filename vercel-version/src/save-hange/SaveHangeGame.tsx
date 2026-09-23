@@ -2,14 +2,10 @@
  * SAVE HANGE —— 对局主体
  *
  * 状态机约定（改代码前先读这段）：
- *   1. 时间轴唯一数据源是 Bauklötze 音频的 currentTime：
- *      剩余时间 = audio.duration - audio.currentTime。
- *      没有 setInterval，也没有任何独立的倒计时变量；requestAnimationFrame
- *      只负责把音频时间刷进 UI（按 0.1 秒粒度节流）。
- *   2. 只有两个合法终态：
- *        Victory = 韩吉抵达出口（gameLogic.isVictory）
- *        Defeat  = 音频自然播放结束
- *      用 terminalRef 做互斥锁，任何路径都不可能同时/先后触发两种结局。
+ *   1. 时间轴以 performance.now() 的单调时钟为兜底，并与音频 currentTime 取较大值。
+ *      因此音乐加载失败、被 WebKit 暂停或播放卡住时，倒计时仍然可靠推进。
+ *   2. 音乐结束前抵达出口才结算 Victory。曲终后棋盘继续开放为练习模式，
+ *      但不显示成功结算，也不上报排行榜。
  *   3. 一次「移动操作」= 一次拖拽 / 点击 / 按键，无论滑动几格，moves 只 +1；
  *      没有实际位移的操作不计步（applyMove 返回原引用即视为没动）。
  *   4. 页面加载不开始计时；第一次有效移动才启动音频与时间轴。
@@ -20,7 +16,6 @@ import { ChevronDown, Flame, RotateCcw, Skull, Volume2, VolumeX } from 'lucide-r
 import rumblingBg from './assets/images/rumbling_bg_1789328679857.webp';
 import { GameBoard } from './components/GameBoard';
 import { VictoryModal } from './components/VictoryModal';
-import { DefeatModal } from './components/DefeatModal';
 import { soundManager } from './audio';
 import { applyMove, createInitialPieces, isVictory } from './gameLogic';
 import type { MoveDelta } from './gameLogic';
@@ -32,7 +27,7 @@ import { HOST_BGM_MESSAGE_TYPE, HOST_RESULT_MESSAGE_TYPE, RANKED_DIFFICULTY } fr
  * 对局音乐状态通知：嵌在主站 iframe 里时通知父页面（TatakaruGame）。
  * 协议名与载荷不可更改：{ type: 'save-hange-bgm', state: 'start' | 'end' }
  *   - start：对局音乐（Bauklötze）开始播放 → 父页面关闭外部共用 BGM 与开关
- *   - end  ：对局音乐停止（胜利/失败/重开/切难度/iframe 卸载）→ 父页面恢复共用 BGM
+ *   - end  ：对局音乐停止（胜利/曲终/重开/切难度/iframe 卸载）→ 父页面恢复共用 BGM
  */
 const notifyHostBgm = (state: 'start' | 'end') => {
   try {
@@ -89,7 +84,7 @@ export const SaveHangeGame: React.FC = () => {
   const [pieces, setPieces] = useState<Piece[]>(() => createInitialPieces('normal'));
   const [moves, setMoves] = useState<number>(0);
   const [hasStarted, setHasStarted] = useState<boolean>(false);
-  const [isGameOver, setIsGameOver] = useState<boolean>(false);
+  const [hasTimedOut, setHasTimedOut] = useState<boolean>(false);
   const [hasWon, setHasWon] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(() => soundManager.getIsMuted());
   const [timeUsedSeconds, setTimeUsedSeconds] = useState<number>(0);
@@ -103,12 +98,15 @@ export const SaveHangeGame: React.FC = () => {
   const movesRef = useRef<number>(0);
   const difficultyRef = useRef<Difficulty>('normal');
   const startedRef = useRef<boolean>(false);
-  /** 终态锁：胜利 / 失败互斥，且终态后不再接受任何移动 */
+  /** 胜利终态锁；曲终练习态不会锁住棋盘 */
   const terminalRef = useRef<boolean>(false);
+  const timerStartedAtRef = useRef<number | null>(null);
+  const timedOutRef = useRef<boolean>(false);
+  const handleTimeoutRef = useRef<() => void>(() => {});
   const difficultyMenuRef = useRef<HTMLDivElement | null>(null);
 
   const currentConfig = DIFFICULTIES[difficulty];
-  const timelineActive = hasStarted && !hasWon && !isGameOver;
+  const timelineActive = hasStarted && !hasWon && !hasTimedOut;
 
   /* ---------- 难度下拉：点击外部收起 ---------- */
   useEffect(() => {
@@ -130,13 +128,24 @@ export const SaveHangeGame: React.FC = () => {
 
     const sync = () => {
       const duration = soundManager.bgmDuration;
-      const elapsed = Math.min(Math.max(soundManager.bgmCurrentTime, 0), duration);
+      const wallElapsed = timerStartedAtRef.current === null
+        ? 0
+        : (performance.now() - timerStartedAtRef.current) / 1000;
+      const elapsed = Math.min(
+        Math.max(soundManager.bgmCurrentTime, wallElapsed, 0),
+        duration
+      );
       const tenth = Math.floor(elapsed * 10);
 
       // 每 0.1 秒刷一次 UI，避免 60fps 触发整棵组件树重渲染
       if (tenth !== lastTenth) {
         lastTenth = tenth;
         setTimeline({ elapsed, remaining: Math.max(0, duration - elapsed), duration });
+      }
+
+      if (elapsed >= duration) {
+        handleTimeoutRef.current();
+        return;
       }
 
       rafId = requestAnimationFrame(sync);
@@ -146,37 +155,43 @@ export const SaveHangeGame: React.FC = () => {
     return () => cancelAnimationFrame(rafId);
   }, [timelineActive]);
 
-  /* ---------- 两个终态 ---------- */
+  /* ---------- 结算窗口 ---------- */
 
-  /** Defeat：音频自然播放结束（曲终仍未突围） */
+  /** 曲终：关闭结算窗口，但继续开放棋盘供玩家练习 */
   const handleAudioEnded = useCallback(() => {
-    if (terminalRef.current) return; // 已经胜利或失败 → 不再判定
-    terminalRef.current = true;
+    if (terminalRef.current || timedOutRef.current) return;
+    timedOutRef.current = true;
 
     const duration = soundManager.bgmDuration;
     setTimeline({ elapsed: duration, remaining: 0, duration });
-    setIsGameOver(true);
-    setHasWon(false);
+    setHasTimedOut(true);
+    soundManager.pauseBGM();
 
-    soundManager.playDefeatSound();
-    haptic([120]);
+    haptic(30);
     notifyHostBgm('end'); // 对局音乐结束 → 宿主恢复共用 BGM
   }, []);
+  handleTimeoutRef.current = handleAudioEnded;
 
   /** Victory：韩吉抵达出口 */
   const handleWin = useCallback(() => {
-    if (terminalRef.current) return;
+    // 曲终之后允许继续练习，但抵达出口不再结算胜利或上报排行榜。
+    if (terminalRef.current || timedOutRef.current) return;
     terminalRef.current = true;
 
     // 先取时间再暂停：结算用时就是音乐播到的那一刻
-    const elapsed = soundManager.bgmCurrentTime;
+    const wallElapsed = timerStartedAtRef.current === null
+      ? 0
+      : (performance.now() - timerStartedAtRef.current) / 1000;
+    const elapsed = Math.min(
+      Math.max(soundManager.bgmCurrentTime, wallElapsed),
+      soundManager.bgmDuration
+    );
     soundManager.pauseBGM();
 
     const duration = soundManager.bgmDuration;
     setTimeUsedSeconds(elapsed);
     setTimeline({ elapsed, remaining: Math.max(0, duration - elapsed), duration });
     setHasWon(true);
-    setIsGameOver(false);
 
     // 只有绝境难度的突围成绩才进头号玩家
     if (difficultyRef.current === RANKED_DIFFICULTY) {
@@ -200,12 +215,12 @@ export const SaveHangeGame: React.FC = () => {
     if (startedRef.current || terminalRef.current) return;
 
     startedRef.current = true;
+    timerStartedAtRef.current = performance.now();
     setHasStarted(true);
     notifyHostBgm('start'); // 通知宿主关闭外部共用 BGM
 
     // playBGM 会把 currentTime 归零、开始播放，并把「自然结束」回调挂上。
-    // 若浏览器仍因自动播放策略拒绝，这里不会退化成第二套计时器：
-    // 对局照常可玩，只是没有倒计时（时间轴始终以音频为准）。
+    // 若 WebKit 拒绝播放，performance.now() 仍按完整曲长推进结算窗口。
     soundManager.playBGM(handleAudioEnded);
   }, [handleAudioEnded]);
 
@@ -228,7 +243,7 @@ export const SaveHangeGame: React.FC = () => {
       piecesRef.current = next;
       setPieces(next);
 
-      // 一次操作只 +1，与滑动了几格无关
+      // 一次操作最多一格，并计为一次移动
       const nextMoves = movesRef.current + 1;
       movesRef.current = nextMoves;
       setMoves(nextMoves);
@@ -243,12 +258,14 @@ export const SaveHangeGame: React.FC = () => {
   /* ---------- 重开 / 切难度：都视为全新对局 ---------- */
 
   const resetTo = useCallback((nextDifficulty: Difficulty) => {
-    const wasPlaying = startedRef.current;
+    const wasPlaying = startedRef.current && !timedOutRef.current;
 
     // pause + currentTime = 0：旧音频绝不会继续播
     soundManager.stopBGM();
     startedRef.current = false;
+    timerStartedAtRef.current = null;
     terminalRef.current = false;
+    timedOutRef.current = false;
 
     // 对局中重开 / 切难度 → 音乐中止，宿主恢复共用 BGM
     if (wasPlaying) notifyHostBgm('end');
@@ -262,7 +279,7 @@ export const SaveHangeGame: React.FC = () => {
     setPieces(next);
     setMoves(0);
     setHasStarted(false);
-    setIsGameOver(false);
+    setHasTimedOut(false);
     setHasWon(false);
     setTimeUsedSeconds(0);
 
@@ -291,13 +308,13 @@ export const SaveHangeGame: React.FC = () => {
   useEffect(
     () => () => {
       soundManager.stopBGM();
-      if (startedRef.current && !terminalRef.current) notifyHostBgm('end');
+      if (startedRef.current && !terminalRef.current && !timedOutRef.current) notifyHostBgm('end');
     },
     []
   );
 
   const timeRemaining = timeline.remaining;
-  const boardLocked = isGameOver || hasWon;
+  const boardLocked = hasWon;
 
   return (
     <div className="relative w-full h-[100dvh] bg-[#080d0a] text-[#f2f7f4] select-none overflow-hidden">
@@ -319,9 +336,9 @@ export const SaveHangeGame: React.FC = () => {
         <div className="relative z-10 flex flex-col">
           {/* Top Status & Difficulty Switcher（左右两组控件等高 h-8、单行不换行、间距统一） */}
           <div className="flex items-center justify-between gap-2 mb-1">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-[#1e1010]/90 border border-[#4a1c1c] text-red-400 font-mono text-[9px] sm:text-[10px] font-bold tracking-wider uppercase rounded shadow-sm backdrop-blur-sm whitespace-nowrap shrink-0">
+            <span className="inline-flex h-8 box-border items-center gap-1 px-1.5 bg-[#1e1010]/90 border border-[#4a1c1c] text-red-400 font-mono text-[9px] sm:text-[10px] font-bold tracking-wider uppercase rounded shadow-sm backdrop-blur-sm whitespace-nowrap shrink-0">
               <Skull className="w-3 h-3 text-red-500 animate-pulse shrink-0" />
-              {hasStarted ? '地鸣逼近 • THE RUMBLING' : '待机中 • STANDBY'}
+              {hasTimedOut ? '终曲已结束 • PRACTICE' : hasStarted ? '地鸣逼近 • THE RUMBLING' : '待机中 • STANDBY'}
             </span>
 
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -390,7 +407,11 @@ export const SaveHangeGame: React.FC = () => {
               SAVE HANS
             </h1>
             <p className="text-[11px] font-bold text-[#bbf7d0] tracking-wide mt-0.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)]">
-              {hasStarted ? '在终曲播放完毕前护送 韩吉 突围登上飞机' : '拖动方块开始突围'}
+              {hasTimedOut
+                ? '结算窗口已关闭，可继续练习当前残局'
+                : hasStarted
+                  ? '在终曲播放完毕前护送 韩吉 突围登上飞机'
+                  : '拖动方块开始突围'}
             </p>
           </div>
 
@@ -457,8 +478,6 @@ export const SaveHangeGame: React.FC = () => {
         />
       )}
 
-      {/* Defeat Modal */}
-      {isGameOver && !hasWon && <DefeatModal onRestart={handleReset} />}
     </div>
   );
 };

@@ -628,7 +628,6 @@ function compileRelayToNovel(post) {
     prompt: post.prompt,
     bodyContent: compiledBody,
     originalPostId: post.id,
-    authorNote: post.prompt ? `起笔设定：${post.prompt}` : undefined,
     tags: ['故事接龙', '合订本', `${comments.length + 1}棒连缀`],
   };
 }
@@ -636,27 +635,31 @@ function compileRelayToNovel(post) {
 /** 把编译好的合订本写回 novels.json（按 id upsert，并写正文 txt） */
 async function saveRelayNovel(novel) {
   if (!novel.id || !novel.title) return;
+  const bodyContent = String(novel.bodyContent || '');
+  // novels.json 只保存索引元数据；正文单独放在 novels/<id>.txt，避免接棒越多索引越臃肿。
+  const meta = { ...novel };
+  delete meta.bodyContent;
   // 正文落桶
   await putObject({
     Bucket: BUCKET,
     Region: REGION,
     Key: `${NOVEL_DIR}${novel.id}.txt`,
-    Body: Buffer.from(String(novel.bodyContent || ''), 'utf8'),
+    Body: Buffer.from(bodyContent, 'utf8'),
     ContentType: 'text/plain; charset=utf-8',
     CacheControl: 'no-cache',
   });
   // 元数据 upsert 进 novels.json（保持 updatedAt 排序）
   const novels = await readNovels();
-  const idx = novels.findIndex((n) => n && n.id === novel.id);
+  const idx = novels.findIndex((n) => n && n.id === meta.id);
   if (idx >= 0) {
-    novel.createdAt = novels[idx].createdAt || novel.createdAt;
-    novels[idx] = novel;
+    meta.createdAt = novels[idx].createdAt || meta.createdAt;
+    novels[idx] = meta;
   } else {
-    novels.unshift(novel);
+    novels.unshift(meta);
   }
   novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
   await writeNovels(novels);
-  return novel;
+  return meta;
 }
 
 /** 删除某接力帖子对应的合订本（若存在） */
@@ -1280,10 +1283,9 @@ const USER_OR_ADMIN_ACTIONS = new Set(['novelCommentDelete', 'linkPreview', 'for
 /* ------------------------------ 头号玩家排行榜 ------------------------------ */
 
 /**
- * 参与榜单的游戏只有两款：daxigua（合成大西皮，全难度）、hange（拯救韩吉，仅绝境难度）。
- * 利了个韩（lihan）暂不参与，因此不在白名单里，避免脏数据入库。
+ * 三款游戏均参与榜单；lihan 分榜按实际通关时间升序排列。
  */
-const GAME_KEYS = ['daxigua', 'hange'];
+const GAME_KEYS = ['daxigua', 'hange', 'lihan'];
 const LEADERBOARD_TOP = 50;
 /** 每人每游戏每日最多提交次数，防脚本刷榜 */
 const SCORE_DAILY_LIMIT = 30;
@@ -1300,6 +1302,7 @@ const GAME_TUNING = {
   hangeWinBase: 400,
   hangeTimeBonusMax: 300,
   hangeMoveBonusMax: 300,
+  lihanBenchmarkSeconds: 900,
   meritCap: 1000,
 };
 
@@ -1310,6 +1313,11 @@ function gameMerit(gameKey, raw) {
   if (gameKey === 'daxigua') {
     const score = Math.max(0, Math.round(numGame(raw.score)));
     return Math.round((Math.min(score, GAME_TUNING.daxiguaScoreCap) / GAME_TUNING.daxiguaScoreCap) * GAME_TUNING.meritCap);
+  }
+  if (gameKey === 'lihan') {
+    const used = numGame(raw.timeUsedSeconds);
+    if (used <= 0) return 0;
+    return Math.max(1, Math.round((1 - clamp01Game(used / GAME_TUNING.lihanBenchmarkSeconds)) * (GAME_TUNING.meritCap - 1)) + 1);
   }
   const duration = numGame(raw.duration) > 0 ? numGame(raw.duration) : FALLBACK_TRACK_SECONDS;
   const used = Math.max(0, Math.min(numGame(raw.timeUsedSeconds), duration));
@@ -1339,7 +1347,7 @@ async function readLeaderboard(uid) {
     assertDbResult(
       await db
         .from('game_best')
-        .select('uid,game_key,merit,achieved_at')
+        .select('uid,game_key,merit,raw_score,achieved_at')
         .order('merit', { ascending: false })
         .limit(500)
     )
@@ -1361,6 +1369,7 @@ async function readLeaderboard(uid) {
   GAME_KEYS.forEach((key) => {
     ranked[key] = best.filter((row) => row.game_key === key);
   });
+  ranked.lihan.sort((a, b) => numGame(a.raw_score && a.raw_score.timeUsedSeconds) - numGame(b.raw_score && b.raw_score.timeUsedSeconds));
 
   // 总榜：按 uid 聚合各游戏积分
   const totalsMap = new Map();
@@ -1377,11 +1386,13 @@ async function readLeaderboard(uid) {
     nickname: nameOf(entry.uid),
     merit: entry.merit,
     achievedAt: entry.achieved_at,
+    ...(entry.game_key === 'lihan' ? { timeUsedSeconds: numGame(entry.raw_score && entry.raw_score.timeUsedSeconds) } : {}),
   });
 
   const total = rankedTotal.slice(0, LEADERBOARD_TOP).map((entry) => ({ ...shape(entry), breakdown: entry.breakdown }));
   const daxigua = ranked.daxigua.slice(0, LEADERBOARD_TOP).map(shape);
   const hange = ranked.hange.slice(0, LEADERBOARD_TOP).map(shape);
+  const lihan = ranked.lihan.slice(0, LEADERBOARD_TOP).map(shape);
 
   let me = null;
   if (uid && totalsMap.has(uid)) {
@@ -1399,11 +1410,12 @@ async function readLeaderboard(uid) {
         total: indexOf(rankedTotal),
         daxigua: indexOf(ranked.daxigua),
         hange: indexOf(ranked.hange),
+        lihan: indexOf(ranked.lihan),
       },
     };
   }
 
-  return { ok: true, total, daxigua, hange, me };
+  return { ok: true, total, daxigua, hange, lihan, me };
 }
 
 /** 提交成绩：需登录（uid 由调用方用 authUid 解析后注入 payload.__uid） */
@@ -1446,10 +1458,14 @@ async function submitGameScore(uid, payload) {
   );
 
   const existing = gameRows(
-    assertDbResult(await db.from('game_best').select('merit').eq('uid', uid).eq('game_key', gameKey).limit(1))
+    assertDbResult(await db.from('game_best').select('merit,raw_score').eq('uid', uid).eq('game_key', gameKey).limit(1))
   );
   const prev = existing[0];
-  const improved = !prev || merit > prev.merit;
+  const previousTime = numGame(prev && prev.raw_score && prev.raw_score.timeUsedSeconds);
+  const currentTime = numGame(raw.timeUsedSeconds);
+  const improved = gameKey === 'lihan'
+    ? (!prev || currentTime > 0 && (!previousTime || currentTime < previousTime))
+    : (!prev || merit > prev.merit);
 
   if (improved) {
     const record = { uid, game_key: gameKey, merit, raw_score: raw, achieved_at: now };
@@ -1852,7 +1868,12 @@ async function handle(action, payload) {
       if (!comment) throw httpError('评论不存在', 404);
       if (comment.uid && comment.uid !== payload.__uid) throw httpError('只能删除自己发布的评论', 403);
       post.comments = (post.comments || []).filter((c) => c && c.id !== String(payload.commentId || ''));
-      await writeForum(posts); return { ok: true, posts };
+      await writeForum(posts);
+      if (post.category === 'relay') {
+        try { await saveRelayNovel(compileRelayToNovel(post)); }
+        catch (e) { console.error('[relay] 删除棒后更新合订本失败', e && e.message); }
+      }
+      return { ok: true, posts };
     }
 
     // 编辑帖子：目前仅开放故事接龙，且只能改自己发布的内容

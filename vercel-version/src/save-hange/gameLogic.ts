@@ -152,7 +152,7 @@ export function clampMove(piece: Piece, limits: MoveLimits, delta: MoveDelta): M
 }
 
 /**
- * 执行一次移动（允许一次滑动多格）。
+ * 执行一次移动。一次操作最多移动一格，避免长距离拖拽被计成一步而压扁难度。
  *
  * 关键约定：**没有任何实际位移时返回原数组引用本身**，
  * 调用方用 `next !== current` 即可判断「本次操作不合法 / 没动，不计步」，
@@ -165,10 +165,13 @@ export function applyMove(pieces: readonly Piece[], pieceId: string, delta: Move
   const limits = getMoveLimits(pieces, piece);
   const { dx, dy } = clampMove(piece, limits, delta);
 
-  if (dx === 0 && dy === 0) return pieces as Piece[];
+  const stepX = Math.sign(dx);
+  const stepY = Math.sign(dy);
+
+  if (stepX === 0 && stepY === 0) return pieces as Piece[];
 
   return (pieces as Piece[]).map((item) =>
-    item.id === pieceId ? { ...item, x: item.x + dx, y: item.y + dy } : item
+    item.id === pieceId ? { ...item, x: item.x + stepX, y: item.y + stepY } : item
   );
 }
 
@@ -194,7 +197,7 @@ export function serializePieces(pieces: readonly Piece[]): string {
     .join('|');
 }
 
-/** 枚举当前局面下所有合法的一步操作（含一次滑动多格），供 BFS 使用 */
+/** 枚举当前局面下所有合法的单格操作，供 BFS 使用 */
 export function enumerateMoves(
   pieces: readonly Piece[]
 ): Array<{ pieceId: string; delta: MoveDelta }> {
@@ -203,10 +206,10 @@ export function enumerateMoves(
   for (const piece of pieces) {
     const limits = getMoveLimits(pieces, piece);
 
-    for (let step = 1; step <= limits.maxLeft; step++) moves.push({ pieceId: piece.id, delta: { dx: -step, dy: 0 } });
-    for (let step = 1; step <= limits.maxRight; step++) moves.push({ pieceId: piece.id, delta: { dx: step, dy: 0 } });
-    for (let step = 1; step <= limits.maxUp; step++) moves.push({ pieceId: piece.id, delta: { dx: 0, dy: -step } });
-    for (let step = 1; step <= limits.maxDown; step++) moves.push({ pieceId: piece.id, delta: { dx: 0, dy: step } });
+    if (limits.maxLeft > 0) moves.push({ pieceId: piece.id, delta: { dx: -1, dy: 0 } });
+    if (limits.maxRight > 0) moves.push({ pieceId: piece.id, delta: { dx: 1, dy: 0 } });
+    if (limits.maxUp > 0) moves.push({ pieceId: piece.id, delta: { dx: 0, dy: -1 } });
+    if (limits.maxDown > 0) moves.push({ pieceId: piece.id, delta: { dx: 0, dy: 1 } });
   }
 
   return moves;

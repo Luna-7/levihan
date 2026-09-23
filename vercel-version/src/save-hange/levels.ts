@@ -65,15 +65,15 @@ export const NORMAL_LAYOUT: readonly Piece[] = [
 /** 困难：韩吉在上方正中，周围完全被纵向棋子包围，出口附近多层封锁 */
 export const HARD_LAYOUT: readonly Piece[] = [
   { id: 'hange', name: '韩吉', type: 'target', w: 2, h: 2, x: 1, y: 0 },
-  { id: 'founding_eren', name: '始祖巨人', type: 'horizontal', w: 2, h: 1, x: 1, y: 2 },
+  { id: 'founding_eren', name: '始祖巨人', type: 'horizontal', w: 2, h: 1, x: 2, y: 3 },
   { id: 'eren', name: '艾伦', type: 'vertical', w: 1, h: 2, x: 0, y: 0 },
   { id: 'ymir', name: '尤弥尔', type: 'vertical', w: 1, h: 2, x: 3, y: 0 },
   { id: 'floch', name: '弗洛克', type: 'vertical', w: 1, h: 2, x: 0, y: 2 },
-  { id: 'zeke', name: '吉克', type: 'vertical', w: 1, h: 2, x: 3, y: 2 },
-  { id: 'titan_1', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 1, y: 3 },
-  { id: 'titan_2', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 2, y: 3 },
-  { id: 'titan_3', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 0, y: 4 },
-  { id: 'titan_4', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 3, y: 4 },
+  { id: 'zeke', name: '吉克', type: 'vertical', w: 1, h: 2, x: 1, y: 2 },
+  { id: 'titan_1', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 0, y: 4 },
+  { id: 'titan_2', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 3, y: 2 },
+  { id: 'titan_3', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 1, y: 4 },
+  { id: 'titan_4', name: '超大型巨人', type: 'small', w: 1, h: 1, x: 2, y: 4 },
 ];
 
 export const DIFFICULTIES: Record<Difficulty, DifficultyConfig> = {

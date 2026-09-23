@@ -16,22 +16,43 @@
     --border-gold: #C29641;
     --pixel-purple: #6A4C93;
     --gold-accent: #E5A93C;
+    /* 浏览器模式优先使用动态视口，随地址栏伸缩。 */
+    --app-h: 100dvh;
   }
 
-  html, body {
+  /* iOS 主屏幕 PWA 的 100dvh 偶尔会少算顶部安全区，独立模式使用
+     稳定的全屏视口。index.html 会在 React 首帧前添加此 class。 */
+  html.pwa-standalone {
+    --app-h: 100vh;
+  }
+
+  html, body, #root {
     overflow-x: hidden;
     width: 100%;
     max-width: 100vw;
+    height: 100%;
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html, body {
     -webkit-tap-highlight-color: transparent;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-size: 16px;
-    padding-top: env(safe-area-inset-top, 0px);
     font-family: var(--font-sans);
     overflow: hidden;
-    height: 100%;
+    overscroll-behavior: none;
+    background: #F6F1E3;
+  }
+
+  #root {
+    position: relative;
+    overflow: hidden;
   }
 
   /* Disable scrollbar globally but allow it in specific containers if needed */
@@ -820,7 +841,7 @@ body.immersive-on .retro-frame-card > .absolute {
   position: absolute;
   inset: -16px 0;
   background: url('/images/lihan/bg-grass.webp') center / cover no-repeat;
-  animation: lihan-grass-float 3.2s ease-in-out infinite;
+  animation: lihan-grass-float 2s ease-in-out infinite;
   pointer-events: none;
   z-index: 0;
 }

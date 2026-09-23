@@ -86,10 +86,12 @@ class SoundManager {
       this.sfxGain.gain.setValueAtTime(this.isMuted ? 0 : SFX_MASTER_GAIN, this.audioCtx.currentTime);
 
       this.sfxLimiter = this.audioCtx.createDynamicsCompressor();
-      this.sfxLimiter.threshold.setValueAtTime(-8, this.audioCtx.currentTime);
-      this.sfxLimiter.knee.setValueAtTime(4, this.audioCtx.currentTime);
-      this.sfxLimiter.ratio.setValueAtTime(12, this.audioCtx.currentTime);
-      this.sfxLimiter.attack.setValueAtTime(0.003, this.audioCtx.currentTime);
+      // WebKit 对短促叠加音的压缩器起压稍慢；使用硬拐点和零起音，
+      // 避免胜利和碰撞音的首个瞬态越过 0 dBFS。
+      this.sfxLimiter.threshold.setValueAtTime(-10, this.audioCtx.currentTime);
+      this.sfxLimiter.knee.setValueAtTime(0, this.audioCtx.currentTime);
+      this.sfxLimiter.ratio.setValueAtTime(20, this.audioCtx.currentTime);
+      this.sfxLimiter.attack.setValueAtTime(0, this.audioCtx.currentTime);
       this.sfxLimiter.release.setValueAtTime(0.12, this.audioCtx.currentTime);
 
       this.sfxGain.connect(this.sfxLimiter);

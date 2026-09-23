@@ -26,9 +26,7 @@ export function compileRelayPostToNovel(post: ForumPost): GroupNovel {
   // 格式化正文排版（包含章节头部、安科判定点以及末尾联名）
   const sections: string[] = [];
 
-  if (post.prompt) {
-    sections.push(`【起笔设定】\n${post.prompt}`);
-  }
+  if (post.prompt) sections.push(`【起笔设定】\n${post.prompt}`);
 
   sections.push(`【第 1 棒 · 执笔：${post.author}】\n${post.body}`);
 
@@ -42,7 +40,7 @@ export function compileRelayPostToNovel(post: ForumPost): GroupNovel {
   const compiledBody = sections.join('\n\n');
 
   return {
-    id: `relay-novel-${post.id}`,
+    id: `relay-${String(post.id || '').replace(/[^a-zA-Z0-9_-]/g, '')}`,
     title: post.title,
     author: `${post.author} 等 ${distinctAuthors.length} 位同好`,
     chars: totalChars,
@@ -54,7 +52,6 @@ export function compileRelayPostToNovel(post: ForumPost): GroupNovel {
     prompt: post.prompt,
     bodyContent: compiledBody,
     originalPostId: post.id,
-    authorNote: post.prompt ? `起笔设定：${post.prompt}` : undefined,
     tags: ['故事接龙', '合订本', `${relayComments.length + 1}棒连缀`],
   };
 }
@@ -93,6 +90,9 @@ export function getAllCompiledRelayNovels(currentPosts?: ForumPost[]): GroupNove
  * 通过 appShellStore 的跳转意图信号通知 App 切换分区（取代 window 隐式事件）。
  * 注意：合订本卡片由典藏阁挂载时自行拉取小说索引，detail 不再需要跨层传值。
  */
-export function jumpToCompiledNovelInDoujinArchive(_novel?: GroupNovel, _autoRead = false) {
-  useAppShellStore.getState().openDoujinArchive();
+export function jumpToCompiledNovelInDoujinArchive(novel?: GroupNovel, autoRead = false) {
+  const store = useAppShellStore.getState();
+  if (autoRead && novel?.id) store.openNovel(novel.id);
+  else if (novel?.id) store.openNovel(novel.id);
+  else store.openDoujinArchive();
 }

@@ -421,20 +421,6 @@ export const NovelModule: React.FC<Props> = ({
                           </div>
                         </div>
 
-                        {/* 如果有自定义起笔设定（非通用背景），清晰列出 */}
-                        {novel.prompt && !novel.prompt.includes('突发暴雨') && (
-                          <>
-                            <div className="h-px bg-[#E0D5BE]/60" />
-                            <div className="space-y-1">
-                              <div className="font-bold text-[#8C5D23] text-[11px] sm:text-xs">
-                                ✍️ 起笔设定：
-                              </div>
-                              <div className="text-[#5B4636] leading-relaxed break-words text-xs pl-1">
-                                {novel.prompt}
-                              </div>
-                            </div>
-                          </>
-                        )}
                       </div>
                     </div>
                   </div>

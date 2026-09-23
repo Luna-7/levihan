@@ -28,6 +28,8 @@ type AppShellState = {
   pendingDoujinOpen: number;
   /** 跳转意图：首页「今日上新」→ 切到「小说本」分类 */
   pendingNovelCategory: number;
+  /** 需要自动打开的指定合订本 ID */
+  pendingNovelId: string | null;
   /** 全局 toast 文案；null 表示不显示 */
   toast: string | null;
   /** 登录弹窗打开动作的单调递增信号；每次 +1 触发 UserEntry 打开 */
@@ -38,6 +40,8 @@ type AppShellState = {
   navigate: (tab: NavigationTab) => void;
   openDoujinArchive: () => void;
   openNovelCategory: () => void;
+  openNovel: (id: string) => void;
+  clearPendingNovel: () => void;
   showToast: (msg: string) => void;
   dismissToast: () => void;
   openLogin: () => void;
@@ -50,6 +54,7 @@ export const useAppShellStore = create<AppShellState>((set) => ({
   activeTab: resolveInitialTab(),
   pendingDoujinOpen: 0,
   pendingNovelCategory: 0,
+  pendingNovelId: null,
   toast: null,
   loginRequest: 0,
   novelIndexVersion: 0,
@@ -68,6 +73,12 @@ export const useAppShellStore = create<AppShellState>((set) => ({
 
   openDoujinArchive: () => set((state) => ({ pendingDoujinOpen: state.pendingDoujinOpen + 1 })),
   openNovelCategory: () => set((state) => ({ pendingNovelCategory: state.pendingNovelCategory + 1 })),
+  openNovel: (id) => set((state) => ({
+    pendingDoujinOpen: state.pendingDoujinOpen + 1,
+    pendingNovelCategory: state.pendingNovelCategory + 1,
+    pendingNovelId: id,
+  })),
+  clearPendingNovel: () => set({ pendingNovelId: null }),
 
   showToast: (msg) => {
     if (toastTimer) clearTimeout(toastTimer);
