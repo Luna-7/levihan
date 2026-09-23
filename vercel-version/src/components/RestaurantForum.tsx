@@ -2775,14 +2775,16 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             >
               <CardPatternOverlay opacity={0.1} mode="multiply" />
 
-              <div className="relative z-10 flex items-center justify-between pb-2 border-b border-[#D8C7AA]">
-                <h2 className="font-serif-title text-sm font-black text-[#2D1F13]">
-                  {showMarketComposer ? '发布市集物资' : '发起发布'}
-                </h2>
+              <div className="relative z-10 pb-2 border-b border-[#D8C7AA]">
+                <img
+                  src="/images/forum-compose-banner.webp"
+                  alt={showMarketComposer ? '发布市集物资' : '发起发布'}
+                  className="w-full h-auto rounded-lg"
+                />
                 <button
                   type="button"
                   onClick={() => { setShowComposer(false); setShowMarketComposer(false); }}
-                  className="text-[#8C7A65] hover:text-[#2D1F13] cursor-pointer"
+                  className="absolute top-2 right-2 p-1 rounded-full bg-white/75 backdrop-blur-xxs text-[#5B4636] hover:bg-white hover:text-[#2D1F13] cursor-pointer transition-colors"
                 >
                   <X size={16} />
                 </button>

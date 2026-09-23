@@ -546,17 +546,32 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
             卡片组：独立操作区域
            ==================================================== */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 shrink-0">
-          {/* 卡片 A：致谢同好 (Supporters Card) */}
-          <div className="p-3.5 border-2 border-dashed border-[#8C6C47]/40 rounded-xl bg-[#FAF3E3]/50 backdrop-blur-xs relative overflow-hidden flex flex-col justify-between min-h-[105px]">
+          {/* 卡片 A：致谢同好 (Supporters Card)；框体向下延伸，底部两侧立绘致意 */}
+          <div className="p-3.5 border-2 border-dashed border-[#8C6C47]/40 rounded-xl bg-[#FAF3E3]/50 backdrop-blur-xs relative overflow-hidden flex flex-col justify-between min-h-[190px]">
             <CardPatternOverlay opacity={0.05} mode="multiply" />
-            <h3 className="font-serif-title text-sm font-black text-[#1E4334] mb-1 flex items-center gap-2">
+            <h3 className="font-serif-title text-sm font-black text-[#1E4334] mb-1 flex items-center gap-2 relative z-10">
               <span>🤝</span>
               <span>感谢以下同好对网站的支持</span>
             </h3>
-            <div className="flex-1 flex items-center justify-center text-[#8C6C47]/50 text-[10px] italic">
+            <div className="flex-1 flex items-center justify-center text-[#8C6C47]/50 text-[10px] italic px-16 relative z-10">
               {/* 名单暂空 */}
               (名单整理中...)
             </div>
+            {/* 立绘：韩吉（左下）与利威尔（右下） */}
+            <img
+              src="/images/supporter-hange-angel.webp"
+              alt="天使韩吉"
+              loading="lazy"
+              decoding="async"
+              className="absolute bottom-0 left-2 h-24 w-auto pointer-events-none select-none"
+            />
+            <img
+              src="/images/supporter-levi-angel.webp"
+              alt="天使利威尔"
+              loading="lazy"
+              decoding="async"
+              className="absolute bottom-0 right-2 h-24 w-auto pointer-events-none select-none"
+            />
           </div>
 
           {/* 卡片 B：呈递调查报告 (Report Card) */}
