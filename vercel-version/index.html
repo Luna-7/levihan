@@ -35,6 +35,69 @@
         } catch (e) {}
       })();
     </script>
+    <script>
+      // ── 部署脱节自愈：防止「新版一上线，老页面切懒加载分区就白屏」────────────
+      // 本站注册了 PWA Service Worker，产物 sw.js 带 skipWaiting + clientsClaim：
+      // 新版一装好立刻接管，并（cleanupOutdatedCaches）清掉旧的预缓存。
+      // 但**正在浏览的页面不会自己刷新**，内存里还是旧代码；此时切到懒加载分区
+      // （巨树餐厅 / 茶会 / 联络）就会去网络拉「旧版 chunk 文件名」——
+      // 那个文件在新部署里已经不存在（404）→ 模块加载失败 → 整页白屏。
+      // 这不是浏览器坏了，是「页面比部署落后」。对策：拿到新版就自动刷一次，
+      // chunk 加载失败也自动刷一次（同一段脚本也内联在 comic.html，改动请同步）。
+      (function () {
+        var FLAG = 'lh-auto-reload';
+        var reloading = false;
+        function safeReload() {
+          if (reloading) return;
+          reloading = true;
+          try {
+            if (sessionStorage.getItem(FLAG) === '1') return; // 本会话已自动刷过 → 放弃（防死循环）
+            sessionStorage.setItem(FLAG, '1');
+          } catch (e) { /* 隐私模式不可写：靠内存标记兜底 */ }
+          var el = document.activeElement;
+          var typing = !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
+          if (typing) {
+            // 正在输入，不打断，等页面切到后台再刷
+            document.addEventListener('visibilitychange', function () {
+              if (document.visibilityState === 'hidden') location.reload();
+            }, { once: true });
+            return;
+          }
+          location.reload();
+        }
+
+        var CHUNK_RE = /dynamically imported module|Importing a module script failed|Loading chunk|loading CSS chunk/i;
+        window.addEventListener('vite:preloadError', function (e) {
+          if (e && e.preventDefault) e.preventDefault();
+          safeReload();
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var m = '';
+          try { m = String((e.reason && (e.reason.message || e.reason)) || ''); } catch (err) {}
+          if (CHUNK_RE.test(m)) safeReload();
+        });
+        window.addEventListener('error', function (e) {
+          var t = e && e.target;
+          var url = t && (t.src || t.href);
+          // 入口或分包脚本 404（旧页面拉旧文件名的典型症状）
+          if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK') && typeof url === 'string' && url.indexOf('/assets/') !== -1) {
+            safeReload();
+            return;
+          }
+          if (CHUNK_RE.test(String((e && e.message) || ''))) safeReload();
+        }, true);
+
+        if ('serviceWorker' in navigator) {
+          var hadController = !!navigator.serviceWorker.controller; // 首次安装为 false → 不刷
+          var swDone = false;
+          navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (!hadController || swDone) return;
+            swDone = true;
+            safeReload();
+          });
+        }
+      })();
+    </script>
     <title>利韩土豆仓</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" data-page-node-id="fpp6pwgdZldfAZxCsVcyOz" />
     <link rel="manifest" href="/manifest.webmanifest" />

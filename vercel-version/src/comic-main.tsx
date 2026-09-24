@@ -1,5 +1,6 @@
 import { StrictMode, useCallback, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { ComicGate } from './components/ComicGate';
 import { DoujinshiArchive } from './components/DoujinshiArchive';
 import { soundManager } from './utils/audio';
@@ -59,7 +60,9 @@ function ComicApp() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ComicApp />
+    <AppErrorBoundary>
+      <ComicApp />
+    </AppErrorBoundary>
   </StrictMode>
 );
 

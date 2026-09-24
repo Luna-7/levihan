@@ -19,6 +19,64 @@
         } catch (e) {}
       })();
     </script>
+    <script>
+      // ── 部署脱节自愈（与主站 index.html 同一段，改动请同步）───────────────
+      // 漫画站同样注册了 PWA Service Worker，sw.js 带 skipWaiting + clientsClaim：
+      // 新版一装好立刻接管并清掉旧预缓存，而正在浏览的旧页面不会自己刷新，
+      // 之后它去拉「旧版 chunk 文件名」（新部署里已 404）→ 模块加载失败 → 整页白屏。
+      // 对策：拿到新版就自动刷一次，chunk 加载失败也自动刷一次。
+      (function () {
+        var FLAG = 'lh-auto-reload';
+        var reloading = false;
+        function safeReload() {
+          if (reloading) return;
+          reloading = true;
+          try {
+            if (sessionStorage.getItem(FLAG) === '1') return; // 本会话已自动刷过 → 放弃（防死循环）
+            sessionStorage.setItem(FLAG, '1');
+          } catch (e) { /* 隐私模式不可写：靠内存标记兜底 */ }
+          var el = document.activeElement;
+          var typing = !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
+          if (typing) {
+            document.addEventListener('visibilitychange', function () {
+              if (document.visibilityState === 'hidden') location.reload();
+            }, { once: true });
+            return;
+          }
+          location.reload();
+        }
+
+        var CHUNK_RE = /dynamically imported module|Importing a module script failed|Loading chunk|loading CSS chunk/i;
+        window.addEventListener('vite:preloadError', function (e) {
+          if (e && e.preventDefault) e.preventDefault();
+          safeReload();
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var m = '';
+          try { m = String((e.reason && (e.reason.message || e.reason)) || ''); } catch (err) {}
+          if (CHUNK_RE.test(m)) safeReload();
+        });
+        window.addEventListener('error', function (e) {
+          var t = e && e.target;
+          var url = t && (t.src || t.href);
+          if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK') && typeof url === 'string' && url.indexOf('/assets/') !== -1) {
+            safeReload();
+            return;
+          }
+          if (CHUNK_RE.test(String((e && e.message) || ''))) safeReload();
+        }, true);
+
+        if ('serviceWorker' in navigator) {
+          var hadController = !!navigator.serviceWorker.controller;
+          var swDone = false;
+          navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (!hadController || swDone) return;
+            swDone = true;
+            safeReload();
+          });
+        }
+      })();
+    </script>
     <title>403 Forbidden</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#1E4334" />
