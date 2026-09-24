@@ -269,7 +269,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                         利韩 · 合成大西皮
                       </span>
                     </div>
-                    <p className="text-[10px] text-[#557B6B] mt-0.5">
+                    <p className="text-xs text-[#446A5A] mt-0.5 font-medium">
                       解压西瓜合成消除 · 收集利韩各阶形态
                     </p>
                   </div>
@@ -303,7 +303,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                         利韩 · 拯救韩吉
                       </span>
                     </div>
-                    <p className="text-[10px] text-[#557B6B] mt-0.5">
+                    <p className="text-xs text-[#446A5A] mt-0.5 font-medium">
                       绝境闪避跳跃战术 · 避开超大型巨人
                     </p>
                   </div>
@@ -338,7 +338,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                         利韩 · 利了个韩
                       </span>
                     </div>
-                    <p className="text-[10px] text-[#557B6B] mt-0.5">
+                    <p className="text-xs text-[#446A5A] mt-0.5 font-medium">
                       卡牌堆叠三消 · 凑齐三张同款即消除
                     </p>
                   </div>

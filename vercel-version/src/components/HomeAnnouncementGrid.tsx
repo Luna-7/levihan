@@ -260,22 +260,22 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
               <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
                 {/* 类别胶囊标 */}
                 <div
-                  className={`mt-0.5 ${badgeBg} text-white px-2 sm:px-2.5 py-1 rounded-md text-[11px] sm:text-xs font-bold flex items-center gap-1.5 shadow-2xs shrink-0 short-screen-text-xs`}
+                  className={`mt-0.5 ${badgeBg} text-white px-2.5 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-2xs shrink-0`}
                 >
-                  <BadgeIcon size={13} className="shrink-0" />
+                  <BadgeIcon size={14} className="shrink-0" />
                   <span className="whitespace-nowrap">{item.tag}</span>
                 </div>
 
                 {/* 标题、描述、发布人 */}
                 <div className="flex flex-col min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
-                    <h4 className="font-serif-title text-xs sm:text-sm font-black text-[#2C2016] leading-snug tracking-tight truncate group-hover:text-[#1E4334] transition-colors short-screen-text-xs min-w-0 flex-1">
+                    <h4 className="font-serif-title text-sm sm:text-base font-black text-[#2C2016] leading-snug tracking-tight truncate group-hover:text-[#1E4334] transition-colors min-w-0 flex-1">
                       {item.title}
                     </h4>
 
                     {/* 日期：贴在公告栏右上角（取管理台「时间」字段，未填写则不显示） */}
                     {item.time && (
-                      <time className="shrink-0 font-retro-jp text-[10px] text-[#8C7A65] leading-snug whitespace-nowrap pt-px">
+                      <time className="shrink-0 font-retro-jp text-xs text-[#8C7A65] leading-snug whitespace-nowrap pt-px">
                         {item.time}
                       </time>
                     )}
@@ -283,14 +283,14 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
 
                   {/* 公告正文（管理台 description） */}
                   {item.description && (
-                    <p className="font-serif-title text-[10px] sm:text-xs text-[#5D4733] mt-1 line-clamp-1 leading-normal">
+                    <p className="font-serif-title text-xs sm:text-sm text-[#5D4733] mt-1 line-clamp-1 leading-normal">
                       {item.description}
                     </p>
                   )}
 
                   {/* 发布人（管理台 author） */}
                   {item.author && (
-                    <div className="hidden sm:flex items-center gap-2 mt-1 text-[10px] text-[#7A6048] leading-none">
+                    <div className="hidden sm:flex items-center gap-2 mt-1 text-xs text-[#7A6048] leading-none">
                       <span className="font-retro-jp text-[#8C7A65] truncate">· {item.author}</span>
                     </div>
                   )}

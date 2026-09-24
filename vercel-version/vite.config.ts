@@ -201,8 +201,48 @@ export default defineConfig(() => {
       '/__cf': {
         target: 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com',
         changeOrigin: true,
-        secure: true,
+        secure: false,
+        timeout: 15000,
+        proxyTimeout: 15000,
         rewrite: (path) => path.replace(/^\/__cf/, ''),
+        configure: (proxy) => {
+          proxy.on('error', (err, _req, res) => {
+            if (res && 'writeHead' in res && !res.headersSent) {
+              res.writeHead(502, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ ok: false, error: 'Proxy connection error: ' + (err.message || 'socket error') }));
+            }
+          });
+        },
+      },
+      '/admin-upload': {
+        target: 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com',
+        changeOrigin: true,
+        secure: false,
+        timeout: 15000,
+        proxyTimeout: 15000,
+        configure: (proxy) => {
+          proxy.on('error', (err, _req, res) => {
+            if (res && 'writeHead' in res && !res.headersSent) {
+              res.writeHead(502, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ ok: false, error: 'Proxy connection error: ' + (err.message || 'socket error') }));
+            }
+          });
+        },
+      },
+      '/auth': {
+        target: 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com',
+        changeOrigin: true,
+        secure: false,
+        timeout: 15000,
+        proxyTimeout: 15000,
+        configure: (proxy) => {
+          proxy.on('error', (err, _req, res) => {
+            if (res && 'writeHead' in res && !res.headersSent) {
+              res.writeHead(502, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ ok: false, error: 'Proxy connection error: ' + (err.message || 'socket error') }));
+            }
+          });
+        },
       },
     },
   },

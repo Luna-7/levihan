@@ -403,28 +403,33 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     return (
       <div id="seamless-doujin-reader" className="relative w-full select-text pb-12">
         {/* 顶部快捷导航控制条（不随滚动固定，回到顶部靠全局悬浮向上按钮） */}
-        <div className="mb-3 px-3 py-2 bg-[#FAF5E8]/95 border border-[#1E4334] rounded-lg shadow-md backdrop-blur-xs flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
+        <div
+          className="mb-3.5 px-3.5 py-2.5 bg-[#FAF5E8] border border-[#1E4334]/50 rounded-lg shadow-md flex items-center justify-between gap-2.5"
+          style={{ paddingTop: 'max(10px, env(safe-area-inset-top, 0px))' }}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
+              type="button"
               onClick={handleCloseReader}
-              className="px-2.5 py-1 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs rounded-xs hover:bg-[#2B5E4A] cursor-pointer transition-all flex items-center gap-1 shrink-0 shadow-xs"
+              className="px-3 py-1.5 min-h-[32px] bg-[#1E4334] text-[#F9E79F] font-pixel text-xs sm:text-sm rounded-md hover:bg-[#2B5E4A] cursor-pointer transition-all flex items-center gap-1 shrink-0 shadow-xs active:scale-95"
             >
               <span>←</span>
               <span>返回列表</span>
             </button>
             <div className="min-w-0">
-              <h2 className="font-pixel text-xs sm:text-sm font-bold text-[#1E3A2B] truncate">
+              <h2 className="font-pixel text-sm sm:text-base font-bold text-[#1E3A2B] truncate">
                 {readingBook.titleZh}
               </h2>
-              <p className="text-[10px] font-retro-jp text-[#7A6958] truncate">
+              <p className="text-xs font-retro-jp text-[#7A6958] truncate mt-0.5">
                 作者：<AuthorWithLink author={readingBook.circle} customUrl={readingBook.authorUrl} defaultColorClass="text-[#7A6958]" orangeColorClass="text-[#D35400]" /> · 共 {totalPages} 页
                 {isDetectingPages ? '（动态校准中...）' : ''}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={() => handleShareBook(readingBook)}
-            className="px-2.5 py-1 bg-[#B7791F] text-[#FFFEEF] font-pixel text-xs rounded-xs hover:bg-[#9A6519] cursor-pointer transition-all flex items-center gap-1 shrink-0 shadow-xs"
+            className="px-3 py-1.5 min-h-[32px] bg-[#B7791F] text-[#FFFEEF] font-pixel text-xs sm:text-sm rounded-md hover:bg-[#9A6519] cursor-pointer transition-all flex items-center gap-1 shrink-0 shadow-xs active:scale-95"
             title="生成分享卡片（封面+详情）"
           >
             <span>↗</span>

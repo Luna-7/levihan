@@ -179,12 +179,12 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onPreloadTab
 
   return (
     <section className="w-full shrink-0 px-1">
-      <div className="flex items-center gap-1.5 mb-1">
-        <span className="w-1 h-3 bg-[#C5A059] rounded-full" aria-hidden="true" />
-        <h3 className="font-pixel text-[10px] sm:text-[11px] text-[#8C7A65] tracking-wider">今日上新</h3>
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span className="w-1.5 h-3.5 bg-[#C5A059] rounded-full" aria-hidden="true" />
+        <h3 className="font-pixel text-xs sm:text-sm font-bold text-[#8C7A65] tracking-wider">今日上新</h3>
       </div>
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1.5">
         {items.map((it) => {
           const meta = KIND_META[it.kind];
           return (
@@ -195,17 +195,17 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onPreloadTab
               onMouseEnter={() => handleHover(it)}
               onTouchStart={() => handleHover(it)}
               onFocus={() => handleHover(it)}
-              className="group flex items-center gap-2 text-left cursor-pointer transition-all active:scale-[0.99] bg-[#F8F1DE] border-[1.5px] border-[#E0D2B4] hover:border-[#C5A059] rounded-lg px-2.5 py-1"
+              className="group flex items-center gap-2.5 text-left cursor-pointer transition-all active:scale-[0.99] bg-[#F8F1DE] border-[1.5px] border-[#E0D2B4] hover:border-[#C5A059] rounded-lg px-3 py-1.5 sm:py-2"
             >
               <span
-                className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-pixel font-bold border whitespace-nowrap ${meta.cls}`}
+                className={`shrink-0 px-2 py-0.5 rounded text-xs font-pixel font-bold border whitespace-nowrap ${meta.cls}`}
               >
                 {meta.label}
               </span>
-              <span className="min-w-0 flex-1 font-retro-jp text-xs text-[#3B2818] truncate">
+              <span className="min-w-0 flex-1 font-retro-jp text-xs sm:text-sm text-[#3B2818] font-medium truncate">
                 {it.text}
               </span>
-              <span className="shrink-0 font-retro-jp text-[10px] text-[#8C7A65] whitespace-nowrap">
+              <span className="shrink-0 font-retro-jp text-xs text-[#8C7A65] whitespace-nowrap">
                 {fmtTime(it.createdAt)}
               </span>
             </button>
