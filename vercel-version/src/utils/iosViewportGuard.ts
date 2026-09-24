@@ -67,7 +67,20 @@ export function setupIOSViewportGuard(): void {
     }, RECOVER_DELAY_MS);
   };
 
+  const syncStandaloneAppHeight = (): void => {
+    const isStandalone =
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+      window.matchMedia('(display-mode: standalone)').matches;
+    if (isStandalone) {
+      const h = window.innerHeight || document.documentElement.clientHeight;
+      if (h) {
+        document.documentElement.style.setProperty('--app-h', `${h}px`);
+      }
+    }
+  };
+
   const check = (): void => {
+    syncStandaloneAppHeight();
     // 修复成功后计数归零，保证后续再次变坏时仍有重试额度
     if (!isBroken()) {
       attempts = 0;

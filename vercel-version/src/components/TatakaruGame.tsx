@@ -429,9 +429,9 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
                 aspectRatio: '720 / 1280',
                 height: 'auto',
                 width: isFullscreen
-                  ? 'min(100vw, calc((100dvh - 38px) * 9 / 16))'
-                  : 'min(calc(100vw - 8px), calc((100dvh - 104px) * 9 / 16), 560px)',
-                maxHeight: isFullscreen ? 'calc(100dvh - 38px)' : 'calc(100dvh - 104px)',
+                  ? 'min(100vw, calc((var(--app-h, 100dvh) - 38px) * 9 / 16))'
+                  : 'min(calc(100vw - 8px), calc((var(--app-h, 100dvh) - 104px) * 9 / 16), 560px)',
+                maxHeight: isFullscreen ? 'calc(var(--app-h, 100dvh) - 38px)' : 'calc(var(--app-h, 100dvh) - 104px)',
               }}
             />
           )}
@@ -445,9 +445,9 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
                        aspectRatio: '9 / 16',
                        height: 'auto',
                        width: isFullscreen
-                         ? 'min(100vw, calc((100dvh - 38px) * 9 / 16))'
-                         : 'min(calc(100vw - 8px), calc((100dvh - 104px) * 9 / 16), 560px)',
-                       maxHeight: isFullscreen ? 'calc(100dvh - 38px)' : 'calc(100dvh - 104px)',
+                         ? 'min(100vw, calc((var(--app-h, 100dvh) - 38px) * 9 / 16))'
+                         : 'min(calc(100vw - 8px), calc((var(--app-h, 100dvh) - 104px) * 9 / 16), 560px)',
+                       maxHeight: isFullscreen ? 'calc(var(--app-h, 100dvh) - 38px)' : 'calc(var(--app-h, 100dvh) - 104px)',
                      }}>
                   <div className="animate-spin text-4xl mb-4">🎮</div>
                   <div className="text-sm">加载游戏中...</div>
@@ -459,9 +459,9 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
                        aspectRatio: '9 / 16',
                        height: 'auto',
                        width: isFullscreen
-                         ? 'min(100vw, calc((100dvh - 38px) * 9 / 16))'
-                         : 'min(calc(100vw - 8px), calc((100dvh - 104px) * 9 / 16), 560px)',
-                       maxHeight: isFullscreen ? 'calc(100dvh - 38px)' : 'calc(100dvh - 104px)',
+                         ? 'min(100vw, calc((var(--app-h, 100dvh) - 38px) * 9 / 16))'
+                         : 'min(calc(100vw - 8px), calc((var(--app-h, 100dvh) - 104px) * 9 / 16), 560px)',
+                       maxHeight: isFullscreen ? 'calc(var(--app-h, 100dvh) - 38px)' : 'calc(var(--app-h, 100dvh) - 104px)',
                      }}>
                   <div className="text-4xl mb-4">⚠️</div>
                   <div className="text-sm text-center px-4">{iframeError}</div>
@@ -494,9 +494,9 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
                   aspectRatio: '9 / 16',
                   height: 'auto',
                   width: isFullscreen
-                    ? 'min(100vw, calc((100dvh - 38px) * 9 / 16))'
-                    : 'min(calc(100vw - 8px), calc((100dvh - 104px) * 9 / 16), 560px)',
-                  maxHeight: isFullscreen ? 'calc(100dvh - 38px)' : 'calc(100dvh - 104px)',
+                    ? 'min(100vw, calc((var(--app-h, 100dvh) - 38px) * 9 / 16))'
+                    : 'min(calc(100vw - 8px), calc((var(--app-h, 100dvh) - 104px) * 9 / 16), 560px)',
+                  maxHeight: isFullscreen ? 'calc(var(--app-h, 100dvh) - 38px)' : 'calc(var(--app-h, 100dvh) - 104px)',
                   display: isLoading || iframeError ? 'none' : 'block',
                 }}
               />
@@ -506,10 +506,10 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
           {/* 原生组件游戏 三：利了个韩 (羊了个羊卡牌堆叠三消 - 9:16 最大化) */}
           {selectedGame === 'lihan' && (
             <div
-              className="bg-transparent flex flex-col items-center justify-center overflow-hidden block"
+              className="bg-transparent flex flex-col items-center justify-center overflow-hidden block animate-in fade-in duration-300"
               style={{
                 width: isFullscreen ? 'min(100vw, 560px)' : 'min(calc(100vw - 14px), 560px)',
-                height: isFullscreen ? 'calc(100dvh - 38px)' : 'min(calc(100dvh - 104px), 840px)',
+                height: isFullscreen ? 'calc(var(--app-h, 100dvh) - 38px)' : 'min(calc(var(--app-h, 100dvh) - 104px), 840px)',
               }}
             >
               <LiLeGeHanGame

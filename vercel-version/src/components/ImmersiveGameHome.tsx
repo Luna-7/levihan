@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -20,6 +20,7 @@ import { useAppShellStore } from '../stores/appShellStore';
 
 interface Props {
   onNavigateTab: (tabId: string) => void;
+  onPreloadTab?: (tabId: string) => void;
   onShowToast: (msg: string) => void;
   isSoundMuted: boolean;
   onToggleSound: () => void;
@@ -27,6 +28,7 @@ interface Props {
 
 export const ImmersiveGameHome: React.FC<Props> = ({
   onNavigateTab,
+  onPreloadTab,
   onShowToast,
   isSoundMuted,
   onToggleSound,
@@ -51,6 +53,25 @@ export const ImmersiveGameHome: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingDoujinOpen]);
 
+  // 预加载「利了个韩」游戏模块与核心素材，消除打开时的网络等待与视觉迟滞
+  const preloadLihanAssets = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      void import('./TatakaruGame');
+      ['/images/lihan/bg-grass.webp', '/images/lihan/lihan-tiles-clean.webp', '/images/lihan/lihan-tray.webp'].forEach((src) => {
+        const img = new Image();
+        img.src = src;
+      });
+    } catch {}
+  }, []);
+
+  // 当用户打开游戏选择窗时立即开始预热素材
+  useEffect(() => {
+    if (activeModal === 'game') {
+      preloadLihanAssets();
+    }
+  }, [activeModal, preloadLihanAssets]);
+
   if (isForumOpen) {
     return <React.Suspense fallback={null}><RestaurantForum onBack={() => setIsForumOpen(false)} onShowToast={onShowToast} /></React.Suspense>;
   }
@@ -58,106 +79,98 @@ export const ImmersiveGameHome: React.FC<Props> = ({
   return (
     <div
       id="view-main"
-      className="relative w-full h-full select-none flex flex-col justify-between overflow-y-auto no-scrollbar overscroll-contain bg-[#FFFEEF]/80 md:bg-[#FFFEEF]/55 md:backdrop-blur-md"
+      className="relative w-full h-full select-none flex flex-col overflow-y-auto no-scrollbar overscroll-contain bg-[#FFFEEF]/80 md:bg-[#FFFEEF]/55 md:backdrop-blur-md"
     >
-      {/* 滚动行为：手机端内容恰好一屏 → 不出现滚动（矮屏兜底仍可滚）；
-          桌面端 lg 下公告区不再内部滚动，整页随内容自然增高、可滚动。 */}
-      {/* ====================================================
-          1. 顶部 Header 横幅（不再使用卡片容器）
-          打开网页时 header PNG 自动向下移入（animate-header-slide-down）
-         ==================================================== */}
-      <div className="relative shrink-0 animate-header-slide-down w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto">
-        {/* header 横幅：宽度始终与导航栏对齐，高度按图片比例等比缩放 */}
-        <img
-          src="/images/header.webp"
-          alt="LEVI × HANS WAREHOUSE 调查兵团特别驻地 · 情报与粮草整备"
-          className="home-header-art w-full h-auto max-w-full block"
-          referrerPolicy="no-referrer"
-          fetchPriority="high"
-        />
-
-        {/* 顶部控制条：悬浮在横幅上 (Avoid top notch / status bar) */}
-        <header
-          className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 sm:pt-4 px-1"
-          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
-        >
-          {/* 左侧：无边框无背景音量键 */}
-          <div className="flex items-center">
-            <button
-              type="button"
-              onClick={() => {
-                soundManager.playWoodTap();
-                onToggleSound();
-              }}
-              className="p-1 sm:p-1.5 bg-transparent border-0 shadow-none flex items-center justify-center transition-all cursor-pointer active:scale-90 hover:opacity-80 shrink-0"
-              title={isSoundMuted ? '开启音效 🔊' : '静音 🔇'}
-              id="btn-header-volume"
-            >
-              <UiSprite
-                name="volume"
-                width={44}
-                role="img"
-                label={isSoundMuted ? '开启音效' : '静音'}
-                className={isSoundMuted ? 'opacity-40 grayscale drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]' : 'drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]'}
-              />
-            </button>
-          </div>
-
-          {/* 右侧：登录按钮 */}
-          <div className="flex items-center shrink-0">
-            <UserEntry variant="pill" onShowToast={onShowToast} />
-          </div>
-        </header>
-      </div>
-
-      {/* ====================================================
-          2. 主体内容区：按照参考图排版
-          （【上段】公告栏自身滚动，最多 3 条公告在其中滚动查看；
-            【下段】3 个入口按钮固定不跟随滚动。
-            窄屏恰好放得下、公告不滚动；只有公告超出时才在卡片区内滚动。
-            矮屏/桌面（header 占高大）空间不足时，main 仍保留兜底滚动，
-            避免按钮被裁掉看不见。）
-         ==================================================== */}
-      {/* 桌面端(lg)：整个首页可随内容自然增高滚动；手机端：保持一屏固定不滚动
-          （内容超高时仅公告卡内部滚动，页面本身不滚）。 */}
-      <main className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl lg:flex-none lg:overflow-visible mx-auto px-2.5 sm:px-4 lg:px-6 pt-1 sm:pt-2 lg:pt-4 clear-adventure-nav-home flex-1 min-h-0 flex flex-col justify-start gap-4 sm:gap-5 lg:gap-8 overflow-y-auto no-scrollbar">
+      <div className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto flex flex-col min-h-full justify-between">
         {/* ====================================================
-            【上段】：首页最多 3 条公告卡片 (显现内容、时间、发布人)
-            —— 手机端：这一块是唯一的滚动容器；
-               桌面端(lg)：不再内部滚动，随整页一起滚动。
+            1. 顶部 Header 横幅（随内容自然增高可向上滚动移出）
+            打开网页时 header PNG 自动向下移入（animate-header-slide-down）
            ==================================================== */}
-        <section
-          id="home-announce-scroll"
-          className="w-full flex-1 min-h-[132px] lg:flex-none lg:min-h-0 lg:overflow-visible flex flex-col overflow-y-auto overflow-x-hidden no-scrollbar px-1 py-1"
-        >
-          <HomeAnnouncementGrid
+        <div className="relative shrink-0 animate-header-slide-down w-full mx-auto">
+          {/* header 横幅：宽度始终与导航栏对齐，高度按图片比例等比缩放 */}
+          <img
+            src="/images/header.webp"
+            alt="LEVI × HANS WAREHOUSE 调查兵团特别驻地 · 情报与粮草整备"
+            className="home-header-art w-full h-auto max-w-full block"
+            referrerPolicy="no-referrer"
+            fetchPriority="high"
+          />
+
+          {/* 顶部控制条：悬浮在横幅上 (Avoid top notch / status bar) */}
+          <header
+            className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 sm:pt-4 px-1"
+            style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
+          >
+            {/* 左侧：无边框无背景音量键 */}
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => {
+                  soundManager.playWoodTap();
+                  onToggleSound();
+                }}
+                className="p-1 sm:p-1.5 bg-transparent border-0 shadow-none flex items-center justify-center transition-all cursor-pointer active:scale-90 hover:opacity-80 shrink-0"
+                title={isSoundMuted ? '开启音效 🔊' : '静音 🔇'}
+                id="btn-header-volume"
+              >
+                <UiSprite
+                  name="volume"
+                  width={44}
+                  role="img"
+                  label={isSoundMuted ? '开启音效' : '静音'}
+                  className={isSoundMuted ? 'opacity-40 grayscale drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]' : 'drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]'}
+                />
+              </button>
+            </div>
+
+            {/* 右侧：登录按钮 */}
+            <div className="flex items-center shrink-0">
+              <UserEntry variant="pill" onShowToast={onShowToast} />
+            </div>
+          </header>
+        </div>
+
+        {/* ====================================================
+            2. 主体内容区：按照参考图排版
+           ==================================================== */}
+        <main className="w-full mx-auto px-2.5 sm:px-4 lg:px-6 pt-1 sm:pt-2 lg:pt-4 clear-adventure-nav-home flex-1 flex flex-col justify-start gap-4 sm:gap-5 lg:gap-8">
+          {/* ====================================================
+              【上段】：首页最多 3 条公告卡片 (显现内容、时间、发布人)
+             ==================================================== */}
+          <section
+            id="home-announce-scroll"
+            className="w-full flex flex-col px-1 py-1"
+          >
+            <HomeAnnouncementGrid
+              onNavigateTab={onNavigateTab}
+              onPreloadTab={onPreloadTab}
+              onShowToast={onShowToast}
+            />
+          </section>
+
+          {/* ====================================================
+              【中段】今日上新（漫画本 / 小说本 / 接力棒）
+             ==================================================== */}
+          <HomeTodaysUpdates
             onNavigateTab={onNavigateTab}
+            onPreloadTab={onPreloadTab}
             onShowToast={onShowToast}
           />
-        </section>
 
-        {/* ====================================================
-            【中段】今日上新（漫画本 / 小说本 / 接力棒）
-            —— 固定高度不滚动；今天无更新时整栏自动隐藏
-           ==================================================== */}
-        <HomeTodaysUpdates
-          onNavigateTab={onNavigateTab}
-          onShowToast={onShowToast}
-        />
-
-        {/* ====================================================
-            【下段】：3 个大复古羊皮纸入口 (塔塔开 + 影视厅 + 巨人资源)
-            —— 固定不滚动
-           ==================================================== */}
-        <section className="w-full shrink-0 short-screen-m-neg">
-          <div className="short-screen-scale">
-            <MiniProgramJumpGrid
-              onOpenGameModal={() => setActiveModal('game')}
-              onOpenResourceModal={() => setActiveModal('resources')}
-            />
-          </div>
-        </section>
-      </main>
+          {/* ====================================================
+              【下段】：3 个大复古羊皮纸入口 (塔塔开 + 影视厅 + 巨人资源)
+             ==================================================== */}
+          <section className="w-full shrink-0 short-screen-m-neg">
+            <div className="short-screen-scale">
+              <MiniProgramJumpGrid
+                onOpenGameModal={() => setActiveModal('game')}
+                onOpenResourceModal={() => setActiveModal('resources')}
+                onPreloadTab={onPreloadTab}
+              />
+            </div>
+          </section>
+        </main>
+      </div>
 
       {/* ====================================================
           4. 弹窗模块：小游戏快捷启动 (塔塔开异形军徽战术框)
@@ -299,6 +312,8 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                 {/* 游戏 3: 利韩 · 利了个韩 */}
                 <button
                   type="button"
+                  onMouseEnter={preloadLihanAssets}
+                  onTouchStart={preloadLihanAssets}
                   onClick={() => {
                     soundManager.playBlip();
                     setActiveModal(null);
@@ -403,7 +418,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
          ==================================================== */}
       {typeof document !== 'undefined' && activeGame && createPortal(
         <div
-          className={`fixed inset-0 z-50 flex items-center justify-center p-0 overflow-hidden animate-in fade-in duration-200 select-none ${activeGame === 'lihan' ? 'bg-transparent lihan-themed-root' : 'bg-black/95 backdrop-blur-md'}`}
+          className={`fixed inset-0 z-50 flex items-center justify-center p-0 overflow-hidden animate-in fade-in duration-300 select-none ${activeGame === 'lihan' ? 'bg-[#5B8C3E] lihan-themed-root' : 'bg-black/95 backdrop-blur-md'}`}
           onClick={() => {
             soundManager.playWoodTap();
             setActiveGame(null);
@@ -415,11 +430,30 @@ export const ImmersiveGameHome: React.FC<Props> = ({
           >
             {/* 居中沉浸式游戏画面 (内部自带顶部集成控制条，零遮挡) */}
             <div className="w-full h-full flex flex-col items-center justify-center p-0 m-0">
-              <React.Suspense fallback={null}><TatakaruGame
-                onShowToast={onShowToast}
-                initialGame={activeGame}
-                onExit={() => setActiveGame(null)}
-              /></React.Suspense>
+              <React.Suspense
+                fallback={
+                  <div className="w-full h-full flex flex-col items-center justify-center text-center p-4 bg-[#5B8C3E] text-white animate-in fade-in duration-200 font-pixel">
+                    <div className="w-16 h-16 rounded-2xl bg-[#4D7A33] border-2 border-[#98CF6E] flex items-center justify-center shadow-lg animate-bounce mb-3">
+                      <span className="text-3xl">🥔</span>
+                    </div>
+                    <div className="font-bold text-base sm:text-lg text-[#FEFBEA] drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)] tracking-wide">
+                      {activeGame === 'lihan' ? '利韩 · 利了个韩' : '正在集结战场...'}
+                    </div>
+                    <div className="text-xs text-[#DCF5C1] mt-1.5 drop-shadow animate-pulse">
+                      {activeGame === 'lihan' ? '玛利亚决战·极难迷阵部署中...' : '作战装备整备中...'}
+                    </div>
+                    <div className="w-44 max-w-[70vw] bg-[#3B6125] h-2.5 rounded-full overflow-hidden border border-[#8EC362] mt-4 shadow-inner">
+                      <div className="bg-[#F8E279] h-full w-2/3 rounded-full animate-pulse" />
+                    </div>
+                  </div>
+                }
+              >
+                <TatakaruGame
+                  onShowToast={onShowToast}
+                  initialGame={activeGame}
+                  onExit={() => setActiveGame(null)}
+                />
+              </React.Suspense>
             </div>
           </div>
         </div>,

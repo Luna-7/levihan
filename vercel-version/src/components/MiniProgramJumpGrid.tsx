@@ -6,11 +6,13 @@ import { UiSprite } from './UiSprite';
 interface Props {
   onOpenGameModal: () => void;
   onOpenResourceModal: () => void;
+  onPreloadTab?: (tabId: string) => void;
 }
 
 export const MiniProgramJumpGrid: React.FC<Props> = ({
   onOpenGameModal,
   onOpenResourceModal,
+  onPreloadTab,
 }) => {
   const [showCinemaNotice, setShowCinemaNotice] = useState(false);
 
@@ -29,6 +31,12 @@ export const MiniProgramJumpGrid: React.FC<Props> = ({
           onClick={() => {
             soundManager.playWoodTap();
             onOpenGameModal();
+          }}
+          onMouseEnter={() => {
+            void import('./TatakaruGame');
+          }}
+          onTouchStart={() => {
+            void import('./TatakaruGame');
           }}
           className="group flex flex-col items-center cursor-pointer p-0"
           id="btn-jump-tatakaru"
@@ -79,6 +87,14 @@ export const MiniProgramJumpGrid: React.FC<Props> = ({
           onClick={() => {
             soundManager.playPageTurn();
             onOpenResourceModal();
+          }}
+          onMouseEnter={() => {
+            onPreloadTab?.('resources');
+            void import('./ResourceHub');
+          }}
+          onTouchStart={() => {
+            onPreloadTab?.('resources');
+            void import('./ResourceHub');
           }}
           className="group flex flex-col items-center cursor-pointer p-0"
           id="btn-jump-resources"

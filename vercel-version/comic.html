@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="robots" content="noindex, nofollow" />
     <script>
-      // 独立 PWA（iOS 添加到主屏幕）标记，与主站 index.html 保持一致。
+      // 独立 PWA（iOS 添加到主屏幕）与 WebKit 布局适配标记，与主站 index.html 保持一致。
       (function () {
         try {
           var ua = window.navigator.userAgent || '';
@@ -15,7 +15,21 @@
           var isStandalone =
             window.navigator.standalone === true ||
             window.matchMedia('(display-mode: standalone)').matches;
-          if (isStandalone) document.documentElement.classList.add('pwa-standalone');
+          if (isStandalone) {
+            document.documentElement.classList.add('pwa-standalone');
+            var syncStandaloneHeight = function () {
+              var h = window.innerHeight || (document.documentElement && document.documentElement.clientHeight);
+              if (h) {
+                document.documentElement.style.setProperty('--app-h', h + 'px');
+              }
+            };
+            syncStandaloneHeight();
+            window.addEventListener('resize', syncStandaloneHeight, { passive: true });
+            window.addEventListener('orientationchange', function () {
+              setTimeout(syncStandaloneHeight, 150);
+            }, { passive: true });
+            window.addEventListener('pageshow', syncStandaloneHeight, { passive: true });
+          }
         } catch (e) {}
       })();
     </script>

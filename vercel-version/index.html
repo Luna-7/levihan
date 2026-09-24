@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" data-page-node-id="XiKQtj2sBTHeZM77h7NJSy" />
     <meta name="robots" content="noindex, nofollow" />
     <script>
-      // 独立 PWA（iOS 添加到主屏幕）标记。
-      // iOS standalone 下 100dvh 会比真实屏幕矮一个 env(safe-area-inset-top)，
-      // 必须换成 100vh；这里提前打标记，避免首帧按错误的高度绘制。
+      // 独立 PWA（iOS 添加到主屏幕）与 WebKit 布局适配标记。
+      // iOS WebKit 在 Standalone 模式下，100dvh 在部分 iOS 版本会少算顶部状态栏或多减去安全区高度；
+      // 而 Standalone 模式没有 Safari 地址栏的伸缩特性，视口固定，以 window.innerHeight 注入 --app-h 最为精准。
       (function () {
         try {
           var ua = window.navigator.userAgent || '';
@@ -17,7 +17,24 @@
           var isStandalone =
             window.navigator.standalone === true ||
             window.matchMedia('(display-mode: standalone)').matches;
-          if (isStandalone) document.documentElement.classList.add('pwa-standalone');
+          if (isStandalone) {
+            document.documentElement.classList.add('pwa-standalone');
+          }
+          var syncAppHeight = function () {
+            var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight || (document.documentElement && document.documentElement.clientHeight);
+            if (h) {
+              document.documentElement.style.setProperty('--app-h', h + 'px');
+            }
+          };
+          syncAppHeight();
+          window.addEventListener('resize', syncAppHeight, { passive: true });
+          if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', syncAppHeight, { passive: true });
+          }
+          window.addEventListener('orientationchange', function () {
+            setTimeout(syncAppHeight, 150);
+          }, { passive: true });
+          window.addEventListener('pageshow', syncAppHeight, { passive: true });
         } catch (e) {}
       })();
     </script>

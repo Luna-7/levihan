@@ -5,10 +5,12 @@ import { soundManager } from '../utils/audio';
 import { AdventureHeroSprite } from './AdventureHeroSprite';
 import { UiSprite } from './UiSprite';
 import { UiSpriteName } from './uiSprite.generated';
+import { cosService } from '../services/cosClient';
 
 interface Props {
   activeTab: NavigationTab;
   onNavigateTab: (tab: NavigationTab) => void;
+  onPreloadTab?: (tab: NavigationTab) => void;
 }
 
 interface StageItem {
@@ -42,7 +44,7 @@ const LINE_TOP = 36; // 行军直线在浮条内的纵向位置（px）：小人
 const RETRACT_MS = 900; // 切换动画(650ms)结束后缩回导航栏
 const WALK_DURATION = 650;
 
-export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }) => {
+export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, onPreloadTab }) => {
   const [prevIndex, setPrevIndex] = useState<number>(() => {
     const idx = STAGES.findIndex((s) => s.id === activeTab);
     return idx >= 0 ? idx : 0;
@@ -137,6 +139,21 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
     navigateTo(best);
   };
 
+  const handlePreloadTab = (tab: NavigationTab) => {
+    if (onPreloadTab) {
+      onPreloadTab(tab);
+      return;
+    }
+    if (tab === 'resources') {
+      void import('./DoujinshiArchive');
+      void cosService.loadNovelList();
+    } else if (tab === 'doujinshi') {
+      void import('./RestaurantForum');
+    } else if (tab === 'dispatch') {
+      void import('./DispatchHub');
+    }
+  };
+
   const handleSelectTab = (tab: NavigationTab) => {
     // 图标切换：切完即缩（首页若切走，目标页同样回到折叠态）
     clearRetractTimer();
@@ -159,6 +176,29 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
           aria-label="行军进度条：点击切换到对应页面"
           title="点击进度条切换页面"
           onClick={handleProgressClick}
+          onMouseMove={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+            let best = 0;
+            let bestDist = Infinity;
+            NODE_X.forEach((nx, i) => {
+              const d = Math.abs(nx - xPct);
+              if (d < bestDist) { bestDist = d; best = i; }
+            });
+            handlePreloadTab(STAGES[best].id);
+          }}
+          onTouchStart={(e) => {
+            if (e.touches.length === 0) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const xPct = ((e.touches[0].clientX - rect.left) / rect.width) * 100;
+            let best = 0;
+            let bestDist = Infinity;
+            NODE_X.forEach((nx, i) => {
+              const d = Math.abs(nx - xPct);
+              if (d < bestDist) { bestDist = d; best = i; }
+            });
+            handlePreloadTab(STAGES[best].id);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
@@ -253,6 +293,9 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab }
                     <button
                       type="button"
                       onClick={() => handleSelectTab(s.id)}
+                      onMouseEnter={() => handlePreloadTab(s.id)}
+                      onTouchStart={() => handlePreloadTab(s.id)}
+                      onFocus={() => handlePreloadTab(s.id)}
                       title={s.stageName}
                       aria-label={s.stageName}
                       className={`flex-1 flex items-center justify-center py-1 px-1 cursor-pointer rounded-lg transition-transform active:scale-90 min-h-[36px] ${

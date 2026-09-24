@@ -188,22 +188,88 @@ export class COSService {
     }
   }
 
+  private cachedNovelList: GroupNovel[] | null = null;
+  private novelFetchPromise: Promise<GroupNovel[]> | null = null;
+
   /**
-   * 加载在线小说索引（novels.json，只含元数据不含正文）。读不到 → 空数组
+   * 同步获取内存或本地持久化缓存的在线小说列表（用于首屏/切页瞬时直出，杜绝加载闪烁）
    */
-  public async loadNovelList(): Promise<GroupNovel[]> {
-    if (!this.config.cdnBaseUrl) return [];
-    try {
-      requestDebug.recordJsonRequest();
-      const resp = await fetch(this.getObjectUrl('novels.json'), { mode: 'cors', cache: 'no-store' });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (Array.isArray(data)) return data;
-      }
-    } catch (e) {
-      // 在线小说缺失时优雅降级
+  public getCachedNovelList(): GroupNovel[] {
+    if (this.cachedNovelList && this.cachedNovelList.length > 0) {
+      return this.cachedNovelList;
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('lh_cached_novels_v1');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            this.cachedNovelList = parsed;
+            return parsed;
+          }
+        }
+      } catch {}
     }
     return [];
+  }
+
+  public hasCachedNovelList(): boolean {
+    return (this.cachedNovelList !== null && this.cachedNovelList.length > 0) || (
+      typeof window !== 'undefined' && Boolean(localStorage.getItem('lh_cached_novels_v1'))
+    );
+  }
+
+  public clearNovelCache(): void {
+    this.cachedNovelList = null;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('lh_cached_novels_v1');
+      } catch {}
+    }
+  }
+
+  /**
+   * 加载在线小说索引（novels.json，只含元数据不含正文）。SWR 策略优先返回缓存，后台静默拉取
+   */
+  public async loadNovelList(forceRefresh = false): Promise<GroupNovel[]> {
+    const cached = this.getCachedNovelList();
+    if (!this.config.cdnBaseUrl) return cached;
+
+    // 非强制刷新且已有缓存：先秒回缓存，并在后台静默拉取更新
+    if (!forceRefresh && cached.length > 0) {
+      void this.fetchNovelListFromRemote();
+      return cached;
+    }
+
+    return this.fetchNovelListFromRemote();
+  }
+
+  private async fetchNovelListFromRemote(): Promise<GroupNovel[]> {
+    if (this.novelFetchPromise) return this.novelFetchPromise;
+    this.novelFetchPromise = (async () => {
+      try {
+        requestDebug.recordJsonRequest();
+        const resp = await fetch(this.getObjectUrl('novels.json'), { mode: 'cors', cache: 'no-store' });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (Array.isArray(data)) {
+            this.cachedNovelList = data;
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem('lh_cached_novels_v1', JSON.stringify(data));
+              } catch {}
+            }
+            return data;
+          }
+        }
+      } catch (e) {
+        // 在线小说缺失时优雅降级
+      } finally {
+        this.novelFetchPromise = null;
+      }
+      return this.getCachedNovelList();
+    })();
+    return this.novelFetchPromise;
   }
 
   /** 在线小说正文直链（novels/{id}.txt，点开卡片时才加载） */

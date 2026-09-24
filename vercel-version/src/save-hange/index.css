@@ -171,3 +171,15 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #386f57;
 }
+
+/* iOS WebKit momentum scrolling */
+html,
+body,
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-auto,
+[class*="overflow-y-auto"],
+[class*="overflow-x-auto"],
+[class*="overflow-auto"] {
+  -webkit-overflow-scrolling: touch;
+}

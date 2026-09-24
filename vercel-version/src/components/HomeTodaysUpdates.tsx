@@ -19,6 +19,7 @@ interface UpdateItem {
 
 interface Props {
   onNavigateTab: (tabId: string) => void;
+  onPreloadTab?: (tabId: string) => void;
   onShowToast: (msg: string) => void;
 }
 
@@ -49,7 +50,7 @@ function byLine(author: string | undefined): string {
   return `『${a}』`;
 }
 
-export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onShowToast }) => {
+export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onPreloadTab, onShowToast }) => {
   const [items, setItems] = useState<UpdateItem[]>([]);
 
   useEffect(() => {
@@ -146,6 +147,17 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onShowToast 
     };
   }, []);
 
+  const handleHover = useMemo(
+    () => (it: UpdateItem) => {
+      if (it.kind === 'relay') {
+        onPreloadTab?.('doujinshi');
+      } else if (it.kind === 'novel') {
+        onPreloadTab?.('resources');
+      }
+    },
+    [onPreloadTab]
+  );
+
   const handleClick = useMemo(
     () => (it: UpdateItem) => {
       soundManager.playWoodTap();
@@ -180,6 +192,9 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onShowToast 
               key={it.id}
               type="button"
               onClick={() => handleClick(it)}
+              onMouseEnter={() => handleHover(it)}
+              onTouchStart={() => handleHover(it)}
+              onFocus={() => handleHover(it)}
               className="group flex items-center gap-2 text-left cursor-pointer transition-all active:scale-[0.99] bg-[#F8F1DE] border-[1.5px] border-[#E0D2B4] hover:border-[#C5A059] rounded-lg px-2.5 py-1"
             >
               <span

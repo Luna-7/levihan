@@ -40,6 +40,7 @@ interface MammothApi {
 interface Props {
   searchQuery: string;
   novels: GroupNovel[];
+  isLoading?: boolean;
   onShowToast: (msg: string) => void;
   initialReadingNovel?: GroupNovel | null;
 }
@@ -62,6 +63,7 @@ const fmtChars = (n: number): string => {
 export const NovelModule: React.FC<Props> = ({
   searchQuery,
   novels,
+  isLoading = false,
   onShowToast,
   initialReadingNovel,
 }) => {
@@ -341,7 +343,24 @@ export const NovelModule: React.FC<Props> = ({
               ✍️ 上传文
             </button>
           </div>
-          {filteredNovels.length === 0 ? (
+          {isLoading && filteredNovels.length === 0 ? (
+            <div className="columns-2 gap-3.5 sm:gap-4.5 w-full animate-pulse">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="mb-3.5 sm:mb-4.5 break-inside-avoid bg-[#FFFEEF]/70 border border-[#D5C9AF]/60 rounded-xl p-3.5 sm:p-4 space-y-2.5"
+                >
+                  <div className="flex gap-1.5 items-center">
+                    <div className="h-4 w-12 bg-[#D5C9AF]/40 rounded-xs" />
+                    <div className="h-4 w-10 bg-[#D5C9AF]/30 rounded-xs" />
+                  </div>
+                  <div className="h-5 w-4/5 bg-[#D5C9AF]/50 rounded-xs" />
+                  <div className="h-3 w-1/2 bg-[#D5C9AF]/30 rounded-xs" />
+                  <div className="h-10 w-full bg-[#D5C9AF]/20 rounded-xs" />
+                </div>
+              ))}
+            </div>
+          ) : filteredNovels.length === 0 ? (
             <div className="p-6 text-center bg-[#FFFEEF]/75 backdrop-blur-xs border border-dashed border-[#D5C9AF] rounded-xl text-xs font-retro-jp text-[#8C7A68]">
               {emptyText}
             </div>

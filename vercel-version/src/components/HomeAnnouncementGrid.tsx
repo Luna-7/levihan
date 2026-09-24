@@ -35,11 +35,13 @@ const HANGE_TEA_LINES = [
 
 interface Props {
   onNavigateTab: (tabId: string) => void;
+  onPreloadTab?: (tabId: string) => void;
   onShowToast: (msg: string) => void;
 }
 
 export const HomeAnnouncementGrid: React.FC<Props> = ({
   onNavigateTab,
+  onPreloadTab,
   onShowToast,
 }) => {
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
@@ -191,6 +193,24 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
     }
   };
 
+  const handleCardHover = (item: AnnouncementItem) => {
+    if (item.link) {
+      const tabMatch = item.link.match(/[?&]tab=([a-zA-Z]+)/);
+      if (tabMatch) {
+        onPreloadTab?.(tabMatch[1]);
+        return;
+      }
+    }
+    const combined = (item.title + item.tag + (item.description || '')).toLowerCase();
+    if (/茶会|接龙|安科|论坛|茶室/.test(combined)) {
+      onPreloadTab?.('doujinshi');
+    } else if (/小说|合订本|同人|粮仓|巨树餐厅|典藏|资源/.test(combined)) {
+      onPreloadTab?.('resources');
+    } else if (/联络|信使|投稿|反馈|群|飞鸽/.test(combined)) {
+      onPreloadTab?.('dispatch');
+    }
+  };
+
   return (
     <div className="w-full flex flex-col gap-2.5 select-none px-1 my-auto">
       {/* ====================================================
@@ -231,6 +251,8 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
                 soundManager.playWoodTap();
                 setShowDetailModal(item);
               }}
+              onMouseEnter={() => handleCardHover(item)}
+              onTouchStart={() => handleCardHover(item)}
               className="announcement-board group relative shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-between gap-2.5 sm:gap-3 active:scale-[0.99]"
               style={{ padding: '9px 12px' }}
             >

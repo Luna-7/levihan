@@ -76,8 +76,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const [shareImgLoaded, setShareImgLoaded] = useState<boolean>(false);
   const sharePosterRef = useRef<HTMLDivElement>(null);
 
-  // 在线小说索引（novels.json，含合订本与同好来稿）；读不到则为空 → 该段不渲染
-  const [novels, setNovels] = useState<GroupNovel[]>([]);
+  // 在线小说索引（novels.json，含合订本与同好来稿）；SWR 预载，若有本地/内存缓存则首屏瞬出
+  const [novels, setNovels] = useState<GroupNovel[]>(() => cosService.getCachedNovelList());
+  const [isNovelsLoading, setIsNovelsLoading] = useState<boolean>(() => !cosService.hasCachedNovelList());
   const [requestedNovel, setRequestedNovel] = useState<GroupNovel | null>(null);
 
   // 统计所有标签（动态汇总当前数据中的所有标签）
@@ -114,14 +115,21 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   // 组件挂载时自动尝试同步 COS 远端归档（在线小说索引并行加载，失败静默降级）
   useEffect(() => {
     handleRefreshArchive(false);
-    cosService.loadNovelList().then(setNovels).catch(() => {});
+    cosService.loadNovelList().then((data) => {
+      setNovels(data);
+      setIsNovelsLoading(false);
+    }).catch(() => {
+      setIsNovelsLoading(false);
+    });
   }, []);
 
   // 投稿免审直发：小说本新上架后立即刷新索引（novels.json 为 no-cache，重拉即最新）
   const novelIndexVersion = useAppShellStore((state) => state.novelIndexVersion);
   useEffect(() => {
     if (novelIndexVersion === 0) return;
-    cosService.loadNovelList().then(setNovels).catch(() => {});
+    cosService.loadNovelList(true).then((data) => {
+      setNovels(data);
+    }).catch(() => {});
     // 只关注版本信号的跳变。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novelIndexVersion]);
@@ -688,6 +696,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         <NovelModule
           searchQuery={searchQuery}
           novels={novels}
+          isLoading={isNovelsLoading}
           onShowToast={onShowToast}
           initialReadingNovel={requestedNovel}
         />
