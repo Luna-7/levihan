@@ -1,6 +1,7 @@
 import { StrictMode, useCallback, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { BackToTopButton } from './components/BackToTopButton';
 import { ComicGate } from './components/ComicGate';
 import { DoujinshiArchive } from './components/DoujinshiArchive';
 import { soundManager } from './utils/audio';
@@ -50,6 +51,7 @@ function ComicApp() {
       <ComicGate>
         <DoujinshiArchive mode="comic" onShowToast={showToast} onCopyCode={copyCode} />
       </ComicGate>
+      <BackToTopButton />
       {toast && (
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[2000] bg-[#FFFDF9] text-[#1E4334] border-2 border-[#5F977E] px-4 py-2 rounded-full shadow-[0_4px_16px_rgba(255,168,188,0.5)] font-retro-jp text-xs sm:text-sm flex items-center gap-2 animate-bounce max-w-[90vw]">
           <span className="text-base shrink-0">✨</span>
