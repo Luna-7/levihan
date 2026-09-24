@@ -74,8 +74,12 @@ export interface ResourceLink {
 export interface GoodsItem {
   /** COS 上的文件名（含扩展名），位于 goods/ 目录下 */
   file: string;
-  /** 展示名（脚本默认取文件名去扩展名） */
-  title: string;
+  /**
+   * 展示名。**可选** —— 周边图往往没有名字：
+   * 文件名有意义时脚本自动采用；是相机/微信/截图默认名、纯数字或纯 hash 时留空，
+   * 前台就当纯图墙渲染（不留一行没用的字）。要补名字用 goods-src/titles.json。
+   */
+  title?: string;
   /** 可选备注，例如材质 / 尺寸 / 年份 */
   note?: string;
   /** 原图字节数（脚本写入，用于显示体积） */

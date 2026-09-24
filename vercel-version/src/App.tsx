@@ -5,7 +5,8 @@ import { ImmersiveGameHome } from './components/ImmersiveGameHome';
 import { GameStageLayout } from './components/GameStageLayout';
 import { AdventureWorldBackground } from './components/AdventureWorldBackground';
 import { AdventureBottomNav } from './components/AdventureBottomNav';
-import { ResourceHub } from './components/ResourceHub';
+// 注：ResourceHub 不在这里静态引入 —— 它由 ImmersiveGameHome 用 React.lazy 按需加载。
+// 静态 import 会让「巨人资源」整块（含漫画索引/小说/周边橱窗）落进首屏主包，别加回来。
 import { ExquisiteStoryWorkshop } from './components/ExquisiteStoryWorkshop';
 const DoujinshiArchive = React.lazy(() => import('./components/DoujinshiArchive').then(m => ({ default: m.DoujinshiArchive })));
 const RestaurantForum = React.lazy(() => import('./components/RestaurantForum').then(m => ({ default: m.RestaurantForum })));

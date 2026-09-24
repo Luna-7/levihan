@@ -272,11 +272,16 @@ export class COSService {
   }
 
   /**
-   * 周边展示图直链：**同一张原图由 COS 现场缩放**，不需要额外存一份缩略图。
-   * 实测 115 KB 的原图取 360px 只要 34 KB —— 列表只加载它，原图留给「下载」。
+   * 周边展示图直链：**同一张原图由 COS 现场转码**，不需要额外存一份缩略图。
+   * `width <= 0` = 只转 WebP、不缩放 —— 原图本身比目标宽度还小时用它，
+   * 避免 COS 的 thumbnail 把小图**放大**（实测 115 KB 的图请求 1600px 会变成 297 KB）。
    */
   public getGoodsImageUrl(file: string, width: number, quality = 82): string {
-    return `${this.getGoodsOriginalUrl(file)}?imageMogr2/thumbnail/${width}x/format/webp/quality/${quality}`;
+    const ops =
+      width > 0
+        ? `thumbnail/${width}x/format/webp/quality/${quality}`
+        : `format/webp/quality/${quality}`;
+    return `${this.getGoodsOriginalUrl(file)}?imageMogr2/${ops}`;
   }
 
   /** 列表缩略图（420px，列表里每张只花几十 KB） */

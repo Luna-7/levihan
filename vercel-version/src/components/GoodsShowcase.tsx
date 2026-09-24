@@ -12,26 +12,51 @@ interface Props {
 }
 
 /**
- * 「周边橱窗」—— 巨人资源里的周边图片（PNG）区块。
+ * 「周边橱窗」—— 巨人资源里的周边图片区块。
  *
- * 设计要点（三条都是为「不占内存」服务的）：
+ * 设计要点（前三条为「不占内存 / 不拖慢加载」服务）：
  * 1. **图片不进仓库、不进构建产物**：原图放在 COS 的 goods/ 目录，清单是 goods/manifest.json。
  *    仓库里只有这份组件，所以 Workbox 预缓存（2 MiB 上限）和访客首屏都不受图片体积影响。
- * 2. **列表只加载缩略图**：同一张原图加 `?imageMogr2/thumbnail/420x/format/webp` 由 COS 现场生成，
- *    实测 115 KB → 34 KB；灯箱看大图用 1600px 预览，**只有点「下载」才取真正的原图**。
+ *    组件本身也只在切到「周边橱窗」分类时才挂载 —— 不进这个分类，零网络请求。
+ * 2. **列表只加载缩略图**：同一张原图加 `?imageMogr2/thumbnail/420x/format/webp` 由 COS 现场生成；
+ *    灯箱看大图用 1600px 预览，**只有点「下载」才取真正的原图**。
+ *    ⚠️ 目标宽度一律不超过原图宽度：COS 的 thumbnail 参数会把小图**放大**（实测 115 KB → 297 KB）。
  * 3. **图片离开视口就卸载**：IntersectionObserver 管两件事——进视口才排队加载（并发 2，走 imageLoadQueue），
  *    出视口就把 <img> 从 DOM 摘掉（只留占位高度），长列表滚到底也不会把几十张图堆在内存里。
+ *
+ * 关于「名字」：周边图往往只有图没有名字，所以 title 是**可选**的。
+ * 没有名字时卡片只渲染图片本体（不留一行没用的字），灯箱用「序号 / 总数」定位；
+ * 一旦清单里出现带名字的条目，搜索框才会出现（纯图模式下不给用户一个搜不出东西的框）。
  *
  * 下载走 fetch → blob → objectURL → <a download> → 立刻 revokeObjectURL（用完即释放）；
  * 桶本身带 CORS 与 Content-Disposition: attachment，所以取流失败时退回「新标签打开原图」也能直接保存。
  */
 
-/** 列表缩略图宽度（CSS px 的 2 倍左右，够清晰又不费流量） */
+/** 列表缩略图宽度上限（卡面约 160 CSS px，420 已是 2x 屏的清晰度） */
 const THUMB_WIDTH = 420;
-/** 灯箱预览宽度：够看清细节，但不是原图（原图留给「下载」） */
+/** 灯箱预览宽度上限：够看清细节，但不是原图（原图留给「下载」） */
 const PREVIEW_WIDTH = 1600;
 /** 加载触发/卸载留白：距视口 300px 就开始加载，出了这个范围就卸载 */
 const VIEW_MARGIN = '300px 0px 300px 0px';
+/** 读不到原图尺寸时的占位比例（周边多为立牌/挂件，竖向居多） */
+const FALLBACK_RATIO = '3 / 4';
+
+/**
+ * 求真正要请求的宽度：原图比目标还小就**不缩放**（返回 0 = 只转 WebP）。
+ * 尺寸未知时按目标宽度处理，最坏情况是多花一点流量，不会出错。
+ */
+function targetWidth(requested: number, originalWidth?: number): number {
+  if (!originalWidth || originalWidth <= 0) return requested;
+  return originalWidth <= requested ? 0 : requested;
+}
+
+function thumbUrlOf(item: GoodsItem): string {
+  return cosService.getGoodsThumbUrl(item.file, targetWidth(THUMB_WIDTH, item.width));
+}
+
+function previewUrlOf(item: GoodsItem): string {
+  return cosService.getGoodsPreviewUrl(item.file, targetWidth(PREVIEW_WIDTH, item.width));
+}
 
 function formatBytes(bytes?: number): string {
   if (!bytes || bytes <= 0) return '';
@@ -85,7 +110,7 @@ const GoodsCard: React.FC<{
   useEffect(() => {
     if (!shouldLoad || loaded || failed) return;
     let cancelled = false;
-    const thumbUrl = cosService.getGoodsThumbUrl(item.file, THUMB_WIDTH);
+    const thumbUrl = thumbUrlOf(item);
 
     // 并发 2 的队列：几十张缩略图不会瞬间打满连接、也不会一次性全进内存
     imageLoadQueue
@@ -116,10 +141,10 @@ const GoodsCard: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [shouldLoad, loaded, failed, item.file]);
+  }, [shouldLoad, loaded, failed, item]);
 
   // 占位比例：清单里有真实尺寸就用真实比例，避免图片到位时列表跳动
-  const aspectRatio = item.width && item.height ? `${item.width} / ${item.height}` : '3 / 4';
+  const aspectRatio = item.width && item.height ? `${item.width} / ${item.height}` : FALLBACK_RATIO;
 
   return (
     <div
@@ -136,12 +161,12 @@ const GoodsCard: React.FC<{
         }}
         className="relative z-10 w-full rounded-xs overflow-hidden bg-[#F2ECE0] border border-[#E0D5BE] cursor-pointer"
         style={{ aspectRatio }}
-        title="点击看大图"
+        title={item.title ? `${item.title} · 点击看大图` : '点击看大图'}
       >
         {loaded && inRange ? (
           <img
-            src={cosService.getGoodsThumbUrl(item.file, THUMB_WIDTH)}
-            alt={item.title}
+            src={thumbUrlOf(item)}
+            alt={item.title || `周边 ${index + 1}`}
             loading="lazy"
             decoding="async"
             draggable={false}
@@ -160,14 +185,15 @@ const GoodsCard: React.FC<{
       </div>
 
       <div className="relative z-10 pt-1.5 space-y-1">
-        <h4 className="font-pixel text-[11px] sm:text-xs font-bold text-[#1E3A2B] leading-snug break-words">
-          {item.title}
-        </h4>
-        {(item.note || item.bytes) && (
+        {/* 没有名字就不渲染标题行 —— 纯图墙不留没用的字 */}
+        {item.title && (
+          <h4 className="font-pixel text-[11px] sm:text-xs font-bold text-[#1E3A2B] leading-snug break-words">
+            {item.title}
+          </h4>
+        )}
+        {item.note && (
           <p className="font-retro-jp text-[10px] text-[#8C7A68] leading-tight break-words">
             {item.note}
-            {item.note && item.bytes ? ' · ' : ''}
-            {item.bytes ? `PNG ${formatBytes(item.bytes)}` : ''}
           </p>
         )}
         <div className="flex items-center gap-1 pt-0.5">
@@ -179,7 +205,7 @@ const GoodsCard: React.FC<{
             }}
             disabled={downloading}
             className="flex-1 px-1.5 py-1 bg-[#1E4334] text-[#F9E79F] border border-[#153025] font-pixel text-[10px] font-bold rounded-xs cursor-pointer enabled:hover:bg-[#2B5E4A] disabled:opacity-60 disabled:cursor-wait whitespace-nowrap"
-            title="下载 PNG 原图"
+            title="下载原图"
           >
             {downloading ? '取图中…' : '⬇ 下载'}
           </button>
@@ -226,15 +252,18 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
     };
   }, []);
 
+  /** 只有确实存在带名字的条目时才提供搜索 —— 纯图模式下搜索框搜不出东西 */
+  const hasNamed = useMemo(() => items.some((it) => (it.title || '').trim().length > 0), [items]);
+
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
     if (!q) return items;
-    return items.filter(
-      (it) => it.title.toLowerCase().includes(q) || (it.note || '').toLowerCase().includes(q),
-    );
+    return items.filter((it) => (it.title || '').toLowerCase().includes(q));
   }, [items, keyword]);
 
   const activeItem = activeIndex >= 0 ? filtered[activeIndex] : undefined;
+  /** 灯箱标题：没有名字时用序号定位，不留空标题 */
+  const titleOf = (it: GoodsItem, index: number) => it.title || `周边 ${index + 1}`;
 
   const handleDownload = async (item: GoodsItem) => {
     const url = cosService.getGoodsOriginalUrl(item.file);
@@ -286,16 +315,16 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
       <div className="p-2 px-3 bg-[#FBF3E4] border-l-3 border-[#B7791F] rounded-r-xs font-retro-jp text-[11px] text-[#5B4636] flex items-center">
         <div>
           <span className="font-bold">🖼 周边橱窗：</span>
-          陈列利韩相关的官方/同人周边 PNG 原图。列表只加载缩略图，点开看大图，<b>「⬇ 下载」拿到的才是原图</b>。
+          陈列利韩相关的官方/同人周边原图。列表只加载缩略图，点开看大图，<b>「⬇ 下载」拿到的才是原图</b>。
         </div>
       </div>
 
-      {/* 搜索（图多了才有意义，少于一屏时不占地方） */}
-      {items.length > 8 && (
+      {/* 搜索：图多、且清单里确实有名字时才出现 */}
+      {hasNamed && items.length > 8 && (
         <div className="flex items-center gap-1.5">
           <input
             type="text"
-            placeholder="搜索周边名称、材质、年份…"
+            placeholder="搜索周边名称…"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             className="px-2.5 py-1.5 text-xs sm:text-sm font-retro-jp bg-[#FAF5E8] border border-[#BFA985] rounded-xs w-full focus:outline-none focus:border-[#1E4334]"
@@ -318,7 +347,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
               key={i}
               className="bg-[#FFFEEF] border-2 border-[#D5C9AF] rounded-md p-2.5 animate-pulse"
             >
-              <div className="w-full rounded-xs bg-[#EFE7D8]" style={{ aspectRatio: '3 / 4' }} />
+              <div className="w-full rounded-xs bg-[#EFE7D8]" style={{ aspectRatio: FALLBACK_RATIO }} />
               <div className="h-2.5 mt-2 rounded-xs bg-[#EFE7D8]" />
               <div className="h-2.5 mt-1.5 w-2/3 rounded-xs bg-[#EFE7D8]" />
             </div>
@@ -343,7 +372,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
           {items.length === 0 ? (
             <>
               <p className="font-bold text-[#5B4636]">橱窗还没上货</p>
-              <p>把周边 PNG 放进本地 goods-src/ 目录，跑一次 npm run sync:goods 就会上架。</p>
+              <p>把周边图放进本地 goods-src/ 目录，跑一次 npm run sync:goods 就会上架。</p>
             </>
           ) : (
             <p>没有匹配「{keyword}」的周边，换个词试试～</p>
@@ -351,7 +380,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
         </div>
       )}
 
-      {/* 灯箱：只有点开才请求 1600px 预览；关闭即卸载 DOM，图不在内存里常驻 */}
+      {/* 灯箱：只有点开才请求预览图；关闭即卸载 DOM，图不在内存里常驻 */}
       {activeItem && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed inset-0 z-[1400] bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-3 select-none animate-in fade-in duration-150"
@@ -363,8 +392,8 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
           >
             <div className="relative flex-1 min-h-0 flex items-center justify-center">
               <img
-                src={cosService.getGoodsPreviewUrl(activeItem.file, PREVIEW_WIDTH)}
-                alt={activeItem.title}
+                src={previewUrlOf(activeItem)}
+                alt={titleOf(activeItem, activeIndex)}
                 decoding="async"
                 draggable={false}
                 onLoad={() => requestDebug.recordImageLoad()}
@@ -395,11 +424,14 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
             <div className="shrink-0 bg-[#FAF5EA] border border-[#C5A059]/50 rounded-md px-3 py-2 space-y-1.5">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="font-pixel text-xs sm:text-sm font-bold text-[#1E3A2B] break-words">
-                  {activeItem.title}
+                  {titleOf(activeItem, activeIndex)}
                 </span>
                 <span className="font-retro-jp text-[10px] text-[#8C7A68] whitespace-nowrap shrink-0">
                   {activeIndex + 1} / {filtered.length}
-                  {activeItem.bytes ? ` · PNG ${formatBytes(activeItem.bytes)}` : ''}
+                  {activeItem.width && activeItem.height
+                    ? ` · ${activeItem.width}×${activeItem.height}`
+                    : ''}
+                  {activeItem.bytes ? ` · ${formatBytes(activeItem.bytes)}` : ''}
                 </span>
               </div>
               {activeItem.note && (
@@ -412,7 +444,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
                   disabled={downloading === activeItem.file}
                   className="flex-1 px-2 py-1.5 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-pixel text-[11px] font-bold rounded-xs cursor-pointer enabled:hover:bg-[#2B5E4A] disabled:opacity-60 disabled:cursor-wait"
                 >
-                  {downloading === activeItem.file ? '取图中…' : '⬇ 下载原图 PNG'}
+                  {downloading === activeItem.file ? '取图中…' : '⬇ 下载原图'}
                 </button>
                 <button
                   type="button"
