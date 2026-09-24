@@ -30,7 +30,8 @@ export const CardPatternOverlay: React.FC<CardPatternOverlayProps> = ({
         opacity,
         mixBlendMode: mode,
         clipPath: clipPath || undefined,
-        filter: 'sepia(0.18) contrast(1.04) brightness(1.02)',
+        backfaceVisibility: 'hidden',
+        WebkitBackfaceVisibility: 'hidden',
         ...style,
       }}
     />

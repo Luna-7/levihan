@@ -159,6 +159,7 @@ const GoodsCard: React.FC<{
   return (
     <div
       className="relative overflow-hidden bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-2 sm:p-2.5 flex flex-col transition-all hover:shadow-md group select-none"
+      style={{ contain: 'layout style paint' }}
       onMouseEnter={() => soundManager.playCardHover()}
     >
       <CardPatternOverlay opacity={0.08} mode="multiply" />

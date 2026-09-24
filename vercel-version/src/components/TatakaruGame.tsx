@@ -488,8 +488,10 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
                   setIsLoading(false);
                   setIframeError('游戏加载失败，请检查网络连接或稍后重试');
                 }}
-                allow="autoplay"
-                className="border-0 bg-[#07140E] block"
+                allow="autoplay; vibrator"
+                className={`border-0 bg-[#07140E] block transition-opacity duration-200 ${
+                  isLoading || iframeError ? 'opacity-0 absolute pointer-events-none' : 'opacity-100'
+                }`}
                 style={{
                   aspectRatio: '9 / 16',
                   height: 'auto',
@@ -497,7 +499,6 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
                     ? 'min(100vw, calc((var(--app-h, 100dvh) - 38px) * 9 / 16))'
                     : 'min(calc(100vw - 8px), calc((var(--app-h, 100dvh) - 104px) * 9 / 16), 560px)',
                   maxHeight: isFullscreen ? 'calc(var(--app-h, 100dvh) - 38px)' : 'calc(var(--app-h, 100dvh) - 104px)',
-                  display: isLoading || iframeError ? 'none' : 'block',
                 }}
               />
             </>

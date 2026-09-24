@@ -67,6 +67,8 @@ class SoundManager {
     return IS_IOS_WEBKIT && this.isBgmActive;
   }
 
+  private isUnlocked: boolean = false;
+
   constructor() {
     this.initAudioElement();
   }
@@ -77,12 +79,29 @@ class SoundManager {
       // Primary track: Bauklötze from <base>/assets/bauklotze.mp3（跟随部署子路径）
       this.bgmAudio = new Audio();
       this.bgmAudio.src = `${import.meta.env.BASE_URL}assets/bauklotze.mp3`;
-      // 首次有效移动才真正拉取并解码整首音乐，避免打开游戏就占用 iOS 媒体内存。
-      this.bgmAudio.preload = 'metadata';
+      this.bgmAudio.preload = 'auto';
 
       this.bgmAudio.addEventListener('loadedmetadata', () => {
         if (this.bgmAudio && !isNaN(this.bgmAudio.duration) && this.bgmAudio.duration > 0) {
           this.currentDuration = Math.round(this.bgmAudio.duration);
+        }
+      });
+
+      // iOS WebKit 全屏触摸监听：任意手势事件立刻静默预热解锁 iOS 音频硬件
+      const handleFirstInteraction = () => {
+        this.unlockAudio();
+      };
+      const interactionEvents = ['touchstart', 'touchend', 'pointerdown', 'mousedown', 'click', 'keydown'];
+      interactionEvents.forEach((evt) => {
+        window.addEventListener(evt, handleFirstInteraction, { capture: true, passive: true });
+      });
+
+      // 页面切回前台（iOS 从后台恢复）自动激活 WebAudioContext
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && this.audioCtx && !this.isMuted) {
+          if (this.audioCtx.state === 'suspended' || (this.audioCtx.state as string) === 'interrupted') {
+            void this.audioCtx.resume();
+          }
         }
       });
     } catch {
@@ -90,10 +109,80 @@ class SoundManager {
     }
   }
 
+  // 播放 1 帧无声音频 Buffer 彻底激活 iOS 系统的 AudioUnit 播放通道
+  private playSilentBuffer(ctx: AudioContext): void {
+    try {
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
+   * iOS WebKit 媒体解锁预热：
+   * 用户在页面上的任意首次点击/触摸（如选择难度、触摸棋盘、点击重开）都会调用此函数。
+   * 这会解除 iOS 对 HTML5 Audio 和 Web Audio API 的播放限制，并预先触发 MP3 缓冲，
+   * 确保用户第 1 次移动棋子时音乐能秒响（毫无延迟）。
+   */
+  public unlockAudio(): void {
+    if (typeof window === 'undefined') return;
+
+    // 1. Web Audio Context 激活与解锁
+    const ctx = this.getAudioContext();
+    if (ctx) {
+      if (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted') {
+        void ctx.resume().then(() => {
+          if (ctx.state === 'running') {
+            this.playSilentBuffer(ctx);
+          }
+        }).catch(() => {});
+      } else if (ctx.state === 'running') {
+        this.playSilentBuffer(ctx);
+      }
+    }
+
+    if (this.isUnlocked) return;
+    this.isUnlocked = true;
+
+    // 2. HTML5 Audio 预热 (iOS 允许在用户手势回调里显式 load() 或触发预载)
+    if (this.bgmAudio) {
+      this.bgmAudio.preload = 'auto';
+      if (this.bgmAudio.paused) {
+        try {
+          this.bgmAudio.load();
+          const p = this.bgmAudio.play();
+          if (p !== undefined) {
+            p.then(() => {
+              if (!this.isBgmPlaying) {
+                this.bgmAudio?.pause();
+                if (this.bgmAudio) this.bgmAudio.currentTime = 0;
+              }
+            }).catch(() => {
+              // ignore
+            });
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
   private getAudioContext(): AudioContext {
     if (!this.audioCtx) {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.audioCtx = new AudioCtx();
+
+      // 监听 iOS WebAudio 状态转换（包含被中断 interrupted 或挂起 suspended）
+      this.audioCtx.onstatechange = () => {
+        if (this.audioCtx && (this.audioCtx.state === 'suspended' || (this.audioCtx.state as string) === 'interrupted') && !this.isMuted) {
+          void this.audioCtx.resume();
+        }
+      };
 
       // SFX 总线：GainNode 抬音量 → 限幅器兜峰值 → 输出
       this.sfxGain = this.audioCtx.createGain();
@@ -111,8 +200,8 @@ class SoundManager {
       this.sfxGain.connect(this.sfxLimiter);
       this.sfxLimiter.connect(this.audioCtx.destination);
     }
-    if (this.audioCtx.state === 'suspended') {
-      this.audioCtx.resume();
+    if (this.audioCtx.state === 'suspended' || (this.audioCtx.state as string) === 'interrupted') {
+      void this.audioCtx.resume().catch(() => {});
     }
     return this.audioCtx;
   }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 const Analytics = () => null;
 import { RetroPixelFrame } from './components/RetroPixelFrame';
 import { ImmersiveGameHome } from './components/ImmersiveGameHome';
@@ -128,6 +128,19 @@ export default function App() {
   // 保持已访问分区的挂载（同时预先挂载与「兵团驻地」相邻的「巨树餐厅」），
   // 杜绝滑动或切页时出现空白、二次重载或 DOM 闪烁
   const [visitedTabs, setVisitedTabs] = useState<Set<NavigationTab>>(() => new Set([activeTab, 'resources']));
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const prevTabRef = useRef(activeTab);
+
+  useEffect(() => {
+    if (prevTabRef.current !== activeTab) {
+      prevTabRef.current = activeTab;
+      setIsTransitioning(true);
+      const timer = window.setTimeout(() => {
+        setIsTransitioning(false);
+      }, 380);
+      return () => window.clearTimeout(timer);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     setVisitedTabs((prev) => {
@@ -317,7 +330,11 @@ export default function App() {
         <div
           className="flex w-[400%] h-full transition-transform duration-350 ease-out"
           style={{
-            transform: `translateX(-${activeIndex * 25}%)`,
+            transform: `translate3d(-${activeIndex * 25}%, 0, 0)`,
+            WebkitTransform: `translate3d(-${activeIndex * 25}%, 0, 0)`,
+            willChange: isTransitioning ? 'transform' : 'auto',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
           }}
         >
           {/* VIEW 1: 兵团驻地大厅 (完全固定，无滚轮) */}
@@ -325,6 +342,10 @@ export default function App() {
             className={`w-1/4 shrink-0 h-full overflow-hidden transition-opacity duration-300 ${
               activeTab === 'home' ? 'opacity-100' : 'opacity-85 pointer-events-none'
             }`}
+            style={{
+              visibility: isTransitioning || activeTab === 'home' ? 'visible' : 'hidden',
+              contain: activeTab === 'home' ? 'none' : 'strict',
+            }}
             aria-hidden={activeTab !== 'home'}
           >
             {isMounted('home') && <ImmersiveGameHome
@@ -341,6 +362,10 @@ export default function App() {
             className={`w-1/4 shrink-0 h-full overflow-hidden transition-opacity duration-300 ${
               activeTab === 'resources' ? 'opacity-100' : 'opacity-85 pointer-events-none'
             }`}
+            style={{
+              visibility: isTransitioning || activeTab === 'resources' ? 'visible' : 'hidden',
+              contain: activeTab === 'resources' ? 'none' : 'strict',
+            }}
             aria-hidden={activeTab !== 'resources'}
           >
             {isMounted('resources') && <GameStageLayout
@@ -363,6 +388,10 @@ export default function App() {
             className={`w-1/4 shrink-0 h-full overflow-hidden transition-opacity duration-300 ${
               activeTab === 'doujinshi' ? 'opacity-100' : 'opacity-85 pointer-events-none'
             }`}
+            style={{
+              visibility: isTransitioning || activeTab === 'doujinshi' ? 'visible' : 'hidden',
+              contain: activeTab === 'doujinshi' ? 'none' : 'strict',
+            }}
             aria-hidden={activeTab !== 'doujinshi'}
           >
             {isMounted('doujinshi') && <Suspense fallback={<TeaPartyLoadingSkeleton />}><RestaurantForum
@@ -376,6 +405,10 @@ export default function App() {
             className={`w-1/4 shrink-0 h-full overflow-hidden transition-opacity duration-300 ${
               activeTab === 'dispatch' ? 'opacity-100' : 'opacity-85 pointer-events-none'
             }`}
+            style={{
+              visibility: isTransitioning || activeTab === 'dispatch' ? 'visible' : 'hidden',
+              contain: activeTab === 'dispatch' ? 'none' : 'strict',
+            }}
             aria-hidden={activeTab !== 'dispatch'}
           >
             {isMounted('dispatch') && <GameStageLayout

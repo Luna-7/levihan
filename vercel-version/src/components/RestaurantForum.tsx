@@ -195,7 +195,7 @@ const seedPosts: ForumPost[] = [
     category: 'roleplay',
     author: '利威尔',
     characterName: '利威尔',
-    characterImage: '/images/characters/levi_tea.jpg',
+    characterImage: spriteRef('char-levi'),
     title: '关于红茶温度与调查报告',
     body: '“喂，四眼，手稿上的墨水又蹭到桌布上了。先去把手洗干净，红茶要是凉了就毫无意义。桌上的发光晶体样本我已经用防潮盒封好了，别用你那沾满泥巴的手去乱碰。”',
     potatoes: 48,
@@ -205,7 +205,7 @@ const seedPosts: ForumPost[] = [
         id: 'c-rp-1',
         author: '韩吉',
         characterName: '韩吉',
-        characterAvatar: '/images/characters/hange_angel.jpg',
+        characterAvatar: spriteRef('char-hange-head'),
         isHost: false,
         body: '“诶——利威尔！那可是我花了一整天才从旧本部后山挖出来的共鸣矿石！怎么能算泥巴呢！不过……今天的红茶真好喝，加了佛手柑吗？”',
         createdAt: '10分钟前',
@@ -215,7 +215,7 @@ const seedPosts: ForumPost[] = [
         id: 'c-rp-1-reply',
         author: '利威尔',
         characterName: '利威尔',
-        characterAvatar: '/images/characters/levi_tea.jpg',
+        characterAvatar: spriteRef('char-levi-head'),
         isHost: true,
         body: '“啧，谁允许你擅自换话题了。把手洗干净之前不准碰茶杯。”',
         createdAt: '6分钟前',
@@ -228,7 +228,7 @@ const seedPosts: ForumPost[] = [
     category: 'roleplay',
     author: '韩吉',
     characterName: '韩吉',
-    characterImage: '/images/characters/hange_angel.jpg',
+    characterImage: spriteRef('char-hange'),
     title: '夜巡归来的全新灵感！',
     body: '“大家快看我手里的羽毛笔！今晚在巨树森林巡逻时，我发现风向和热气流的流动有非常奇妙的规律！只要调整立体机动装置的气阀喷射角度，说不定能在空中滑翔更久！利威尔，明天要不要和我去实地测试看看？”',
     potatoes: 56,
@@ -1481,7 +1481,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             <button
               type="button"
               onClick={() => handleCategoryTabClick('all')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap shadow-2xs shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap shadow-2xs shrink-0 ${
                 activeCategory === 'all'
                   ? 'bg-[#1E4334] text-[#F9E79F] border border-[#163327]'
                   : 'bg-[#EFE5D2] text-[#614E3C] border border-[#C5B295] hover:bg-[#E2D4BC]'
@@ -1494,15 +1494,15 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             <button
               type="button"
               onClick={() => handleCategoryTabClick('chat')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap shadow-2xs shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shadow-2xs shrink-0 ${
                 activeCategory === 'chat'
                   ? 'bg-[#1E4334] text-[#F9E79F] border border-[#163327]'
                   : 'bg-[#EFE5D2] text-[#614E3C] border border-[#C5B295] hover:bg-[#E2D4BC]'
               }`}
             >
-              <MessageCircle size={11} />
+              <MessageCircle size={13} />
               <span>闲聊茶歇</span>
-              <span className="text-[10px] px-1 rounded-full bg-black/15 font-mono">
+              <span className="text-xs px-1.5 py-0.2 rounded-full bg-black/15 font-mono">
                 {posts.filter((p) => (p.category || 'chat') === 'chat').length}
               </span>
             </button>
@@ -1511,15 +1511,15 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             <button
               type="button"
               onClick={() => handleCategoryTabClick('links')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap shadow-2xs shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shadow-2xs shrink-0 ${
                 activeCategory === 'links'
                   ? 'bg-[#B7791F] text-[#FFFEEF] border border-[#9A6519]'
                   : 'bg-[#EFE5D2] text-[#614E3C] border border-[#C5B295] hover:bg-[#E2D4BC]'
               }`}
             >
-              <LinkIcon size={11} />
+              <LinkIcon size={13} />
               <span>安利墙</span>
-              <span className="text-[10px] px-1 rounded-full bg-black/15 font-mono">
+              <span className="text-xs px-1.5 py-0.2 rounded-full bg-black/15 font-mono">
                 {posts.filter((p) => p.category === 'links').length}
               </span>
             </button>
@@ -1528,15 +1528,15 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             <button
               type="button"
               onClick={() => handleCategoryTabClick('roleplay')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap shadow-2xs shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shadow-2xs shrink-0 ${
                 activeCategory === 'roleplay'
                   ? 'bg-[#3B0764] text-[#F3E8FF] border border-[#2E1065]'
                   : 'bg-[#EFE5D2] text-[#614E3C] border border-[#C5B295] hover:bg-[#E2D4BC]'
               }`}
             >
-              <Sparkles size={11} />
+              <Sparkles size={13} />
               <span>角色拟音</span>
-              <span className="text-[10px] px-1 rounded-full bg-black/15 font-mono">
+              <span className="text-xs px-1.5 py-0.2 rounded-full bg-black/15 font-mono">
                 {posts.filter((p) => p.category === 'roleplay').length}
               </span>
             </button>
@@ -1545,15 +1545,15 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             <button
               type="button"
               onClick={() => handleCategoryTabClick('relay')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap shadow-2xs shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shadow-2xs shrink-0 ${
                 activeCategory === 'relay'
                   ? 'bg-[#B45309] text-white border border-[#92400E]'
                   : 'bg-[#EFE5D2] text-[#614E3C] border border-[#C5B295] hover:bg-[#E2D4BC]'
               }`}
             >
-              <Feather size={11} />
+              <Feather size={13} />
               <span>故事接龙</span>
-              <span className="text-[10px] px-1 rounded-full bg-black/15 font-mono">
+              <span className="text-xs px-1.5 py-0.2 rounded-full bg-black/15 font-mono">
                 {posts.filter((p) => p.category === 'relay').length}
               </span>
             </button>
@@ -1562,7 +1562,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             <button
               type="button"
               onClick={() => handleCategoryTabClick('market')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap shadow-2xs shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap shadow-2xs shrink-0 ${
                 activeCategory === 'market'
                   ? 'bg-[#8C5828] text-[#FDF8EE] border border-[#643D16]'
                   : 'bg-[#EFE5D2] text-[#614E3C] border border-[#C5B295] hover:bg-[#E2D4BC]'
@@ -1570,7 +1570,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             >
               <span>🥔</span>
               <span>土豆市集</span>
-              <span className="text-[10px] px-1 rounded-full bg-black/15 font-mono">
+              <span className="text-xs px-1.5 py-0.2 rounded-full bg-black/15 font-mono">
                 {marketItems.length}
               </span>
             </button>
@@ -1578,7 +1578,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
           {/* 右侧手写印记与发布按钮 */}
           <div className="flex items-center gap-2 shrink-0">
-            <div className="hidden sm:flex flex-col text-right font-serif text-[9px] text-[#8C6D4F]/80 italic leading-tight select-none pointer-events-none">
+            <div className="hidden sm:flex flex-col text-right font-serif text-[11px] text-[#8C6D4F]/80 italic leading-tight select-none pointer-events-none">
               <span>For the stories</span>
               <span>For a better tomorrow.</span>
             </div>
@@ -1596,28 +1596,28 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                 setForumImages([]);
                 setShowComposer(true);
               }}
-              className="px-3.5 py-1 rounded-full bg-[#1E4334] hover:bg-[#2C5C46] text-[#F9E79F] border border-[#163327] text-xs font-bold cursor-pointer flex items-center gap-1 active:scale-95 shadow-xs"
+              className="px-4 py-1.5 rounded-full bg-[#1E4334] hover:bg-[#2C5C46] text-[#F9E79F] border border-[#163327] text-xs sm:text-sm font-bold cursor-pointer flex items-center gap-1 active:scale-95 shadow-xs"
             >
-              <Plus size={13} /> <span>发布</span>
+              <Plus size={15} /> <span>发布</span>
             </button>
           </div>
         </div>
       </div>
 
-        <div className="max-w-3xl mx-auto space-y-3.5 pt-3 px-2 sm:px-4">
+        <div className="max-w-3xl mx-auto space-y-4 pt-3 px-2 sm:px-4">
 
           {/* ==================== 🥔 土豆市集专用视图 (当选中土豆市集分类时) ==================== */}
           {activeCategory === 'market' && (
-            <div className="space-y-3.5">
+            <div className="space-y-4">
               {/* 1. 交易风险防范与安全警示说明 */}
-              <div className="bg-[#FAF1D8] border-2 border-[#D97706] rounded-xl p-3 sm:p-3.5 text-[#78350F] shadow-xs relative overflow-hidden">
-                <div className="flex items-start gap-2.5">
-                  <ShieldAlert className="w-5 h-5 text-[#D97706] shrink-0 mt-0.5" />
-                  <div className="text-xs space-y-1">
-                    <h4 className="font-serif-title font-black text-xs sm:text-sm text-[#92400E]">
+              <div className="bg-[#FAF1D8] border-2 border-[#D97706] rounded-xl p-3.5 sm:p-4 text-[#78350F] shadow-xs relative overflow-hidden">
+                <div className="flex items-start gap-3">
+                  <ShieldAlert className="w-6 h-6 text-[#D97706] shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="font-serif-title font-black text-sm sm:text-base text-[#92400E]">
                       ⚠️ 交易风险防范与安全警示（购买前必读）
                     </h4>
-                    <p className="leading-relaxed text-[11px] text-[#78350F]/90">
+                    <p className="leading-relaxed text-xs sm:text-sm text-[#78350F]/90">
                       本茶会市集仅作为同好信息互助展示板块，所有物资流转与支付请务必在正规第三方担保平台（如闲鱼/微店/小红书等）内完成。切勿脱离担保平台私下微信或支付宝直接转账，谨防受骗！
                     </p>
                   </div>
@@ -1625,7 +1625,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
               </div>
 
               {/* 2. 搜索栏与快捷发布 */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-[#FAF3E3] p-2 sm:p-2.5 rounded-xl border border-[#C5B295] shadow-xs">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-[#FAF3E3] p-2.5 sm:p-3 rounded-xl border border-[#C5B295] shadow-xs">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8C6D4F]" />
                   <input
@@ -1633,7 +1633,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                     placeholder="搜索市集商品名称、描述、发布人..."
                     value={marketSearchQuery}
                     onChange={(e) => setMarketSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-white/90 border border-[#D5C19A] rounded-lg focus:outline-none focus:border-[#8C5828] text-[#2C2016]"
+                    className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm bg-white/90 border border-[#D5C19A] rounded-lg focus:outline-none focus:border-[#8C5828] text-[#2C2016]"
                   />
                   {marketSearchQuery && (
                     <button
@@ -1641,7 +1641,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       onClick={() => setMarketSearchQuery('')}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#8C6D4F] hover:text-[#2C2016]"
                     >
-                      <X size={13} />
+                      <X size={15} />
                     </button>
                   )}
                 </div>
@@ -1653,15 +1653,15 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                     setComposeCategory('market');
                     setShowMarketComposer(true);
                   }}
-                  className="px-3.5 py-1.5 bg-[#8C5828] hover:bg-[#72451E] text-[#FFFDF8] rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-transform active:scale-95 shrink-0"
+                  className="px-4 py-2 bg-[#8C5828] hover:bg-[#72451E] text-[#FFFDF8] rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-transform active:scale-95 shrink-0"
                 >
-                  <PlusCircle size={14} />
+                  <PlusCircle size={16} />
                   <span>发布市集物资</span>
                 </button>
               </div>
 
               {/* 3. 市集卡片列表 */}
-              <div className="space-y-3">
+              <div className="space-y-3.5">
                 {filteredMarketItems.map((item) => (
                   <article
                     key={item.id}
@@ -1683,10 +1683,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                           referrerPolicy="no-referrer"
                         />
-                        <div className="absolute top-2 left-2 bg-[#8C5828] text-[#FAF5EA] font-pixel text-[10px] font-bold px-2 py-0.5 rounded shadow-xs border border-[#C5A059]/40">
+                        <div className="absolute top-2 left-2 bg-[#8C5828] text-[#FAF5EA] font-pixel text-xs font-bold px-2 py-0.5 rounded shadow-xs border border-[#C5A059]/40">
                           🥔 市集物资
                         </div>
-                        <div className="absolute bottom-2 right-2 bg-black/75 backdrop-blur-xs text-[#FDE68A] font-bold text-xs px-2 py-0.5 rounded shadow-xs">
+                        <div className="absolute bottom-2 right-2 bg-black/75 backdrop-blur-xs text-[#FDE68A] font-bold text-xs sm:text-sm px-2 py-0.5 rounded shadow-xs">
                           ¥{item.price}
                         </div>
                       </div>
@@ -1695,7 +1695,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch">
                         <div className="space-y-1.5">
                           <div className="flex items-start justify-between gap-2">
-                            <h3 className="font-serif-title text-base sm:text-lg font-black text-[#2D1F13] group-hover:text-[#8C5828] transition-colors line-clamp-2">
+                            <h3 className="font-serif-title text-base sm:text-xl font-black text-[#2D1F13] group-hover:text-[#8C5828] transition-colors line-clamp-2">
                               {item.title}
                             </h3>
                             <button
@@ -1707,20 +1707,20 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                               className="text-[#8C7A65] hover:text-[#DC2626] p-1 rounded transition-colors shrink-0"
                               title="下架该物资"
                             >
-                              <Trash2 size={15} />
+                              <Trash2 size={16} />
                             </button>
                           </div>
 
-                          <p className="text-xs sm:text-sm text-[#614E3C] leading-relaxed line-clamp-2 sm:line-clamp-3">
+                          <p className="text-xs sm:text-sm md:text-base text-[#614E3C] leading-relaxed line-clamp-2 sm:line-clamp-3">
                             {item.description}
                           </p>
                         </div>
 
-                        <div className="pt-2.5 mt-2 border-t border-[#D8C7AA] flex items-center justify-between text-xs text-[#8C6D4F]">
+                        <div className="pt-2.5 mt-2 border-t border-[#D8C7AA] flex items-center justify-between text-xs sm:text-sm text-[#8C6D4F]">
                           <div className="flex items-center gap-1.5">
                             <span className="font-bold text-[#3B2818]">发布人:</span>
                             <span className="font-medium">{item.nickname}</span>
-                            <span className="text-[10px] text-[#A89078] ml-1">{item.date}</span>
+                            <span className="text-xs text-[#A89078] ml-1">{item.date}</span>
                           </div>
 
                           <div className="flex items-center gap-2">
@@ -1732,14 +1732,14 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                                 setShareTarget({ type: 'market', marketItem: item });
                                 setIsShareModalOpen(true);
                               }}
-                              className="px-2 py-0.5 rounded-md bg-[#EFE5D2] hover:bg-[#E2D4BC] border border-[#C5B295] text-[#8C6D4F] hover:text-[#1E4334] text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                              className="px-2.5 py-1 rounded-md bg-[#EFE5D2] hover:bg-[#E2D4BC] border border-[#C5B295] text-[#8C6D4F] hover:text-[#1E4334] text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                               title="分享此市集物资"
                             >
-                              <Share2 size={11} />
+                              <Share2 size={13} />
                               <span>分享</span>
                             </button>
 
-                            <span className="text-xs font-bold text-[#8C5828] group-hover:underline flex items-center gap-1">
+                            <span className="text-xs sm:text-sm font-bold text-[#8C5828] group-hover:underline flex items-center gap-1">
                               <span>详情</span>
                               <span>➔</span>
                             </span>
@@ -1793,24 +1793,24 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
                   {/* 顶栏: 标签胶囊 + 认领状态 + 右侧合订本 */}
                   <div className="relative z-10 flex items-center justify-between gap-2 pb-2.5 border-b border-[#D8C7AA]">
-                    <div className="flex items-center gap-1.5 text-xs flex-wrap">
-                      <span className="px-2.5 py-0.5 rounded-full bg-[#B45309] text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs">
-                        <Feather size={10} /> 故事接龙
+                    <div className="flex items-center gap-1.5 text-xs sm:text-sm flex-wrap">
+                      <span className="px-3 py-1 rounded-full bg-[#B45309] text-white font-bold text-xs flex items-center gap-1 shadow-2xs">
+                        <Feather size={12} /> 故事接龙
                       </span>
 
                       {isClaimActive ? (
                         isMyClaim ? (
-                          <span className="px-2.5 py-0.5 rounded-full bg-[#1E4334] text-[#F9E79F] font-bold text-[10px] flex items-center gap-1">
-                            <Feather size={10} /> 执笔中 · {formatTimeRemaining(claim.expiresAt, now)}
+                          <span className="px-3 py-1 rounded-full bg-[#1E4334] text-[#F9E79F] font-bold text-xs flex items-center gap-1">
+                            <Feather size={12} /> 执笔中 · {formatTimeRemaining(claim.expiresAt, now)}
                           </span>
                         ) : (
-                          <span className="px-2.5 py-0.5 rounded-full bg-[#EFE3CD] text-[#8C6D4F] border border-[#C5B295] font-bold text-[10px] flex items-center gap-1">
-                            <Lock size={10} /> {claim.claimedBy} · {formatTimeRemaining(claim.expiresAt, now)}
+                          <span className="px-3 py-1 rounded-full bg-[#EFE3CD] text-[#8C6D4F] border border-[#C5B295] font-bold text-xs flex items-center gap-1">
+                            <Lock size={12} /> {claim.claimedBy} · {formatTimeRemaining(claim.expiresAt, now)}
                           </span>
                         )
                       ) : (
-                        <span className="px-2.5 py-0.5 rounded-full bg-[#EFE3CD] text-[#8C6D4F] border border-[#C5B295] font-bold text-[10px] flex items-center gap-1">
-                          <Unlock size={10} /> 可认领第 {nextStepNum} 棒
+                        <span className="px-3 py-1 rounded-full bg-[#EFE3CD] text-[#8C6D4F] border border-[#C5B295] font-bold text-xs flex items-center gap-1">
+                          <Unlock size={12} /> 可认领第 {nextStepNum} 棒
                         </span>
                       )}
                     </div>
@@ -1823,22 +1823,22 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                         const compiledNovel = compileRelayPostToNovel(post);
                         jumpToCompiledNovelInDoujinArchive(compiledNovel, false);
                       }}
-                      className="px-2.5 py-1 rounded-full bg-[#F2E8D5] hover:bg-[#EADCBF] border border-[#B89A74] text-[#614223] text-[11px] font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer shrink-0 shadow-2xs"
+                      className="px-3 py-1 rounded-full bg-[#F2E8D5] hover:bg-[#EADCBF] border border-[#B89A74] text-[#614223] text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shrink-0 shadow-2xs"
                       title="前往粮仓小说本查看合订本卡片"
                     >
-                      <BookOpen size={11} />
+                      <BookOpen size={13} />
                       <span>查看合订本</span>
                     </button>
                   </div>
 
                   {/* 发帖者个人信息 */}
                   <div className="relative z-10 flex items-center gap-2 mt-2.5">
-                    <div className="w-6 h-6 rounded-full bg-[#8C6D4F] text-[#F9E79F] flex items-center justify-center text-xs font-bold border border-[#B89A74] shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-[#8C6D4F] text-[#F9E79F] flex items-center justify-center text-sm font-bold border border-[#B89A74] shrink-0">
                       ✍️
                     </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-[#3B2818] font-bold">{post.author}</span>
-                      <span className="text-[#8C7A65] text-[10px]">{fmtTime(post.createdAt)}</span>
+                    <div className="flex items-center gap-2 text-xs sm:text-sm">
+                      <span className="text-[#3B2818] font-bold text-sm sm:text-base">{post.author}</span>
+                      <span className="text-[#8C7A65] text-xs">{fmtTime(post.createdAt)}</span>
                       {currentUid && post.uid === currentUid && (
                         <>
                           <button
@@ -1847,7 +1847,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                             className="ml-1 text-[#8C7A65] hover:text-[#235340] p-0.5 rounded transition-colors"
                             title="编辑我发布的接龙"
                           >
-                            <PenLine size={12} />
+                            <PenLine size={13} />
                           </button>
                           <button
                             type="button"
@@ -1855,7 +1855,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                             className="text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
                             title="删除我发布的帖子"
                           >
-                            <Trash2 size={12} />
+                            <Trash2 size={13} />
                           </button>
                         </>
                       )}
@@ -1863,32 +1863,32 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                   </div>
 
                   {/* 标题 */}
-                  <h2 className="relative z-10 mt-2 text-base sm:text-lg font-black leading-snug text-[#2C2016] group-hover:text-[#8C6D4F] transition-colors font-serif-title">
+                  <h2 className="relative z-10 mt-2 text-base sm:text-xl font-black leading-snug text-[#2C2016] group-hover:text-[#8C6D4F] transition-colors font-serif-title">
                     {post.title}
                   </h2>
 
                   {/* 灵感题设 (参考图黄色浅网格题设框) */}
                   {post.prompt && (
-                    <div className="relative z-10 mt-2 bg-[#F5ECDA] border border-[#D5C19A] p-2.5 rounded-xl flex items-start gap-2 text-xs text-[#633F17]">
-                      <span className="text-sm shrink-0">📖</span>
-                      <p className="font-serif-title text-[#3B2818] leading-relaxed">{post.prompt}</p>
+                    <div className="relative z-10 mt-2 bg-[#F5ECDA] border border-[#D5C19A] p-3 rounded-xl flex items-start gap-2 text-xs sm:text-sm text-[#633F17]">
+                      <span className="text-base shrink-0">📖</span>
+                      <p className="font-serif-title text-[#3B2818] leading-relaxed text-xs sm:text-sm md:text-base">{post.prompt}</p>
                     </div>
                   )}
 
                   {/* 首楼开篇正文 */}
-                  <div className="relative z-10 mt-2.5 p-3 bg-[#F3E9D2]/80 border border-[#DECDB3] rounded-xl text-xs sm:text-sm leading-relaxed text-[#3B2818] font-serif-title space-y-1">
-                    <div className="flex items-center justify-between text-[10px] font-bold text-[#8C6D4F] border-b border-[#DECDB3]/60 pb-1 mb-1">
+                  <div className="relative z-10 mt-2.5 p-3.5 bg-[#F3E9D2]/80 border border-[#DECDB3] rounded-xl text-sm sm:text-base md:text-lg leading-relaxed text-[#3B2818] font-serif-title space-y-1.5">
+                    <div className="flex items-center justify-between text-xs font-bold text-[#8C6D4F] border-b border-[#DECDB3]/60 pb-1.5 mb-1">
                       <div className="flex items-center gap-1.5">
                         <span>#1</span>
-                        <span>{post.author}</span>
+                        <span className="text-sm font-bold">{post.author}</span>
                       </div>
-                      <span className="font-sans font-normal text-[#8C7A65]">{post.body.length}字</span>
+                      <span className="font-sans font-normal text-[#8C7A65] text-xs">{post.body.length}字</span>
                     </div>
-                    <p className="indent-2 whitespace-pre-wrap">{post.body}</p>
+                    <p className="indent-2 whitespace-pre-wrap leading-relaxed">{post.body}</p>
                   </div>
 
                   {/* 卡片底栏 (参考图 蛋糕按钮 + 棒数 + 🔗 分享 + 展开指示) */}
-                  <div className="relative z-10 mt-3 pt-2.5 border-t border-[#D8C7AA] flex items-center justify-between gap-2">
+                  <div className="relative z-10 mt-3.5 pt-2.5 border-t border-[#D8C7AA] flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -1896,18 +1896,18 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           e.stopPropagation();
                           givePotato(post.id);
                         }}
-                        className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-2xs ${
+                        className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-2xs ${
                           post.potatoGiven
                             ? 'bg-[#8C6D4F] text-white'
                             : 'bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#3B2818]'
                         }`}
                       >
-                        <span className="text-sm">🍰</span>
+                        <span className="text-base">🍰</span>
                         <span>{post.potatoes}</span>
                       </button>
 
-                      <span className="px-3 py-1 rounded-full bg-[#EFE3CD] border border-[#C5B295] text-[#8C6D4F] text-xs font-bold flex items-center gap-1 shadow-2xs">
-                        <Feather size={11} />
+                      <span className="px-3.5 py-1.5 rounded-full bg-[#EFE3CD] border border-[#C5B295] text-[#8C6D4F] text-xs sm:text-sm font-bold flex items-center gap-1 shadow-2xs">
+                        <Feather size={13} />
                         <span>{steps.length + 1} 棒</span>
                       </span>
 
@@ -1919,16 +1919,16 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           setShareTarget({ type: 'post', post });
                           setIsShareModalOpen(true);
                         }}
-                        className="px-2.5 py-1 rounded-full bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#8C6D4F] hover:text-[#1E4334] text-xs font-bold flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-2xs"
+                        className="px-3 py-1.5 rounded-full bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#8C6D4F] hover:text-[#1E4334] text-xs sm:text-sm font-bold flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-2xs"
                         title="分享接龙故事"
                       >
-                        <Share2 size={11} />
+                        <Share2 size={13} />
                         <span>分享</span>
                       </button>
                     </div>
 
                     <div className="text-[#8C6D4F] flex items-center p-1">
-                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </div>
                   </div>
 
@@ -1936,38 +1936,38 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                   {isExpanded && (
                     <section
                       onClick={(e) => e.stopPropagation()}
-                      className="relative z-10 mt-3 pt-2 space-y-2.5 cursor-default border-t border-[#D8C7AA]"
+                      className="relative z-10 mt-3 pt-2.5 space-y-3 cursor-default border-t border-[#D8C7AA]"
                     >
                       {/* 后续楼层 */}
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         {steps.map((comment, index) => {
                           const isCommentHost = comment.isHost || comment.author === post.author;
                           return (
                             <div
                               key={comment.id}
-                              className="pt-2 pb-2.5 border-b border-dashed border-[#D8C7AA] last:border-b-0 space-y-1 text-xs"
+                              className="pt-2.5 pb-3 border-b border-dashed border-[#D8C7AA] last:border-b-0 space-y-1.5 text-xs sm:text-sm"
                             >
-                              <div className="flex items-center justify-between text-[11px] text-[#715431]">
+                              <div className="flex items-center justify-between text-xs sm:text-sm text-[#715431]">
                                 <div className="flex items-center gap-1.5 font-bold">
-                                  <span className="text-[#8C6D4F] font-mono select-none">↳</span>
+                                  <span className="text-[#8C6D4F] font-mono select-none text-sm">↳</span>
                                   <span className="text-[#8C6D4F]">#{index + 2}</span>
-                                  <span className="text-[#2C2016]">{comment.author}</span>
+                                  <span className="text-[#2C2016] text-sm sm:text-base font-bold">{comment.author}</span>
                                   {isCommentHost && (
-                                    <span className="text-[#8C6D4F] font-bold text-[10px] ml-0.5">
+                                    <span className="text-[#8C6D4F] font-bold text-xs ml-0.5">
                                       楼主
                                     </span>
                                   )}
                                   {comment.diceRoll && (
-                                    <span className="text-[10px] text-[#8C6D4F] font-normal">
+                                    <span className="text-xs text-[#8C6D4F] font-normal">
                                       (🎲 1D100={comment.diceRoll.value})
                                     </span>
                                   )}
                                   {comment.editedAt && (
-                                    <span className="text-[10px] text-[#8C7A65] font-normal">(已编辑)</span>
+                                    <span className="text-xs text-[#8C7A65] font-normal">(已编辑)</span>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
+                                  <span className="text-xs text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
                                   {currentUid && comment.uid === currentUid && (
                                     <>
                                       <button
@@ -1976,7 +1976,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                                         className="text-[#8C7A65] hover:text-[#235340] p-0.5 rounded transition-colors"
                                         title={`编辑第 ${index + 2} 棒`}
                                       >
-                                        <PenLine size={11} />
+                                        <PenLine size={13} />
                                       </button>
                                       <button
                                         type="button"
@@ -1984,14 +1984,14 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                                         className="text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
                                         title="删除我发布的评论"
                                       >
-                                        <Trash2 size={11} />
+                                        <Trash2 size={13} />
                                       </button>
                                     </>
                                   )}
                                 </div>
                               </div>
 
-                              <p className="text-xs sm:text-sm text-[#2C2016] leading-relaxed font-serif-title whitespace-pre-wrap pl-4">
+                              <p className="text-sm sm:text-base md:text-lg text-[#2C2016] leading-relaxed font-serif-title whitespace-pre-wrap pl-4">
                                 {comment.body}
                               </p>
                             </div>
@@ -2001,10 +2001,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
                       {/* 创作台 */}
                       {isMyClaim && (
-                        <div className="bg-[#FAF3E3] p-3 rounded-xl space-y-2 border-2 border-[#8C6D4F]">
-                          <div className="flex items-center justify-between text-xs font-bold text-[#8C6D4F]">
+                        <div className="bg-[#FAF3E3] p-3.5 rounded-xl space-y-2.5 border-2 border-[#8C6D4F]">
+                          <div className="flex items-center justify-between text-xs sm:text-sm font-bold text-[#8C6D4F]">
                             <span className="flex items-center gap-1">
-                              <Feather size={12} /> 第 {claim.relayStep} 棒 (剩 {formatTimeRemaining(claim.expiresAt, now)})
+                              <Feather size={14} /> 第 {claim.relayStep} 棒 (剩 {formatTimeRemaining(claim.expiresAt, now)})
                             </span>
                           </div>
 
@@ -2016,23 +2016,23 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                             }
                             maxLength={5000}
                             placeholder="承接剧情撰写..."
-                            className="w-full p-2.5 rounded-lg text-xs sm:text-sm outline-none bg-white text-[#2C2016] resize-y font-serif-title border border-[#D8C7AA] leading-relaxed"
+                            className="w-full p-3 rounded-lg text-sm sm:text-base outline-none bg-white text-[#2C2016] resize-y font-serif-title border border-[#D8C7AA] leading-relaxed"
                           />
 
-                          <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+                          <div className="flex items-center justify-between gap-2 flex-wrap text-xs sm:text-sm">
                             <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              className={`px-3 py-1 rounded-full text-xs font-bold ${
                                 isWordCountMet ? 'bg-[#1E4334] text-[#F9E79F]' : 'bg-[#EFE3CD] text-[#8C6D4F]'
                               }`}
                             >
                               最少 {RELAY_MIN_WORDS} 字 (已写 {currentDraft.length})
                             </span>
 
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-2">
                               <button
                                 type="button"
                                 onClick={() => handleReleaseQuill(post.id)}
-                                className="px-3 py-1.5 rounded-full text-xs font-bold bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#8C6D4F] cursor-pointer transition-all active:scale-95 shadow-2xs"
+                                className="px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#8C6D4F] cursor-pointer transition-all active:scale-95 shadow-2xs"
                                 title="归还羽毛笔（放弃本次认领）"
                               >
                                 归还
@@ -2040,13 +2040,13 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                               <button
                                 type="button"
                                 onClick={() => addComment(post.id)}
-                                className={`px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-2xs ${
+                                className={`px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-2xs ${
                                   isWordCountMet
                                     ? 'bg-[#8C6D4F] text-white'
                                     : 'bg-[#C5B295] text-white'
                                 }`}
                               >
-                                <Feather size={12} />
+                                <Feather size={14} />
                                 <span>递交第 {claim.relayStep} 棒</span>
                               </button>
                             </div>
@@ -2055,20 +2055,20 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       )}
 
                       {isOtherClaim && (
-                        <div className="bg-[#F5ECDA] p-2.5 rounded-xl text-center text-xs text-[#8C6D4F] font-bold flex items-center justify-center gap-1.5 border border-[#DECDB3]">
-                          <Lock size={12} />
+                        <div className="bg-[#F5ECDA] p-3 rounded-xl text-center text-xs sm:text-sm text-[#8C6D4F] font-bold flex items-center justify-center gap-1.5 border border-[#DECDB3]">
+                          <Lock size={14} />
                           <span>【{claim.claimedBy}】执笔中 · 剩余 {formatTimeRemaining(claim.expiresAt, now)}</span>
                         </div>
                       )}
 
                       {!isClaimActive && (
-                        <div className="text-center pt-1">
+                        <div className="text-center pt-1.5">
                           <button
                             type="button"
                             onClick={() => handleClaimQuill(post.id)}
-                            className="px-4 py-1.5 rounded-full bg-[#8C6D4F] hover:bg-[#72573E] text-white text-xs font-bold inline-flex items-center gap-1.5 active:scale-95 cursor-pointer shadow-2xs"
+                            className="px-4 py-2 rounded-full bg-[#8C6D4F] hover:bg-[#72573E] text-white text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 active:scale-95 cursor-pointer shadow-2xs"
                           >
-                            <Feather size={12} />
+                            <Feather size={14} />
                             <span>认领第 {nextStepNum} 棒 (24h)</span>
                           </button>
                         </div>
@@ -2099,18 +2099,18 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                   <CardPatternOverlay opacity={0.08} mode="multiply" />
 
                   {/* 顶栏: [📌 安利墙] 胶囊 + 平台徽章 + 分享人 + 时间 */}
-                  <div className="relative z-10 flex items-center justify-between gap-2 pb-2 border-b border-[#D8C7AA]">
-                    <div className="flex items-center gap-2 text-xs min-w-0">
-                      <span className="px-2.5 py-0.5 rounded-full bg-[#B7791F] text-[#FFFEEF] font-bold text-[10px] flex items-center gap-1 shadow-2xs shrink-0">
-                        <LinkIcon size={10} /> 安利墙
+                  <div className="relative z-10 flex items-center justify-between gap-2 pb-2.5 border-b border-[#D8C7AA]">
+                    <div className="flex items-center gap-2 text-xs sm:text-sm min-w-0">
+                      <span className="px-3 py-1 rounded-full bg-[#B7791F] text-[#FFFEEF] font-bold text-xs flex items-center gap-1 shadow-2xs shrink-0">
+                        <LinkIcon size={12} /> 安利墙
                       </span>
                       {link && (
-                        <span className="px-2 py-0.5 rounded-full bg-[#EFE5D2] border border-[#C5B295] text-[#614E3C] text-[10px] font-bold shrink-0">
+                        <span className="px-2.5 py-0.5 rounded-full bg-[#EFE5D2] border border-[#C5B295] text-[#614E3C] text-xs font-bold shrink-0">
                           {platformLabel(link.platform)}
                         </span>
                       )}
-                      <span className="text-[#2C2016] font-bold text-xs truncate">{post.author}</span>
-                      <span className="text-[#8C7A65] text-[10px] shrink-0">{fmtTime(post.createdAt)}</span>
+                      <span className="text-[#2C2016] font-bold text-sm truncate">{post.author}</span>
+                      <span className="text-[#8C7A65] text-xs shrink-0">{fmtTime(post.createdAt)}</span>
                       {currentUid && post.uid === currentUid && (
                         <button
                           type="button"
@@ -2118,13 +2118,13 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           className="text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors shrink-0"
                           title="删除我发布的安利"
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={14} />
                         </button>
                       )}
                     </div>
                   </div>
 
-                  <div className="relative z-10 mt-2.5">
+                  <div className="relative z-10 mt-3">
                     {link ? (
                       <LinkShareCard
                         link={link}
@@ -2137,30 +2137,30 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                         }}
                       />
                     ) : (
-                      <div className="p-4 text-center text-[11px] font-retro-jp text-[#8C7A65] bg-[#F3E9D2]/60 rounded-xl">
+                      <div className="p-4 text-center text-xs font-retro-jp text-[#8C7A65] bg-[#F3E9D2]/60 rounded-xl">
                         这条安利缺少链接数据，可能是旧版本发布的。
                       </div>
                     )}
                   </div>
 
                   {/* 底栏: 🍰 蛋糕按键 + 💬 评论数 + 🔗 分享 */}
-                  <div className="relative z-10 mt-3 pt-2.5 border-t border-[#D8C7AA] flex items-center justify-between gap-2">
+                  <div className="relative z-10 mt-3.5 pt-2.5 border-t border-[#D8C7AA] flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); givePotato(post.id); }}
-                        className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-2xs ${
+                        className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-2xs ${
                           post.potatoGiven
                             ? 'bg-[#8C6D4F] text-white'
                             : 'bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#3B2818]'
                         }`}
                       >
-                        <span className="text-sm">🍰</span>
+                        <span className="text-base">🍰</span>
                         <span>{post.potatoes}</span>
                       </button>
 
-                      <span className="px-3 py-1 rounded-full bg-[#EFE3CD] border border-[#C5B295] text-[#8C6D4F] text-xs font-bold flex items-center gap-1 shadow-2xs">
-                        <MessageCircle size={11} />
+                      <span className="px-3.5 py-1.5 rounded-full bg-[#EFE3CD] border border-[#C5B295] text-[#8C6D4F] text-xs sm:text-sm font-bold flex items-center gap-1 shadow-2xs">
+                        <MessageCircle size={13} />
                         <span>{post.comments.length}</span>
                       </span>
 
@@ -2172,43 +2172,43 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           setShareTarget({ type: 'post', post });
                           setIsShareModalOpen(true);
                         }}
-                        className="px-2.5 py-1 rounded-full bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#8C6D4F] hover:text-[#1E4334] text-xs font-bold flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-2xs"
+                        className="px-3 py-1.5 rounded-full bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#8C6D4F] hover:text-[#1E4334] text-xs sm:text-sm font-bold flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-2xs"
                         title="分享这条安利"
                       >
-                        <Share2 size={11} />
+                        <Share2 size={13} />
                         <span>分享</span>
                       </button>
                     </div>
 
                     <div className="text-[#8C6D4F] flex items-center p-1">
-                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </div>
                   </div>
 
-                  {/* 展开区：留言（安利墙白嫖论坛现成的评论区） */}
+                  {/* 展开区：留言 */}
                   {isExpanded && (
                     <section
                       onClick={(e) => e.stopPropagation()}
-                      className="relative z-10 mt-3 pt-2 space-y-2.5 cursor-default border-t border-[#D8C7AA]"
+                      className="relative z-10 mt-3 pt-2.5 space-y-3 cursor-default border-t border-[#D8C7AA]"
                     >
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         {post.comments.map((comment) => {
                           const isCommentHost = comment.isHost || comment.author === post.author;
                           return (
                             <div
                               key={comment.id}
-                              className="pt-2 pb-2.5 border-b border-dashed border-[#D8C7AA] last:border-b-0 space-y-1 text-xs"
+                              className="pt-2.5 pb-3 border-b border-dashed border-[#D8C7AA] last:border-b-0 space-y-1.5 text-xs sm:text-sm"
                             >
-                              <div className="flex items-center justify-between text-[11px] text-[#715431]">
+                              <div className="flex items-center justify-between text-xs sm:text-sm text-[#715431]">
                                 <div className="flex items-center gap-1.5 font-bold">
-                                  <span className="text-[#8C6D4F] font-mono select-none">↳</span>
-                                  <span className="text-[#2C2016]">{comment.author}</span>
+                                  <span className="text-[#8C6D4F] font-mono select-none text-sm">↳</span>
+                                  <span className="text-[#2C2016] text-sm sm:text-base font-bold">{comment.author}</span>
                                   {isCommentHost && (
-                                    <span className="text-[#8C6D4F] font-bold text-[10px] ml-0.5">楼主</span>
+                                    <span className="text-[#8C6D4F] font-bold text-xs ml-0.5">楼主</span>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
+                                  <span className="text-xs text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
                                   {currentUid && comment.uid === currentUid && (
                                     <button
                                       type="button"
@@ -2216,12 +2216,12 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                                       className="text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
                                       title="删除我发布的评论"
                                     >
-                                      <Trash2 size={11} />
+                                      <Trash2 size={13} />
                                     </button>
                                   )}
                                 </div>
                               </div>
-                              <p className="text-xs text-[#3B2818] leading-relaxed whitespace-pre-wrap pl-4 font-serif-title">
+                              <p className="text-sm sm:text-base md:text-lg text-[#3B2818] leading-relaxed whitespace-pre-wrap pl-4 font-serif-title">
                                 {comment.body}
                               </p>
                             </div>
@@ -2229,14 +2229,14 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                         })}
 
                         {post.comments.length === 0 && (
-                          <div className="py-2 text-xs text-[#8C7A65] flex items-center gap-1.5">
+                          <div className="py-2.5 text-xs sm:text-sm text-[#8C7A65] flex items-center gap-1.5">
                             <span className="font-mono">↳</span>
                             <span>暂无留言</span>
                           </div>
                         )}
                       </div>
 
-                      <div className="flex gap-2 pt-1">
+                      <div className="flex gap-2 pt-1.5">
                         <input
                           type="text"
                           value={commentDrafts[post.id] || ''}
@@ -2244,7 +2244,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                             setCommentDrafts((drafts) => ({ ...drafts, [post.id]: e.target.value }))
                           }
                           placeholder="说说你对这条安利的看法..."
-                          className="min-w-0 flex-1 px-3 py-1.5 rounded-lg text-xs outline-none bg-white text-[#2C2016] border border-[#D8C7AA] focus:border-[#8C6D4F] transition-colors"
+                          className="min-w-0 flex-1 px-3.5 py-2 rounded-lg text-xs sm:text-sm outline-none bg-white text-[#2C2016] border border-[#D8C7AA] focus:border-[#8C6D4F] transition-colors"
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') addComment(post.id);
                           }}
@@ -2252,10 +2252,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                         <button
                           type="button"
                           onClick={() => addComment(post.id)}
-                          className="px-3.5 py-1.5 rounded-full bg-[#B7791F] hover:bg-[#9A6519] text-[#FFFEEF] border border-[#9A6519] text-xs font-bold cursor-pointer transition-transform active:scale-95 shadow-2xs flex items-center gap-1 shrink-0"
+                          className="px-4 py-2 rounded-full bg-[#B7791F] hover:bg-[#9A6519] text-[#FFFEEF] border border-[#9A6519] text-xs sm:text-sm font-bold cursor-pointer transition-transform active:scale-95 shadow-2xs flex items-center gap-1 shrink-0"
                         >
                           <span>发送</span>
-                          <Send size={11} />
+                          <Send size={13} />
                         </button>
                       </div>
                     </section>
@@ -2267,8 +2267,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             // ==================== 🎭 角色拟音 (语C) 卡片 ====================
             if (post.category === 'roleplay') {
               const currentCommenter = getCommenterForPost(post);
-              // Both come from the same 拟音人物, so the header circle, the card
-              // illustration and the composer rail can never disagree.
               const { avatar: charAvatar, illustration: charImg } = getPostArtwork(post);
               const displayName = post.characterName || post.author;
 
@@ -2287,11 +2285,11 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                   {/* 背景干花/植物蕾丝纹理装饰 */}
                   <div className="absolute left-1 top-1 bottom-1 w-12 pointer-events-none opacity-20 bg-[radial-gradient(#8C6D4F_1px,transparent_1px)] [background-size:8px_8px]" />
 
-                  {/* 顶栏: [||| 角色拟音] 胶囊 + 头像 + 姓名 + 发布时间 (底边为顶部分割线) */}
-                  <div className="relative z-10 flex items-center justify-between gap-2 pb-2 border-b border-[#D8C7AA]">
-                    <div className="flex items-center gap-2 text-xs flex-wrap">
-                      <span className="px-2.5 py-0.5 rounded-full bg-[#433854] text-[#E7D6F7] font-bold text-[10px] flex items-center gap-1 shadow-2xs">
-                        <span className="text-[9px] tracking-tighter font-mono">|||</span>
+                  {/* 顶栏: [||| 角色拟音] 胶囊 + 头像 + 姓名 + 发布时间 */}
+                  <div className="relative z-10 flex items-center justify-between gap-2 pb-2.5 border-b border-[#D8C7AA]">
+                    <div className="flex items-center gap-2 text-xs sm:text-sm flex-wrap">
+                      <span className="px-3 py-1 rounded-full bg-[#433854] text-[#E7D6F7] font-bold text-xs flex items-center gap-1 shadow-2xs">
+                        <span className="text-[10px] tracking-tighter font-mono">|||</span>
                         <span>角色拟音</span>
                       </span>
 
@@ -2301,15 +2299,15 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           src={charAvatar}
                           alt={displayName}
                           fit="cover"
-                          className="w-5 h-5 rounded-full shrink-0 shadow-2xs"
+                          className="w-6 h-6 rounded-full shrink-0 shadow-2xs"
                         />
 
-                        <span className="text-[#2C2016] font-bold text-xs">
+                        <span className="text-[#2C2016] font-bold text-sm">
                           {displayName}
                         </span>
                       </div>
 
-                      <span className="text-[#8C7A65] text-[10px]">{fmtTime(post.createdAt)}</span>
+                      <span className="text-[#8C7A65] text-xs">{fmtTime(post.createdAt)}</span>
                       {currentUid && post.uid === currentUid && (
                         <button
                           type="button"
@@ -2317,34 +2315,27 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           className="ml-1 text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
                           title="删除我发布的帖子"
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={13} />
                         </button>
                       )}
                     </div>
                   </div>
 
-                  {/* 中间核心内容区：
-                      1. 严格位于顶部分割线与底部分割线之间
-                      2. 人物始终固定在文本框右侧
-                      3. 图片无任何边框！无外层边框底座！
-                      4. 设置 overflow-hidden，确保 hover 时人物动态变大绝对不会超过顶底分割线
-                  */}
-                  <div className="relative z-10 my-2.5 flex items-stretch justify-between gap-2.5 sm:gap-3.5 overflow-hidden rounded-xl">
+                  {/* 中间核心内容区 */}
+                  <div className="relative z-10 my-3 flex items-stretch justify-between gap-3 sm:gap-4 overflow-hidden rounded-xl">
                     {/* 左侧：文本框 */}
                     <div className="flex-1 min-w-0 flex flex-col justify-center">
-                      <div className="h-full flex flex-col justify-center p-3 sm:p-3.5 rounded-xl bg-[#F3E9D2]/75 border border-[#DECDB3] shadow-2xs">
+                      <div className="h-full flex flex-col justify-center p-3.5 sm:p-4 rounded-xl bg-[#F3E9D2]/75 border border-[#DECDB3] shadow-2xs">
                         {post.prompt && (
-                          <div className="mb-2 rounded-lg border border-[#D8C7AA] bg-[#FFF9EC]/75 px-2.5 py-2 text-[10px] sm:text-[11px] leading-relaxed text-[#6D5A46]">
+                          <div className="mb-2 rounded-lg border border-[#D8C7AA] bg-[#FFF9EC]/75 px-3 py-2 text-xs sm:text-sm leading-relaxed text-[#6D5A46]">
                             <span className="mr-1.5 font-bold text-[#433854]">背景设定</span>
                             <span className="whitespace-pre-wrap">{post.prompt}</span>
                           </div>
                         )}
-                        <p className="text-xs sm:text-sm leading-relaxed font-serif-title whitespace-pre-wrap text-[#3B2818] italic">
+                        <p className="text-sm sm:text-base md:text-lg leading-relaxed font-serif-title whitespace-pre-wrap text-[#3B2818] italic">
                           {post.body}
                         </p>
 
-                        {/* 剧场剧照：仅当上传了与立绘不同的独立配图时展示。
-                            历史帖子的 image 曾镜像 characterImage，故需一并排除 */}
                         {post.image && post.image !== charImg && post.image !== post.characterImage && (
                           <div className="mt-2.5 rounded-lg overflow-hidden">
                             <img
@@ -2358,25 +2349,24 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       </div>
                     </div>
 
-                    {/* 右侧：始终固定在文本框右侧的人物展示区 (纯净无边框，hover 放大但受限于外框溢出截断) */}
+                    {/* 右侧：始终固定在文本框右侧的人物展示区 */}
                     <div className="shrink-0 w-24 xs:w-28 sm:w-36 md:w-40 self-stretch min-h-[96px] sm:min-h-[112px] relative flex items-center justify-center overflow-hidden select-none">
                       <CharacterArt
                         src={charImg}
                         alt={displayName}
                         fit="contain"
-                        // 预留 8% 内边距：hover 放大 115% 后立绘仍在框内，不露边
                         className="w-full h-full p-[8%]"
                         innerClassName="drop-shadow-sm select-none pointer-events-none transition-transform duration-300 ease-out group-hover:scale-115"
                       />
 
                       {/* 底部角色名微标 */}
-                      <div className="absolute bottom-1 right-1.5 px-1.5 py-0.5 rounded bg-black/45 backdrop-blur-2xs text-[8.5px] sm:text-[9px] font-pixel text-[#FAF4E4] pointer-events-none opacity-90 leading-none">
+                      <div className="absolute bottom-1 right-1.5 px-2 py-0.5 rounded bg-black/45 backdrop-blur-2xs text-[10px] sm:text-xs font-pixel text-[#FAF4E4] pointer-events-none opacity-90 leading-none">
                         {displayName}
                       </div>
                     </div>
                   </div>
 
-                  {/* 底栏: 🍰 蛋糕按键 + 💬 评论数 + 🔗 分享 + 折叠按钮 (顶边为底部分割线) */}
+                  {/* 底栏: 🍰 蛋糕按键 + 💬 评论数 + 🔗 分享 + 折叠按钮 */}
                   <div className="relative z-10 pt-2.5 border-t border-[#D8C7AA] flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <button
@@ -2385,18 +2375,18 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           e.stopPropagation();
                           givePotato(post.id);
                         }}
-                        className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-2xs ${
+                        className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-2xs ${
                           post.potatoGiven
                             ? 'bg-[#8C6D4F] text-white'
                             : 'bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#3B2818]'
                         }`}
                       >
-                        <span className="text-sm">🍰</span>
+                        <span className="text-base">🍰</span>
                         <span>{post.potatoes}</span>
                       </button>
 
-                      <span className="px-3 py-1 rounded-full bg-[#EFE3CD] border border-[#C5B295] text-[#8C6D4F] text-xs font-bold flex items-center gap-1 shadow-2xs">
-                        <MessageCircle size={11} />
+                      <span className="px-3.5 py-1.5 rounded-full bg-[#EFE3CD] border border-[#C5B295] text-[#8C6D4F] text-xs sm:text-sm font-bold flex items-center gap-1 shadow-2xs">
+                        <MessageCircle size={13} />
                         <span>{post.comments.length}</span>
                       </span>
 
@@ -2408,16 +2398,16 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           setShareTarget({ type: 'post', post });
                           setIsShareModalOpen(true);
                         }}
-                        className="px-2.5 py-1 rounded-full bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#8C6D4F] hover:text-[#1E4334] text-xs font-bold flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-2xs"
+                        className="px-3 py-1.5 rounded-full bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#8C6D4F] hover:text-[#1E4334] text-xs sm:text-sm font-bold flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-2xs"
                         title="分享角色语C台词卡片"
                       >
-                        <Share2 size={11} />
+                        <Share2 size={13} />
                         <span>分享</span>
                       </button>
                     </div>
 
                     <div className="text-[#8C6D4F] flex items-center p-1">
-                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </div>
                   </div>
 
@@ -2425,45 +2415,45 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                   {isExpanded && (
                     <section
                       onClick={(e) => e.stopPropagation()}
-                      className="relative z-10 mt-3 pt-2 space-y-2.5 cursor-default border-t border-[#D8C7AA]"
+                      className="relative z-10 mt-3 pt-2.5 space-y-3 cursor-default border-t border-[#D8C7AA]"
                     >
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         {post.comments.map((comment) => {
                           const isCommentHost = comment.isHost || comment.author === post.author;
                           return (
                             <div
                               key={comment.id}
-                              className="pt-2 pb-2.5 border-b border-dashed border-[#D8C7AA] last:border-b-0 space-y-1 text-xs"
+                              className="pt-2.5 pb-3 border-b border-dashed border-[#D8C7AA] last:border-b-0 space-y-1.5 text-xs sm:text-sm"
                             >
-                              <div className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center justify-between text-xs sm:text-sm">
                                 <div className="flex items-center gap-1.5 font-bold">
-                                  <span className="text-[#8C7A65] font-mono select-none">↳</span>
+                                  <span className="text-[#8C7A65] font-mono select-none text-sm">↳</span>
                                   {comment.characterAvatar ? (
                                     <CharacterArt
                                       src={resolveArtwork(comment.characterName || comment.author, comment.characterAvatar).avatar}
                                       alt={comment.author}
                                       fit="cover"
-                                      className="w-4 h-4 rounded-full border border-[#8C6D4F]/30 shrink-0"
+                                      className="w-5 h-5 rounded-full border border-[#8C6D4F]/30 shrink-0"
                                     />
                                   ) : (
-                                    <span className="w-4 h-4 rounded-full bg-[#8C6D4F] text-[#F9E79F] flex items-center justify-center text-[9px]">
+                                    <span className="w-5 h-5 rounded-full bg-[#8C6D4F] text-[#F9E79F] flex items-center justify-center text-xs">
                                       {isCommentHost ? '👑' : '🎭'}
                                     </span>
                                   )}
 
-                                  <span className="text-[#2C2016]">
+                                  <span className="text-[#2C2016] text-sm sm:text-base font-bold">
                                     {comment.characterName || comment.author}
                                   </span>
 
                                   {isCommentHost && (
-                                    <span className="text-[#8C6D4F] font-bold text-[10px] ml-0.5">
+                                    <span className="text-[#8C6D4F] font-bold text-xs ml-0.5">
                                       楼主
                                     </span>
                                   )}
                                 </div>
 
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
+                                  <span className="text-xs text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
                                   {currentUid && comment.uid === currentUid && (
                                     <button
                                       type="button"
@@ -2471,13 +2461,13 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                                       className="text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
                                       title="删除我发布的评论"
                                     >
-                                      <Trash2 size={11} />
+                                      <Trash2 size={13} />
                                     </button>
                                   )}
                                 </div>
                               </div>
 
-                              <p className="text-xs sm:text-sm text-[#2C2016] leading-relaxed font-serif-title whitespace-pre-wrap pl-4">
+                              <p className="text-sm sm:text-base md:text-lg text-[#2C2016] leading-relaxed font-serif-title whitespace-pre-wrap pl-4">
                                 {comment.body}
                               </p>
                             </div>
@@ -2485,25 +2475,25 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                         })}
 
                         {post.comments.length === 0 && (
-                          <div className="py-2 text-xs text-[#8C7A65] flex items-center gap-1.5">
+                          <div className="py-2.5 text-xs sm:text-sm text-[#8C7A65] flex items-center gap-1.5">
                             <span className="font-mono">↳</span>
                             <span>暂无对白</span>
                           </div>
                         )}
                       </div>
 
-                      {/* 接力对白输入 (展开后缩小选择角色的下拉栏) */}
+                      {/* 接力对白输入 */}
                       <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                        <div className="flex items-center gap-1 shrink-0 bg-[#EFE3CD] px-1.5 py-0.5 rounded-md border border-[#C5B295] text-[10px]">
+                        <div className="flex items-center gap-1.5 shrink-0 bg-[#EFE3CD] px-2 py-1 rounded-md border border-[#C5B295] text-xs sm:text-sm">
                           {currentCommenter.avatar ? (
                             <CharacterArt
                               src={currentCommenter.avatar}
                               alt={currentCommenter.name}
                               fit="cover"
-                              className="w-3.5 h-3.5 rounded-full border border-[#8C6D4F]/30 shrink-0"
+                              className="w-4 h-4 rounded-full border border-[#8C6D4F]/30 shrink-0"
                             />
                           ) : (
-                            <div className="w-3.5 h-3.5 rounded-full bg-[#8C6D4F] text-[#F9E79F] flex items-center justify-center text-[8px] font-bold shrink-0">
+                            <div className="w-4 h-4 rounded-full bg-[#8C6D4F] text-[#F9E79F] flex items-center justify-center text-[10px] font-bold shrink-0">
                               🎭
                             </div>
                           )}
@@ -2519,7 +2509,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                               };
                               setCommenterChars((prev) => ({ ...prev, [post.id]: matched }));
                             }}
-                            className="text-[10px] font-bold text-[#3B2818] bg-transparent outline-none cursor-pointer max-w-[80px] sm:max-w-[95px] truncate py-0"
+                            className="text-xs sm:text-sm font-bold text-[#3B2818] bg-transparent outline-none cursor-pointer max-w-[100px] sm:max-w-[120px] truncate py-0"
                           >
                             <optgroup label="👑 楼主身份">
                               <option value={post.author}>👑 楼主 ({post.author})</option>
@@ -2538,7 +2528,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           </select>
 
                           {currentCommenter.name === post.author && (
-                            <span className="px-1 py-0.2 rounded bg-gradient-to-r from-[#FDE68A] to-[#F59E0B] text-[#451A03] border border-[#D97706] font-black text-[8px] shadow-2xs whitespace-nowrap">
+                            <span className="px-1 py-0.2 rounded bg-gradient-to-r from-[#FDE68A] to-[#F59E0B] text-[#451A03] border border-[#D97706] font-black text-[9px] shadow-2xs whitespace-nowrap">
                               👑
                             </span>
                           )}
@@ -2552,7 +2542,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                               setCommentDrafts((drafts) => ({ ...drafts, [post.id]: e.target.value }))
                             }
                             placeholder="接力对白…"
-                            className="min-w-0 flex-1 px-3 py-1.5 rounded-lg text-xs outline-none bg-white text-[#2C2016] border border-[#D8C7AA] focus:border-[#8C6D4F] transition-colors"
+                            className="min-w-0 flex-1 px-3.5 py-2 rounded-lg text-xs sm:text-sm outline-none bg-white text-[#2C2016] border border-[#D8C7AA] focus:border-[#8C6D4F] transition-colors"
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') addComment(post.id);
                             }}
@@ -2561,10 +2551,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           <button
                             type="button"
                             onClick={() => addComment(post.id)}
-                            className="px-3.5 py-1.5 rounded-full bg-[#1E4334] hover:bg-[#2C5C46] text-[#F9E79F] border border-[#163327] text-xs font-bold cursor-pointer transition-transform active:scale-95 shadow-2xs flex items-center gap-1 shrink-0"
+                            className="px-4 py-2 rounded-full bg-[#1E4334] hover:bg-[#2C5C46] text-[#F9E79F] border border-[#163327] text-xs sm:text-sm font-bold cursor-pointer transition-transform active:scale-95 shadow-2xs flex items-center gap-1 shrink-0"
                           >
                             <span>发送</span>
-                            <Send size={11} />
+                            <Send size={13} />
                           </button>
                         </div>
                       </div>
@@ -2589,21 +2579,21 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
                 {/* 背景水彩红茶杯与手写英文字印记 */}
                 <div className="absolute right-3 top-2 bottom-2 w-32 pointer-events-none opacity-20 flex flex-col justify-between items-end text-right font-serif italic text-[#8C6D4F]">
-                  <span className="text-xs">Good Tea Better People.</span>
-                  <span className="text-[28px] opacity-30">☕</span>
+                  <span className="text-xs sm:text-sm">Good Tea Better People.</span>
+                  <span className="text-[32px] opacity-30">☕</span>
                 </div>
 
                 {/* 顶栏: [☕ 闲聊茶歇] 胶囊 + 头像/用户名 + 时间 */}
-                <div className="relative z-10 flex items-center justify-between gap-2 pb-2 border-b border-[#D8C7AA]">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="px-2.5 py-0.5 rounded-full bg-[#1E4334] text-[#F9E79F] font-bold text-[10px] flex items-center gap-1 shadow-2xs">
-                      <MessageCircle size={10} /> 闲聊茶歇
+                <div className="relative z-10 flex items-center justify-between gap-2 pb-2.5 border-b border-[#D8C7AA]">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm">
+                    <span className="px-3 py-1 rounded-full bg-[#1E4334] text-[#F9E79F] font-bold text-xs flex items-center gap-1 shadow-2xs">
+                      <MessageCircle size={12} /> 闲聊茶歇
                     </span>
-                    <div className="w-4 h-4 rounded-full bg-[#1E4334] text-[#F9E79F] flex items-center justify-center text-[9px] font-bold">
+                    <div className="w-5 h-5 rounded-full bg-[#1E4334] text-[#F9E79F] flex items-center justify-center text-xs font-bold">
                       ☕
                     </div>
-                    <span className="text-[#2C2016] font-bold text-xs">{post.author}</span>
-                    <span className="text-[#8C7A65] text-[10px]">{fmtTime(post.createdAt)}</span>
+                    <span className="text-[#2C2016] font-bold text-sm">{post.author}</span>
+                    <span className="text-[#8C7A65] text-xs">{fmtTime(post.createdAt)}</span>
                     {currentUid && post.uid === currentUid && (
                       <button
                         type="button"
@@ -2611,7 +2601,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                         className="ml-1 text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
                         title="删除我发布的帖子"
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={14} />
                       </button>
                     )}
                   </div>
@@ -2619,22 +2609,22 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
                 {/* 正文 */}
                 {post.body && (
-                  <div className="relative z-10 mt-2 p-2.5 bg-[#F3E9D2]/60 rounded-xl text-xs sm:text-sm leading-relaxed text-[#3B2818] font-serif-title">
+                  <div className="relative z-10 mt-2.5 p-3 bg-[#F3E9D2]/60 rounded-xl text-sm sm:text-base md:text-lg leading-relaxed text-[#3B2818] font-serif-title">
                     {post.body}
                   </div>
                 )}
 
                 {(post.images?.length || post.image) && (
-                  <div className="relative z-10 mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div className="relative z-10 mt-2.5 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                     {(post.images?.length ? post.images : [post.image!]).map((url, index) => (
                       <img key={`${url}-${index}`} src={url} alt={`茶话配图 ${index + 1}`}
-                        className="max-h-[280px] w-full object-contain rounded-xl bg-[#F0E6D2] border border-[#DECDB3]" />
+                        className="max-h-[300px] w-full object-contain rounded-xl bg-[#F0E6D2] border border-[#DECDB3]" />
                     ))}
                   </div>
                 )}
 
                 {/* 底栏: 🍰 蛋糕按键 + 💬 评论数 + 🔗 分享 */}
-                <div className="relative z-10 mt-3 pt-2.5 border-t border-[#D8C7AA] flex items-center justify-between gap-2">
+                <div className="relative z-10 mt-3.5 pt-2.5 border-t border-[#D8C7AA] flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -2642,18 +2632,18 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                         e.stopPropagation();
                         givePotato(post.id);
                       }}
-                      className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-2xs ${
+                      className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-2xs ${
                         post.potatoGiven
                           ? 'bg-[#8C6D4F] text-white'
                           : 'bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#3B2818]'
                       }`}
                     >
-                      <span className="text-sm">🍰</span>
+                      <span className="text-base">🍰</span>
                       <span>{post.potatoes}</span>
                     </button>
 
-                    <span className="px-3 py-1 rounded-full bg-[#EFE3CD] border border-[#C5B295] text-[#8C6D4F] text-xs font-bold flex items-center gap-1 shadow-2xs">
-                      <MessageCircle size={11} />
+                    <span className="px-3.5 py-1.5 rounded-full bg-[#EFE3CD] border border-[#C5B295] text-[#8C6D4F] text-xs sm:text-sm font-bold flex items-center gap-1 shadow-2xs">
+                      <MessageCircle size={13} />
                       <span>{post.comments.length}</span>
                     </span>
 
@@ -2665,16 +2655,16 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                         setShareTarget({ type: 'post', post });
                         setIsShareModalOpen(true);
                       }}
-                      className="px-2.5 py-1 rounded-full bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#8C6D4F] hover:text-[#1E4334] text-xs font-bold flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-2xs"
+                      className="px-3 py-1.5 rounded-full bg-[#EFE3CD] hover:bg-[#E5D5BA] border border-[#C5B295] text-[#8C6D4F] hover:text-[#1E4334] text-xs sm:text-sm font-bold flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-2xs"
                       title="分享茶歇发言"
                     >
-                      <Share2 size={11} />
+                      <Share2 size={13} />
                       <span>分享</span>
                     </button>
                   </div>
 
                   <div className="text-[#8C6D4F] flex items-center p-1">
-                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                   </div>
                 </div>
 
@@ -2682,28 +2672,28 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                 {isExpanded && (
                   <section
                     onClick={(e) => e.stopPropagation()}
-                    className="relative z-10 mt-3 pt-2 space-y-2.5 cursor-default border-t border-[#D8C7AA]"
+                    className="relative z-10 mt-3 pt-2.5 space-y-3 cursor-default border-t border-[#D8C7AA]"
                   >
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {post.comments.map((comment) => {
                         const isCommentHost = comment.isHost || comment.author === post.author;
                         return (
                           <div
                             key={comment.id}
-                            className="pt-2 pb-2.5 border-b border-dashed border-[#D8C7AA] last:border-b-0 space-y-1 text-xs"
+                            className="pt-2.5 pb-3 border-b border-dashed border-[#D8C7AA] last:border-b-0 space-y-1.5 text-xs sm:text-sm"
                           >
-                            <div className="flex items-center justify-between text-[11px] text-[#715431]">
+                            <div className="flex items-center justify-between text-xs sm:text-sm text-[#715431]">
                               <div className="flex items-center gap-1.5 font-bold">
-                                <span className="text-[#8C6D4F] font-mono select-none">↳</span>
-                                <span className="text-[#2C2016]">{comment.author}</span>
+                                <span className="text-[#8C6D4F] font-mono select-none text-sm">↳</span>
+                                <span className="text-[#2C2016] text-sm sm:text-base font-bold">{comment.author}</span>
                                 {isCommentHost && (
-                                  <span className="text-[#8C6D4F] font-bold text-[10px] ml-0.5">
+                                  <span className="text-[#8C6D4F] font-bold text-xs ml-0.5">
                                     楼主
                                   </span>
                                 )}
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
+                                <span className="text-xs text-[#8C7A65]">{fmtTime(comment.createdAt)}</span>
                                 {currentUid && comment.uid === currentUid && (
                                   <button
                                     type="button"
@@ -2711,12 +2701,12 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                                     className="text-[#8C7A65] hover:text-[#DC2626] p-0.5 rounded transition-colors"
                                     title="删除我发布的评论"
                                   >
-                                    <Trash2 size={11} />
+                                    <Trash2 size={13} />
                                   </button>
                                 )}
                               </div>
                             </div>
-                            <p className="text-xs text-[#3B2818] leading-relaxed whitespace-pre-wrap pl-4 font-serif-title">
+                            <p className="text-sm sm:text-base md:text-lg text-[#3B2818] leading-relaxed whitespace-pre-wrap pl-4 font-serif-title">
                               {comment.body}
                             </p>
                           </div>
@@ -2724,14 +2714,14 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       })}
 
                       {post.comments.length === 0 && (
-                        <div className="py-2 text-xs text-[#8C7A65] flex items-center gap-1.5">
+                        <div className="py-2.5 text-xs sm:text-sm text-[#8C7A65] flex items-center gap-1.5">
                           <span className="font-mono">↳</span>
                           <span>暂无留言</span>
                         </div>
                       )}
                     </div>
 
-                    <div className="flex gap-2 pt-1">
+                    <div className="flex gap-2 pt-1.5">
                       <input
                         type="text"
                         value={commentDrafts[post.id] || ''}
@@ -2739,7 +2729,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                           setCommentDrafts((drafts) => ({ ...drafts, [post.id]: e.target.value }))
                         }
                         placeholder="发表茶歇留言..."
-                        className="min-w-0 flex-1 px-3 py-1.5 rounded-lg text-xs outline-none bg-white text-[#2C2016] border border-[#D8C7AA] focus:border-[#8C6D4F] transition-colors"
+                        className="min-w-0 flex-1 px-3.5 py-2 rounded-lg text-xs sm:text-sm outline-none bg-white text-[#2C2016] border border-[#D8C7AA] focus:border-[#8C6D4F] transition-colors"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') addComment(post.id);
                         }}
@@ -2747,10 +2737,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                       <button
                         type="button"
                         onClick={() => addComment(post.id)}
-                        className="px-3.5 py-1.5 rounded-full bg-[#1E4334] hover:bg-[#2C5C46] text-[#F9E79F] border border-[#163327] text-xs font-bold cursor-pointer transition-transform active:scale-95 shadow-2xs flex items-center gap-1 shrink-0"
+                        className="px-4 py-2 rounded-full bg-[#1E4334] hover:bg-[#2C5C46] text-[#F9E79F] border border-[#163327] text-xs sm:text-sm font-bold cursor-pointer transition-transform active:scale-95 shadow-2xs flex items-center gap-1 shrink-0"
                       >
                         <span>发送</span>
-                        <Send size={11} />
+                        <Send size={13} />
                       </button>
                     </div>
                   </section>

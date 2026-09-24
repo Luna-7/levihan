@@ -15,6 +15,7 @@ import { toPng } from 'html-to-image';
 import { soundManager } from '../utils/audio';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { CharacterArt, externalArtworkUrl } from './CharacterArt';
+import { getRandomSharePng, getExternalSharePng } from '../utils/shareArtwork';
 import { ForumPost, PostCategory } from './RestaurantForum';
 import { MarketItem } from './PotatoMarket';
 
@@ -85,7 +86,7 @@ export const TeaPartyShareModal: React.FC<Props> = ({
         title: '兵长茶会 · 调查兵团地下交流所',
         summary: '利韩专属交流粮仓：闲聊茶歇、角色拟音、故事接龙与土豆市集！',
         author: '调查兵团',
-        image: '/images/characters/levi_tea.jpg',
+        image: getRandomSharePng('general', true),
         badge: '☕ 兵长茶会',
       };
     }
@@ -99,7 +100,11 @@ export const TeaPartyShareModal: React.FC<Props> = ({
           ? `【语C】${p.characterName || p.author} 的茶会台词`
           : `【${catName}】${p.author} 的发言`);
       const summary = p.body.slice(0, 100) + (p.body.length > 100 ? '...' : '');
-      const img = p.image || p.characterImage || '/images/characters/levi_tea.jpg';
+      const img =
+        p.image ||
+        (p.characterImage && !p.characterImage.includes('levi_tea')
+          ? p.characterImage
+          : getRandomSharePng(p.id || p.title || 'post', true));
 
       return {
         title,
@@ -116,7 +121,7 @@ export const TeaPartyShareModal: React.FC<Props> = ({
         title: `【市集】${m.title} (¥${m.price})`,
         summary: m.description.slice(0, 80) + (m.description.length > 80 ? '...' : ''),
         author: m.nickname,
-        image: m.image || '/images/characters/levi_tea.jpg',
+        image: m.image || getRandomSharePng(m.id || m.title || 'market', true),
         badge: '🥔 土豆市集',
       };
     }
@@ -126,7 +131,7 @@ export const TeaPartyShareModal: React.FC<Props> = ({
       title: `兵长茶会 · ${catName}`,
       summary: '利韩专属交流粮仓：闲聊茶歇、角色拟音、故事接龙与土豆市集！',
       author: '利韩土豆仓',
-      image: '/images/characters/levi_tea.jpg',
+      image: getRandomSharePng(target.category || 'general', true),
       badge: catName,
     };
   }, [target]);

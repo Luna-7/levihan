@@ -155,6 +155,15 @@ export default defineConfig(() => {
             },
           },
           {
+            urlPattern: /\/save-hange\/.*\.mp3$/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'game-hange-audio',
+              networkTimeoutSeconds: 4,
+              cacheableResponse: { statuses: [0, 200, 206] },
+            },
+          },
+          {
             urlPattern: /\/save-hange\/.*/i,
             handler: 'CacheFirst',
             options: {

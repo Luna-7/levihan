@@ -1,5 +1,6 @@
 import React from 'react';
 import { UI_SPRITES, UI_SPRITE_SIZES, UiSpriteName } from './uiSprite.generated';
+import { getRandomSharePng } from '../utils/shareArtwork';
 
 /**
  * Roleplay (语C) character artwork comes from one of two places:
@@ -23,13 +24,16 @@ export const isSpriteRef = (src: string | undefined): src is string =>
 const atlasEntry = (src: string) => UI_SPRITES[src.slice(SPRITE_REF_PREFIX.length) as UiSpriteName];
 
 /**
- * Converts a sprite ref into a plain image URL that can be handed to an outside
- * service. Only the share sheet needs this: Weibo and QQ fetch the `pic`
- * themselves, and the atlas crop is only expressible in CSS, so sprite-backed
- * characters fall back to the same stand-in banner the sheet already used.
+ * Converts a sprite ref or missing asset into a plain image URL that can be handed to an outside
+ * service (such as Weibo, QQ, or external cards) by picking a random PNG asset from
+ * 巨人资源 & 周边橱窗.
  */
-export const externalArtworkUrl = (src: string): string =>
-  isSpriteRef(src) ? '/images/characters/levi_tea.jpg' : src;
+export const externalArtworkUrl = (src: string): string => {
+  if (!src || src === '/images/characters/levi_tea.jpg' || isSpriteRef(src)) {
+    return getRandomSharePng(src || 'default');
+  }
+  return src;
+};
 
 interface CharacterArtProps {
   /** `sprite:<atlas-key>`, a plain URL, or a data URL. */

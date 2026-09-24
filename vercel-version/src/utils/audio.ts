@@ -12,12 +12,22 @@ function markSoundPlayed() {
 if (typeof window !== 'undefined') {
   try {
     const savedPreference = localStorage.getItem('rpg_sound_muted');
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    // iOS 首次创建 AudioContext 会阻塞第一次交互；由用户点音量键明确开启。
-    isMuted = savedPreference === 'true' || (savedPreference === null && isIOS);
+    isMuted = savedPreference === 'true';
   } catch {
     isMuted = false;
+  }
+}
+
+// 辅助函数：播放 1 帧无声音频，用于彻底激活 iOS/WebKit 音频引擎
+function playSilentBuffer(ctx: AudioContext) {
+  try {
+    const buffer = ctx.createBuffer(1, 1, 22050);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+  } catch {
+    // ignore
   }
 }
 
@@ -29,12 +39,53 @@ function getAudioContext(): AudioContext | null {
     const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass) {
       audioCtx = new AudioContextClass();
+      
+      // 监听 WebAudio 状态变化（处理 iOS 锁屏/后台切回/中断复原）
+      audioCtx.onstatechange = () => {
+        if (audioCtx && (audioCtx.state === 'suspended' || (audioCtx.state as string) === 'interrupted') && !isMuted) {
+          void audioCtx.resume();
+        }
+      };
     }
   }
-  if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume();
+
+  if (audioCtx && (audioCtx.state === 'suspended' || (audioCtx.state as string) === 'interrupted')) {
+    void audioCtx.resume().catch(() => {});
   }
   return audioCtx;
+}
+
+// iOS WebKit 全局音频解锁器：在用户首次触控或交互时立即恢复 WebAudioContext 状态
+if (typeof window !== 'undefined') {
+  const unlockAudioContextOnUserGesture = () => {
+    if (isMuted) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    if (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted') {
+      void ctx.resume().then(() => {
+        if (ctx.state === 'running') {
+          playSilentBuffer(ctx);
+        }
+      }).catch(() => {});
+    } else if (ctx.state === 'running') {
+      playSilentBuffer(ctx);
+    }
+  };
+
+  const interactionEvents = ['touchstart', 'touchend', 'pointerdown', 'mousedown', 'click', 'keydown'];
+  interactionEvents.forEach((eventName) => {
+    window.addEventListener(eventName, unlockAudioContextOnUserGesture, { capture: true, passive: true });
+  });
+
+  // 页面切回前台（iOS 切回 App）自动恢复 AudioContext
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && audioCtx && !isMuted) {
+      if (audioCtx.state === 'suspended' || (audioCtx.state as string) === 'interrupted') {
+        void audioCtx.resume();
+      }
+    }
+  });
 }
 
 export const soundManager = {
@@ -798,6 +849,8 @@ export const soundManager = {
 // 🔔 全局按键音效自动分发器 (Global Audio Feedback Delegator)
 // 确保页面上的每个按键、可交互控件都有反馈，导航栏是其专属音效，同类型为对应音效
 // =========================================================================
+// 全局常规点击声效捕获（兜底未手动触发音效的可交互控件，并对组件自带音效做防重复处理）
+// =========================================================================
 if (typeof window !== 'undefined') {
   window.addEventListener(
     'click',
@@ -813,16 +866,21 @@ if (typeof window !== 'undefined') {
       );
       if (!btn) return;
 
-      // 延迟微量时间（12ms），让组件自带的 onClick 优先执行
+      const dataSound = btn.getAttribute('data-sound') || '';
+      if (dataSound === 'none' || dataSound === 'off' || dataSound === 'custom') return;
+
+      // 若当前点击已被组件内的具体声音方法同步处理（250ms内有播放），则立即终止，不触发二次音效
+      if (Date.now() - lastSoundTime < 250) return;
+
+      // 延迟微量时间（12ms），让尚未触发组件内部调用的 onClick 优先执行
       window.setTimeout(() => {
         if (isMuted) return;
-        // 若当前点击已被组件内的具体声音方法处理（70ms内有播放），则不重复发出反馈
-        if (Date.now() - lastSoundTime < 70) return;
+        // 若在微延迟期间（例如250ms内）组件内主动播放过声音，则不重复发出反馈
+        if (Date.now() - lastSoundTime < 250) return;
 
         const text = (btn.innerText || btn.textContent || '').trim();
         const ariaLabel = (btn.getAttribute('aria-label') || '').trim();
         const role = btn.getAttribute('role') || '';
-        const dataSound = btn.getAttribute('data-sound') || '';
         const combined = `${text} ${ariaLabel} ${btn.className} ${btn.id}`;
 
         // 1. 导航栏专属类别 (Navigation bar & Tabs)

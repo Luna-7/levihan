@@ -75,6 +75,7 @@ export const ResourceHub: React.FC<Props> = ({
           onClick={() => handleAutoJump(item.url, item.code)}
           onMouseEnter={() => soundManager.playCardHover()}
           className="relative overflow-hidden bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full"
+          style={{ contain: 'layout style paint' }}
           title="点击即可自动复制提取码并打开网盘"
         >
           <CardPatternOverlay opacity={0.10} mode="multiply" />
