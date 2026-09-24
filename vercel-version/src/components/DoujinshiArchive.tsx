@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { toPng } from 'html-to-image';
 import {
   DOUJIN_ARCHIVE_DATA,
 } from '../data/doujinArchiveData';
@@ -66,6 +68,13 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
   // 封面加载失败状态
   const [failedCovers, setFailedCovers] = useState<Set<string>>(new Set());
+
+  // 分享卡片：当前正在生成/预览分享卡的本子 + 卡片 PNG dataUrl
+  const [shareCardBook, setShareCardBook] = useState<DoujinBookItem | null>(null);
+  const [shareCardUrl, setShareCardUrl] = useState<string>('');
+  const [isGeneratingShareCard, setIsGeneratingShareCard] = useState<boolean>(false);
+  const [shareImgLoaded, setShareImgLoaded] = useState<boolean>(false);
+  const sharePosterRef = useRef<HTMLDivElement>(null);
 
   // 在线小说索引（novels.json，含合订本与同好来稿）；读不到则为空 → 该段不渲染
   const [novels, setNovels] = useState<GroupNovel[]>([]);
@@ -211,25 +220,75 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     setDetectedPages(null);
   };
 
-  // 分享当前阅读的本子：移动端调系统原生分享面板（QQ/微信可直接转发），
-  // 桌面端降级为复制「标题 + 链接」。分享的链接永远是站点根路径（链接不变原则），
-  // 没进过门的人打开只会看到伪 403，不会暴露任何内容。
-  const handleShareBook = async (book: DoujinBookItem) => {
+  // 分享卡片流程：点「分享」→ 弹出卡片预览（封面 + 详情）→
+  // 移动端调 navigator.share 直接把**图片**发到 QQ/微信（系统分享面板），
+  // 桌面端降级为保存 PNG。分享的链接恒为站点根路径（链接不变原则）。
+  const handleShareBook = (book: DoujinBookItem) => {
+    soundManager.playCoin();
+    setShareCardBook(book);
+    setShareCardUrl('');
+    setShareImgLoaded(false);
+  };
+
+  // 卡片图片生成：等封面 img onLoad 之后再跑 toPng，避免半截图
+  useEffect(() => {
+    if (!shareCardBook || shareCardUrl || !shareImgLoaded || !sharePosterRef.current) return;
+    let cancelled = false;
+    setIsGeneratingShareCard(true);
+    void (async () => {
+      try {
+        const dataUrl = await toPng(sharePosterRef.current as HTMLElement, {
+          cacheBust: true,
+          pixelRatio: 2.2,
+          backgroundColor: '#FAF3E3',
+        });
+        if (!cancelled) setShareCardUrl(dataUrl);
+      } catch (err) {
+        console.error('Share card generation failed', err);
+        if (!cancelled) onShowToast('卡片生成失败，请重试');
+      } finally {
+        if (!cancelled) setIsGeneratingShareCard(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shareCardBook, shareCardUrl, shareImgLoaded]);
+
+  // 原生分享（带图片文件）；不支持文件分享的环境降级为保存图片
+  const handleShareCard = async () => {
+    if (!shareCardUrl || !shareCardBook) return;
+    try {
+      const blob = await (await fetch(shareCardUrl)).blob();
+      const file = new File([blob], `share_${shareCardBook.id}.png`, { type: 'image/png' });
+      const canShareFiles = typeof navigator.canShare === 'function'
+        ? navigator.canShare({ files: [file] })
+        : typeof navigator.share === 'function';
+      if (canShareFiles && typeof navigator.share === 'function') {
+        await navigator.share({ files: [file], title: `《${shareCardBook.titleZh}》` });
+        return; // 用户完成或取消系统分享面板
+      }
+    } catch {
+      return; // 用户取消分享不算错误
+    }
+    handleDownloadShareCard();
+  };
+
+  const handleDownloadShareCard = () => {
+    if (!shareCardUrl) return;
+    const link = document.createElement('a');
+    link.download = `分享_${shareCardBook?.titleZh || 'levihan'}_${Date.now()}.png`;
+    link.href = shareCardUrl;
+    link.click();
+    onShowToast('卡片已保存，去转发吧 ✨');
+  };
+
+  const handleCopyShareLink = () => {
     soundManager.playCoin();
     const url = `${window.location.origin}/`;
-    const shareData: ShareData = { title: `《${book.titleZh}》`, url };
-    if (typeof navigator.share === 'function') {
-      try {
-        await navigator.share(shareData);
-        return; // 用户完成或取消系统分享面板，无需 toast
-      } catch {
-        return; // 用户取消分享不算错误
-      }
-    }
-    const text = `《${book.titleZh}》 ${url}`;
+    const text = `《${shareCardBook?.titleZh || ''}》 ${url}`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(
-        () => onShowToast('已复制标题和链接，去粘贴分享吧 📋'),
+        () => onShowToast('已复制标题和链接 📋'),
         () => onShowToast(`分享链接：${url}`)
       );
     } else {
@@ -360,9 +419,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
             </div>
           </div>
           <button
-            onClick={() => void handleShareBook(readingBook)}
+            onClick={() => handleShareBook(readingBook)}
             className="px-2.5 py-1 bg-[#B7791F] text-[#FFFEEF] font-pixel text-xs rounded-xs hover:bg-[#9A6519] cursor-pointer transition-all flex items-center gap-1 shrink-0 shadow-xs"
-            title="分享这本（系统分享面板 / 复制链接）"
+            title="生成分享卡片（封面+详情）"
           >
             <span>↗</span>
             <span>分享</span>
@@ -394,6 +453,97 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
             onShowToast={onShowToast}
             onCommentCountChange={() => setCommentVersion((v) => v + 1)}
           />
+        )}
+
+        {/* 分享卡片弹窗：封面 + 详情生成 PNG，原生分享面板直发 QQ/微信 */}
+        {shareCardBook && typeof document !== 'undefined' && createPortal(
+          <div
+            className="fixed inset-0 z-[1300] bg-black/60 flex items-center justify-center p-4 select-none"
+            onClick={() => setShareCardBook(null)}
+          >
+            <div className="w-full max-w-[360px] space-y-3" onClick={(e) => e.stopPropagation()}>
+              {/* 海报本体（同时是 toPng 的截图源） */}
+              <div className="mx-auto w-[320px]">
+                <div
+                  ref={sharePosterRef}
+                  className="bg-[#FAF3E3] border-2 border-[#1E4334] rounded-lg overflow-hidden shadow-xl"
+                >
+                  <div className="px-3 py-2 bg-[#1E4334] text-[#F9E79F] font-pixel text-[10px] flex items-center justify-between">
+                    <span>✦ 利韩 · 典藏分享</span>
+                    <span>{shareCardBook.category || '漫画本'}</span>
+                  </div>
+                  <div className="flex gap-3 p-3">
+                    <div className="w-[120px] shrink-0 aspect-[2/3] bg-[#EDEFF2] border border-[#D5C9AF] rounded-xs overflow-hidden flex items-center justify-center">
+                      {shareCardBook.coverFile && !failedCovers.has(shareCardBook.id) ? (
+                        <img
+                          src={cosService.getCoverUrl(shareCardBook)}
+                          alt=""
+                          crossOrigin="anonymous"
+                          draggable={false}
+                          className="w-full h-full object-cover"
+                          onLoad={() => setShareImgLoaded(true)}
+                          onError={() => { handleCoverError(shareCardBook.id); setShareImgLoaded(true); }}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center w-full h-full text-center p-2">
+                          <div className="text-3xl">{shareCardBook.secure ? '🔒' : '📖'}</div>
+                          <div className="font-pixel text-[10px] text-[#1E3A2B] mt-1 break-words">{shareCardBook.titleZh}</div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-1.5 text-left">
+                      <div className="font-pixel text-sm font-bold text-[#1E3A2B] leading-snug break-words">
+                        {shareCardBook.titleZh}
+                      </div>
+                      {shareCardBook.titleJp && (
+                        <div className="text-[10px] font-retro-jp text-[#8C7A68] italic break-words">{shareCardBook.titleJp}</div>
+                      )}
+                      <div className="text-[11px] font-retro-jp text-[#3E342B]">
+                        作者：{shareCardBook.circle || '未知'}
+                      </div>
+                      <div className="text-[11px] font-retro-jp text-[#5B4636]">
+                        共 {shareCardBook.pages || 30} 页{shareCardBook.secure ? ' · 🔒 校验码解析' : ''}
+                      </div>
+                      {shareCardBook.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {shareCardBook.tags.slice(0, 4).map((tag, i) => (
+                            <span key={i} className="text-[9px] font-retro-jp px-1.5 py-0.5 rounded-xs border border-[#DECFA9] bg-[#F4EEDF] text-[#7A6958]">
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="px-3 py-1.5 border-t border-dashed border-[#D5C9AF] flex items-center justify-between text-[9px] font-retro-jp text-[#8C7A68]">
+                    <span>{typeof window !== 'undefined' ? window.location.host : ''}</span>
+                    <span> forbidden until triple-click 🤫</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 操作按钮 */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => void handleShareCard()}
+                  disabled={!shareCardUrl}
+                  className="flex-1 px-3 py-2.5 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-pixel text-xs font-bold rounded-xs cursor-pointer enabled:hover:bg-[#2B5E4A] disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                >
+                  {isGeneratingShareCard || !shareCardUrl ? '生成卡片中…' : '↗ 分享图片'}
+                </button>
+                <button
+                  onClick={handleCopyShareLink}
+                  className="px-3 py-2.5 bg-[#FFFEEF] text-[#1E4334] border-2 border-[#1E4334] font-pixel text-xs font-bold rounded-xs cursor-pointer hover:bg-[#F3EAD5] shadow-md"
+                >
+                  📋 链接
+                </button>
+              </div>
+              <p className="text-center text-[10px] font-retro-jp text-white/75">
+                手机上「分享图片」可直接转发到 QQ / 微信 · 也可以长按图片保存
+              </p>
+            </div>
+          </div>,
+          document.body
         )}
       </div>
     );
