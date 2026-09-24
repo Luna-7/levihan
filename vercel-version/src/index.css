@@ -55,6 +55,20 @@
     overflow: hidden;
   }
 
+  /* 漫画站（comic.html 入口）没有主站的分区外壳，内容直接长在文档流里。
+     上面 html/body/#root 的 overflow:hidden 是为主站「分区内部各自滚」设计的，
+     会把漫画站锁死无法滚动 —— .comic-site（comic-main.tsx 挂载时打上）全部放开。 */
+  html.comic-site,
+  html.comic-site body {
+    overflow: auto;
+    height: auto;
+    overscroll-behavior: auto;
+  }
+  html.comic-site #root {
+    overflow: visible;
+    height: auto;
+  }
+
   /* WebKit 会为每个 backdrop-filter 建立额外合成层。移动端改用已有的高不透明
      背景色，保留视觉层级，同时避免滚动时反复重采样整屏。 */
   html.ios-webkit [class*="backdrop-blur"],
