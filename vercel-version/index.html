@@ -20,21 +20,8 @@
           if (isStandalone) {
             document.documentElement.classList.add('pwa-standalone');
           }
-          var syncAppHeight = function () {
-            var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight || (document.documentElement && document.documentElement.clientHeight);
-            if (h) {
-              document.documentElement.style.setProperty('--app-h', h + 'px');
-            }
-          };
-          syncAppHeight();
-          window.addEventListener('resize', syncAppHeight, { passive: true });
-          if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', syncAppHeight, { passive: true });
-          }
-          window.addEventListener('orientationchange', function () {
-            setTimeout(syncAppHeight, 150);
-          }, { passive: true });
-          window.addEventListener('pageshow', syncAppHeight, { passive: true });
+          // 高度与键盘生命周期由 iosViewportGuard 统一管理；这里仅在首帧标记环境，
+          // 避免两套 resize 监听器互相覆盖 --app-h。
         } catch (e) {}
       })();
     </script>

@@ -111,8 +111,6 @@ export default defineConfig(() => {
         'images/lihan/lihan-tray.webp',
         'images/lihan/lihan-tiles-clean.webp',
         'images/lihan/lihan-victory.webp',
-        'sounds/bgm.mp3',
-        'sounds/lihan-bgm.mp3',
       ],
       workbox: {
         // Only the app shell is installed up front. Games and comics stay on demand.
@@ -136,7 +134,7 @@ export default defineConfig(() => {
         // ⚠️ /admin 必须连**不带斜杠**的写法一起排除：
         // 只写 /^\/admin\// 时，访问 /admin（无斜杠）会被 SW 回退成前台首页，
         // 用户看到的是「主页」而不是后台（2026-09-21 实测踩过）。
-        navigateFallbackDenylist: [/^\/daxigua\//, /^\/save-hange\//, /^\/admin(\/|$)/, /^\/comics\/?$/],
+        navigateFallbackDenylist: [/^\/api\//, /^\/daxigua\//, /^\/save-hange\//, /^\/admin(\/|$)/, /^\/comics\/?$/],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {

@@ -290,7 +290,8 @@ export class COSService {
     const remoteUrl = this.getObjectUrl('archive.json');
     try {
       requestDebug.recordJsonRequest();
-      const resp = await fetch(remoteUrl, { mode: 'cors', cache: 'default' });
+      // 归档发布后应立即反映排序与新书，避免浏览器沿用旧 archive.json。
+      const resp = await fetch(remoteUrl, { mode: 'cors', cache: 'no-store' });
       if (resp.ok) {
         const data = await resp.json();
         if (Array.isArray(data) && data.length > 0) {

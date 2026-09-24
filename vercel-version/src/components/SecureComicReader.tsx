@@ -87,17 +87,27 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
   const [aspect, setAspect] = useState(1.4); // 占位高度，避免滚动条乱跳
   const [failed, setFailed] = useState(false);
   const [rendered, setRendered] = useState(false);
+  const leaveTimerRef = useRef<number | null>(null);
 
-  // 只提前半屏开始画，避免手机快速滑动时多页同时进入绘制范围。
+  // 提前两屏开始画，并延迟清理离开的页面，兼顾 iOS 惯性滚动与位图内存。
   useEffect(() => {
     const el = holderRef.current;
     if (!el) return undefined;
-    const observer = new IntersectionObserver(
-      ([entry]) => setVisible(entry.isIntersecting),
-      { root: null, rootMargin: '50% 0px 50% 0px', threshold: 0 },
-    );
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
+        leaveTimerRef.current = null;
+        setVisible(true);
+        return;
+      }
+      // 给 iOS 惯性滚动留出缓冲区，避免边界抖动导致 Canvas 清空后立刻重绘。
+      leaveTimerRef.current = window.setTimeout(() => setVisible(false), 750);
+    }, { root: null, rootMargin: '200% 0px 200% 0px', threshold: 0 });
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {

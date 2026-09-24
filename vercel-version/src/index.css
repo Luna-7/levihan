@@ -208,6 +208,15 @@
     select {
       font-size: 16px !important;
     }
+
+    /* 独立 PWA 聚焦输入框时冻结根外壳尺寸；只让系统键盘覆盖/推动具体滚动区，
+       避免 WebKit 把整个页面重新缩放后无法恢复。 */
+    html.pwa-standalone.ios-keyboard-open,
+    html.pwa-standalone.ios-keyboard-open body,
+    html.pwa-standalone.ios-keyboard-open #root {
+      width: 100%;
+      max-width: 100%;
+    }
   }
 
   @media (max-width: 640px) {

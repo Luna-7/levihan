@@ -18,7 +18,6 @@ import { soundManager } from './utils/audio';
 import { NavigationTab } from './types';
 import { useAppShellStore } from './stores/appShellStore';
 import { cosService } from './services/cosClient';
-import { initIdlePreloader } from './utils/idlePreloader';
 
 /**
  * 导航分区与对应动态组件 Chunk 的预加载函数
@@ -126,15 +125,18 @@ export default function App() {
   const showToast = useAppShellStore((state) => state.showToast);
   const toastMessage = useAppShellStore((state) => state.toast);
 
-  // 保持已访问分区的挂载（同时预先挂载与「兵团驻地」相邻的「巨树餐厅」），
-  // 杜绝滑动或切页时出现空白、二次重载或 DOM 闪烁
-  const [visitedTabs, setVisitedTabs] = useState<Set<NavigationTab>>(() => new Set([activeTab, 'resources']));
+  // 最多保持当前分区与上一分区挂载，兼顾滑动过渡和 iOS 内存回收。
+  const [visitedTabs, setVisitedTabs] = useState<Set<NavigationTab>>(() => new Set([activeTab]));
   const [isTransitioning, setIsTransitioning] = useState(false);
   const prevTabRef = useRef(activeTab);
 
   useEffect(() => {
     if (prevTabRef.current !== activeTab) {
+      const previousTab = prevTabRef.current;
       prevTabRef.current = activeTab;
+      // iOS 对大型 DOM、Canvas 与图片解码缓存更敏感。只保留当前页和上一页，
+      // 既保证滑动过渡期间没有空白，也允许更早页面释放内存。
+      setVisitedTabs(new Set([previousTab, activeTab]));
       setIsTransitioning(true);
       const timer = window.setTimeout(() => {
         setIsTransitioning(false);
@@ -143,45 +145,8 @@ export default function App() {
     }
   }, [activeTab]);
 
-  useEffect(() => {
-    setVisitedTabs((prev) => {
-      if (prev.has(activeTab)) return prev;
-      const next = new Set(prev);
-      next.add(activeTab);
-      return next;
-    });
-  }, [activeTab]);
-
-  useEffect(() => {
-    initIdlePreloader();
-  }, []);
-
-  // 空闲预热排队策略：首屏 600ms 后静默预热最近的「巨树餐厅」及其小说索引；
-  // 1800ms 后分步预热「茶会」和「联络」，确保用户随后交互时所有 chunk 均已处于本地缓存
-  useEffect(() => {
-    const t1 = window.setTimeout(() => {
-      preloadTabChunk('resources');
-    }, 600);
-    const t2 = window.setTimeout(() => {
-      preloadTabChunk('doujinshi');
-      preloadTabChunk('dispatch');
-    }, 1800);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, []);
-
   const handlePreloadTab = React.useCallback((tab: NavigationTab | string) => {
     preloadTabChunk(tab);
-    if (tab === 'resources' || tab === 'doujinshi' || tab === 'dispatch' || tab === 'home') {
-      setVisitedTabs((prev) => {
-        if (prev.has(tab as NavigationTab)) return prev;
-        const next = new Set(prev);
-        next.add(tab as NavigationTab);
-        return next;
-      });
-    }
   }, []);
 
   const isMounted = (tab: NavigationTab) => visitedTabs.has(tab);
@@ -352,6 +317,7 @@ export default function App() {
               contain: activeTab === 'home' ? 'none' : 'strict',
             }}
             aria-hidden={activeTab !== 'home'}
+            inert={activeTab !== 'home' ? true : undefined}
           >
             {isMounted('home') && <ImmersiveGameHome
               onNavigateTab={handleNavigate}
@@ -372,6 +338,7 @@ export default function App() {
               contain: activeTab === 'resources' ? 'none' : 'strict',
             }}
             aria-hidden={activeTab !== 'resources'}
+            inert={activeTab !== 'resources' ? true : undefined}
           >
             {isMounted('resources') && <GameStageLayout
               activeTab="resources"
@@ -398,6 +365,7 @@ export default function App() {
               contain: activeTab === 'doujinshi' ? 'none' : 'strict',
             }}
             aria-hidden={activeTab !== 'doujinshi'}
+            inert={activeTab !== 'doujinshi' ? true : undefined}
           >
             {isMounted('doujinshi') && <Suspense fallback={<TeaPartyLoadingSkeleton />}><RestaurantForum
               onBack={() => handleNavigate('home')}
@@ -415,6 +383,7 @@ export default function App() {
               contain: activeTab === 'dispatch' ? 'none' : 'strict',
             }}
             aria-hidden={activeTab !== 'dispatch'}
+            inert={activeTab !== 'dispatch' ? true : undefined}
           >
             {isMounted('dispatch') && <GameStageLayout
               activeTab="dispatch"

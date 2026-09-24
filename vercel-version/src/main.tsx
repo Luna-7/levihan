@@ -3,7 +3,10 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { useAuthStore } from './stores/authStore';
+import { setupIOSViewportGuard } from './utils/iosViewportGuard';
 import './index.css';
+
+setupIOSViewportGuard();
 
 const syncPageVisibilityClass = () => {
   document.documentElement.classList.toggle('app-page-hidden', document.visibilityState !== 'visible');

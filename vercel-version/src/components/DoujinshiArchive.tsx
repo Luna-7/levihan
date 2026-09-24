@@ -1,6 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { toPng } from 'html-to-image';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import {
   DOUJIN_ARCHIVE_DATA,
 } from '../data/doujinArchiveData';
@@ -9,6 +7,7 @@ import { soundManager } from '../utils/audio';
 import { cosService } from '../services/cosClient';
 import { NovelModule } from './NovelModule';
 import LazyComicPage from './LazyComicPage';
+import { BookShareModal } from './BookShareModal';
 // SecureComicReader 静态引入会把 pdfjs-dist + crypto-js（合计约 570 KB）拖进主包：
 // 每个访客都白下载一遍，还会顶破 Workbox 的 2 MiB 预缓存上限导致构建失败。
 // 它只在打开「含有敏感元素」的漫画本时才用得到，所以按需加载。
@@ -54,11 +53,12 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const [selectedTag, setSelectedTag] = useState<string>('全部');
   const [selectedAuthor, setSelectedAuthor] = useState<string>('全部');
   // 排序方式：'pages' = 从页数多到页数少（默认），'new' = 从新到旧
-  const [sortBy, setSortBy] = useState<'pages' | 'new'>('pages');
+  const [sortBy, setSortBy] = useState<'pages' | 'new'>('new');
   const wasMangaVisible = useRef(isMangaVisible);
 
   // 当前正在无缝长图阅读的书籍
   const [readingBook, setReadingBook] = useState<DoujinBookItem | null>(null);
+  const archiveScrollYRef = useRef(0);
   // 加密归档本子：走独立的伪装阅读器，普通长图画廊状态完全不受影响
   const [secureBook, setSecureBook] = useState<DoujinBookItem | null>(null);
 
@@ -69,12 +69,10 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   // 封面加载失败状态
   const [failedCovers, setFailedCovers] = useState<Set<string>>(new Set());
 
-  // 分享卡片：当前正在生成/预览分享卡的本子 + 卡片 PNG dataUrl
+  // 当前打开分享卡片的本子（普通本与加密解析本共用）。
   const [shareCardBook, setShareCardBook] = useState<DoujinBookItem | null>(null);
-  const [shareCardUrl, setShareCardUrl] = useState<string>('');
-  const [isGeneratingShareCard, setIsGeneratingShareCard] = useState<boolean>(false);
-  const [shareImgLoaded, setShareImgLoaded] = useState<boolean>(false);
-  const sharePosterRef = useRef<HTMLDivElement>(null);
+  const deepLinkHandledRef = useRef(false);
+  const [linkedBookId, setLinkedBookId] = useState('');
 
   // 在线小说索引（novels.json，含合订本与同好来稿）；SWR 预载，若有本地/内存缓存则首屏瞬出
   const [novels, setNovels] = useState<GroupNovel[]>(() => cosService.getCachedNovelList());
@@ -114,7 +112,15 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
   // 组件挂载时自动尝试同步 COS 远端归档（在线小说索引并行加载，失败静默降级）
   useEffect(() => {
-    handleRefreshArchive(false);
+    void handleRefreshArchive(false).then((archiveBooks) => {
+      if (mode !== 'comic' || deepLinkHandledRef.current) return;
+      const bookId = new URLSearchParams(window.location.search).get('book');
+      if (!bookId) return;
+      const linkedBook = archiveBooks.find((book) => book.id === bookId);
+      if (!linkedBook) return;
+      deepLinkHandledRef.current = true;
+      setLinkedBookId(linkedBook.id);
+    });
     cosService.loadNovelList().then((data) => {
       setNovels(data);
       setIsNovelsLoading(false);
@@ -169,7 +175,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   }, [pendingNovelId, onShowToast]);
 
   // 刷新归档数据 (尝试从 COS 获取 archive.json)
-  const handleRefreshArchive = async (showToastNotice = true) => {
+  const handleRefreshArchive = async (showToastNotice = true): Promise<DoujinBookItem[]> => {
     setIsLoadingArchive(true);
     try {
       const loaded = await cosService.loadArchiveData();
@@ -178,12 +184,14 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         if (showToastNotice) {
           onShowToast(`已同步 COS 存储桶归档数据，共 ${loaded.length} 部作品 📦`);
         }
+        return loaded;
       }
     } catch (err) {
       console.warn('Failed to load remote archive:', err);
     } finally {
       setIsLoadingArchive(false);
     }
+    return books;
   };
 
   // 点击卡片直接进入查看来源于 COS 的无缝长图
@@ -194,16 +202,16 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     // 加密归档的本子：正文只有 comic_vault/{id}_secure.txt，没有可读的图片，
     // 所以不进长图画廊，改走 SecureComicReader（维护页 → 校验码 → 内存解密 → Canvas）
     if (book.secure && SecureComicReader) {
+      archiveScrollYRef.current = window.scrollY;
       setSecureBook(book);
       onShowToast(`《${book.titleZh}》资源已被安全隔离，需校验码解析 🔒`);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
+    archiveScrollYRef.current = window.scrollY;
     setReadingBook(book);
     setDetectedPages(book.pages || 30);
     onShowToast(`正在开启《${book.titleZh}》无缝长图画廊 📖`);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
 
     // 只在页数未知时才进行探测
     if (!book.pages || book.pages <= 0) {
@@ -228,70 +236,24 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     setDetectedPages(null);
   };
 
+  // 在新阅读器 DOM 提交后再瞬时定位。旧实现会先让列表平滑滚动，再替换成高度完全
+  // 不同的漫画 DOM，iOS Safari 上会显示一帧空白或明显跳闪。
+  useLayoutEffect(() => {
+    if (readingBook || secureBook) {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      return;
+    }
+    if (archiveScrollYRef.current > 0) {
+      window.scrollTo({ top: archiveScrollYRef.current, behavior: 'auto' });
+    }
+  }, [readingBook, secureBook]);
+
   // 分享卡片流程：点「分享」→ 弹出卡片预览（封面 + 详情）→
   // 移动端调 navigator.share 直接把**图片**发到 QQ/微信（系统分享面板），
   // 桌面端降级为保存 PNG。分享的链接恒为站点根路径（链接不变原则）。
   const handleShareBook = (book: DoujinBookItem) => {
     soundManager.playCoin();
     setShareCardBook(book);
-    setShareCardUrl('');
-    setShareImgLoaded(false);
-  };
-
-  // 卡片图片生成：等封面 img onLoad 之后再跑 toPng，避免半截图
-  useEffect(() => {
-    if (!shareCardBook || shareCardUrl || !shareImgLoaded || !sharePosterRef.current) return;
-    let cancelled = false;
-    setIsGeneratingShareCard(true);
-    void (async () => {
-      try {
-        const dataUrl = await toPng(sharePosterRef.current as HTMLElement, {
-          cacheBust: true,
-          pixelRatio: 2.2,
-          backgroundColor: '#FAF3E3',
-        });
-        if (!cancelled) setShareCardUrl(dataUrl);
-      } catch (err) {
-        console.error('Share card generation failed', err);
-        if (!cancelled) onShowToast('卡片生成失败，请重试');
-      } finally {
-        if (!cancelled) setIsGeneratingShareCard(false);
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shareCardBook, shareCardUrl, shareImgLoaded]);
-
-  // 原生分享：图片 + 链接一起发。
-  // ⚠️ iOS 在带 files 分享时会丢弃独立的 url 字段（平台限制），
-  // 所以链接必须写进 text 里才能保得住；卡片图右下角也印了域名兜底。
-  const handleShareCard = async () => {
-    if (!shareCardUrl || !shareCardBook) return;
-    const url = `${window.location.origin}/`;
-    const text = `《${shareCardBook.titleZh}》\n${url}`;
-    try {
-      const blob = await (await fetch(shareCardUrl)).blob();
-      const file = new File([blob], `share_${shareCardBook.id}.png`, { type: 'image/png' });
-      const canShareFiles = typeof navigator.canShare === 'function'
-        ? navigator.canShare({ files: [file] })
-        : typeof navigator.share === 'function';
-      if (canShareFiles && typeof navigator.share === 'function') {
-        await navigator.share({ files: [file], title: `《${shareCardBook.titleZh}》`, text });
-        return; // 用户完成或取消系统分享面板
-      }
-    } catch {
-      return; // 用户取消分享不算错误
-    }
-    handleDownloadShareCard();
-  };
-
-  const handleDownloadShareCard = () => {
-    if (!shareCardUrl) return;
-    const link = document.createElement('a');
-    link.download = `分享_${shareCardBook?.titleZh || 'levihan'}_${Date.now()}.png`;
-    link.href = shareCardUrl;
-    link.click();
-    onShowToast('卡片已保存，去转发吧 ✨');
   };
 
   // 过滤同人本列表
@@ -314,8 +276,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     return matchCat && matchTag && matchAuthor && matchSearch;
   });
 
-  // 排序：默认「页数多→少」；「从新到旧」按 updatedAt/createdAt 降序；
-  // 缺失日期的条目视为最旧（排到末尾）。引入 ID 兜底保证顺序绝对稳定。
+  // 排序：默认「从新到旧」；按 updatedAt/createdAt 降序。
+  // 早期归档没有日期，以递增的 lh-NNN ID 代表收录顺序，因此兜底必须倒序。
   const sortedBooks = useMemo(() => {
     const getTime = (b: DoujinBookItem) =>
       new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
@@ -326,7 +288,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         if (diff !== 0) return diff;
         const pageDiff = (b.pages || 0) - (a.pages || 0);
         if (pageDiff !== 0) return pageDiff;
-        return String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true });
+        return String(b.id).localeCompare(String(a.id), 'zh-CN', { numeric: true });
       });
     } else {
       arr.sort((a, b) => {
@@ -334,11 +296,26 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         if (diff !== 0) return diff;
         const timeDiff = getTime(b) - getTime(a);
         if (timeDiff !== 0) return timeDiff;
-        return String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true });
+        return String(b.id).localeCompare(String(a.id), 'zh-CN', { numeric: true });
       });
     }
     return arr;
   }, [filteredBooks, sortBy]);
+
+  useEffect(() => {
+    if (!linkedBookId) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(`book-card-${linkedBookId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 120);
+    const clearHighlight = window.setTimeout(() => setLinkedBookId(''), 3200);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(clearHighlight);
+    };
+  }, [linkedBookId]);
 
   // 处理封面加载失败
   const handleCoverError = (bookId: string) => {
@@ -426,15 +403,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => handleShareBook(readingBook)}
-            className="px-3 py-1.5 min-h-[32px] bg-[#B7791F] text-[#FFFEEF] font-pixel text-xs sm:text-sm rounded-md hover:bg-[#9A6519] cursor-pointer transition-all flex items-center gap-1 shrink-0 shadow-xs active:scale-95"
-            title="生成分享卡片（封面+详情）"
-          >
-            <span>↗</span>
-            <span>分享</span>
-          </button>
         </div>
 
         {/* 无缝长图展示区 */}
@@ -464,97 +432,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           />
         )}
 
-        {/* 分享卡片弹窗：封面 + 详情生成 PNG，原生分享面板直发 QQ/微信 */}
-        {shareCardBook && typeof document !== 'undefined' && createPortal(
-          <div
-            className="fixed inset-0 z-[1300] bg-black/60 flex items-center justify-center p-4 select-none"
-            onClick={() => setShareCardBook(null)}
-          >
-            <div className="w-full max-w-[360px] space-y-3" onClick={(e) => e.stopPropagation()}>
-              {/* 海报本体（同时是 toPng 的截图源） */}
-              <div className="mx-auto w-[320px]">
-                <div
-                  ref={sharePosterRef}
-                  className="bg-[#FAF3E3] border-2 border-[#1E4334] rounded-lg overflow-hidden shadow-xl"
-                >
-                  <div className="px-3 py-2 bg-[#1E4334] text-[#F9E79F] font-pixel text-[10px] flex items-center justify-between">
-                    <span>✦ 利韩 · 典藏分享</span>
-                    <span>{shareCardBook.category || '漫画本'}</span>
-                  </div>
-                  <div className="flex gap-3 p-3">
-                    <div className="w-[120px] shrink-0 aspect-[2/3] bg-[#EDEFF2] border border-[#D5C9AF] rounded-xs overflow-hidden flex items-center justify-center">
-                      {shareCardBook.coverFile && !failedCovers.has(shareCardBook.id) ? (
-                        <img
-                          src={cosService.getCoverUrl(shareCardBook)}
-                          alt=""
-                          crossOrigin="anonymous"
-                          draggable={false}
-                          className="w-full h-full object-cover"
-                          onLoad={() => setShareImgLoaded(true)}
-                          onError={() => { handleCoverError(shareCardBook.id); setShareImgLoaded(true); }}
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center w-full h-full text-center p-2">
-                          <div className="text-3xl">{shareCardBook.secure ? '🔒' : '📖'}</div>
-                          <div className="font-pixel text-[10px] text-[#1E3A2B] mt-1 break-words">{shareCardBook.titleZh}</div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 space-y-1.5 text-left">
-                      <div className="font-pixel text-sm font-bold text-[#1E3A2B] leading-snug break-words">
-                        {shareCardBook.titleZh}
-                      </div>
-                      {shareCardBook.titleJp && (
-                        <div className="text-[10px] font-retro-jp text-[#8C7A68] italic break-words">{shareCardBook.titleJp}</div>
-                      )}
-                      <div className="text-[11px] font-retro-jp text-[#3E342B]">
-                        作者：{shareCardBook.circle || '未知'}
-                      </div>
-                      <div className="text-[11px] font-retro-jp text-[#5B4636]">
-                        共 {shareCardBook.pages || 30} 页{shareCardBook.secure ? ' · 🔒 校验码解析' : ''}
-                      </div>
-                      {shareCardBook.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {shareCardBook.tags.slice(0, 4).map((tag, i) => (
-                            <span key={i} className="text-[9px] font-retro-jp px-1.5 py-0.5 rounded-xs border border-[#DECFA9] bg-[#F4EEDF] text-[#7A6958]">
-                              #{tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="px-3 py-1.5 border-t border-dashed border-[#D5C9AF] flex items-center justify-between text-[9px] font-retro-jp text-[#8C7A68]">
-                    <span>{typeof window !== 'undefined' ? window.location.host : ''}</span>
-                    <span> forbidden until triple-click 🤫</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 操作按钮 */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => void handleShareCard()}
-                  disabled={!shareCardUrl}
-                  className="flex-1 px-3 py-2.5 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-pixel text-xs font-bold rounded-xs cursor-pointer enabled:hover:bg-[#2B5E4A] disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                >
-                  {isGeneratingShareCard || !shareCardUrl ? '生成卡片中…' : '↗ 分享图片 + 链接'}
-                </button>
-                <button
-                  onClick={handleDownloadShareCard}
-                  disabled={!shareCardUrl}
-                  className="px-3 py-2.5 bg-[#FFFEEF] text-[#1E4334] border-2 border-[#1E4334] font-pixel text-xs font-bold rounded-xs cursor-pointer hover:bg-[#F3EAD5] disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                >
-                  💾 保存
-                </button>
-              </div>
-              <p className="text-center text-[10px] font-retro-jp text-white/75">
-                手机上直接转发到 QQ / 微信（卡片图 + 链接一起发出）· 也可以长按图片保存
-              </p>
-            </div>
-          </div>,
-          document.body
-        )}
       </div>
     );
   }
@@ -564,6 +441,13 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   // ==========================================
   return (
     <div id="doujinshi-archive-root" className="space-y-2 text-[#2C241D] select-text">
+      {shareCardBook && (
+        <BookShareModal
+          book={shareCardBook}
+          onClose={() => setShareCardBook(null)}
+          onShowToast={onShowToast}
+        />
+      )}
       {/* 典藏公约红线轻量提示 */}
       <div className="py-1 px-2.5 bg-[#FBF0EE] border-l-3 border-[#C0392B] rounded-r-xs font-retro-jp text-[11px] text-[#1E4334] flex items-center shadow-2xs">
         <div>
@@ -725,9 +609,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
           return (
             <div
+              id={`book-card-${book.id}`}
               key={book.id}
               onClick={() => handleOpenBookReader(book)}
-              className="bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full h-full"
+              className={`bg-[#FFFEEF] border-2 rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full h-full ${linkedBookId === book.id ? 'border-[#E5A93C] ring-4 ring-[#E5A93C]/35 shadow-xl animate-pulse' : 'border-[#D5C9AF] hover:border-[#1E4334]'}`}
+              style={{ contentVisibility: 'auto', containIntrinsicSize: '720px' }}
               title="点击直接打开查看无缝长图"
             >
               <div className="space-y-2">
@@ -761,6 +647,18 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                       </div>
                     )}
                   </div>
+                  <button
+                    type="button"
+                    aria-label={`分享《${book.titleZh}》`}
+                    title="分享本子卡片"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleShareBook(book);
+                    }}
+                    className="shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-full border border-[#B7791F] bg-[#FFF8E8] text-[#9A6519] text-base leading-none shadow-xs active:scale-90"
+                  >
+                    ↗
+                  </button>
                 </div>
 
                 {/* 封面图片展示区 (来源 腾讯云 COS CDN 链接映射，竖版漫画本比例 2:3，悬浮显示点击阅读长图) */}

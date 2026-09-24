@@ -17,18 +17,6 @@
             window.matchMedia('(display-mode: standalone)').matches;
           if (isStandalone) {
             document.documentElement.classList.add('pwa-standalone');
-            var syncStandaloneHeight = function () {
-              var h = window.innerHeight || (document.documentElement && document.documentElement.clientHeight);
-              if (h) {
-                document.documentElement.style.setProperty('--app-h', h + 'px');
-              }
-            };
-            syncStandaloneHeight();
-            window.addEventListener('resize', syncStandaloneHeight, { passive: true });
-            window.addEventListener('orientationchange', function () {
-              setTimeout(syncStandaloneHeight, 150);
-            }, { passive: true });
-            window.addEventListener('pageshow', syncStandaloneHeight, { passive: true });
           }
         } catch (e) {}
       })();

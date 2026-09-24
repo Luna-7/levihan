@@ -31,10 +31,12 @@ export default function LazyComicPage({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [displayReady, setDisplayReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [inRange, setInRange] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(2 / 3);
   const mountedRef = useRef(true);
+  const unloadTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -47,12 +49,25 @@ export default function LazyComicPage({
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setInRange(entry.isIntersecting),
-      { root: null, rootMargin: '100% 0px 100% 0px', threshold: 0 },
-    );
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        if (unloadTimerRef.current !== null) window.clearTimeout(unloadTimerRef.current);
+        unloadTimerRef.current = null;
+        setInRange(true);
+        return;
+      }
+      // iOS 惯性滚动时观察器边界会快速往返。延迟摘图可避免刚离开边界就清空、
+      // 下一帧又重新插入造成整块闪屏，同时仍能释放真正远离视口的图片。
+      unloadTimerRef.current = window.setTimeout(() => {
+        setInRange(false);
+        setDisplayReady(false);
+      }, 500);
+    }, { root: null, rootMargin: '300% 0px 300% 0px', threshold: 0 });
     observer.observe(element);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (unloadTimerRef.current !== null) window.clearTimeout(unloadTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -137,28 +152,24 @@ export default function LazyComicPage({
       data-page={pageNumber}
       style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
     >
-      {!failed && (!loaded || !inRange) ? (
-        // 占位容器，维持滚动高度
-        <div
-          aria-hidden="true"
-          className="w-full min-h-[240px]"
-          style={{ aspectRatio }}
-        />
-      ) : (
-        <>
+      {!failed ? (
+        <div className="relative w-full min-h-[240px] bg-[#F6F1E3]" style={{ aspectRatio }}>
+          {!displayReady && <div aria-hidden="true" className="absolute inset-0 bg-[#F6F1E3]" />}
           {loaded && inRange && (
             <img
               src={src}
               alt={alt || `第 ${pageNumber} 页`}
               referrerPolicy={referrerPolicy}
-              loading="lazy"
               decoding="async"
               draggable={false}
-              className="w-full h-auto block m-0 p-0 border-0 align-top select-none touch-pan-x touch-pan-y bg-[#F6F1E3]"
+              onLoad={() => setDisplayReady(true)}
+              className={`absolute inset-0 w-full h-full object-contain block m-0 p-0 border-0 align-top select-none touch-pan-x touch-pan-y bg-[#F6F1E3] transition-opacity duration-150 ${displayReady ? 'opacity-100' : 'opacity-0'}`}
               style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
             />
           )}
-
+        </div>
+      ) : (
+        <>
           {failed && (
             <div className="w-full py-10 px-4 bg-[#1E2621] border-b border-dashed border-[#34483B] text-center text-[#A69C8E] font-retro-jp space-y-1 block">
               <div className="text-sm font-pixel text-[#F9E79F]">第 {pageNumber} 页</div>

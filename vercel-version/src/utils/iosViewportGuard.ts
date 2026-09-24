@@ -23,6 +23,7 @@ const VIEWPORT_FLAT = 'width=device-width, initial-scale=1.0';
 const RECOVER_DELAY_MS = 80;
 const VERIFY_DELAY_MS = 260;
 const MAX_ATTEMPTS = 3;
+let initialized = false;
 
 function isIOS(): boolean {
   const ua = navigator.userAgent;
@@ -41,12 +42,16 @@ function getViewportMeta(): HTMLMetaElement | null {
 export function setupIOSViewportGuard(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   if (!isIOS()) return;
+  if (initialized) return;
+  initialized = true;
 
   const meta = getViewportMeta();
   if (!meta) return;
 
   let attempts = 0;
   let busy = false;
+  let frame = 0;
+  let editableFocused = false;
 
   const isBroken = (): boolean => window.innerWidth > maxLayoutWidth() + 1;
 
@@ -67,20 +72,34 @@ export function setupIOSViewportGuard(): void {
     }, RECOVER_DELAY_MS);
   };
 
-  const syncStandaloneAppHeight = (): void => {
+  const syncAppHeight = (): void => {
     const isStandalone =
       (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
       window.matchMedia('(display-mode: standalone)').matches;
-    if (isStandalone) {
-      const h = window.innerHeight || document.documentElement.clientHeight;
-      if (h) {
-        document.documentElement.style.setProperty('--app-h', `${h}px`);
-      }
+    // iOS 键盘弹出时 visualViewport 会连续缩小。独立 PWA 若跟着改整个应用高度，
+    // WebKit 很容易把外壳二次缩放，表现为输入框聚焦后整页突然变大。
+    // 聚焦期间冻结外壳高度；普通 Safari 才跟随 visualViewport 的地址栏变化。
+    if (isStandalone && editableFocused) return;
+    const h = isStandalone
+      ? window.innerHeight || document.documentElement.clientHeight
+      : window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight;
+    if (h) {
+      document.documentElement.style.setProperty('--app-h', `${Math.round(h)}px`);
     }
   };
 
+  const scheduleSync = (delay = 0): void => {
+    window.setTimeout(() => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        syncAppHeight();
+        if (isBroken()) heal();
+      });
+    }, delay);
+  };
+
   const check = (): void => {
-    syncStandaloneAppHeight();
+    syncAppHeight();
     // 修复成功后计数归零，保证后续再次变坏时仍有重试额度
     if (!isBroken()) {
       attempts = 0;
@@ -94,8 +113,24 @@ export function setupIOSViewportGuard(): void {
   window.addEventListener('load', check);
   window.addEventListener('pageshow', check);
   window.addEventListener('focus', check);
-  window.addEventListener('orientationchange', () => window.setTimeout(check, 300));
-  window.addEventListener('resize', () => window.setTimeout(check, 200));
+  window.addEventListener('orientationchange', () => scheduleSync(300), { passive: true });
+  window.addEventListener('resize', () => scheduleSync(120), { passive: true });
+  window.visualViewport?.addEventListener('resize', () => scheduleSync(), { passive: true });
+  document.addEventListener('focusin', (event) => {
+    const target = event.target as HTMLElement | null;
+    editableFocused = !!target && (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT' ||
+      target.isContentEditable
+    );
+    document.documentElement.classList.toggle('ios-keyboard-open', editableFocused);
+  });
+  document.addEventListener('focusout', () => {
+    editableFocused = false;
+    document.documentElement.classList.remove('ios-keyboard-open');
+    scheduleSync(320);
+  });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') window.setTimeout(check, 120);
   });

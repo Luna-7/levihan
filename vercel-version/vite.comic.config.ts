@@ -40,6 +40,7 @@ export default defineConfig(() => {
             'assets/pdf.worker.min-*.js',
           ],
           navigateFallback: 'comic.html',
+          navigateFallbackDenylist: [/^\/api\//],
           cleanupOutdatedCaches: true,
           runtimeCaching: [
             {
