@@ -4,6 +4,7 @@ import { RESOURCE_LINKS } from '../data/initialData';
 import { soundManager } from '../utils/audio';
 import { AuNovelReader } from './AuNovelReader';
 import { CardPatternOverlay } from './CardPatternOverlay';
+import { GoodsShowcase } from './GoodsShowcase';
 
 interface Props {
   onCopyCode: (code: string) => void;
@@ -17,7 +18,8 @@ export const ResourceHub: React.FC<Props> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('动漫原片');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const allCategories = ['动漫原片', '漫画与手稿', '二创剪辑/素材', '官方AU小说'];
+  // 「周边橱窗」只陈列图片（清单在 COS 的 goods/manifest.json），不走网盘链接那套
+  const allCategories = ['动漫原片', '漫画与手稿', '二创剪辑/素材', '官方AU小说', '周边橱窗'];
 
   const handleAutoJump = (url: string, code?: string) => {
     if (code) {
@@ -137,7 +139,7 @@ export const ResourceHub: React.FC<Props> = ({
       <div className="p-2 px-3 bg-[#EAF2EE] border-l-3 border-[#1E4334] rounded-r-xs font-retro-jp text-[11px] text-[#1E4334] flex items-center">
         <div>
           <span className="font-bold">📚 官方资料馆：</span>
-          收录《进击的巨人》官方原片、原画分镜手稿、设定公式书、二创音画剪辑母盘与官方授权AU小说。
+          收录《进击的巨人》官方原片、原画分镜手稿、设定公式书、二创音画剪辑母盘与官方授权AU小说；另有「周边橱窗」陈列周边 PNG 原图。
         </div>
       </div>
 
@@ -166,8 +168,8 @@ export const ResourceHub: React.FC<Props> = ({
           ))}
         </div>
 
-        {/* 搜索框 (官方AU小说自带阅读器内置目录，其余分类提供搜索) */}
-        {selectedCategory !== '官方AU小说' && (
+        {/* 搜索框 (官方AU小说自带阅读器内置目录、周边橱窗自带搜索，其余分类提供搜索) */}
+        {selectedCategory !== '官方AU小说' && selectedCategory !== '周边橱窗' && (
           <div className="flex items-center gap-1.5 pt-1 border-t border-dashed border-[#E0D5BE]">
             <input
               type="text"
@@ -188,8 +190,13 @@ export const ResourceHub: React.FC<Props> = ({
         )}
       </div>
 
-      {/* 📜 官方AU小说专区 */}
-      {selectedCategory === '官方AU小说' ? (
+      {/* 🖼 周边橱窗：图片区块（懒加载缩略图 + 一键下载原图，图片本体放在 COS 不进包） */}
+      {selectedCategory === '周边橱窗' ? (
+        <div className="mb-6">
+          <GoodsShowcase onShowToast={onShowToast} />
+        </div>
+      ) : selectedCategory === '官方AU小说' ? (
+        /* 📜 官方AU小说专区 */
         <div className="mb-6">
           <AuNovelReader onShowToast={onShowToast} />
         </div>

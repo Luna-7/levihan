@@ -13,6 +13,7 @@
     "build:comic": "vite build --config vite.comic.config.ts && cp dist/comic.html dist/index.html",
     "preview": "vite preview",
     "sync:archive": "node scripts/sync-archive.mjs",
+    "sync:goods": "node scripts/sync-goods.mjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "check:admin": "node scripts/check-admin-inline.cjs",

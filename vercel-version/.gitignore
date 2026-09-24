@@ -9,6 +9,10 @@ coverage/
 !.env.example
 .vercel
 
+# 「周边橱窗」的图片源目录：原图只上传到 COS，不进仓库
+# （仓库里的静态资源会被 Workbox 预缓存，几十张 PNG 足以把构建打挂）
+goods-src/
+
 # CloudBase 退出前导出的数据备份（含 users 表密码哈希，禁止入库）
 cloudbase/backups/cloudbase-exit-*/
 

@@ -1,4 +1,5 @@
 import { DoujinBookItem, GroupNovel } from '../types/doujinArchive';
+import { GoodsItem } from '../types';
 import { DOUJIN_ARCHIVE_DATA, TENCENT_COS_CONFIG } from '../data/doujinArchiveData';
 import { requestDebug } from '../utils/requestDebug';
 
@@ -235,6 +236,57 @@ export class COSService {
       // 远端暂无 archive.json 时，优雅使用本地录入的本子数据
     }
     return DOUJIN_ARCHIVE_DATA;
+  }
+
+  /**
+   * 「周边橱窗」清单（goods/manifest.json）。读不到 → 空数组（区块显示「还没上货」）。
+   * 加图不改代码：把 PNG 丢进本地 goods-src/，跑一次 npm run sync:goods 即可上架。
+   */
+  public async loadGoodsList(): Promise<GoodsItem[]> {
+    if (!this.config.cdnBaseUrl) return [];
+    try {
+      requestDebug.recordJsonRequest();
+      const resp = await fetch(this.getObjectUrl('goods/manifest.json'), {
+        mode: 'cors',
+        cache: 'no-store',
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const list = Array.isArray(data) ? data : data?.items;
+        if (Array.isArray(list)) {
+          return list.filter(
+            (it: Partial<GoodsItem> | null): it is GoodsItem =>
+              Boolean(it && typeof it.file === 'string' && it.file),
+          );
+        }
+      }
+    } catch (e) {
+      // 清单缺失时优雅降级为空橱窗
+    }
+    return [];
+  }
+
+  /** 周边原图直链（「下载」和「看原图」用它；桶已配 CORS + Content-Disposition: attachment） */
+  public getGoodsOriginalUrl(file: string): string {
+    return this.getObjectUrl(`goods/${file.replace(/^\//, '')}`);
+  }
+
+  /**
+   * 周边展示图直链：**同一张原图由 COS 现场缩放**，不需要额外存一份缩略图。
+   * 实测 115 KB 的原图取 360px 只要 34 KB —— 列表只加载它，原图留给「下载」。
+   */
+  public getGoodsImageUrl(file: string, width: number, quality = 82): string {
+    return `${this.getGoodsOriginalUrl(file)}?imageMogr2/thumbnail/${width}x/format/webp/quality/${quality}`;
+  }
+
+  /** 列表缩略图（420px，列表里每张只花几十 KB） */
+  public getGoodsThumbUrl(file: string, width = 420): string {
+    return this.getGoodsImageUrl(file, width, 80);
+  }
+
+  /** 灯箱预览（1600px，够看清细节但不是原图） */
+  public getGoodsPreviewUrl(file: string, width = 1600): string {
+    return this.getGoodsImageUrl(file, width, 88);
   }
 }
 

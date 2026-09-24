@@ -67,6 +67,24 @@ export interface ResourceLink {
   description?: string;
 }
 
+/**
+ * 「周边橱窗」单张周边图（清单来自 COS 的 goods/manifest.json，由 scripts/sync-goods.mjs 生成）
+ * 原图存放于 COS 的 goods/ 目录；缩略图/预览图由 COS 图片处理参数现场生成，不需要另存一份。
+ */
+export interface GoodsItem {
+  /** COS 上的文件名（含扩展名），位于 goods/ 目录下 */
+  file: string;
+  /** 展示名（脚本默认取文件名去扩展名） */
+  title: string;
+  /** 可选备注，例如材质 / 尺寸 / 年份 */
+  note?: string;
+  /** 原图字节数（脚本写入，用于显示体积） */
+  bytes?: number;
+  /** 原图宽高（脚本写入，用于列表占位按真实比例，避免加载时跳动） */
+  width?: number;
+  height?: number;
+}
+
 export interface AuNovelStory {
   id: string;
   num: number;

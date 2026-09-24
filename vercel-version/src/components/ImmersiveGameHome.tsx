@@ -619,7 +619,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                     官方典藏 · 巨人资源
                   </h3>
                   <p className="font-retro-jp text-[10px] text-[#E9D5FF] mt-0.5">
-                    动漫原片 · 漫画手稿 · 二创素材 · AU官方小说
+                    动漫原片 · 漫画手稿 · 二创素材 · AU官方小说 · 周边橱窗
                   </p>
                 </div>
               </div>
