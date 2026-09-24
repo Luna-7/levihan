@@ -356,7 +356,7 @@
       <button type="button" class="admin-tab active" data-admin-tab="manga">📚 漫画上传</button>
       <button type="button" class="admin-tab" data-admin-tab="novel">✍️ 小说管理</button>
       <button type="button" class="admin-tab" data-admin-tab="announcement">📢 公告管理</button>
-      <button type="button" class="admin-tab" data-admin-tab="inbox">📬 联络收件箱</button>
+      <button type="button" class="admin-tab" data-admin-tab="inbox">📬 调查报告收件箱</button>
       <button type="button" class="admin-tab" data-admin-tab="authors">📇 作者登记</button>
       <button type="button" class="admin-tab" data-admin-tab="forum">🌳 餐厅论坛</button>
     </nav>
@@ -377,17 +377,14 @@
       <option value="商业志">商业志</option>
     </select>
 
-    <div class="admin-page-head hide" data-admin-page="inbox"><h2>📬 联络收件箱</h2><div class="muted">处理站内来信与小说投稿。</div></div>
+    <div class="admin-page-head hide" data-admin-page="inbox"><h2>📬 调查报告收件箱</h2><div class="muted">接收并处理前台「调查报告呈递」提交的所有来信与报告。</div></div>
     <div class="panel hide" id="inbox-panel" data-admin-page="inbox">
       <div class="spread" style="margin-bottom:12px">
-        <h2 style="margin:0">📬 联络收件箱</h2>
+        <h2 style="margin:0">📬 调查报告呈递 · 收件箱</h2>
         <button class="btn-sm" id="inbox-refresh">↻ 刷新收件箱</button>
       </div>
-      <div class="muted" id="inbox-status">登录后点击刷新，查看「联络」里呈递的来信与小说投稿。</div>
-      <h3>✉️ 联络来信（战术研讨 / 投递自作 / 定制沟通）</h3>
-      <div id="inbox-contacts"></div>
-      <h3>✍️ 小说投稿</h3>
-      <div id="inbox-novels"></div>
+      <div class="muted" id="inbox-status">登录后点击刷新，接收前台「调查报告呈递」提交的来信与报告。</div>
+      <div id="inbox-contacts" style="margin-top:14px"></div>
     </div>
 
     <div class="admin-page-head hide" data-admin-page="announcement"><h2>📢 公告管理</h2><div class="muted">维护首页公告卡片、横版图片与跳转入口。</div></div>
@@ -1173,7 +1170,6 @@ function enterMain(){
     $('nv-list').innerHTML = '<p class="muted">本地预览不加载云端小说列表。</p>';
     $('author-list').innerHTML = '<p class="muted">本地预览不加载云端登记表。</p>';
     $('inbox-contacts').innerHTML = '<p class="muted">本地预览不加载云端收件箱。</p>';
-    $('inbox-novels').innerHTML = '';
     $('btn-nv-save').disabled = true;
     $('btn-reload').disabled = true;
     $('btn-nv-reload').disabled = true;
@@ -2401,15 +2397,14 @@ function updateProgress(done, total){
   $('prog-text').textContent = '已处理 ' + done + ' / ' + total + ' 张（' + pct + '%）';
 }
 
-/* ============ 联络收件箱 ============ */
+/* ============ 调查报告收件箱 ============ */
 function loadInbox(){
   if (LOCAL_PREVIEW) return;
   $('inbox-status').textContent = '正在读取收件箱…';
   api({ action:'inboxList' }).then(function(res){
     var items = Array.isArray(res.items) ? res.items : [];
-    $('inbox-status').textContent = '未处理来信：' + items.length + ' 条';
-    renderInboxType('contact', items.filter(function(item){ return item.type === 'contact'; }), $('inbox-contacts'));
-    renderInboxType('novel', items.filter(function(item){ return item.type === 'novel'; }), $('inbox-novels'));
+    $('inbox-status').textContent = '未处理调查报告与来信：' + items.length + ' 条';
+    renderInboxReports(items, $('inbox-contacts'));
     renderReviewItems(items.filter(function(item){ return item.type === 'announcement'; }), $('an-review'), '企划');
     renderReviewItems(items.filter(function(item){ return item.type === 'novel' || item.type === 'recommend'; }), $('nv-review'), '投稿');
   }).catch(function(err){ $('inbox-status').textContent = '读取失败：' + (err.message || String(err)); });
@@ -2422,50 +2417,57 @@ function renderReviewItems(items, container, label){
     return '<div class="notice-row" data-inbox-id="'+esc(item._id)+'"><div class="info"><b>'+esc(kind+' · '+(item.title||'未命名'))+'</b><div class="muted">提交人：'+esc(item.author||'匿名')+(item.link?' · '+esc(item.link):'')+'</div>'+(detail?'<details><summary>查看内容</summary><pre style="white-space:pre-wrap">'+esc(detail)+'</pre></details>':'')+'</div><button class="btn-sm btn-gold" data-review="approve">通过</button><button class="btn-sm btn-danger" data-review="reject">拒绝</button></div>';
   }).join('');
 }
-function renderInboxType(type, items, container){
-  if (!items.length) { container.innerHTML = '<p class="muted">暂无未处理来信</p>'; return; }
+function renderInboxReports(items, container){
+  if (!items.length) { container.innerHTML = '<p class="muted">暂无未处理调查报告与来信</p>'; return; }
+  var kindNames = {
+    'feedback': '📋 战术研讨',
+    'translate-release': '🌐 汉化发布',
+    'novel': '✍️ 同人小说',
+    'art-comic': '🎨 同人插画短漫',
+    'recommend': '⭐ 安利推荐',
+    'translate-request': '📖 汉化请求',
+    'contact': '✉️ 调查报告来信'
+  };
   container.innerHTML = items.map(function(item){
-    var title, meta;
-    if (type === 'contact') {
-      title = (item.kindLabel || '联络') + ' · ' + (item.title || item.name || '匿名来信');
-      var metaParts = [];
-      if (item.name) metaParts.push('称呼：' + item.name);
-      if (item.author) metaParts.push('创作者：' + item.author);
-      if (item.email) metaParts.push('邮箱：' + item.email);
-      if (item.homepage) metaParts.push('主页：' + item.homepage);
-      if (item.link) metaParts.push('链接：' + item.link);
-      if (item.source) metaParts.push('来源：' + item.source);
-      if (item.translator) metaParts.push('汉化：' + item.translator);
-      if (item.typesetter) metaParts.push('嵌字：' + item.typesetter);
-      if (item.category) metaParts.push('类别：' + item.category);
-      if (item.notes) metaParts.push('备注：' + item.notes);
-      meta = metaParts.join(' · ');
-      var detail = item.content || '';
-      if (item.reason) detail = (detail ? detail + '\n\n' : '') + '【理由】\n' + item.reason;
-      var actions = '<button class="btn-sm btn-gold" data-review="approve">✓ 已读处理</button>' +
-        '<button class="btn-sm btn-danger" data-review="reject">✕ 忽略</button>';
-      return '<div class="panel" style="margin:8px 0;padding:12px" data-inbox-id="' + esc(item._id) + '">' +
-        '<b>' + esc(title) + '</b> <span class="muted">' + esc(item.createdAt || '') + '</span>' +
-        (meta ? '<p class="muted">' + esc(meta) + '</p>' : '') +
-        '<details><summary>查看来信内容</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:340px;overflow:auto">' + esc(detail || '（无正文）') + '</pre></details>' +
-        '<div class="row" style="margin-top:10px">' + actions + '</div></div>';
-    }
-    title = item.title;
-    meta = '作者：' + item.author + ' · 邮箱：' + item.email + ' · 备注：' + (item.notes || '无');
-    return '<div class="panel" style="margin:8px 0;padding:12px" data-inbox-id="' + esc(item._id) + '">' +
-      '<b>' + esc(title) + '</b> <span class="muted">' + esc(item.createdAt || '') + '</span>' +
-      '<p class="muted">' + esc(meta) + '</p>' +
-      '<details><summary>查看完整内容</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:340px;overflow:auto">' + esc(item.body || '') + '</pre></details>' +
-      '<div class="row" style="margin-top:10px"><button class="btn-sm btn-gold" data-review="approve">✓ 通过并发布</button>' +
-      '<button class="btn-sm btn-danger" data-review="reject">✕ 驳回</button></div></div>';
+    var k = item.kind || item.type || 'contact';
+    var kindBadge = kindNames[k] || item.kindLabel || (k === 'novel' ? '✍️ 同人小说' : '📋 调查报告');
+    var title = item.title || item.name || (item.category ? item.category + ' 呈递' : '调查兵来信');
+
+    var metaParts = [];
+    if (item.category) metaParts.push('<b>分类：</b>' + esc(item.category));
+    if (item.name) metaParts.push('<b>呈递人：</b>' + esc(item.name));
+    if (item.author) metaParts.push('<b>作者：</b>' + esc(item.author));
+    if (item.email) metaParts.push('<b>邮箱：</b>' + esc(item.email));
+    if (item.source) metaParts.push('<b>来源：</b>' + esc(item.source));
+    if (item.translator) metaParts.push('<b>汉化：</b>' + esc(item.translator));
+    if (item.typesetter) metaParts.push('<b>嵌字：</b>' + esc(item.typesetter));
+    if (item.link) metaParts.push('<b>链接：</b><a href="' + esc(item.link) + '" target="_blank" rel="noopener" style="color:var(--green-2);text-decoration:underline">' + esc(item.link) + '</a>');
+    if (item.homepage) metaParts.push('<b>主页：</b><a href="' + esc(item.homepage) + '" target="_blank" rel="noopener" style="color:var(--green-2);text-decoration:underline">' + esc(item.homepage) + '</a>');
+    if (item.files) metaParts.push('<b>附件：</b>' + esc(item.files));
+    if (item.notes) metaParts.push('<b>备注：</b>' + esc(item.notes));
+
+    var detail = item.content || item.body || '';
+    if (item.reason) detail = (detail ? detail + '\n\n' : '') + '【理由/说明】\n' + item.reason;
+
+    var actions = '<button class="btn-sm btn-gold" data-review="approve">✓ 标记已处理</button>' +
+      '<button class="btn-sm btn-danger" data-review="reject">✕ 忽略</button>';
+    return '<div class="panel" style="margin:10px 0;padding:14px;background:#FFFDF6;border:1.5px solid var(--green-2);border-radius:8px" data-inbox-id="' + esc(item._id) + '">' +
+      '<div class="spread" style="margin-bottom:6px">' +
+        '<div><span class="tag" style="background:var(--green-2);color:#F9E79F;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-right:6px">' + esc(kindBadge) + '</span>' +
+        '<b style="font-size:14px;color:var(--green-2)">' + esc(title) + '</b></div>' +
+        '<span class="muted" style="font-size:12px">' + esc(item.createdAt || '') + '</span>' +
+      '</div>' +
+      (metaParts.length ? '<div style="font-size:12px;line-height:1.8;color:var(--ink-2);margin:6px 0">' + metaParts.join(' ｜ ') + '</div>' : '') +
+      '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--green-2);font-weight:700">查看详情内容</summary>' +
+        '<pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;background:rgba(30,67,52,.04);padding:10px;border-radius:6px;margin-top:6px;font-size:12px">' + esc(detail || '（无附加文本）') + '</pre>' +
+      '</details>' +
+      '<div class="row" style="margin-top:10px;gap:8px">' + actions + '</div></div>';
   }).join('');
 }
-function reviewInbox(id, decision, isContact){
-  var msg;
-  if (isContact) msg = decision === 'approve' ? '确认标记这封来信为「已处理」？' : '确认忽略这封来信？';
-  else msg = decision === 'approve' ? '确认通过并立即发布到主站？' : '确认驳回这条投稿？';
+function reviewInbox(id, decision){
+  var msg = decision === 'approve' ? '确认标记此条报告为「已处理」？' : '确认忽略此条报告？';
   if (!confirm(msg)) return;
-  $('inbox-status').textContent = '正在处理来信…';
+  $('inbox-status').textContent = '正在处理…';
   api({ action:'inboxReview', id:id, decision:decision }).then(function(){ loadInbox(); })
     .catch(function(err){ $('inbox-status').textContent = '处理失败：' + (err.message || String(err)); });
 }
@@ -2475,13 +2477,12 @@ $('inbox-panel').addEventListener('click', function(event){
   if (!button) return;
   var card = button.closest('[data-inbox-id]');
   if (!card) return;
-  var section = card.closest('#inbox-contacts') ? 'contact' : 'novel';
-  reviewInbox(card.getAttribute('data-inbox-id'), button.getAttribute('data-review'), section === 'contact');
+  reviewInbox(card.getAttribute('data-inbox-id'), button.getAttribute('data-review'));
 });
 ['an-review','nv-review'].forEach(function(id){ $(id).addEventListener('click',function(event){
   var button=event.target.closest('[data-review]'); if(!button)return;
   var card=button.closest('[data-inbox-id]'); if(!card)return;
-  reviewInbox(card.getAttribute('data-inbox-id'),button.getAttribute('data-review'),false);
+  reviewInbox(card.getAttribute('data-inbox-id'),button.getAttribute('data-review'));
 }); });
 
 var adminRecs=[];
