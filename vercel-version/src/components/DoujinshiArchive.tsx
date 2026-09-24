@@ -211,6 +211,32 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     setDetectedPages(null);
   };
 
+  // 分享当前阅读的本子：移动端调系统原生分享面板（QQ/微信可直接转发），
+  // 桌面端降级为复制「标题 + 链接」。分享的链接永远是站点根路径（链接不变原则），
+  // 没进过门的人打开只会看到伪 403，不会暴露任何内容。
+  const handleShareBook = async (book: DoujinBookItem) => {
+    soundManager.playCoin();
+    const url = `${window.location.origin}/`;
+    const shareData: ShareData = { title: `《${book.titleZh}》`, url };
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share(shareData);
+        return; // 用户完成或取消系统分享面板，无需 toast
+      } catch {
+        return; // 用户取消分享不算错误
+      }
+    }
+    const text = `《${book.titleZh}》 ${url}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => onShowToast('已复制标题和链接，去粘贴分享吧 📋'),
+        () => onShowToast(`分享链接：${url}`)
+      );
+    } else {
+      onShowToast(`分享链接：${url}`);
+    }
+  };
+
   // 过滤同人本列表
   const filteredBooks = books.filter((book) => {
     const matchCat = (book.category || '漫画本') === selectedCategory;
@@ -333,6 +359,14 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
               </p>
             </div>
           </div>
+          <button
+            onClick={() => void handleShareBook(readingBook)}
+            className="px-2.5 py-1 bg-[#B7791F] text-[#FFFEEF] font-pixel text-xs rounded-xs hover:bg-[#9A6519] cursor-pointer transition-all flex items-center gap-1 shrink-0 shadow-xs"
+            title="分享这本（系统分享面板 / 复制链接）"
+          >
+            <span>↗</span>
+            <span>分享</span>
+          </button>
         </div>
 
         {/* 无缝长图展示区 */}
@@ -351,13 +385,16 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           </div>
         </div>
 
-        {/* 读者同好书评区 */}
-        <MangaCommentSection
-          bookId={readingBook.id}
-          bookTitle={readingBook.titleZh}
-          onShowToast={onShowToast}
-          onCommentCountChange={() => setCommentVersion((v) => v + 1)}
-        />
+        {/* 读者同好书评区：仅主站渲染。
+            评论数据是 localStorage 单机占位（发出去别人看不见），漫画站隐藏以免误导群友。 */}
+        {mode === 'main' && (
+          <MangaCommentSection
+            bookId={readingBook.id}
+            bookTitle={readingBook.titleZh}
+            onShowToast={onShowToast}
+            onCommentCountChange={() => setCommentVersion((v) => v + 1)}
+          />
+        )}
       </div>
     );
   }
@@ -677,9 +714,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                 </div>
               </div>
 
-              {/* 底部引导栏：如果有评论显示“共？条评论”，否则显示“共？页” */}
+              {/* 底部引导栏：主站有本地评论计数时优先展示；漫画站一律显示页数 */}
               <div className="pt-2.5 border-t border-dashed border-[#E0D5BE] flex items-center justify-between text-xs font-retro-jp text-[#8C7A68] whitespace-nowrap">
-                {commentCount > 0 ? (
+                {mode === 'main' && commentCount > 0 ? (
                   <span className="flex items-center gap-1 text-[#5B4636] font-medium">
                     <span>💬</span>
                     <span>共 {commentCount} 条评论</span>
