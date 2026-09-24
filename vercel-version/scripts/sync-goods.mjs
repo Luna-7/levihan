@@ -58,10 +58,11 @@ function titleOf(fileName) {
   return fileName.replace(/\.[^.]+$/, '');
 }
 
+// 目录不存在就建出来（首次上货时用户只需把图丢进去，不用先手动 mkdir）
 if (!fs.existsSync(srcDir)) {
-  console.error(`✗ 找不到目录 ${srcDir}`);
-  console.error('  新建它，把周边 PNG 放进去，再跑 npm run sync:goods');
-  process.exit(1);
+  fs.mkdirSync(srcDir, { recursive: true });
+  console.log(`✓ 已创建目录 ${path.relative(process.cwd(), srcDir)}/，把周边 PNG 放进去再跑一次。`);
+  process.exit(0);
 }
 
 const files = fs
