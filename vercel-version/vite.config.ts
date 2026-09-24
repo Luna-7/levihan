@@ -108,7 +108,11 @@ export default defineConfig(() => {
         'icons/icon-512x512.png',
         'icons/icon-maskable-512x512.png',
         'images/archive-maintenance.webp',
+        'images/lihan/lihan-tray.webp',
+        'images/lihan/lihan-tiles-clean.webp',
+        'images/lihan/lihan-victory.webp',
         'sounds/bgm.mp3',
+        'sounds/lihan-bgm.mp3',
       ],
       workbox: {
         // Only the app shell is installed up front. Games and comics stay on demand.
@@ -155,11 +159,20 @@ export default defineConfig(() => {
             },
           },
           {
+            urlPattern: /\/sounds\/.*\.mp3$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'site-sounds',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200, 206] },
+            },
+          },
+          {
             urlPattern: /\/save-hange\/.*\.mp3$/i,
-            handler: 'NetworkFirst',
+            handler: 'CacheFirst',
             options: {
               cacheName: 'game-hange-audio',
-              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 },
               cacheableResponse: { statuses: [0, 200, 206] },
             },
           },

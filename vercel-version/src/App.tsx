@@ -18,6 +18,7 @@ import { soundManager } from './utils/audio';
 import { NavigationTab } from './types';
 import { useAppShellStore } from './stores/appShellStore';
 import { cosService } from './services/cosClient';
+import { initIdlePreloader } from './utils/idlePreloader';
 
 /**
  * 导航分区与对应动态组件 Chunk 的预加载函数
@@ -150,6 +151,10 @@ export default function App() {
       return next;
     });
   }, [activeTab]);
+
+  useEffect(() => {
+    initIdlePreloader();
+  }, []);
 
   // 空闲预热排队策略：首屏 600ms 后静默预热最近的「巨树餐厅」及其小说索引；
   // 1800ms 后分步预热「茶会」和「联络」，确保用户随后交互时所有 chunk 均已处于本地缓存

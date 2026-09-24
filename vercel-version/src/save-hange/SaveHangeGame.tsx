@@ -111,6 +111,35 @@ export const SaveHangeGame: React.FC = () => {
   const currentConfig = DIFFICULTIES[difficulty];
   const timelineActive = hasStarted && !hasWon && !hasTimedOut;
 
+  /* ---------- 跨宿主与页面可见性生命周期控制 ---------- */
+  useEffect(() => {
+    const handleHostMessage = (e: MessageEvent) => {
+      if (!e || !e.data) return;
+      if (e.data.type === 'pause' || e.data.type === 'game-pause') {
+        soundManager.pauseBGM();
+      } else if (e.data.type === 'resume' || e.data.type === 'game-resume') {
+        if (startedRef.current && !terminalRef.current && !timedOutRef.current) {
+          soundManager.resumeBGM();
+        }
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        soundManager.pauseBGM();
+      } else if (startedRef.current && !terminalRef.current && !timedOutRef.current) {
+        soundManager.resumeBGM();
+      }
+    };
+
+    window.addEventListener('message', handleHostMessage);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('message', handleHostMessage);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
+
   /* ---------- 难度下拉：点击外部收起 ---------- */
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

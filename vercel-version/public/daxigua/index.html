@@ -135,6 +135,48 @@
                 window.addEventListener(evt, unlockAudioAndWakeHost, { passive: true });
             });
 
+            // 跨宿主与页面可见性生命周期控制：后台/隐藏时挂起 Cocos2d 渲染循环与 WebAudio
+            var handlePauseGame = function () {
+                try {
+                    if (window.cc && window.cc.game && typeof window.cc.game.pause === 'function') {
+                        window.cc.game.pause();
+                    }
+                    var ctx = window.cc && cc.sys && cc.sys.__audioSupport && cc.sys.__audioSupport.context;
+                    if (ctx && ctx.state === 'running') {
+                        ctx.suspend();
+                    }
+                } catch (e) {}
+            };
+
+            var handleResumeGame = function () {
+                try {
+                    if (window.cc && window.cc.game && typeof window.cc.game.resume === 'function') {
+                        window.cc.game.resume();
+                    }
+                    var ctx = window.cc && cc.sys && cc.sys.__audioSupport && cc.sys.__audioSupport.context;
+                    if (ctx && ctx.state === 'suspended') {
+                        ctx.resume();
+                    }
+                } catch (e) {}
+            };
+
+            window.addEventListener('message', function (e) {
+                if (!e || !e.data) return;
+                if (e.data.type === 'pause' || e.data.type === 'game-pause') {
+                    handlePauseGame();
+                } else if (e.data.type === 'resume' || e.data.type === 'game-resume') {
+                    handleResumeGame();
+                }
+            });
+
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) {
+                    handlePauseGame();
+                } else {
+                    handleResumeGame();
+                }
+            });
+
             window.__DAXIGUA_RESULT_PREVIEW__ = new URLSearchParams(window.location.search).has('result-preview');
         })();
     </script>

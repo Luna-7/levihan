@@ -59,7 +59,50 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
   }, [selectedGame, onPlayingChange]);
 
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const daxiguaIframeRef = useRef<HTMLIFrameElement>(null);
+  const hangeIframeRef = useRef<HTMLIFrameElement>(null);
+
+  // 跨游戏生命周期挂起与恢复管理：当游戏处于后台/隐藏 Tab 时，向其 iframe 发送 pause 信号以冻结 Cocos2d 循环与 AudioContext，降低 CPU/GPU 占用与发热
+  useEffect(() => {
+    const isDaxiguaActive = selectedGame === 'daxigua';
+    const isHangeActive = selectedGame === 'hange';
+
+    try {
+      daxiguaIframeRef.current?.contentWindow?.postMessage({ type: isDaxiguaActive ? 'resume' : 'pause' }, '*');
+      hangeIframeRef.current?.contentWindow?.postMessage({ type: isHangeActive ? 'resume' : 'pause' }, '*');
+    } catch {
+      /* ignore */
+    }
+  }, [selectedGame]);
+
+  // 页面切到后台或标签关闭时，同时挂起所有 iframe 游戏
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') {
+        try {
+          daxiguaIframeRef.current?.contentWindow?.postMessage({ type: 'pause' }, '*');
+          hangeIframeRef.current?.contentWindow?.postMessage({ type: 'pause' }, '*');
+        } catch { /* ignore */ }
+      } else {
+        try {
+          if (selectedGame === 'daxigua') {
+            daxiguaIframeRef.current?.contentWindow?.postMessage({ type: 'resume' }, '*');
+          } else if (selectedGame === 'hange') {
+            hangeIframeRef.current?.contentWindow?.postMessage({ type: 'resume' }, '*');
+          }
+        } catch { /* ignore */ }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      try {
+        daxiguaIframeRef.current?.contentWindow?.postMessage({ type: 'pause' }, '*');
+        hangeIframeRef.current?.contentWindow?.postMessage({ type: 'pause' }, '*');
+      } catch { /* ignore */ }
+    };
+  }, [selectedGame]);
   // ---- 对局背景音乐（合成大西皮、利了个韩） ----
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [bgmOn, setBgmOn] = useState<boolean>(() => {
@@ -421,7 +464,7 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
           {/* 原生内嵌游戏 Iframe 一：合成大西皮 (尺寸最大化) */}
           {visitedGames.has('daxigua') && (
             <iframe
-              ref={selectedGame === 'daxigua' ? iframeRef : undefined}
+              ref={daxiguaIframeRef}
               src="/daxigua/index.html"
               title="利韩合成大西皮"
               onLoad={() => {
@@ -488,7 +531,7 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
                 </div>
               )}
               <iframe
-                ref={selectedGame === 'hange' ? iframeRef : undefined}
+                ref={hangeIframeRef}
                 src="/save-hange/index.html"
                 title="利韩·拯救韩吉"
                 onLoad={() => {
