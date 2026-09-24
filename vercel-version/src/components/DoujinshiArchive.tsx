@@ -254,9 +254,13 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shareCardBook, shareCardUrl, shareImgLoaded]);
 
-  // 原生分享（带图片文件）；不支持文件分享的环境降级为保存图片
+  // 原生分享：图片 + 链接一起发。
+  // ⚠️ iOS 在带 files 分享时会丢弃独立的 url 字段（平台限制），
+  // 所以链接必须写进 text 里才能保得住；卡片图右下角也印了域名兜底。
   const handleShareCard = async () => {
     if (!shareCardUrl || !shareCardBook) return;
+    const url = `${window.location.origin}/`;
+    const text = `《${shareCardBook.titleZh}》\n${url}`;
     try {
       const blob = await (await fetch(shareCardUrl)).blob();
       const file = new File([blob], `share_${shareCardBook.id}.png`, { type: 'image/png' });
@@ -264,7 +268,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         ? navigator.canShare({ files: [file] })
         : typeof navigator.share === 'function';
       if (canShareFiles && typeof navigator.share === 'function') {
-        await navigator.share({ files: [file], title: `《${shareCardBook.titleZh}》` });
+        await navigator.share({ files: [file], title: `《${shareCardBook.titleZh}》`, text });
         return; // 用户完成或取消系统分享面板
       }
     } catch {
@@ -280,20 +284,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     link.href = shareCardUrl;
     link.click();
     onShowToast('卡片已保存，去转发吧 ✨');
-  };
-
-  const handleCopyShareLink = () => {
-    soundManager.playCoin();
-    const url = `${window.location.origin}/`;
-    const text = `《${shareCardBook?.titleZh || ''}》 ${url}`;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(
-        () => onShowToast('已复制标题和链接 📋'),
-        () => onShowToast(`分享链接：${url}`)
-      );
-    } else {
-      onShowToast(`分享链接：${url}`);
-    }
   };
 
   // 过滤同人本列表
@@ -529,17 +519,18 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
                   disabled={!shareCardUrl}
                   className="flex-1 px-3 py-2.5 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-pixel text-xs font-bold rounded-xs cursor-pointer enabled:hover:bg-[#2B5E4A] disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                 >
-                  {isGeneratingShareCard || !shareCardUrl ? '生成卡片中…' : '↗ 分享图片'}
+                  {isGeneratingShareCard || !shareCardUrl ? '生成卡片中…' : '↗ 分享图片 + 链接'}
                 </button>
                 <button
-                  onClick={handleCopyShareLink}
-                  className="px-3 py-2.5 bg-[#FFFEEF] text-[#1E4334] border-2 border-[#1E4334] font-pixel text-xs font-bold rounded-xs cursor-pointer hover:bg-[#F3EAD5] shadow-md"
+                  onClick={handleDownloadShareCard}
+                  disabled={!shareCardUrl}
+                  className="px-3 py-2.5 bg-[#FFFEEF] text-[#1E4334] border-2 border-[#1E4334] font-pixel text-xs font-bold rounded-xs cursor-pointer hover:bg-[#F3EAD5] disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                 >
-                  📋 链接
+                  💾 保存
                 </button>
               </div>
               <p className="text-center text-[10px] font-retro-jp text-white/75">
-                手机上「分享图片」可直接转发到 QQ / 微信 · 也可以长按图片保存
+                手机上直接转发到 QQ / 微信（卡片图 + 链接一起发出）· 也可以长按图片保存
               </p>
             </div>
           </div>,
