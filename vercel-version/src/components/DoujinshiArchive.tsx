@@ -9,22 +9,32 @@ import { NovelModule } from './NovelModule';
 import LazyComicPage from './LazyComicPage';
 // SecureComicReader 静态引入会把 pdfjs-dist + crypto-js（合计约 570 KB）拖进主包：
 // 每个访客都白下载一遍，还会顶破 Workbox 的 2 MiB 预缓存上限导致构建失败。
-// 它只在打开「含有敏感元素」的本子时才用得到，所以按需加载。
-const SecureComicReader = React.lazy(() => import('./SecureComicReader'));
-import { DoujinMaintenanceGate } from './DoujinMaintenanceGate';
+// 它只在打开「含有敏感元素」的漫画本时才用得到，所以按需加载。
+//
+// 构建时切除：宣发主站（VITE_COMIC_ENABLED=false）不含漫画本，也就用不到加密阅读器，
+// 这里把 lazy import 换成 null，让 rollup 物理上不把 pdfjs-dist / crypto-js 打进主站产物。
+const SecureComicReader = import.meta.env.VITE_COMIC_ENABLED === 'false'
+  ? null
+  : React.lazy(() => import('./SecureComicReader'));
 import { AuthorWithLink } from '../utils/authorLink';
 import { MangaCommentSection } from './MangaCommentSection';
 import { getCommentCountByBookId } from '../data/mangaComments';
-import { useAuthStore } from '../stores/authStore';
 import { useAppShellStore } from '../stores/appShellStore';
 
 interface Props {
   onCopyCode?: (code: string) => void;
   onShowToast: (msg: string) => void;
   onGoToResources?: () => void;
+  /**
+   * 站点模式：
+   * - 'main'（默认）：宣发主站，只显示「小说本（合订本）+ 插画集」，不显示漫画本；
+   * - 'comic'：私有漫画站，只显示「漫画本」，不显示小说本/插画集。
+   * 二者共用同一份组件与数据，但按模式过滤分类，保证主站零漫画、漫画站零合订本。
+   */
+  mode?: 'main' | 'comic';
 }
 
-export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources }) => {
+export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources, mode = 'main' }) => {
   // 归档数据状态（优先加载远端 COS archive.json，兜底使用本地 Excel 录入数据）
   const [books, setBooks] = useState<DoujinBookItem[]>(DOUJIN_ARCHIVE_DATA);
   const [isLoadingArchive, setIsLoadingArchive] = useState<boolean>(false);
@@ -32,12 +42,17 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
   // 搜索与多维筛选
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>(() => useAuthStore.getState().profile ? '漫画本' : '小说本');
+  // 站点模式决定「漫画本」是否可见：
+  // - comic 模式（私有漫画站）：恒可见，且不再依赖主站登录态；
+  // - main 模式（宣发主站）：恒不可见（漫画本已迁走）。
+  const isMangaVisible = mode === 'comic';
+  const [selectedCategory, setSelectedCategory] = useState<string>(() =>
+    isMangaVisible ? '漫画本' : '小说本'
+  );
   const [selectedTag, setSelectedTag] = useState<string>('全部');
   const [selectedAuthor, setSelectedAuthor] = useState<string>('全部');
   // 排序方式：'pages' = 从页数多到页数少（默认），'new' = 从新到旧
   const [sortBy, setSortBy] = useState<'pages' | 'new'>('pages');
-  const isMangaVisible = useAuthStore((state) => Boolean(state.profile));
   const wasMangaVisible = useRef(isMangaVisible);
 
   // 当前正在无缝长图阅读的书籍
@@ -57,7 +72,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const [requestedNovel, setRequestedNovel] = useState<GroupNovel | null>(null);
 
   // 统计所有标签（动态汇总当前数据中的所有标签）
-  const allCategories = isMangaVisible ? ['漫画本', '小说本', '插画集'] : ['小说本', '插画集'];
+  const allCategories = isMangaVisible ? ['漫画本'] : ['小说本', '插画集'];
   const categoryBooks = books.filter((book) => (book.category || '漫画本') === selectedCategory);
   const dynamicTags = Array.from(new Set(categoryBooks.flatMap((b) => b.tags || [])));
   const allTags = ['全部', ...dynamicTags];
@@ -161,7 +176,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
 
     // 加密归档的本子：正文只有 comic_vault/{id}_secure.txt，没有可读的图片，
     // 所以不进长图画廊，改走 SecureComicReader（维护页 → 校验码 → 内存解密 → Canvas）
-    if (book.secure) {
+    if (book.secure && SecureComicReader) {
       setSecureBook(book);
       onShowToast(`《${book.titleZh}》资源已被安全隔离，需校验码解析 🔒`);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -245,7 +260,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   // 🔒 加密归档阅读模式（维护页 → 校验码 → 解密 → Canvas 瀑布流）
   // 放在长图模式之前：敏感本子绝不允许落到任何图片直链渲染路径上
   // ==========================================
-  if (secureBook && isMangaVisible) {
+  if (secureBook && isMangaVisible && SecureComicReader) {
     return (
       <React.Suspense
         fallback={
@@ -500,14 +515,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         />
       )}
 
-      {/* 典藏本卡片网格：2*2 的规整摆放，点击直接进入查看长图 */}
+      {/* 典藏本卡片网格：2*2 的规整摆放，点击直接进入查看长图
+          门已收敛到入口层：comic 模式由 ComicGate 整站守护，main 模式只渲染插画集（公开）。 */}
       {selectedCategory !== '小说本' && (selectedCategory !== '漫画本' || isMangaVisible) && (
-        <DoujinMaintenanceGate
-          enabled={selectedCategory === '漫画本'}
-          allowAdmin={false}
-          unlockOnTripleClick={selectedCategory === '漫画本'}
-        >
-          <div className="columns-1 sm:columns-2 gap-3.5 sm:gap-4.5 w-full">
+        <>
+        <div className="columns-1 sm:columns-2 gap-3.5 sm:gap-4.5 w-full">
         {sortedBooks.map((book) => {
           // 通过 COS 逻辑层动态生成封面 CDN 地址
           const coverUrl = cosService.getCoverUrl(book);
@@ -689,7 +701,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
               没有检索到符合条件的同人本，您可以清空搜索条件或调整分类～
             </div>
           )}
-        </DoujinMaintenanceGate>
+        </>
       )}
     </div>
   );

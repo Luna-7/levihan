@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <script>
+      // 独立 PWA（iOS 添加到主屏幕）标记，与主站 index.html 保持一致。
+      (function () {
+        try {
+          var ua = window.navigator.userAgent || '';
+          var isIOSWebKit = /iP(?:hone|ad|od)/.test(ua) ||
+            (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+          if (isIOSWebKit) document.documentElement.classList.add('ios-webkit');
+          var isStandalone =
+            window.navigator.standalone === true ||
+            window.matchMedia('(display-mode: standalone)').matches;
+          if (isStandalone) document.documentElement.classList.add('pwa-standalone');
+        } catch (e) {}
+      })();
+    </script>
+    <title>403 Forbidden</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#1E4334" />
+    <meta name="format-detection" content="telephone=no" />
+    <script>
+      if (typeof window !== 'undefined' && typeof window.global === 'undefined') {
+        window.global = window;
+      }
+    </script>
+  </head>
+  <body class="bg-[#F6F1E3] text-[#2C241D] min-h-screen">
+    <div id="root"></div>
+    <script type="module" src="/src/comic-main.tsx"></script>
+  </body>
+</html>

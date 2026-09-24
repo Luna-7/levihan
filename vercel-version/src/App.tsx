@@ -146,6 +146,7 @@ export default function App() {
               onShowToast={showToast}
             >
               <Suspense fallback={null}><DoujinshiArchive
+                mode="main"
                 onCopyCode={handleCopyExtractionCode}
                 onShowToast={showToast}
               /></Suspense>
