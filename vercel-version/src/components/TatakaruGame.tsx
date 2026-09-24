@@ -46,6 +46,10 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
   const [isLoading, setIsLoading] = useState<boolean>(initialKey !== null && initialKey !== 'lihan');
   const [iframeError, setIframeError] = useState<string | null>(null);
 
+  // 记录已访问与已加载完毕的游戏，确保对局已载入后二次切换 0 延迟、无需重新解析资源
+  const [visitedGames, setVisitedGames] = useState<Set<TatakaruGameKey>>(() => new Set(initialKey ? [initialKey] : []));
+  const loadedGamesRef = useRef<Set<TatakaruGameKey>>(new Set());
+
   // Notify parent component whether immersive game is currently active
   useEffect(() => {
     onPlayingChange?.(selectedGame !== null);
@@ -93,14 +97,16 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
     } catch {}
   }, [selectedGame]);
 
-  // Reset loading state when switching to hange game
+  // 根据已载入状态精细掌控骨架屏显示：若已载入过则秒开，零卡顿
   useEffect(() => {
-    if (selectedGame === 'hange') {
-      setIsLoading(true);
+    if (selectedGame) {
+      setVisitedGames((prev) => (prev.has(selectedGame) ? prev : new Set([...prev, selectedGame])));
       setIframeError(null);
-    } else {
-      // Reset error when switching away from hange
-      setIframeError(null);
+      if (selectedGame === 'lihan' || loadedGamesRef.current.has(selectedGame)) {
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
+      }
     }
   }, [selectedGame]);
 
@@ -413,18 +419,23 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
           )}
 
           {/* 原生内嵌游戏 Iframe 一：合成大西皮 (尺寸最大化) */}
-          {selectedGame === 'daxigua' && (
+          {visitedGames.has('daxigua') && (
             <iframe
-              ref={iframeRef}
+              ref={selectedGame === 'daxigua' ? iframeRef : undefined}
               src="/daxigua/index.html"
               title="利韩合成大西皮"
-              onLoad={() => setIsLoading(false)}
+              onLoad={() => {
+                loadedGamesRef.current.add('daxigua');
+                if (selectedGame === 'daxigua') setIsLoading(false);
+              }}
               onError={() => {
-                setIsLoading(false);
-                setIframeError('游戏加载失败，请检查网络连接或稍后重试');
+                if (selectedGame === 'daxigua') {
+                  setIsLoading(false);
+                  setIframeError('游戏加载失败，请检查网络连接或稍后重试');
+                }
               }}
               allow="autoplay; fullscreen"
-              className="border-0 bg-[#07140E] block"
+              className={`border-0 bg-[#07140E] ${selectedGame === 'daxigua' ? 'block' : 'hidden'}`}
               style={{
                 aspectRatio: '720 / 1280',
                 height: 'auto',
@@ -437,9 +448,9 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
           )}
 
           {/* 原生内嵌游戏 Iframe 二：拯救韩吉 (尺寸最大化) */}
-          {selectedGame === 'hange' && (
+          {visitedGames.has('hange') && (
             <>
-              {isLoading && (
+              {selectedGame === 'hange' && isLoading && (
                 <div className="flex flex-col items-center justify-center bg-[#07140E] text-[#f2f7f4]"
                      style={{
                        aspectRatio: '9 / 16',
@@ -453,7 +464,7 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
                   <div className="text-sm">加载游戏中...</div>
                 </div>
               )}
-              {iframeError && (
+              {selectedGame === 'hange' && iframeError && (
                 <div className="flex flex-col items-center justify-center bg-[#07140E] text-red-400"
                      style={{
                        aspectRatio: '9 / 16',
@@ -477,20 +488,29 @@ export const TatakaruGame: React.FC<Props> = ({ onShowToast, onPlayingChange, in
                 </div>
               )}
               <iframe
-                ref={iframeRef}
+                ref={selectedGame === 'hange' ? iframeRef : undefined}
                 src="/save-hange/index.html"
                 title="利韩·拯救韩吉"
                 onLoad={() => {
-                  setIsLoading(false);
-                  setIframeError(null);
+                  loadedGamesRef.current.add('hange');
+                  if (selectedGame === 'hange') {
+                    setIsLoading(false);
+                    setIframeError(null);
+                  }
                 }}
                 onError={() => {
-                  setIsLoading(false);
-                  setIframeError('游戏加载失败，请检查网络连接或稍后重试');
+                  if (selectedGame === 'hange') {
+                    setIsLoading(false);
+                    setIframeError('游戏加载失败，请检查网络连接或稍后重试');
+                  }
                 }}
                 allow="autoplay; vibrator"
-                className={`border-0 bg-[#07140E] block transition-opacity duration-200 ${
-                  isLoading || iframeError ? 'opacity-0 absolute pointer-events-none' : 'opacity-100'
+                className={`border-0 bg-[#07140E] transition-opacity duration-200 ${
+                  selectedGame === 'hange'
+                    ? isLoading || iframeError
+                      ? 'opacity-0 absolute pointer-events-none'
+                      : 'opacity-100 block'
+                    : 'hidden opacity-0'
                 }`}
                 style={{
                   aspectRatio: '9 / 16',

@@ -351,7 +351,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ pieces, onMovePiece, isGam
                 transform: `translate3d(${dragX}px, ${dragY}px, 0)`,
                 // 拖拽中不做补间（严格跟手）；松手后由这段轻量 ease-out 完成吸附
                 transition: isCurrentlyDragging ? 'none' : SNAP_TRANSITION,
-                willChange: isCurrentlyDragging ? 'transform' : 'left, top',
+                willChange: 'transform',
                 touchAction: 'none',
                 zIndex: isCurrentlyDragging ? 30 : 10,
               }}

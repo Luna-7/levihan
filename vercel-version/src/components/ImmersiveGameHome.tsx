@@ -53,24 +53,64 @@ export const ImmersiveGameHome: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingDoujinOpen]);
 
-  // 预加载「利了个韩」游戏模块与核心素材，消除打开时的网络等待与视觉迟滞
-  const preloadLihanAssets = useCallback(() => {
+  // 预加载「塔塔开」全部三款游戏模块与核心素材（合成大西皮、拯救韩吉、利了个韩），消除打开与进入时的网络等待
+  const preloadGameAssets = useCallback(() => {
     if (typeof window === 'undefined') return;
     try {
       void import('./TatakaruGame');
-      ['/images/lihan/bg-grass.webp', '/images/lihan/lihan-tiles-clean.webp', '/images/lihan/lihan-tray.webp'].forEach((src) => {
-        const img = new Image();
-        img.src = src;
+
+      // Prefetch daxigua & save-hange HTML documents & engine scripts
+      const prefetchUrls = [
+        { href: '/daxigua/index.html', as: 'document' },
+        { href: '/daxigua/cocos2d-js-min.js', as: 'script' },
+        { href: '/daxigua/main.js', as: 'script' },
+        { href: '/save-hange/index.html', as: 'document' },
+      ];
+
+      prefetchUrls.forEach(({ href, as }) => {
+        if (!document.querySelector(`link[href="${href}"]`)) {
+          const link = document.createElement('link');
+          link.rel = 'prefetch';
+          link.href = href;
+          link.as = as;
+          document.head.appendChild(link);
+        }
+      });
+
+      // Preload image assets & audio tracks
+      [
+        '/images/lihan/bg-grass.webp',
+        '/images/lihan/lihan-tiles-clean.webp',
+        '/images/lihan/lihan-tray.webp',
+        '/sounds/bgm.mp3',
+        '/sounds/lihan-bgm.mp3',
+      ].forEach((src) => {
+        if (src.endsWith('.mp3')) {
+          const audio = new Audio();
+          audio.preload = 'auto';
+          audio.src = src;
+        } else {
+          const img = new Image();
+          img.src = src;
+        }
       });
     } catch {}
   }, []);
 
-  // 当用户打开游戏选择窗时立即开始预热素材
+  // 页面闲置 1 秒后自动后台预热游戏组件，或在打开游戏选择窗时立即开始预热
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      preloadGameAssets();
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [preloadGameAssets]);
+
   useEffect(() => {
     if (activeModal === 'game') {
-      preloadLihanAssets();
+      preloadGameAssets();
     }
-  }, [activeModal, preloadLihanAssets]);
+  }, [activeModal, preloadGameAssets]);
 
   if (isForumOpen) {
     return <React.Suspense fallback={null}><RestaurantForum onBack={() => setIsForumOpen(false)} onShowToast={onShowToast} /></React.Suspense>;
@@ -278,6 +318,8 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                 {/* 游戏 2: 利韩 · 拯救韩吉 */}
                 <button
                   type="button"
+                  onMouseEnter={preloadGameAssets}
+                  onTouchStart={preloadGameAssets}
                   onClick={() => {
                     soundManager.playCoin();
                     setActiveModal(null);
@@ -312,8 +354,8 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                 {/* 游戏 3: 利韩 · 利了个韩 */}
                 <button
                   type="button"
-                  onMouseEnter={preloadLihanAssets}
-                  onTouchStart={preloadLihanAssets}
+                  onMouseEnter={preloadGameAssets}
+                  onTouchStart={preloadGameAssets}
                   onClick={() => {
                     soundManager.playBlip();
                     setActiveModal(null);

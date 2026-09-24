@@ -15,9 +15,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, Flame, RotateCcw, Skull, Volume2, VolumeX } from 'lucide-react';
 import rumblingBg from './assets/images/rumbling_bg_1789328679857.webp';
 import { GameBoard } from './components/GameBoard';
-import { VictoryModal } from './components/VictoryModal';
 import { soundManager } from './audio';
 import { applyMove, createInitialPieces, isVictory } from './gameLogic';
+
+const VictoryModal = React.lazy(() => import('./components/VictoryModal').then(m => ({ default: m.VictoryModal })));
 import type { MoveDelta } from './gameLogic';
 import { DIFFICULTIES, DIFFICULTY_ORDER } from './levels';
 import type { Difficulty, Piece } from './levels';
@@ -476,12 +477,14 @@ export const SaveHangeGame: React.FC = () => {
 
       {/* Victory Modal */}
       {hasWon && (
-        <VictoryModal
-          timeUsedSeconds={timeUsedSeconds}
-          moves={moves}
-          onRestart={handleReset}
-          onClose={() => setHasWon(false)}
-        />
+        <React.Suspense fallback={null}>
+          <VictoryModal
+            timeUsedSeconds={timeUsedSeconds}
+            moves={moves}
+            onRestart={handleReset}
+            onClose={() => setHasWon(false)}
+          />
+        </React.Suspense>
       )}
 
     </div>

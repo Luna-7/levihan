@@ -123,7 +123,8 @@ window.boot = function() {
 
         cc.loader.downloader._subpackages = settings.subpackages;
 
-        cc.view.enableRetina(true);
+        // 移动端不开启 3x 超高分屏 retina，大幅降低 WebGL/Canvas 绘图与物理计算压力，彻底解决卡顿
+        cc.view.enableRetina(!cc.sys.isMobile);
         cc.view.resizeWithBrowserSize(true);
 
         if (!false && !false) {

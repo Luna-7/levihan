@@ -22,18 +22,25 @@ export const CARD_TYPES: CardType[] = Array.from({ length: 16 }, (_, index) => (
   name: `卡片${index + 1}`,
 }));
 
-const spriteCellStyle = (pos: { x: number; y: number }): React.CSSProperties => ({
+const BLOCK_SPRITE_STYLE: React.CSSProperties = {
+  backgroundImage: `url(${LIHAN_TILE_SPRITE_SRC})`,
+  backgroundSize: `${SPRITE_BG_SIZE.x}% ${SPRITE_BG_SIZE.y}%`,
+  backgroundPosition: `${BLOCK_SPRITE_POS.x}% ${BLOCK_SPRITE_POS.y}%`,
+  backgroundRepeat: 'no-repeat',
+};
+
+const CARD_SPRITE_STYLES: React.CSSProperties[] = CARD_SPRITE_POS.map((pos) => ({
   backgroundImage: `url(${LIHAN_TILE_SPRITE_SRC})`,
   backgroundSize: `${SPRITE_BG_SIZE.x}% ${SPRITE_BG_SIZE.y}%`,
   backgroundPosition: `${pos.x}% ${pos.y}%`,
-  backgroundRepeat: 'no-repeat' as const,
-});
+  backgroundRepeat: 'no-repeat',
+}));
 
 const TileFace = React.memo<{ cardInfo: CardType; exposure?: number; hiddenInPile?: boolean }>(({
   cardInfo, exposure = 1, hiddenInPile = false,
 }) => {
   const idx = Math.max(0, CARD_TYPES.findIndex((c) => c.id === cardInfo.id));
-  const pos = CARD_SPRITE_POS[idx] ?? CARD_SPRITE_POS[0];
+  const cardStyle = CARD_SPRITE_STYLES[idx] ?? CARD_SPRITE_STYLES[0];
   const covered = exposure < EXPOSED_THRESHOLD;
   const isBadge = idx >= 12;
   return (
@@ -41,9 +48,9 @@ const TileFace = React.memo<{ cardInfo: CardType; exposure?: number; hiddenInPil
       className={`relative w-full h-full overflow-hidden rounded-[4px] ${covered ? 'shadow-[1px_1px_0px_#233D12]' : 'shadow-[1px_3px_2px_#233D12]'}`}
       aria-label={hiddenInPile ? '未翻开的牌' : cardInfo.name}
     >
-      {/* 方块底（雪碧图切片，比例与元素一致无拉伸） */}
-      <div className="absolute inset-0" style={spriteCellStyle(BLOCK_SPRITE_POS)} />
-      <div className={isBadge ? 'absolute inset-[18%]' : 'absolute inset-[8%]'} style={spriteCellStyle(pos)} />
+      {/* 方块底（雪碧图切片，静态对象引用） */}
+      <div className="absolute inset-0" style={BLOCK_SPRITE_STYLE} />
+      <div className={isBadge ? 'absolute inset-[18%]' : 'absolute inset-[8%]'} style={cardStyle} />
       {/* 遮罩覆盖整张彩色牌；露出的任何边缘仍可看到图案。 */}
       {covered && <div className="absolute inset-0 rounded-[4px] bg-black/45 pointer-events-none" />}
     </div>
@@ -59,23 +66,30 @@ const BoardCard = React.memo<{
 }>(({ card, cardInfo, exposure, hiddenInPile, onClick }) => {
   const isCovered = exposure < EXPOSED_THRESHOLD;
 
+  const cardStyle = useMemo<React.CSSProperties>(
+    () => ({
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      transform: `translate3d(${card.x}px, ${card.y}px, 0)`,
+      willChange: 'transform',
+      width: `${CARD_W}px`,
+      height: `${CARD_H}px`,
+      zIndex: card.layer * 10,
+      touchAction: 'manipulation',
+      WebkitTapHighlightColor: 'transparent',
+      userSelect: 'none',
+    }),
+    [card.x, card.y, card.layer]
+  );
+
   return (
     <button
       type="button"
       disabled={isCovered}
       aria-label={hiddenInPile ? '未翻开的牌' : cardInfo.name}
       onClick={() => onClick(card)}
-      style={{
-        position: 'absolute',
-        left: `${card.x}px`,
-        top: `${card.y}px`,
-        width: `${CARD_W}px`,
-        height: `${CARD_H}px`,
-        zIndex: card.layer * 10,
-        touchAction: 'manipulation',
-        WebkitTapHighlightColor: 'transparent',
-        userSelect: 'none',
-      }}
+      style={cardStyle}
       className={`p-0 border-0 bg-transparent select-none transform-gpu ${
         isCovered
           ? 'cursor-default pointer-events-none'
