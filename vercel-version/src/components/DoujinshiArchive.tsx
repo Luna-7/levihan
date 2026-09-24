@@ -315,7 +315,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   });
 
   // 排序：默认「页数多→少」；「从新到旧」按 updatedAt/createdAt 降序；
-  // 缺失日期的条目视为最旧（排到末尾）。两种排序都以前者为主、后者（页数/日期）为次级稳定键。
+  // 缺失日期的条目视为最旧（排到末尾）。引入 ID 兜底保证顺序绝对稳定。
   const sortedBooks = useMemo(() => {
     const getTime = (b: DoujinBookItem) =>
       new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
@@ -323,12 +323,18 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     if (sortBy === 'new') {
       arr.sort((a, b) => {
         const diff = getTime(b) - getTime(a);
-        return diff !== 0 ? diff : (b.pages || 0) - (a.pages || 0);
+        if (diff !== 0) return diff;
+        const pageDiff = (b.pages || 0) - (a.pages || 0);
+        if (pageDiff !== 0) return pageDiff;
+        return String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true });
       });
     } else {
       arr.sort((a, b) => {
         const diff = (b.pages || 0) - (a.pages || 0);
-        return diff !== 0 ? diff : getTime(b) - getTime(a);
+        if (diff !== 0) return diff;
+        const timeDiff = getTime(b) - getTime(a);
+        if (timeDiff !== 0) return timeDiff;
+        return String(a.id).localeCompare(String(b.id), 'zh-CN', { numeric: true });
       });
     }
     return arr;
@@ -702,11 +708,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
         />
       )}
 
-      {/* 典藏本卡片网格：2*2 的规整摆放，点击直接进入查看长图
+      {/* 典藏本卡片网格：横向先行（从左到右、从上到下）的规整 2 列网格，点击直接进入查看长图
           门已收敛到入口层：comic 模式由 ComicGate 整站守护，main 模式只渲染插画集（公开）。 */}
       {selectedCategory !== '小说本' && (selectedCategory !== '漫画本' || isMangaVisible) && (
         <>
-        <div className="columns-1 sm:columns-2 gap-3.5 sm:gap-4.5 w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4.5 w-full items-stretch">
         {sortedBooks.map((book) => {
           // 通过 COS 逻辑层动态生成封面 CDN 地址
           const coverUrl = cosService.getCoverUrl(book);
@@ -716,7 +722,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
             <div
               key={book.id}
               onClick={() => handleOpenBookReader(book)}
-              className="bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full mb-3.5 sm:mb-4.5 break-inside-avoid"
+              className="bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full h-full"
               title="点击直接打开查看无缝长图"
             >
               <div className="space-y-2">

@@ -257,6 +257,10 @@
     var ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
+    if (!watermarkLines || !watermarkLines.length) {
+      return canvas;
+    }
+
     var fontSize = Math.max(12, Math.floor(canvas.width / 48));
     var padding = Math.max(10, Math.floor(canvas.width / 90));
     ctx.font = '700 ' + fontSize + 'px ' + CONFIG.fontStack;
@@ -419,15 +423,17 @@
       var friend = val('tk-friendName');
       sourceText = friend ? '群友分享（' + friend + '）' : '群友分享（匿名）';
     }
+    var hasWatermark = $('tk-hasWatermark') ? $('tk-hasWatermark').checked : true;
     return {
       sourceText: sourceText,
-      watermarkLines: [
+      hasWatermark: hasWatermark,
+      watermarkLines: hasWatermark ? [
         '原作者：' + (val('tk-author') || '未填写') +
           ' 来源：' + sourceText +
           ' 汉化：' + (val('tk-translator') || '未填写') +
           ' 嵌字：' + (val('tk-typesetter') || '未填写'),
         CONFIG.resourceTail
-      ],
+      ] : [],
       stem: bracketName([
         $('tk-hasWarning').checked ? '预警' : '',
         val('tk-workTitle'),

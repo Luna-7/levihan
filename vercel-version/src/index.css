@@ -1091,3 +1091,103 @@ body.immersive-on .retro-frame-card > .absolute {
     max-width: 360px;
   }
 }
+
+/* ====================================================
+   弹窗浮层平滑过渡动画 (.modal-layer Smooth Transitions & Animations)
+   利用 opacity 与 scale/translateY 微变换，实现丝滑轻盈的呼出与收起动效
+   ==================================================== */
+@keyframes modalLayerIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes modalLayerOut {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+}
+
+/* 声明式类名模式：直接渲染即触发平滑呼出动效 */
+.modal-layer {
+  will-change: opacity, transform;
+  animation: modalLayerIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* 状态驱动模式：通过 class 切换 show/active/open 实现纯 CSS transition */
+.modal-layer.transition-mode {
+  animation: none;
+  opacity: 0;
+  transform: scale(0.96) translateY(8px);
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+              visibility 0.24s;
+}
+
+.modal-layer.transition-mode.show,
+.modal-layer.transition-mode.active,
+.modal-layer.transition-mode.open,
+.modal-layer.transition-mode.is-open,
+.modal-layer.transition-mode.visible,
+.modal-layer.transition-mode[aria-hidden="false"] {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  pointer-events: auto;
+  visibility: visible;
+}
+
+/* 消失/退出动效类 (Disappearing / Exit states) */
+.modal-layer.closing,
+.modal-layer.hiding,
+.modal-layer.is-closing,
+.modal-layer.leaving,
+.modal-layer-exit,
+.modal-layer-leave-active {
+  animation: modalLayerOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+  pointer-events: none;
+}
+
+/* 内部内容容器微浮动强化 (Inner modal box / dialog) */
+.modal-layer .modal-dialog,
+.modal-layer .modal-box,
+.modal-layer .modal-content,
+.modal-layer .modal-card {
+  will-change: transform, opacity;
+  transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-layer.closing .modal-dialog,
+.modal-layer.closing .modal-box,
+.modal-layer.closing .modal-content,
+.modal-layer.closing .modal-card {
+  transform: scale(0.95) translateY(6px);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-layer,
+  .modal-layer.transition-mode,
+  .modal-layer.closing,
+  .modal-layer.hiding,
+  .modal-layer .modal-dialog,
+  .modal-layer .modal-box,
+  .modal-layer .modal-content,
+  .modal-layer .modal-card {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}

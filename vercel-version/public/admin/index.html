@@ -298,19 +298,21 @@
   .tool-file-name.has{color:var(--green-2);font-weight:700}
   input[type=color]{width:64px;height:34px;padding:2px;border:1.5px solid var(--line);border-radius:6px;
                     background:#fff;cursor:pointer}
-  /* ---- 工具箱同色系确认弹窗（替代浏览器原生 confirm） ---- */
-  .tk-modal{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:18px;
-            background:rgba(34,55,43,.55);animation:tkFade .14s ease-out}
-  @keyframes tkFade{from{opacity:0}to{opacity:1}}
-  .tk-modal-box{width:min(430px,100%);background:var(--paper);border:2px solid var(--green-2);border-radius:10px;
-                box-shadow:5px 5px 0 rgba(30,67,52,.22),inset 0 0 0 3px rgba(229,169,60,.18);padding:18px}
-  .tk-modal-box h3{margin:0 0 10px;display:flex;align-items:center;gap:8px;font-family:var(--font-ui);
+  /* ---- 工具箱 / 通用同色系确认弹窗（替代浏览器原生 confirm） ---- */
+  .modal-layer, .tk-modal{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:18px;
+            background:rgba(34,55,43,.55);animation:modalLayerFadeIn .22s cubic-bezier(0.16, 1, 0.3, 1) both;will-change:opacity,transform}
+  .modal-layer.closing, .modal-layer.hiding, .tk-modal.closing{animation:modalLayerFadeOut .18s cubic-bezier(0.4, 0, 1, 1) forwards;pointer-events:none}
+  @keyframes modalLayerFadeIn{0%{opacity:0;transform:scale(0.96) translateY(6px)}100%{opacity:1;transform:scale(1) translateY(0)}}
+  @keyframes modalLayerFadeOut{0%{opacity:1;transform:scale(1) translateY(0)}100%{opacity:0;transform:scale(0.96) translateY(6px)}}
+  .tk-modal-box, .modal-layer .modal-box, .modal-layer .modal-dialog{width:min(430px,100%);background:var(--paper);border:2px solid var(--green-2);border-radius:10px;
+                box-shadow:5px 5px 0 rgba(30,67,52,.22),inset 0 0 0 3px rgba(229,169,60,.18);padding:18px;transition:transform .22s cubic-bezier(0.16, 1, 0.3, 1),opacity .22s cubic-bezier(0.16, 1, 0.3, 1)}
+  .tk-modal-box h3, .modal-layer h3{margin:0 0 10px;display:flex;align-items:center;gap:8px;font-family:var(--font-ui);
                    font-size:15px;color:var(--green-2)}
-  .tk-modal-box h3 .ico{width:24px;height:24px;flex:none;display:flex;align-items:center;justify-content:center;
+  .tk-modal-box h3 .ico, .modal-layer h3 .ico{width:24px;height:24px;flex:none;display:flex;align-items:center;justify-content:center;
                         border-radius:50%;background:#FFF9EC;border:1.5px solid var(--gold-2);font-size:13px}
-  .tk-modal-box p{margin:0 0 16px;font-size:13px;line-height:1.75;color:var(--ink-2);white-space:pre-wrap}
-  .tk-modal-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
-  .tk-modal-box button:focus{outline:none;box-shadow:0 0 0 3px rgba(30,67,52,.18)}
+  .tk-modal-box p, .modal-layer p{margin:0 0 16px;font-size:13px;line-height:1.75;color:var(--ink-2);white-space:pre-wrap}
+  .tk-modal-actions, .modal-layer .modal-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+  .tk-modal-box button:focus, .modal-layer button:focus{outline:none;box-shadow:0 0 0 3px rgba(30,67,52,.18)}
 </style>
 </head>
 <body data-page-node-id="3AGdYi6o1dC1vHPHJmaRyD">
@@ -488,6 +490,9 @@
           <label for="tk-warningText">预警具体内容 <span class="tag">选填</span></label>
           <input type="text" id="tk-warningText" placeholder="如：含血腥描写 / 强制情节">
         </div>
+        <div class="sw" style="margin-top:10px">
+          <input type="checkbox" id="tk-hasWatermark" checked><label for="tk-hasWatermark" style="font-weight:400">页面右下角添加防盗水印（标注来源/汉化/土豆群内部声明）</label>
+        </div>
         <div class="f" style="margin-top:14px">
           <label for="tk-imageFiles">上传图片 / PDF <span class="tag">可多选，按文件名自然排序</span></label>
           <input type="file" id="tk-imageFiles" accept="image/*,.pdf,application/pdf" multiple>
@@ -499,7 +504,7 @@
         <div class="bar"><i id="tk-pdf-bar"></i></div>
         <div class="tool-bar-text" id="tk-pdf-bar-text"></div>
         <div class="msg" id="tk-pdf-msg"></div>
-        <div class="note">生成物统一加口令 <b>levihan</b>，右下角浮水印标注来源与「土豆群内部资源，严禁外传，违者永久拉黑」。PDF 会先按页渲染成图再合并加密；一次选到多个 PDF（或图片与 PDF 混选）时，会先询问「合并为一份」还是「分别导出」。</div>
+        <div class="note">生成物统一加口令 <b>levihan</b>。勾选水印时在每页右下角标注来源声明；不勾选则仅添加密码与标准化文件名。PDF 会先按页渲染成图再合并加密；一次选到多个 PDF（或图片与 PDF 混选）时，会先询问「合并为一份」还是「分别导出」。</div>
       </div>
 
       <!-- ② PDF 转图片 -->
