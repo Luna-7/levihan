@@ -58,8 +58,10 @@ export default defineConfig(() => {
     ],
     resolve: { alias: { '@': path.resolve(__dirname, '.') } },
     build: {
-      // 独立输出目录，避免与主站 dist/ 混写。
-      outDir: 'dist-comic',
+      // 输出到 dist/（与主站构建共用输出目录名）：
+      // 漫画站项目只跑漫画构建，dist 里永远只有漫画产物；
+      // Vercel 的 Output Directory 统一填 dist 即可，两个项目配置完全一致。
+      outDir: 'dist',
       emptyOutDir: true,
       rollupOptions: {
         // 漫画站以 comic.html 为唯一入口。
