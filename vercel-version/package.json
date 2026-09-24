@@ -10,7 +10,7 @@
     "dev:save-hange": "vite --config vite.save-hange.config.ts --port=3001",
     "build": "npm run build:save-hange && vite build",
     "build:save-hange": "vite build --config vite.save-hange.config.ts",
-    "build:comic": "vite build --config vite.comic.config.ts",
+    "build:comic": "vite build --config vite.comic.config.ts && cp dist-comic/comic.html dist-comic/index.html",
     "preview": "vite preview",
     "sync:archive": "node scripts/sync-archive.mjs",
     "clean": "rm -rf dist",
