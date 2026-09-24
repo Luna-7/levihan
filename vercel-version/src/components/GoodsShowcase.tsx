@@ -28,6 +28,9 @@ interface Props {
  * 没有名字时卡片只渲染图片本体（不留一行没用的字），灯箱用「序号 / 总数」定位；
  * 一旦清单里出现带名字的条目，搜索框才会出现（纯图模式下不给用户一个搜不出东西的框）。
  *
+ * 卡片尺寸**统一**：图片框固定用 CARD_RATIO，不按每张原图的真实比例撑高（理由见 CARD_RATIO 注释）；
+ * 灯箱里已去掉「🔗 直链」按钮 —— 原图只通过「下载」这一条路径交付（同理，橱窗不对外提供直链）。
+ *
  * 下载走 fetch → blob → objectURL → <a download> → 立刻 revokeObjectURL（用完即释放）；
  * 桶本身带 CORS 与 Content-Disposition: attachment，所以取流失败时退回「新标签打开原图」也能直接保存。
  */
@@ -38,8 +41,17 @@ const THUMB_WIDTH = 420;
 const PREVIEW_WIDTH = 1600;
 /** 加载触发/卸载留白：距视口 300px 就开始加载，出了这个范围就卸载 */
 const VIEW_MARGIN = '300px 0px 300px 0px';
-/** 读不到原图尺寸时的占位比例（周边多为立牌/挂件，竖向居多） */
-const FALLBACK_RATIO = '3 / 4';
+/**
+ * 卡片图片框的**统一**比例 —— 所有卡片等高，网格才是齐的。
+ *
+ * 不按每张原图的真实比例撑高：这批周边从 0.45（细长挂件）到 1.23（横构图）都有，
+ * 逐张用真实比例会让同一行的卡片高矮不一、行与行之间也对不齐（骨架图与真图还会互相跳）。
+ * 取 3/4 的依据：实测 60 张的宽高比中位数 0.79、四分位区间 0.75–1.00；
+ * 3/4 与 4/5 的平均留白几乎相同（0.139 vs 0.140），而 3/4 更贴合「立牌 / 挂件」偏竖的展示习惯。
+ *
+ * ⚠️ 图片一律 `object-contain`：统一的只是**外框**，图本身不会被裁掉。
+ */
+const CARD_RATIO = '3 / 4';
 
 /**
  * 求真正要请求的宽度：原图比目标还小就**不缩放**（返回 0 = 只转 WebP）。
@@ -143,9 +155,7 @@ const GoodsCard: React.FC<{
     };
   }, [shouldLoad, loaded, failed, item]);
 
-  // 占位比例：清单里有真实尺寸就用真实比例，避免图片到位时列表跳动
-  const aspectRatio = item.width && item.height ? `${item.width} / ${item.height}` : FALLBACK_RATIO;
-
+  // 统一比例：所有卡片等高，网格齐整（图片用 object-contain，图本身不会被裁）
   return (
     <div
       className="relative overflow-hidden bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-2 sm:p-2.5 flex flex-col transition-all hover:shadow-md group select-none"
@@ -160,7 +170,7 @@ const GoodsCard: React.FC<{
           onOpen(index);
         }}
         className="relative z-10 w-full rounded-xs overflow-hidden bg-[#F2ECE0] border border-[#E0D5BE] cursor-pointer"
-        style={{ aspectRatio }}
+        style={{ aspectRatio: CARD_RATIO }}
         title={item.title ? `${item.title} · 点击看大图` : '点击看大图'}
       >
         {loaded && inRange ? (
@@ -291,18 +301,6 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
     }
   };
 
-  const handleCopyLink = (item: GoodsItem) => {
-    const url = cosService.getGoodsOriginalUrl(item.file);
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(
-        () => onShowToast('原图直链已复制 🔗'),
-        () => onShowToast(`原图直链：${url}`),
-      );
-    } else {
-      onShowToast(`原图直链：${url}`);
-    }
-  };
-
   const step = (delta: number) => {
     if (filtered.length === 0) return;
     soundManager.playNavClick();
@@ -347,7 +345,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
               key={i}
               className="bg-[#FFFEEF] border-2 border-[#D5C9AF] rounded-md p-2.5 animate-pulse"
             >
-              <div className="w-full rounded-xs bg-[#EFE7D8]" style={{ aspectRatio: FALLBACK_RATIO }} />
+              <div className="w-full rounded-xs bg-[#EFE7D8]" style={{ aspectRatio: CARD_RATIO }} />
               <div className="h-2.5 mt-2 rounded-xs bg-[#EFE7D8]" />
               <div className="h-2.5 mt-1.5 w-2/3 rounded-xs bg-[#EFE7D8]" />
             </div>
@@ -445,13 +443,6 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
                   className="flex-1 px-2 py-1.5 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-pixel text-[11px] font-bold rounded-xs cursor-pointer enabled:hover:bg-[#2B5E4A] disabled:opacity-60 disabled:cursor-wait"
                 >
                   {downloading === activeItem.file ? '取图中…' : '⬇ 下载原图'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleCopyLink(activeItem)}
-                  className="px-2 py-1.5 bg-[#FAF5E8] text-[#5B4636] border-2 border-[#D5C9AF] font-pixel text-[11px] font-bold rounded-xs cursor-pointer hover:bg-[#F3EAD5] whitespace-nowrap"
-                >
-                  🔗 直链
                 </button>
                 <button
                   type="button"
