@@ -175,6 +175,19 @@ export default defineConfig(() => {
             },
           },
           {
+            // 子游戏入口不能 CacheFirst：旧 HTML 会引用部署后已删除的哈希脚本，
+            // iOS PWA 最终只显示 iframe 的深色底色。联网时优先拿最新版，
+            // 离线时仍可回退到最近一次成功响应。
+            urlPattern: /\/save-hange\/(?:index\.html)?(?:\?.*)?$/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'game-hange-entry',
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 2, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
             urlPattern: /\/save-hange\/.*/i,
             handler: 'CacheFirst',
             options: {

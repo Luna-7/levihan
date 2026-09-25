@@ -1,5 +1,30 @@
 @import "tailwindcss";
 
+/* iframe 的高度由宿主明确给出，子应用应优先继承它。
+   iOS 15 及更早版本不认识 dvh；若只写 100dvh，外层高度会退化为 auto，
+   而内部主体是 absolute，最终 root 高度为 0，只剩 body 的深色背景（看起来像黑屏）。 */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #080d0a;
+}
+
+.save-hange-app {
+  height: 100%;
+  min-height: 100vh;
+}
+
+@supports (height: 100dvh) {
+  .save-hange-app {
+    min-height: 100dvh;
+  }
+}
+
 /* SAVE HANGE 运行在独立 iframe，继承不到主站的 ios-webkit class。
    iOS 下直接取消大面积模糊和常驻脉冲，减少独立合成层。 */
 @supports (-webkit-touch-callout: none) {
