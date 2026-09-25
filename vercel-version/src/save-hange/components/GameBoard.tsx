@@ -42,9 +42,6 @@ interface DragState {
   gh: number;
 }
 
-/** 落格动画：只用很轻的 ease-out，不做弹簧 / 惯性 */
-const SNAP_TRANSITION = 'left 0.14s ease-out, top 0.14s ease-out, transform 0.14s ease-out';
-
 /** 触感反馈（无振动硬件时静默降级） */
 const haptic = (pattern: number | number[]) => {
   try {
@@ -215,8 +212,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ pieces, onMovePiece, isGam
         return;
       }
 
-      // 拖动过但不足半格 → 回弹，并给出「没落格」的反馈；纯点击不触发
-      if (dragged) flashBlocked(dragState.pieceId);
+      // 拖动不足半格时静默复位。不要再触发 lockedShake，否则视觉上像松手回弹。
     },
     [dragState, flashBlocked, onMovePiece]
   );
@@ -349,8 +345,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ pieces, onMovePiece, isGam
                 width: `${piece.w * 25}%`,
                 height: `${piece.h * 20}%`,
                 transform: `translate3d(${dragX}px, ${dragY}px, 0)`,
-                // 拖拽中不做补间（严格跟手）；松手后由这段轻量 ease-out 完成吸附
-                transition: isCurrentlyDragging ? 'none' : SNAP_TRANSITION,
+                // 始终不对位置做补间：松手后立即落格或复位，避免拖拽后的回弹感。
+                transition: 'none',
                 willChange: 'transform',
                 touchAction: 'none',
                 zIndex: isCurrentlyDragging ? 30 : 10,
