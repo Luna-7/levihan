@@ -53,19 +53,22 @@ export const ImmersiveGameHome: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingDoujinOpen]);
 
-  // 预加载「塔塔开」全部三款游戏模块与核心素材（合成大西皮、拯救韩吉、利了个韩），消除打开与进入时的网络等待
-  const preloadGameAssets = useCallback(() => {
+  // 只预加载用户明确指向的游戏。此前首页打开 1.2 秒后会一次性拉取 3.1MB
+  // Cocos 引擎、2.4MB 音乐和三款游戏素材，iOS 会因并发下载/解码明显卡顿。
+  const preloadGameAssets = useCallback((game?: 'daxigua' | 'hange' | 'lihan') => {
     if (typeof window === 'undefined') return;
     try {
       void import('./TatakaruGame');
 
-      // Prefetch daxigua & save-hange HTML documents & engine scripts
-      const prefetchUrls = [
-        { href: '/daxigua/index.html', as: 'document' },
-        { href: '/daxigua/cocos2d-js-min.js', as: 'script' },
-        { href: '/daxigua/main.js', as: 'script' },
-        { href: '/save-hange/index.html', as: 'document' },
-      ];
+      const prefetchUrls = game === 'daxigua'
+        ? [
+            { href: '/daxigua/index.html', as: 'document' },
+            { href: '/daxigua/cocos2d-js-min.js', as: 'script' },
+            { href: '/daxigua/main.js', as: 'script' },
+          ]
+        : game === 'hange'
+          ? [{ href: '/save-hange/index.html', as: 'document' }]
+          : [];
 
       prefetchUrls.forEach(({ href, as }) => {
         if (!document.querySelector(`link[href="${href}"]`)) {
@@ -77,17 +80,22 @@ export const ImmersiveGameHome: React.FC<Props> = ({
         }
       });
 
-      // Preload image assets & audio tracks
-      [
-        '/images/lihan/bg-grass.webp',
-        '/images/lihan/lihan-tiles-clean.webp',
-        '/images/lihan/lihan-tray.webp',
-        '/sounds/bgm.mp3',
-        '/sounds/lihan-bgm.mp3',
-      ].forEach((src) => {
+      const mediaUrls = game === 'daxigua'
+        ? ['/sounds/bgm.mp3']
+        : game === 'lihan'
+          ? [
+              '/images/lihan/bg-grass.webp',
+              '/images/lihan/lihan-tiles-clean.webp',
+              '/images/lihan/lihan-tray.webp',
+              '/sounds/lihan-bgm.mp3',
+            ]
+          : [];
+
+      mediaUrls.forEach((src) => {
         if (src.endsWith('.mp3')) {
+          // 只取元数据，避免 iOS 在进入游戏前就下载整首 2.4MB 音频并建立解码器。
           const audio = new Audio();
-          audio.preload = 'auto';
+          audio.preload = 'metadata';
           audio.src = src;
         } else {
           const img = new Image();
@@ -97,15 +105,8 @@ export const ImmersiveGameHome: React.FC<Props> = ({
     } catch {}
   }, []);
 
-  // 页面闲置 1 秒后自动后台预热游戏组件，或在打开游戏选择窗时立即开始预热
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      preloadGameAssets();
-    }, 1200);
-
-    return () => window.clearTimeout(timer);
-  }, [preloadGameAssets]);
-
+  // 首屏不再自动预热游戏。打开游戏选择窗只拉取轻量 React chunk；
+  // 具体引擎和素材等用户触摸对应卡片后再加载。
   useEffect(() => {
     if (activeModal === 'game') {
       preloadGameAssets();
@@ -284,7 +285,10 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                 {/* 游戏 1: 利韩 · 合成大西皮 */}
                 <button
                   type="button"
+                  onMouseEnter={() => preloadGameAssets('daxigua')}
+                  onTouchStart={() => preloadGameAssets('daxigua')}
                   onClick={() => {
+                    preloadGameAssets('daxigua');
                     soundManager.playCoin();
                     setActiveModal(null);
                     setActiveGame('daxigua');
@@ -318,9 +322,10 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                 {/* 游戏 2: 利韩 · 拯救韩吉 */}
                 <button
                   type="button"
-                  onMouseEnter={preloadGameAssets}
-                  onTouchStart={preloadGameAssets}
+                  onMouseEnter={() => preloadGameAssets('hange')}
+                  onTouchStart={() => preloadGameAssets('hange')}
                   onClick={() => {
+                    preloadGameAssets('hange');
                     soundManager.playCoin();
                     setActiveModal(null);
                     setActiveGame('hange');
@@ -354,9 +359,10 @@ export const ImmersiveGameHome: React.FC<Props> = ({
                 {/* 游戏 3: 利韩 · 利了个韩 */}
                 <button
                   type="button"
-                  onMouseEnter={preloadGameAssets}
-                  onTouchStart={preloadGameAssets}
+                  onMouseEnter={() => preloadGameAssets('lihan')}
+                  onTouchStart={() => preloadGameAssets('lihan')}
                   onClick={() => {
+                    preloadGameAssets('lihan');
                     soundManager.playBlip();
                     setActiveModal(null);
                     setActiveGame('lihan');
