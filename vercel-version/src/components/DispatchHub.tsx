@@ -549,6 +549,16 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
           {/* 卡片 A：致谢同好 (Supporters Card)；框体向下延伸，底部两侧立绘致意 */}
           <div className="p-3.5 border-2 border-dashed border-[#8C6C47]/40 rounded-xl bg-[#FAF3E3]/50 backdrop-blur-xs relative overflow-hidden flex flex-col justify-between min-h-[190px]">
             <CardPatternOverlay opacity={0.05} mode="multiply" />
+            <a
+              href="https://afdian.com/a/laogongtudou?tab=feed&utm_source=copylink&utm_medium=link"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative z-20 self-center mb-2 inline-flex items-center justify-center gap-1.5 rounded-lg border-2 border-[#1E4334] bg-[#1E4334] px-4 py-2 font-pixel text-[11px] font-bold tracking-wide text-[#F9E79F] shadow-[3px_3px_0_rgba(140,108,71,0.35)] transition-all hover:bg-[#285A46] active:translate-y-0.5 active:shadow-[1px_1px_0_rgba(140,108,71,0.35)]"
+              aria-label="前往爱发电给服务器喂咖啡"
+            >
+              <span aria-hidden="true">☕</span>
+              <span>给服务器喂咖啡</span>
+            </a>
             <h3 className="font-serif-title text-sm font-black text-[#1E4334] mb-1 flex items-center gap-2 relative z-10">
               <span>🤝</span>
               <span>感谢以下同好对网站的支持</span>
