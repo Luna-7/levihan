@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { soundManager } from '../utils/audio';
 import { submitToInbox } from '../utils/submissionInbox';
+import { cosService } from '../services/cosClient';
 import { CardPatternOverlay } from './CardPatternOverlay';
 
 interface Props {
@@ -14,7 +15,41 @@ interface UploadedFileItem {
   size: number;
 }
 
+type SupportKind = 'translation' | 'typesetting' | 'tech' | 'donation';
+type SupporterItem = { id: string; name: string; kind: SupportKind; order?: number; visible?: boolean };
+
+const SUPPORT_SYMBOLS: Record<SupportKind, { symbol: string; label: string }> = {
+  translation: { symbol: '🌐', label: '汉化' },
+  typesetting: { symbol: '✒️', label: '嵌字' },
+  tech: { symbol: '⚙️', label: '技术' },
+  donation: { symbol: '☕', label: '捐赠' },
+};
+
 export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
+  const [supporters, setSupporters] = useState<SupporterItem[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const url = `${cosService.getObjectUrl('supporters.json')}?v=${Date.now()}`;
+    fetch(url, { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : response.status === 404 ? [] : Promise.reject(new Error('支持墙读取失败')))
+      .then((items: unknown) => {
+        if (cancelled || !Array.isArray(items)) return;
+        const valid = items
+          .filter((item): item is SupporterItem => Boolean(
+            item && typeof item === 'object' &&
+            typeof (item as SupporterItem).name === 'string' &&
+            (item as SupporterItem).kind in SUPPORT_SYMBOLS &&
+            (item as SupporterItem).visible !== false
+          ))
+          .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+          .slice(0, 40);
+        setSupporters(valid);
+      })
+      .catch(() => { if (!cancelled) setSupporters([]); });
+    return () => { cancelled = true; };
+  }, []);
+
   // Main Tab: 'feedback' (战术研讨) | 'share' (作品分享)
   const [mainTab, setMainTab] = useState<'feedback' | 'share'>('feedback');
 
@@ -553,9 +588,25 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
               <span>🤝</span>
               <span>感谢以下同好对网站的支持</span>
             </h3>
-            <div className="flex-1 flex items-center justify-center text-[#8C6C47]/50 text-[10px] italic px-16 relative z-10">
-              {/* 名单暂空 */}
-              (名单整理中...)
+            <div className="flex-1 flex items-center justify-center px-16 py-2 relative z-10">
+              {supporters.length ? (
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 w-full max-w-[230px]">
+                  {supporters.map((supporter) => {
+                    const meta = SUPPORT_SYMBOLS[supporter.kind];
+                    return (
+                      <div
+                        key={supporter.id}
+                        className="min-w-0 flex items-center justify-center gap-1 rounded border border-[#CDBA91]/75 bg-[#FFF9EC]/80 px-1.5 py-1 text-[10px] font-bold text-[#1E4334] shadow-[0_1px_2px_rgba(140,108,71,0.12)]"
+                      >
+                        <span title={meta.label} aria-label={meta.label} className="shrink-0">{meta.symbol}</span>
+                        <span className="truncate">{supporter.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <span className="text-[#8C6C47]/50 text-[10px] italic">(名单整理中...)</span>
+              )}
             </div>
             <a
               href="https://afdian.com/a/laogongtudou?tab=feed&utm_source=copylink&utm_medium=link"

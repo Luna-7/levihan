@@ -53,6 +53,7 @@ const TAGS_KEY = 'tags.json';   // 全站标签库（string[]），供上传台�
 const AUTHORS_KEY = 'authors.json'; // 作者链接登记表（[{name,url,createdAt,updatedAt}]），上传台自动补全 + 可导出 Excel
 const ANNOUNCEMENTS_KEY = 'announcements.json'; // 首页公告栏（公开读取、管理员写入）
 const ANNOUNCEMENT_DIR = 'announcements/';
+const SUPPORTERS_KEY = 'supporters.json'; // 支持墙（[{id,name,kind,order,visible}]）
 const FORUM_KEY = 'restaurant-forum.json';
 const FORUM_DIR = 'restaurant-forum/';
 const LINK_COVER_DIR = 'link-covers/';
@@ -273,6 +274,44 @@ async function readAnnouncements() {
 async function writeAnnouncements(items) {
   await putObject({
     Bucket: BUCKET, Region: REGION, Key: ANNOUNCEMENTS_KEY,
+    Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'),
+    ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache',
+  });
+}
+
+const SUPPORT_KINDS = new Set(['translation', 'typesetting', 'tech', 'donation']);
+
+function normalizeSupporter(raw) {
+  const name = String(raw && raw.name || '').trim().slice(0, 40);
+  if (!name) throw httpError('支持者昵称不能为空', 400);
+  const kind = String(raw && raw.kind || '').trim();
+  if (!SUPPORT_KINDS.has(kind)) throw httpError('请选择有效的支持类型', 400);
+  const id = String(raw && raw.id || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60)
+    || `support-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+  const order = Number(raw && raw.order);
+  return {
+    id,
+    name,
+    kind,
+    order: Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0,
+    visible: raw && raw.visible !== false,
+  };
+}
+
+async function readSupporters() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: SUPPORTERS_KEY });
+    const parsed = JSON.parse(Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+
+async function writeSupporters(items) {
+  await putObject({
+    Bucket: BUCKET, Region: REGION, Key: SUPPORTERS_KEY,
     Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'),
     ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache',
   });
@@ -1259,7 +1298,7 @@ const PUBLIC_ACTIONS = new Set([
   'status', 'login',
   'submitNovel', 'submitContact', 'submitAnnouncement', 'submitRecommend',
   'submitCustomOrderEmail',
-  'announcementList', 'announcementImageUpload',
+  'announcementList', 'announcementImageUpload', 'supporterList',
   'forumList', 'forumTodayRelay', 'marketList',
   'novelCommentList',
   'leaderboard',
@@ -1606,6 +1645,34 @@ async function handle(action, payload) {
       }
       const next = items.filter((entry) => entry && entry.id !== id);
       await writeAnnouncements(next);
+      return { ok: true, id, items: next };
+    }
+
+    case 'supporterList': {
+      const items = await readSupporters();
+      return { ok: true, items: items.slice().sort((a, b) => Number(a.order || 0) - Number(b.order || 0)) };
+    }
+
+    case 'supporterSave': {
+      const item = normalizeSupporter(payload.item || {});
+      const items = await readSupporters();
+      const index = items.findIndex((entry) => entry && entry.id === item.id);
+      const now = new Date().toISOString();
+      const next = { ...(index >= 0 ? items[index] : {}), ...item, updatedAt: now };
+      if (index >= 0) items[index] = next;
+      else items.push({ ...next, createdAt: now });
+      items.sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+      await writeSupporters(items.slice(0, 200));
+      return { ok: true, item: next, items };
+    }
+
+    case 'supporterDelete': {
+      const id = String(payload.id || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60);
+      if (!id) throw httpError('支持者 ID 无效', 400);
+      const items = await readSupporters();
+      const next = items.filter((entry) => entry && entry.id !== id);
+      if (next.length === items.length) throw httpError('支持者不存在', 404);
+      await writeSupporters(next);
       return { ok: true, id, items: next };
     }
 

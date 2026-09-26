@@ -356,6 +356,7 @@
       <button type="button" class="admin-tab active" data-admin-tab="manga">📚 漫画上传</button>
       <button type="button" class="admin-tab" data-admin-tab="novel">✍️ 小说管理</button>
       <button type="button" class="admin-tab" data-admin-tab="announcement">📢 公告管理</button>
+      <button type="button" class="admin-tab" data-admin-tab="support">🤝 支持</button>
       <button type="button" class="admin-tab" data-admin-tab="inbox">📬 调查报告收件箱</button>
       <button type="button" class="admin-tab" data-admin-tab="authors">📇 作者登记</button>
       <button type="button" class="admin-tab" data-admin-tab="forum">🌳 餐厅论坛</button>
@@ -429,6 +430,42 @@
         <button class="btn-sm" id="an-clear">清空表单</button>
       </div>
       <div class="msg" id="an-msg"></div>
+    </div>
+
+    <div class="admin-page-head hide" data-admin-page="support"><h2>🤝 支持墙</h2><div class="muted">维护前台致谢卡片中的名字与贡献符号。</div></div>
+    <div class="panel hide" id="support-panel" data-admin-page="support">
+      <div class="spread" style="margin-bottom:12px">
+        <h2 style="margin:0">🤝 支持墙名单</h2>
+        <button class="btn-sm" id="support-reload">↻ 刷新名单</button>
+      </div>
+      <div id="support-list"><p class="muted">登录后自动载入名单。</p></div>
+      <div class="grid" style="margin-top:16px">
+        <div class="f">
+          <label for="support-name">昵称 <span class="req">*</span></label>
+          <input type="text" id="support-name" maxlength="40" placeholder="支持者昵称">
+        </div>
+        <div class="f">
+          <label for="support-kind">贡献符号 <span class="req">*</span></label>
+          <select id="support-kind">
+            <option value="translation">🌐 汉化</option>
+            <option value="typesetting">✒️ 嵌字</option>
+            <option value="tech">⚙️ 技术</option>
+            <option value="donation">☕ 捐赠</option>
+          </select>
+        </div>
+        <div class="f">
+          <label for="support-order">排序 <span class="tag">数字越小越靠前</span></label>
+          <input type="number" id="support-order" min="0" step="1" value="0">
+        </div>
+        <div class="f" style="justify-content:flex-end">
+          <label style="align-items:center"><input type="checkbox" id="support-visible" checked style="width:auto"> 在前台展示</label>
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn-gold" id="support-save">加入支持墙</button>
+        <button class="btn-sm" id="support-clear">清空表单</button>
+      </div>
+      <div class="msg" id="support-msg"></div>
     </div>
 
     <!-- 作者链接登记表：发布作品时自动登记「作者名 + 主页链接」，输入同名作者自动带出链接，可导出 Excel -->
@@ -953,6 +990,8 @@ var announcements = [];
 var anEditingId = '';
 var anImageBase64 = '';
 var anExistingImage = '';
+var supporters = [];
+var supporterEditingId = '';
 
 /* ============ 小工具 ============ */
 function $(id){ return document.getElementById(id); }
@@ -1072,7 +1111,7 @@ function syncCategory(){
 
 var activeAdminPage = 'manga';
 function switchAdminPage(page, updateHash){
-  var allowed = ['manga','novel','announcement','inbox','authors','forum','toolkit'];
+  var allowed = ['manga','novel','announcement','support','inbox','authors','forum','toolkit'];
   if (allowed.indexOf(page) < 0) page = 'manga';
   // 文件工具箱已并入「漫画上传」页的功能区下拉，#admin-toolkit 仍可直达
   var sub = 'upload';
@@ -1169,15 +1208,18 @@ function enterMain(){
     $('bk-list').innerHTML = '<p class="muted">本地预览不加载云端作品列表。</p>';
     $('nv-list').innerHTML = '<p class="muted">本地预览不加载云端小说列表。</p>';
     $('author-list').innerHTML = '<p class="muted">本地预览不加载云端登记表。</p>';
+    $('support-list').innerHTML = '<p class="muted">本地预览不加载云端支持墙。</p>';
     $('inbox-contacts').innerHTML = '<p class="muted">本地预览不加载云端收件箱。</p>';
     $('btn-nv-save').disabled = true;
     $('btn-reload').disabled = true;
     $('btn-nv-reload').disabled = true;
     $('author-add').disabled = true;
     $('author-export').disabled = true;
+    $('support-save').disabled = true;
   } else {
     refreshEnv();
     loadAnnouncements();
+    loadSupporters();
     loadBooks();
     loadNovels();
     loadAuthorLib();
@@ -1266,6 +1308,76 @@ $('an-list').addEventListener('click', function(e){
     var id=del.getAttribute('data-an-del'); if (!confirm('确定删除这条公告？')) return;
     api({action:'announcementDelete',id:id}).then(function(d){ announcements=d.items||[]; renderAnnouncements(); resetAnnouncementForm(); })
       .catch(function(err){ if(onAuthFail(err))return; show($('an-msg'),'err',err.message||String(err)); });
+  }
+});
+
+/* ============ 支持墙 ============ */
+var SUPPORT_SYMBOLS = { translation:'🌐', typesetting:'✒️', tech:'⚙️', donation:'☕' };
+var SUPPORT_LABELS = { translation:'汉化', typesetting:'嵌字', tech:'技术', donation:'捐赠' };
+function renderSupporters(){
+  var box = $('support-list');
+  if (!supporters.length) { box.innerHTML = '<p class="muted">支持墙暂时没有名单。</p>'; return; }
+  box.innerHTML = supporters.map(function(item){
+    var symbol = SUPPORT_SYMBOLS[item.kind] || '✦';
+    return '<div class="notice-row">' +
+      '<div class="info"><b>' + symbol + ' ' + esc(item.name) + '</b>' +
+      '<div class="muted">' + esc(SUPPORT_LABELS[item.kind] || '支持') + ' · 排序 ' + Number(item.order || 0) +
+      (item.visible === false ? ' · 已隐藏' : ' · 前台展示') + '</div></div>' +
+      '<button class="btn-sm" data-support-edit="' + esc(item.id) + '">编辑</button>' +
+      '<button class="btn-sm btn-danger" data-support-del="' + esc(item.id) + '">删除</button></div>';
+  }).join('');
+}
+function loadSupporters(){
+  $('support-list').innerHTML = '<p class="muted">加载中…</p>';
+  api({ action:'supporterList' }).then(function(d){ supporters = d.items || []; renderSupporters(); })
+    .catch(function(err){ if (onAuthFail(err)) return; $('support-list').innerHTML = '<p class="muted">读取失败：' + esc(err.message || err) + '</p>'; });
+}
+function resetSupporterForm(){
+  supporterEditingId = '';
+  $('support-name').value = '';
+  $('support-kind').value = 'translation';
+  $('support-order').value = '0';
+  $('support-visible').checked = true;
+  $('support-save').textContent = '加入支持墙';
+  hide($('support-msg'));
+}
+function saveSupporter(){
+  var item = {
+    id: supporterEditingId || undefined,
+    name: $('support-name').value.trim(),
+    kind: $('support-kind').value,
+    order: Number($('support-order').value || 0),
+    visible: $('support-visible').checked
+  };
+  if (!item.name) { show($('support-msg'), 'err', '请填写支持者昵称。'); return; }
+  var btn = $('support-save'); btn.disabled = true; hide($('support-msg'));
+  api({ action:'supporterSave', item:item }).then(function(d){
+    supporters = d.items || []; renderSupporters(); resetSupporterForm();
+    show($('support-msg'), 'ok', '✓ 已保存，前台支持墙会自动读取。');
+  }).catch(function(err){ if (onAuthFail(err)) return; show($('support-msg'), 'err', err.message || String(err)); })
+    .then(function(){ btn.disabled = false; });
+}
+$('support-save').addEventListener('click', saveSupporter);
+$('support-clear').addEventListener('click', resetSupporterForm);
+$('support-reload').addEventListener('click', loadSupporters);
+$('support-list').addEventListener('click', function(e){
+  var edit = e.target.closest('[data-support-edit]'), del = e.target.closest('[data-support-del]');
+  if (edit) {
+    var item = supporters.find(function(x){ return x.id === edit.getAttribute('data-support-edit'); });
+    if (!item) return;
+    supporterEditingId = item.id;
+    $('support-name').value = item.name || '';
+    $('support-kind').value = item.kind || 'translation';
+    $('support-order').value = String(Number(item.order || 0));
+    $('support-visible').checked = item.visible !== false;
+    $('support-save').textContent = '保存修改';
+    window.scrollTo({ top:$('support-panel').offsetTop - 12, behavior:'smooth' });
+  } else if (del) {
+    var id = del.getAttribute('data-support-del');
+    if (!confirm('确定从支持墙删除这个名字？')) return;
+    api({ action:'supporterDelete', id:id }).then(function(d){
+      supporters = d.items || []; renderSupporters(); resetSupporterForm();
+    }).catch(function(err){ if (onAuthFail(err)) return; show($('support-msg'), 'err', err.message || String(err)); });
   }
 });
 
@@ -4155,7 +4267,7 @@ $('bk-list').addEventListener('click', function(e){
 });
 
 /* ============ 启动 ============ */
-var initialAdminPage = (location.hash.match(/^#admin-(manga|novel|announcement|inbox|authors|forum)$/) || [])[1] || 'manga';
+var initialAdminPage = (location.hash.match(/^#admin-(manga|novel|announcement|support|inbox|authors|forum)$/) || [])[1] || 'manga';
 switchAdminPage(initialAdminPage, false);
 if (LOCAL_PREVIEW || token) enterMain();
 else { $('view-login').classList.remove('hide'); }
