@@ -5,9 +5,16 @@
   "framework": "vite",
   "routes": [
     {
+      "src": "^/sw\\.js$",
+      "has": [{ "type": "host", "value": "admin.levihan.asia" }],
+      "dest": "/admin/sw-kill.js",
+      "headers": { "Cache-Control": "no-cache, no-store, must-revalidate" }
+    },
+    {
       "src": "^/$",
       "has": [{ "type": "host", "value": "admin.levihan.asia" }],
-      "dest": "/admin/index.html"
+      "dest": "/admin/index.html",
+      "headers": { "Cache-Control": "no-cache, no-store, must-revalidate" }
     },
     {
       "src": "^/pixiv-artists\\.js$",
@@ -17,7 +24,8 @@
     {
       "src": "^/admin/(.*)$",
       "has": [{ "type": "host", "value": "admin.levihan.asia" }],
-      "dest": "/admin/$1"
+      "dest": "/admin/$1",
+      "headers": { "Cache-Control": "no-cache, no-store, must-revalidate" }
     },
     {
       "src": "/(.*)",

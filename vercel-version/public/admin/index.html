@@ -5,6 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="WJCacGGq8uacjSIYi7e77s">
 <meta name="robots" content="noindex,nofollow,noarchive" data-page-node-id="nzdVfmMXyOVAFFjrcvguFU">
 <title>利韩土豆仓 · 管理工作台</title>
+<script>
+  // 管理域名不应由主站 PWA 接管。清除历史遗留的 Service Worker 与 Cache Storage，
+  // 防止旧主站的 navigateFallback 把管理台替换成过期首页。
+  (function () {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.getRegistrations().then(function (registrations) {
+      return Promise.all(registrations.map(function (registration) { return registration.unregister(); }));
+    }).catch(function () {});
+    if ('caches' in window) {
+      caches.keys().then(function (keys) {
+        return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+      }).catch(function () {});
+    }
+  })();
+</script>
 <style>
   :root{
     --paper:#FBF7EC; --bg:#F6F1E3; --card:#FFFBF0;
