@@ -323,8 +323,8 @@ export class COSService {
         if (Array.isArray(list)) {
           return list.filter(
             (it: Partial<GoodsItem> | null): it is GoodsItem =>
-              Boolean(it && typeof it.file === 'string' && it.file),
-          );
+              Boolean(it && typeof it.file === 'string' && it.file && it.visible !== false),
+          ).sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
         }
       }
     } catch (e) {

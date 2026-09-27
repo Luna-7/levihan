@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { soundManager } from '../utils/audio';
-import { submitToInbox } from '../utils/submissionInbox';
+import { loadUnreadInboxReplies, markInboxReplyRead, submitToInbox, type InboxReply } from '../utils/submissionInbox';
 import { cosService } from '../services/cosClient';
 import { CardPatternOverlay } from './CardPatternOverlay';
+import { useAuthStore } from '../stores/authStore';
 
 interface Props {
   onShowToast: (msg: string) => void;
@@ -27,6 +28,17 @@ const SUPPORT_SYMBOLS: Record<SupportKind, { symbol: string; label: string }> = 
 
 export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
   const [supporters, setSupporters] = useState<SupporterItem[]>([]);
+  const profile = useAuthStore((state) => state.profile);
+  const authInitialized = useAuthStore((state) => state.initialized);
+  const [inboxReplies, setInboxReplies] = useState<InboxReply[]>([]);
+  const [activeReply, setActiveReply] = useState<InboxReply | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!authInitialized || !profile) { setInboxReplies([]); setActiveReply(null); return; }
+    loadUnreadInboxReplies().then((items) => { if (!cancelled) setInboxReplies(items); }).catch(() => { if (!cancelled) setInboxReplies([]); });
+    return () => { cancelled = true; };
+  }, [authInitialized, profile?.uid]);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,6 +85,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
   const [feedbackName, setFeedbackName] = useState<string>('');
   const [feedbackEmail, setFeedbackEmail] = useState<string>('');
   const [feedbackContent, setFeedbackContent] = useState<string>('');
+  const [feedbackParentId, setFeedbackParentId] = useState<string>('');
 
   // Form States - Translate Release
   const [trBookName, setTrBookName] = useState<string>('');
@@ -221,10 +234,12 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       name: feedbackName,
       email: feedbackEmail,
       content: feedbackContent,
+      parentId: feedbackParentId,
     });
     if (sent) {
       onShowToast('调查报告已呈递至收件箱！📬');
       setFeedbackContent('');
+      setFeedbackParentId('');
       setIsReportModalOpen(false);
       return;
     }
@@ -237,6 +252,18 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
     }
     setFeedbackContent('');
     setIsReportModalOpen(false);
+  };
+
+  const closeReply = async (reply: InboxReply, continueQuestion = false) => {
+    setInboxReplies((items) => items.filter((item) => item.id !== reply.id));
+    setActiveReply(null);
+    void markInboxReplyRead(reply.id).catch(() => onShowToast('回信状态同步失败，请稍后重试'));
+    if (continueQuestion) {
+      setFeedbackCategory('💬 随便聊聊');
+      setFeedbackContent(`关于管理员回信（${reply.subject || '调查报告'}）：\n`);
+      setFeedbackParentId(reply.id);
+      setIsReportModalOpen(true);
+    }
   };
 
   // 2. 呈递汉化发布
@@ -580,6 +607,16 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
         {/* ====================================================
             卡片组：独立操作区域
            ==================================================== */}
+        {inboxReplies.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setActiveReply(inboxReplies[0])}
+            className="relative self-center mb-3 inline-flex items-center gap-2 rounded-lg border-2 border-[#B7791F] bg-[#F3C45E] px-4 py-2 text-[#3E2C16] font-pixel text-[11px] font-bold shadow-[3px_3px_0_rgba(140,108,71,.32)] animate-pulse hover:bg-[#F7D47C] cursor-pointer"
+          >
+            <span>💌</span><span>管理员回信</span>
+            <span className="absolute -right-2 -top-2 min-w-5 h-5 px-1 rounded-full bg-[#C6452D] text-white text-[10px] flex items-center justify-center border border-[#FFF6DD]">{inboxReplies.length}</span>
+          </button>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 shrink-0">
           {/* 卡片 A：致谢同好 (Supporters Card)；框体向下延伸，底部两侧立绘致意 */}
           <div className="p-3.5 border-2 border-dashed border-[#8C6C47]/40 rounded-xl bg-[#FAF3E3]/50 backdrop-blur-xs relative overflow-hidden flex flex-col justify-between min-h-[190px]">
@@ -672,6 +709,25 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
         )}
 
         {/* ======================= MODULE 1: 弹窗模式的战术研讨 ======================= */}
+        {activeReply && createPortal(
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="relative w-full max-w-md overflow-hidden rounded-xl border-2 border-[#1E4334] bg-[#FFFDF6] p-5 shadow-[0_18px_50px_rgba(0,0,0,.38)]">
+              <CardPatternOverlay opacity={0.07} mode="multiply" />
+              <div className="relative z-10">
+                <div className="mb-3 flex items-center gap-2 border-b border-dashed border-[#CDBA91] pb-3">
+                  <span className="text-2xl">✉️</span>
+                  <div><h3 className="font-serif-title text-lg font-black text-[#1E4334]">来自管理员的回信</h3><p className="text-[10px] text-[#8C7A68]">关于：{activeReply.subject || '调查报告'}</p></div>
+                </div>
+                <p className="min-h-24 whitespace-pre-wrap rounded-md bg-[#F7F1E5] p-3 text-sm leading-7 text-[#3E342B]">{activeReply.body}</p>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => closeReply(activeReply)} className="rounded-md border-2 border-[#B7791F] bg-[#F3C45E] px-3 py-2 text-sm font-bold text-[#3E2C16] hover:bg-[#F7D47C] cursor-pointer">我知道了</button>
+                  <button type="button" onClick={() => closeReply(activeReply, true)} className="rounded-md border-2 border-[#1E4334] bg-[#FFF9EC] px-3 py-2 text-sm font-bold text-[#1E4334] hover:bg-[#F1E8D4] cursor-pointer">继续提问</button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
         {isReportModalOpen && createPortal(
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <div className="w-full max-w-md bg-[#FFFDF6] border-2 border-[#1E4334] rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.35)] flex flex-col relative overflow-hidden animate-in fade-in zoom-in duration-200">

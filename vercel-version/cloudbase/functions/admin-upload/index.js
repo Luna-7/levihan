@@ -54,6 +54,8 @@ const AUTHORS_KEY = 'authors.json'; // 作者链接登记表（[{name,url,create
 const ANNOUNCEMENTS_KEY = 'announcements.json'; // 首页公告栏（公开读取、管理员写入）
 const ANNOUNCEMENT_DIR = 'announcements/';
 const SUPPORTERS_KEY = 'supporters.json'; // 支持墙（[{id,name,kind,order,visible}]）
+const GOODS_KEY = 'goods/manifest.json';
+const GOODS_DIR = 'goods/';
 const FORUM_KEY = 'restaurant-forum.json';
 const FORUM_DIR = 'restaurant-forum/';
 const LINK_COVER_DIR = 'link-covers/';
@@ -315,6 +317,38 @@ async function writeSupporters(items) {
     Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'),
     ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache',
   });
+}
+
+async function readGoods() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: GOODS_KEY });
+    const parsed = JSON.parse(Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body));
+    return Array.isArray(parsed) ? parsed : (Array.isArray(parsed && parsed.items) ? parsed.items : []);
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+
+async function writeGoods(items) {
+  await putObject({ Bucket: BUCKET, Region: REGION, Key: GOODS_KEY,
+    Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'),
+    ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache' });
+}
+
+function normalizeGoodsItem(raw, fallbackFile) {
+  const file = String(raw && raw.file || fallbackFile || '').trim().replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 120);
+  if (!file || !FILE_RE.test(file)) throw httpError('周边图片文件名无效', 400);
+  const order = Number(raw && raw.order), scale = Number(raw && raw.scale);
+  const width = Number(raw && raw.width), height = Number(raw && raw.height);
+  return { file,
+    ...(String(raw && raw.title || '').trim() ? { title: String(raw.title).trim().slice(0, 60) } : {}),
+    ...(String(raw && raw.note || '').trim() ? { note: String(raw.note).trim().slice(0, 120) } : {}),
+    order: Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0,
+    scale: Number.isFinite(scale) ? Math.min(130, Math.max(60, Math.round(scale))) : 100,
+    visible: raw && raw.visible !== false,
+    ...(Number.isFinite(width) && width > 0 ? { width: Math.floor(width) } : {}),
+    ...(Number.isFinite(height) && height > 0 ? { height: Math.floor(height) } : {}) };
 }
 
 async function readForum() {
@@ -1252,6 +1286,9 @@ async function submitToInbox(type, payload) {
       rating: String(payload.rating || '').trim().slice(0, 20) };
   } else if (type === 'contact') {
     item = normalizeContactItem(payload);
+    if (payload.__uid) item.userUid = String(payload.__uid);
+    const parentId = String(payload.parentId || '').trim();
+    if (parentId && /^[a-zA-Z0-9_-]{8,80}$/.test(parentId)) item.parentId = parentId;
   } else throw httpError('不支持的投稿类型', 400);
   const id = crypto.randomUUID();
   assertDbResult(await inboxDb().from(INBOX_COLLECTION).insert({ id, type, status: 'pending', payload: item, created_at: now, updated_at: now }));
@@ -1311,7 +1348,10 @@ const USER_ACTIONS = new Set([
   'novelDirectPublish', 'novelUpdate', 'novelCommentAdd',
   'novelBody',
   'submitScore',
+  'inboxReplyList', 'inboxReplyRead',
 ]);
+// 匿名也可呈递；若请求带有效登录会话则顺带绑定账号，供管理员站内回信。
+const OPTIONAL_USER_ACTIONS = new Set(['submitContact']);
 /* 用户会话**或**管理员令牌任一即可：
    - 删评论 / 删帖子 = 本人（uid 比对）或管理员（管理员可清理任意垃圾贴）
    - linkPreview = 前台发布安利与后台发布安利都要用
@@ -1581,6 +1621,39 @@ async function handle(action, payload) {
       const rows = assertDbResult(await inboxDb().from(INBOX_COLLECTION).select('id,type,payload,created_at').eq('status', 'pending').order('created_at', { ascending: false }).limit(100));
       return { ok: true, items: (rows || []).map((row) => ({ _id: row.id, type: row.type, createdAt: row.created_at, ...(row.payload || {}) })) };
     }
+    case 'inboxReply': {
+      const id = String(payload.id || '').trim();
+      const body = String(payload.reply || '').replace(/\r\n?/g, '\n').trim().slice(0, 3000);
+      if (!/^[a-zA-Z0-9_-]{8,80}$/.test(id) || !body) throw httpError('请填写有效的回信内容', 400);
+      const db = inboxDb();
+      const rows = assertDbResult(await db.from(INBOX_COLLECTION).select('id,type,status,payload').eq('id', id).limit(1));
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      if (!row) throw httpError('来信不存在', 404);
+      const current = row.payload || {};
+      if (!current.userUid) throw httpError('该来信未绑定登录账号，无法发送站内回信', 409);
+      const now = new Date().toISOString();
+      const nextPayload = { ...current, adminReply: body, repliedAt: now, replyReadAt: null };
+      assertDbResult(await db.from(INBOX_COLLECTION).update({ payload: nextPayload, status: 'replied', updated_at: now }).eq('id', id));
+      return { ok: true, id, status: 'replied' };
+    }
+    case 'inboxReplyList': {
+      const rows = assertDbResult(await inboxDb().from(INBOX_COLLECTION).select('id,payload,updated_at').order('updated_at', { ascending: false }).limit(500));
+      const items = (rows || []).filter((row) => row && row.payload && row.payload.userUid === payload.__uid && row.payload.adminReply && !row.payload.replyReadAt)
+        .map((row) => ({ id: row.id, body: String(row.payload.adminReply), repliedAt: row.payload.repliedAt || row.updated_at,
+          subject: row.payload.title || row.payload.category || row.payload.kindLabel || '调查报告' })).slice(0, 20);
+      return { ok: true, items };
+    }
+    case 'inboxReplyRead': {
+      const id = String(payload.id || '').trim();
+      if (!/^[a-zA-Z0-9_-]{8,80}$/.test(id)) throw httpError('回信 ID 无效', 400);
+      const db = inboxDb();
+      const rows = assertDbResult(await db.from(INBOX_COLLECTION).select('id,payload').eq('id', id).limit(1));
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      if (!row || !row.payload || row.payload.userUid !== payload.__uid) throw httpError('回信不存在', 404);
+      const nextPayload = { ...row.payload, replyReadAt: new Date().toISOString() };
+      assertDbResult(await db.from(INBOX_COLLECTION).update({ payload: nextPayload, updated_at: new Date().toISOString() }).eq('id', id));
+      return { ok: true, id };
+    }
     case 'inboxReview': return reviewInbox(payload);
     case 'status':
       return {
@@ -1646,6 +1719,44 @@ async function handle(action, payload) {
       const next = items.filter((entry) => entry && entry.id !== id);
       await writeAnnouncements(next);
       return { ok: true, id, items: next };
+    }
+
+    case 'goodsList': {
+      const items = await readGoods();
+      return { ok: true, items: items.slice().sort((a, b) => Number(a.order || 0) - Number(b.order || 0)) };
+    }
+
+    case 'goodsSave': {
+      const imageBase64 = String(payload.imageBase64 || '');
+      if (imageBase64 && Math.floor((imageBase64.length * 3) / 4) > MAX_BYTES) throw httpError('周边图片超过 4MB 上限', 413);
+      const generatedFile = imageBase64 ? `admin-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.webp` : '';
+      const item = normalizeGoodsItem(payload.item || {}, generatedFile);
+      const items = await readGoods();
+      const index = items.findIndex((entry) => entry && entry.file === item.file);
+      if (!imageBase64 && index < 0) throw httpError('周边图片不存在', 404);
+      if (imageBase64) {
+        const body = Buffer.from(imageBase64, 'base64');
+        if (!body.length) throw httpError('周边图片内容为空', 400);
+        await putObject({ Bucket: BUCKET, Region: REGION, Key: `${GOODS_DIR}${item.file}`, Body: body,
+          ContentType: 'image/webp', CacheControl: 'public, max-age=604800' });
+        item.bytes = body.length;
+      }
+      const next = { ...(index >= 0 ? items[index] : {}), ...item };
+      if (index >= 0) items[index] = next; else items.push(next);
+      items.sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+      await writeGoods(items.slice(0, 300));
+      return { ok: true, item: next, items };
+    }
+
+    case 'goodsDelete': {
+      const file = String(payload.file || '').trim().replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 120);
+      if (!file || !FILE_RE.test(file)) throw httpError('周边图片文件名无效', 400);
+      const items = await readGoods();
+      const next = items.filter((entry) => entry && entry.file !== file);
+      if (next.length === items.length) throw httpError('周边图片不存在', 404);
+      await deleteMultipleObject({ Bucket: BUCKET, Region: REGION, Objects: [{ Key: `${GOODS_DIR}${file}` }] });
+      await writeGoods(next);
+      return { ok: true, file, items: next };
     }
 
     case 'supporterList': {
@@ -2590,6 +2701,8 @@ const server = http.createServer(async (req, res) => {
     if (USER_ACTIONS.has(action)) {
       payload.__uid = await authUid(bearer);
       if (!payload.__uid) throw httpError('请先登录账号', 401);
+    } else if (OPTIONAL_USER_ACTIONS.has(action)) {
+      payload.__uid = await authUid(bearer);
     } else if (USER_OR_ADMIN_ACTIONS.has(action)) {
       // 用户会话或管理员令牌任一通过即可；管理员以 __admin__ 身份放行（可删任意评论）
       payload.__uid = await authUid(bearer);
@@ -2659,6 +2772,8 @@ exports.main = async (event) => {
     if (USER_ACTIONS.has(action)) {
       payload.__uid = await authUid(bearer);
       if (!payload.__uid) throw httpError('请先登录账号', 401);
+    } else if (OPTIONAL_USER_ACTIONS.has(action)) {
+      payload.__uid = await authUid(bearer);
     } else if (USER_OR_ADMIN_ACTIONS.has(action)) {
       payload.__uid = await authUid(bearer);
       if (!payload.__uid && verifyToken(token)) payload.__uid = '__admin__';

@@ -356,8 +356,9 @@
       <button type="button" class="admin-tab active" data-admin-tab="manga">📚 漫画上传</button>
       <button type="button" class="admin-tab" data-admin-tab="novel">✍️ 小说管理</button>
       <button type="button" class="admin-tab" data-admin-tab="announcement">📢 公告管理</button>
+      <button type="button" class="admin-tab" data-admin-tab="goods">🖼 周边橱窗</button>
       <button type="button" class="admin-tab" data-admin-tab="support">🤝 支持</button>
-      <button type="button" class="admin-tab" data-admin-tab="inbox">📬 调查报告收件箱</button>
+      <button type="button" class="admin-tab" data-admin-tab="inbox">📬 调查报告收件箱 <span id="inbox-badge" class="hide" style="display:inline-flex;min-width:19px;height:19px;padding:0 5px;align-items:center;justify-content:center;border-radius:10px;background:#C6452D;color:#fff;font-size:11px">0</span></button>
       <button type="button" class="admin-tab" data-admin-tab="authors">📇 作者登记</button>
       <button type="button" class="admin-tab" data-admin-tab="forum">🌳 餐厅论坛</button>
     </nav>
@@ -430,6 +431,22 @@
         <button class="btn-sm" id="an-clear">清空表单</button>
       </div>
       <div class="msg" id="an-msg"></div>
+    </div>
+
+    <div class="admin-page-head hide" data-admin-page="goods"><h2>🖼 周边橱窗</h2><div class="muted">上传、排序和统一调整人物在卡片中的显示大小。</div></div>
+    <div class="panel hide" id="goods-panel" data-admin-page="goods">
+      <div class="spread" style="margin-bottom:12px"><h2 style="margin:0">🖼 橱窗图片管理</h2><button class="btn-sm" id="goods-reload">↻ 刷新图片</button></div>
+      <div id="goods-list"><p class="muted">登录后自动载入橱窗。</p></div>
+      <div class="grid" style="margin-top:16px">
+        <div class="f span2"><label for="goods-image">人物图片 <span class="tag">新增时必选；自动转为 WebP，单张不超过 4MB</span></label><input type="file" id="goods-image" accept="image/png,image/jpeg,image/webp,image/avif"><img id="goods-preview" class="notice-preview hide" alt="周边图片预览" style="object-fit:contain;aspect-ratio:3/4;max-height:300px"></div>
+        <div class="f"><label for="goods-title">名称 <span class="tag">选填</span></label><input id="goods-title" maxlength="60" placeholder="人物或周边名称"></div>
+        <div class="f"><label for="goods-note">备注 <span class="tag">选填</span></label><input id="goods-note" maxlength="120" placeholder="来源、款式等"></div>
+        <div class="f"><label for="goods-order">排序 <span class="tag">数字越小越靠前</span></label><input type="number" id="goods-order" min="0" step="1" value="0"></div>
+        <div class="f"><label for="goods-scale">人物大小 <span class="tag" id="goods-scale-value">100%</span></label><input type="range" id="goods-scale" min="60" max="130" step="5" value="100"></div>
+        <div class="f" style="justify-content:flex-end"><label style="align-items:center"><input type="checkbox" id="goods-visible" checked style="width:auto"> 在前台展示</label></div>
+      </div>
+      <div class="row" style="margin-top:14px"><button class="btn-gold" id="goods-save">上传到橱窗</button><button class="btn-sm" id="goods-clear">清空表单</button></div>
+      <div class="msg" id="goods-msg"></div>
     </div>
 
     <div class="admin-page-head hide" data-admin-page="support"><h2>🤝 支持墙</h2><div class="muted">维护前台致谢卡片中的名字与贡献符号。</div></div>
@@ -992,6 +1009,11 @@ var anImageBase64 = '';
 var anExistingImage = '';
 var supporters = [];
 var supporterEditingId = '';
+var goodsItems = [];
+var goodsEditingFile = '';
+var goodsImageBase64 = '';
+var goodsImageWidth = 0;
+var goodsImageHeight = 0;
 
 /* ============ 小工具 ============ */
 function $(id){ return document.getElementById(id); }
@@ -1111,7 +1133,7 @@ function syncCategory(){
 
 var activeAdminPage = 'manga';
 function switchAdminPage(page, updateHash){
-  var allowed = ['manga','novel','announcement','support','inbox','authors','forum','toolkit'];
+  var allowed = ['manga','novel','announcement','goods','support','inbox','authors','forum','toolkit'];
   if (allowed.indexOf(page) < 0) page = 'manga';
   // 文件工具箱已并入「漫画上传」页的功能区下拉，#admin-toolkit 仍可直达
   var sub = 'upload';
@@ -1219,6 +1241,7 @@ function enterMain(){
   } else {
     refreshEnv();
     loadAnnouncements();
+    loadGoods();
     loadSupporters();
     loadBooks();
     loadNovels();
@@ -1309,6 +1332,51 @@ $('an-list').addEventListener('click', function(e){
     api({action:'announcementDelete',id:id}).then(function(d){ announcements=d.items||[]; renderAnnouncements(); resetAnnouncementForm(); })
       .catch(function(err){ if(onAuthFail(err))return; show($('an-msg'),'err',err.message||String(err)); });
   }
+});
+
+/* ============ 周边橱窗 ============ */
+function goodsUrl(file){ return CDN + '/goods/' + String(file || '').split('/').map(encodeURIComponent).join('/'); }
+function renderGoods(){
+  var box = $('goods-list');
+  if (!goodsItems.length) { box.innerHTML = '<p class="muted">橱窗暂时没有图片。</p>'; return; }
+  box.innerHTML = goodsItems.map(function(item){
+    var scale = Math.min(130, Math.max(60, Number(item.scale || 100)));
+    return '<div class="notice-row"><div style="width:68px;height:88px;overflow:hidden;background:#F2ECE0;border:1px solid var(--line);border-radius:5px;flex:none"><img src="' + esc(goodsUrl(item.file) + '?imageMogr2/thumbnail/160x/format/webp') + '" alt="" style="width:100%;height:100%;object-fit:contain;transform:scale(' + (scale/100) + ')"></div>' +
+      '<div class="info"><b>' + esc(item.title || item.file) + '</b><div class="muted">' + esc(item.file) + ' · 排序 ' + Number(item.order||0) + ' · 大小 ' + scale + '%' + (item.visible===false?' · 已隐藏':' · 前台展示') + '</div></div>' +
+      '<button class="btn-sm" data-goods-edit="' + esc(item.file) + '">编辑</button><button class="btn-sm btn-danger" data-goods-del="' + esc(item.file) + '">删除</button></div>';
+  }).join('');
+}
+function loadGoods(){
+  $('goods-list').innerHTML='<p class="muted">加载中…</p>';
+  api({action:'goodsList'}).then(function(d){goodsItems=d.items||[];renderGoods();}).catch(function(err){if(onAuthFail(err))return;$('goods-list').innerHTML='<p class="muted">读取失败：'+esc(err.message||err)+'</p>';});
+}
+function resetGoodsForm(){
+  goodsEditingFile=''; goodsImageBase64=''; goodsImageWidth=0; goodsImageHeight=0;
+  $('goods-image').value=''; $('goods-title').value=''; $('goods-note').value=''; $('goods-order').value='0'; $('goods-scale').value='100'; $('goods-scale-value').textContent='100%'; $('goods-visible').checked=true;
+  $('goods-preview').src=''; $('goods-preview').style.transform=''; $('goods-preview').classList.add('hide'); $('goods-save').textContent='上传到橱窗'; hide($('goods-msg'));
+}
+function prepareGoodsImage(file){
+  if(!file||!/^image\//.test(file.type)) return Promise.reject(new Error('请选择图片文件。'));
+  if(file.size>MAX_FILE) return Promise.reject(new Error('图片超过 4MB 上限。'));
+  return new Promise(function(resolve,reject){
+    var img=new Image(),url=URL.createObjectURL(file);
+    img.onload=function(){try{var max=1800,ratio=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.max(1,Math.round(img.naturalWidth*ratio)),h=Math.max(1,Math.round(img.naturalHeight*ratio)),canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;canvas.getContext('2d').drawImage(img,0,0,w,h);URL.revokeObjectURL(url);goodsImageWidth=w;goodsImageHeight=h;resolve(canvas.toDataURL('image/webp',.9));}catch(e){URL.revokeObjectURL(url);reject(e);}};
+    img.onerror=function(){URL.revokeObjectURL(url);reject(new Error('图片读取失败。'));}; img.src=url;
+  });
+}
+$('goods-image').addEventListener('change',function(){var file=this.files&&this.files[0];if(!file)return;show($('goods-msg'),'info','正在处理图片…');prepareGoodsImage(file).then(function(data){goodsImageBase64=data.split(',')[1]||'';$('goods-preview').src=data;$('goods-preview').classList.remove('hide');hide($('goods-msg'));}).catch(function(err){show($('goods-msg'),'err',err.message||String(err));});});
+$('goods-scale').addEventListener('input',function(){$('goods-scale-value').textContent=this.value+'%';$('goods-preview').style.transform='scale('+(Number(this.value)/100)+')';});
+function saveGoods(){
+  if(!goodsEditingFile&&!goodsImageBase64){show($('goods-msg'),'err','请选择要上传的人物图片。');return;}
+  var item={file:goodsEditingFile||undefined,title:$('goods-title').value.trim(),note:$('goods-note').value.trim(),order:Number($('goods-order').value||0),scale:Number($('goods-scale').value||100),visible:$('goods-visible').checked,width:goodsImageWidth||undefined,height:goodsImageHeight||undefined};
+  var btn=$('goods-save');btn.disabled=true;
+  api({action:'goodsSave',item:item,imageBase64:goodsImageBase64}).then(function(d){goodsItems=d.items||[];renderGoods();resetGoodsForm();show($('goods-msg'),'ok','✓ 橱窗已更新。');}).catch(function(err){if(onAuthFail(err))return;show($('goods-msg'),'err',err.message||String(err));}).then(function(){btn.disabled=false;});
+}
+$('goods-save').addEventListener('click',saveGoods); $('goods-clear').addEventListener('click',resetGoodsForm); $('goods-reload').addEventListener('click',loadGoods);
+$('goods-list').addEventListener('click',function(e){
+  var edit=e.target.closest('[data-goods-edit]'),del=e.target.closest('[data-goods-del]');
+  if(edit){var item=goodsItems.find(function(x){return x.file===edit.getAttribute('data-goods-edit');});if(!item)return;goodsEditingFile=item.file;goodsImageBase64='';goodsImageWidth=0;goodsImageHeight=0;$('goods-title').value=item.title||'';$('goods-note').value=item.note||'';$('goods-order').value=String(Number(item.order||0));$('goods-scale').value=String(Number(item.scale||100));$('goods-scale-value').textContent=Number(item.scale||100)+'%';$('goods-visible').checked=item.visible!==false;$('goods-preview').src=goodsUrl(item.file);$('goods-preview').style.transform='scale('+(Number(item.scale||100)/100)+')';$('goods-preview').classList.remove('hide');$('goods-save').textContent='保存修改';window.scrollTo({top:$('goods-panel').offsetTop-12,behavior:'smooth'});}
+  else if(del){var file=del.getAttribute('data-goods-del');if(!confirm('确定删除这张橱窗图片及原图？'))return;api({action:'goodsDelete',file:file}).then(function(d){goodsItems=d.items||[];renderGoods();resetGoodsForm();}).catch(function(err){if(onAuthFail(err))return;show($('goods-msg'),'err',err.message||String(err));});}
 });
 
 /* ============ 支持墙 ============ */
@@ -2515,7 +2583,11 @@ function loadInbox(){
   $('inbox-status').textContent = '正在读取收件箱…';
   api({ action:'inboxList' }).then(function(res){
     var items = Array.isArray(res.items) ? res.items : [];
-    $('inbox-status').textContent = '未处理调查报告与来信：' + items.length + ' 条';
+    $('inbox-status').textContent = items.length ? '🔔 ' + items.length + ' 条新来信待处理' : '暂无未处理调查报告与来信';
+    $('inbox-status').style.color = items.length ? '#B63A2B' : '';
+    $('inbox-status').style.fontWeight = items.length ? '700' : '';
+    $('inbox-badge').textContent = String(items.length);
+    $('inbox-badge').classList.toggle('hide', items.length === 0);
     renderInboxReports(items, $('inbox-contacts'));
     renderReviewItems(items.filter(function(item){ return item.type === 'announcement'; }), $('an-review'), '企划');
     renderReviewItems(items.filter(function(item){ return item.type === 'novel' || item.type === 'recommend'; }), $('nv-review'), '投稿');
@@ -2561,6 +2633,7 @@ function renderInboxReports(items, container){
     var detail = item.content || item.body || '';
     if (item.reason) detail = (detail ? detail + '\n\n' : '') + '【理由/说明】\n' + item.reason;
 
+    var replyBox = item.userUid ? '<div style="margin-top:10px;padding-top:10px;border-top:1.5px dashed var(--rule)"><label style="font-size:12px;font-weight:700;color:var(--green-2)">✏️ 管理员回信</label><textarea data-inbox-reply rows="3" maxlength="3000" placeholder="输入给该账号的回信内容…" style="margin-top:6px;width:100%"></textarea><button class="btn-sm btn-gold" data-reply-send style="margin-top:7px">✉ 发送回信</button></div>' : '<div class="muted" style="margin-top:9px">该来信未绑定登录账号，仅能通过预留邮箱联系。</div>';
     var actions = '<button class="btn-sm btn-gold" data-review="approve">✓ 标记已处理</button>' +
       '<button class="btn-sm btn-danger" data-review="reject">✕ 忽略</button>';
     return '<div class="panel" style="margin:10px 0;padding:14px;background:#FFFDF6;border:1.5px solid var(--green-2);border-radius:8px" data-inbox-id="' + esc(item._id) + '">' +
@@ -2572,7 +2645,7 @@ function renderInboxReports(items, container){
       (metaParts.length ? '<div style="font-size:12px;line-height:1.8;color:var(--ink-2);margin:6px 0">' + metaParts.join(' ｜ ') + '</div>' : '') +
       '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--green-2);font-weight:700">查看详情内容</summary>' +
         '<pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;background:rgba(30,67,52,.04);padding:10px;border-radius:6px;margin-top:6px;font-size:12px">' + esc(detail || '（无附加文本）') + '</pre>' +
-      '</details>' +
+      '</details>' + replyBox +
       '<div class="row" style="margin-top:10px;gap:8px">' + actions + '</div></div>';
   }).join('');
 }
@@ -2585,6 +2658,17 @@ function reviewInbox(id, decision){
 }
 $('inbox-refresh').onclick = loadInbox;
 $('inbox-panel').addEventListener('click', function(event){
+  var replyButton = event.target.closest('[data-reply-send]');
+  if (replyButton) {
+    var replyCard = replyButton.closest('[data-inbox-id]');
+    var input = replyCard && replyCard.querySelector('[data-inbox-reply]');
+    var reply = input ? input.value.trim() : '';
+    if (!reply) { alert('请先填写回信内容。'); return; }
+    replyButton.disabled = true; replyButton.textContent = '发送中…';
+    api({ action:'inboxReply', id:replyCard.getAttribute('data-inbox-id'), reply:reply }).then(function(){ loadInbox(); })
+      .catch(function(err){ if(onAuthFail(err))return; alert(err.message||String(err)); replyButton.disabled=false; replyButton.textContent='✉ 发送回信'; });
+    return;
+  }
   var button = event.target.closest('[data-review]');
   if (!button) return;
   var card = button.closest('[data-inbox-id]');
@@ -4267,7 +4351,7 @@ $('bk-list').addEventListener('click', function(e){
 });
 
 /* ============ 启动 ============ */
-var initialAdminPage = (location.hash.match(/^#admin-(manga|novel|announcement|support|inbox|authors|forum)$/) || [])[1] || 'manga';
+var initialAdminPage = (location.hash.match(/^#admin-(manga|novel|announcement|goods|support|inbox|authors|forum)$/) || [])[1] || 'manga';
 switchAdminPage(initialAdminPage, false);
 if (LOCAL_PREVIEW || token) enterMain();
 else { $('view-login').classList.remove('hide'); }

@@ -87,6 +87,12 @@ export interface GoodsItem {
   /** 原图宽高（脚本写入，用于列表占位按真实比例，避免加载时跳动） */
   width?: number;
   height?: number;
+  /** 后台可调的卡片内人物显示比例（百分比，默认 100） */
+  scale?: number;
+  /** 数字越小越靠前 */
+  order?: number;
+  /** 后台临时下架时为 false */
+  visible?: boolean;
 }
 
 export interface AuNovelStory {
