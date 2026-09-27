@@ -59,7 +59,7 @@ export const RandomLeviHanBite: React.FC<{
   onNavigateTab: (tab: string) => void;
   onShowToast: (msg: string) => void;
   onPairChange?: (secondCharacterUrl: string) => void;
-}> = ({ onNavigateTab, onShowToast, onPairChange }) => {
+}> = React.memo(({ onNavigateTab, onShowToast, onPairChange }) => {
   const [goods, setGoods] = useState<GoodsItem[]>([]);
   const [pool, setPool] = useState<BiteItem[]>(() => TRIVIA.map((detail, index) => ({ id:`trivia-${index}`, kind:'trivia', label:'琐事', title:'LeviHan 琐事', detail, source:'LeviHan Wiki · Trivia（外链）', externalUrl:WIKI_URL })));
   const [pairStart, setPairStart] = useState(0);
@@ -129,4 +129,4 @@ export const RandomLeviHanBite: React.FC<{
     </button>
     {detailOpen && selected && createPortal(<div className="fixed inset-0 z-[1600] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" onClick={() => setDetailOpen(false)}><div className="relative w-full max-w-md rounded-xl border-2 border-[#1E4334] bg-[#FFFDF6] p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}><CardPatternOverlay opacity={0.08} mode="multiply"/><div className="relative z-10"><div className="flex items-start justify-between gap-3"><div><span className="rounded bg-[#8F3426] px-2 py-1 text-[9px] font-bold text-white">{selected.label}</span><h3 className="mt-2 font-serif-title text-lg font-black text-[#1E4334]">{selected.title}</h3></div><button onClick={() => setDetailOpen(false)} className="text-lg text-[#8C6C47] cursor-pointer">✕</button></div><p className="mt-3 whitespace-pre-wrap rounded-md bg-[#F7F1E5] p-3 text-sm leading-7 text-[#3E342B]">{selected.detail}</p><p className="mt-2 text-[10px] text-[#9A8268]">来源：{selected.source}</p><div className="mt-4 flex gap-2"><button onClick={goToTarget} className="flex-1 rounded-md border-2 border-[#B7791F] bg-[#E5A93C] px-3 py-2 text-sm font-bold text-[#3E2C16] cursor-pointer">{selected.externalUrl?'打开来源网站':'前往对应区域'}</button><button onClick={reroll} className="rounded-md border-2 border-[#1E4334] bg-[#FFF9EC] px-3 py-2 text-sm font-bold text-[#1E4334] cursor-pointer">换一条</button></div></div></div></div>,document.body)}
   </section>;
-};
+});

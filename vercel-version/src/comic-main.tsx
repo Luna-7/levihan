@@ -6,6 +6,7 @@ import { ComicGate } from './components/ComicGate';
 import { DoujinshiArchive } from './components/DoujinshiArchive';
 import { soundManager } from './utils/audio';
 import { setupIOSViewportGuard } from './utils/iosViewportGuard';
+import { setupPwaAutoUpdate } from './utils/pwaUpdate';
 import './index.css';
 
 // 漫画站是普通文档流滚动（没有主站「分区内部各自滚」的外壳），
@@ -13,6 +14,7 @@ import './index.css';
 // 这里打上标记 class，让 CSS 只在漫画站放开滚动锁（见 index.css 的 .comic-site 规则）。
 document.documentElement.classList.add('comic-site');
 setupIOSViewportGuard();
+setupPwaAutoUpdate();
 
 /**
  * 漫画站独立入口（comic-main.tsx）。

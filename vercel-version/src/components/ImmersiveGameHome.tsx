@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -28,13 +28,14 @@ interface Props {
   onToggleSound: () => void;
 }
 
-export const ImmersiveGameHome: React.FC<Props> = ({
+export const ImmersiveGameHome: React.FC<Props> = React.memo(({
   onNavigateTab,
   onPreloadTab,
   onShowToast,
   isSoundMuted,
   onToggleSound,
 }) => {
+  const pageRef = useRef<HTMLDivElement>(null);
   const [quickSubmissionCharacter, setQuickSubmissionCharacter] = useState('');
   // 选中的沉浸游戏（点击下方街机进入后全屏直接玩）
   const [activeGame, setActiveGame] = useState<'daxigua' | 'hange' | 'lihan' | null>(() => {
@@ -44,6 +45,36 @@ export const ImmersiveGameHome: React.FC<Props> = ({
   const [activeModal, setActiveModal] = useState<'game' | 'leaderboard' | 'rules' | 'doujinshi' | 'resources' | null>(null);
   const [isForumOpen, setIsForumOpen] = useState(false);
   const pendingDoujinOpen = useAppShellStore((state) => state.pendingDoujinOpen);
+
+  // CSS 无限动画只有真正进入首页滚动视口时才运行。IntersectionObserver 自身在
+  // 首页卸载时销毁；document hidden 则由全局 app-page-hidden 规则兜底暂停。
+  useEffect(() => {
+    const page = pageRef.current;
+    if (!page || typeof IntersectionObserver === 'undefined') return;
+    const animated = page.querySelectorAll<HTMLElement>([
+      '.animate-wood-marquee',
+      '.animate-hero-walk',
+      '.animate-hero-cape',
+      '.animate-hero-leg-left',
+      '.animate-hero-leg-right',
+      '.animate-hero-dust',
+      '.animate-pulse',
+      '.animate-ping',
+      '.animate-bounce',
+      '.animate-spin',
+      '.animate-zipline-loop',
+      '.animate-zipline-loop-fast',
+      '.animate-zipline-bob',
+      '.walking-sprite-frame',
+    ].join(','));
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        entry.target.classList.toggle('perf-animation-paused', !entry.isIntersecting);
+      });
+    }, { root: page, rootMargin: '80px 0px', threshold: 0.01 });
+    animated.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
 
   // 接龙合订本跳转意图：自动跳转到巨树餐厅典藏阁（取代 window 隐式事件）。
   // 首页的 isForumOpen / activeModal 是首页局部的弹窗态，需要在跳转前一并收起。
@@ -116,12 +147,16 @@ export const ImmersiveGameHome: React.FC<Props> = ({
     }
   }, [activeModal, preloadGameAssets]);
 
+  const openGameModal = useCallback(() => setActiveModal('game'), []);
+  const openResourceModal = useCallback(() => setActiveModal('resources'), []);
+
   if (isForumOpen) {
     return <React.Suspense fallback={null}><RestaurantForum onBack={() => setIsForumOpen(false)} onShowToast={onShowToast} /></React.Suspense>;
   }
 
   return (
     <div
+      ref={pageRef}
       id="view-main"
       className="relative w-full h-full select-none flex flex-col overflow-y-auto no-scrollbar overscroll-contain bg-[#FFFEEF]/80 md:bg-[#FFFEEF]/55 md:backdrop-blur-md"
     >
@@ -209,11 +244,11 @@ export const ImmersiveGameHome: React.FC<Props> = ({
           {/* ====================================================
               【下段】：3 个大复古羊皮纸入口 (塔塔开 + 影视厅 + 巨人资源)
              ==================================================== */}
-          <section className="w-full shrink-0 short-screen-m-neg">
+          <section className="home-jump-section w-full shrink-0 short-screen-m-neg">
             <div className="short-screen-scale">
               <MiniProgramJumpGrid
-                onOpenGameModal={() => setActiveModal('game')}
-                onOpenResourceModal={() => setActiveModal('resources')}
+                onOpenGameModal={openGameModal}
+                onOpenResourceModal={openResourceModal}
                 onPreloadTab={onPreloadTab}
               />
             </div>
@@ -754,4 +789,4 @@ export const ImmersiveGameHome: React.FC<Props> = ({
 
     </div>
   );
-};
+});

@@ -46,7 +46,7 @@ interface Props {
   onShowToast: (msg: string) => void;
 }
 
-export const HomeAnnouncementGrid: React.FC<Props> = ({
+export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
   onNavigateTab,
   onPreloadTab,
   onShowToast,
@@ -225,7 +225,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
   };
 
   return (
-    <div className="w-full flex flex-col gap-2.5 select-none px-1 my-auto">
+    <div className="home-announcement-region w-full flex flex-col select-none my-auto">
       {/* ====================================================
           首页公告卡片：完全由管理台公告数据驱动（最多 3 条）
           外层设为容器查询上下文（container-type: inline-size），
@@ -234,7 +234,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
           避免底图在宽屏上被压扁。上限 204px 防止桌面端卡片过高。
          ==================================================== */}
       <div
-        className="w-full flex flex-col gap-2 sm:gap-2.5 max-w-md sm:max-w-2xl lg:max-w-3xl mx-auto"
+        className="home-announcement-list w-full flex flex-col gap-2 sm:gap-2.5 max-w-md sm:max-w-2xl lg:max-w-3xl mx-auto no-scrollbar"
         style={{ containerType: 'inline-size' }}
       >
         {loadingAnnouncements && (
@@ -247,7 +247,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
           </div>
         )}
 
-        {announcements.slice(0, 3).map((item) => {
+        {announcements.map((item) => {
           const { bg: badgeBg, tone, Icon: BadgeIcon } = badgeStyle(item.tag);
 
           return (
@@ -570,4 +570,4 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
       )}
     </div>
   );
-};
+});

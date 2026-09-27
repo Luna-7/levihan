@@ -50,7 +50,7 @@ function byLine(author: string | undefined): string {
   return `『${a}』`;
 }
 
-export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onPreloadTab, onShowToast }) => {
+export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, onPreloadTab, onShowToast }) => {
   const [items, setItems] = useState<UpdateItem[]>([]);
 
   useEffect(() => {
@@ -118,15 +118,15 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onPreloadTab
                     });
                   });
                   if (!cancelled) {
-                    setItems(acc.sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt)).slice(0, 3));
+                    setItems(acc.sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt)));
                   }
                 })
                 .catch(() => {
-                  if (!cancelled) setItems(acc.sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt)).slice(0, 3));
+                  if (!cancelled) setItems(acc.sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt)));
                 });
             })
             .catch(() => {
-              if (!cancelled) setItems(acc.sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt)).slice(0, 3));
+              if (!cancelled) setItems(acc.sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt)));
             });
         })
         .catch(() => {
@@ -178,13 +178,13 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onPreloadTab
   if (items.length === 0) return null;
 
   return (
-    <section className="w-full shrink-0 px-1">
+    <section className="home-todays-updates w-full shrink-0 px-1">
       <div className="flex items-center gap-1.5 mb-1.5">
         <span className="w-1.5 h-3.5 bg-[#C5A059] rounded-full" aria-hidden="true" />
         <h3 className="font-pixel text-xs sm:text-sm font-bold text-[#8C7A65] tracking-wider">今日上新</h3>
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="home-todays-list flex flex-col gap-1.5 no-scrollbar">
         {items.map((it) => {
           const meta = KIND_META[it.kind];
           return (
@@ -214,4 +214,4 @@ export const HomeTodaysUpdates: React.FC<Props> = ({ onNavigateTab, onPreloadTab
       </div>
     </section>
   );
-};
+});

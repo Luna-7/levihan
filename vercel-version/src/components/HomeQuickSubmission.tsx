@@ -31,7 +31,7 @@ async function fileToWebpBase64(file: File): Promise<string> {
   });
 }
 
-export const HomeQuickSubmission: React.FC<{ onShowToast: (message: string) => void; characterImageUrl?: string }> = ({ onShowToast, characterImageUrl }) => {
+export const HomeQuickSubmission: React.FC<{ onShowToast: (message: string) => void; characterImageUrl?: string }> = React.memo(({ onShowToast, characterImageUrl }) => {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('menu');
   const [busy, setBusy] = useState(false);
@@ -115,4 +115,4 @@ export const HomeQuickSubmission: React.FC<{ onShowToast: (message: string) => v
       {mode === 'art' && <form onSubmit={submitArt} className="mt-4 space-y-3"><label className="block text-xs font-bold">标题 *<input value={title} onChange={(e)=>setTitle(e.target.value)} className={field} required /></label><label className="block text-xs font-bold">创作者<input value={profile?.nickname || ''} readOnly className={`${field} bg-[#EEE8D8]`} /></label><label className="block text-xs font-bold">主页链接（选填）<input type="url" value={homepage} onChange={(e)=>setHomepage(e.target.value)} className={field} /></label><div><span className="block text-xs font-bold">上传图片 *</span><label className="mt-1 flex min-h-16 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[#B7791F] bg-[#FFF8E8] px-3 py-3 text-[#6B4515] transition-colors hover:bg-[#F8EBCB]"><span className="text-xl">🎨</span><span className="text-sm font-bold">{images.length ? `已选择 ${images.length} 张图片` : '选择插画或短漫图片'}</span><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={(e)=>setImages(Array.from(e.target.files || []).slice(0,60))} className="sr-only" required /></label></div><p className="text-[10px] text-[#8C7A68]">保留原图宽高比，提交时统一转换为 WebP，最长边不超过 2200px。</p><label className="block text-xs font-bold">备注（选填）<textarea value={notes} onChange={(e)=>setNotes(e.target.value)} rows={3} className={field} /></label><button disabled={busy} className="w-full rounded-md bg-[#B7791F] px-4 py-2.5 font-bold text-white cursor-pointer">{busy?'提交中…':'提交'}</button></form>}
       {mode !== 'menu' && !busy && <button type="button" onClick={()=>setMode('menu')} className="mt-3 text-xs font-bold text-[#6B5138] cursor-pointer">← 返回投递类型</button>}</div></div></div>, document.body)}
   </>;
-};
+});

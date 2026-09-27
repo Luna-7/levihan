@@ -56,7 +56,7 @@ const readField = (form: HTMLFormElement, name: string, fallback: string) => {
   return typeof value === 'string' && value.length > 0 ? value : fallback;
 };
 
-export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
+export const UserEntry: React.FC<Props> = React.memo(({ onShowToast }) => {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>('login');
   const account = useAuthStore((state) => state.profile);
@@ -278,7 +278,7 @@ export const UserEntry: React.FC<Props> = ({ onShowToast }) => {
       </section>
     </div>, document.body)}
   </>;
-};
+});
 
 const Submit = ({ children, busy, onClick }: { children: React.ReactNode; busy: boolean; onClick?: () => void }) => (
   <button type="submit" disabled={busy} onClick={onClick} className="w-full p-3 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-bold cursor-pointer disabled:opacity-50">{busy ? '处理中…' : children}</button>

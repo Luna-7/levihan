@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 const Analytics = () => null;
 import { RetroPixelFrame } from './components/RetroPixelFrame';
 import { ImmersiveGameHome } from './components/ImmersiveGameHome';
@@ -37,7 +37,7 @@ export const preloadTabChunk = (tab: NavigationTab | string) => {
       void import('./components/DispatchHub');
       break;
     case 'home': // 兵团驻地
-      void import('./components/ImmersiveGameHome');
+      // 首页属于 initial chunk，已经存在；无需再发起无效的 dynamic import。
       break;
     default:
       break;
@@ -145,7 +145,7 @@ export default function App() {
     }
   }, [activeTab]);
 
-  const handlePreloadTab = React.useCallback((tab: NavigationTab | string) => {
+  const handlePreloadTab = useCallback((tab: NavigationTab | string) => {
     preloadTabChunk(tab);
   }, []);
 
@@ -238,7 +238,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingDoujinOpen]);
 
-  const handleCopyGroupNumber = () => {
+  const handleCopyGroupNumber = useCallback(() => {
     soundManager.playCoin();
     const groupText = GROUP_INFO.qqGroups
       .map((g) => `${g.name}：${g.number}`)
@@ -251,9 +251,9 @@ export default function App() {
     } else {
       showToast(`QQ群：${groupText}`);
     }
-  };
+  }, [showToast]);
 
-  const handleCopyExtractionCode = (code: string) => {
+  const handleCopyExtractionCode = useCallback((code: string) => {
     soundManager.playCoin();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(code).then(
@@ -263,20 +263,67 @@ export default function App() {
     } else {
       showToast(`提取码为：${code}`);
     }
-  };
+  }, [showToast]);
 
-  const handleToggleSound = () => {
+  const handleToggleSound = useCallback(() => {
     const muted = soundManager.toggleMute();
     setIsSoundMuted(muted);
     if (!muted) {
       soundManager.playCoin();
     }
     showToast(muted ? '已静音 🔇' : '已开启复古8位音效 🔊');
-  };
+  }, [showToast]);
 
-  const handleNavigate = (tab: NavigationTab) => {
+  const handleNavigate = useCallback((tab: NavigationTab) => {
     soundManager.playNavClick();
     navigate(tab);
+  }, [navigate]);
+
+  // activeTab 改变后的第一次 render 发生在 effect 之前；把该帧也算进过渡期，
+  // 才能保留原有横向滑动。动画结束后轨道退化为单页、单 DOM，而不是永久维持 400%。
+  const shouldRenderTrack = isTransitioning || prevTabRef.current !== activeTab;
+
+  const renderTab = (tab: NavigationTab) => {
+    if (!isMounted(tab)) return null;
+    switch (tab) {
+      case 'home':
+        return <ImmersiveGameHome
+          onNavigateTab={handleNavigate}
+          onPreloadTab={handlePreloadTab}
+          onShowToast={showToast}
+          isSoundMuted={isSoundMuted}
+          onToggleSound={handleToggleSound}
+        />;
+      case 'resources':
+        return <GameStageLayout
+          activeTab="resources"
+          onNavigateTab={handleNavigate}
+          isSoundMuted={isSoundMuted}
+          onToggleSound={handleToggleSound}
+          onShowToast={showToast}
+        >
+          <Suspense fallback={<RestaurantLoadingSkeleton />}><DoujinshiArchive
+            mode="main"
+            onCopyCode={handleCopyExtractionCode}
+            onShowToast={showToast}
+          /></Suspense>
+        </GameStageLayout>;
+      case 'doujinshi':
+        return <Suspense fallback={<TeaPartyLoadingSkeleton />}><RestaurantForum
+          onBack={() => handleNavigate('home')}
+          onShowToast={showToast}
+        /></Suspense>;
+      case 'dispatch':
+        return <GameStageLayout
+          activeTab="dispatch"
+          onNavigateTab={handleNavigate}
+          isSoundMuted={isSoundMuted}
+          onToggleSound={handleToggleSound}
+          onShowToast={showToast}
+        >
+          <Suspense fallback={<DispatchLoadingSkeleton />}><DispatchHub onShowToast={showToast} /></Suspense>
+        </GameStageLayout>;
+    }
   };
 
   return (
@@ -297,105 +344,32 @@ export default function App() {
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
       >
-        <div
-          className="flex w-[400%] h-full transition-transform duration-350 ease-out"
-          style={{
-            transform: `translate3d(-${activeIndex * 25}%, 0, 0)`,
-            WebkitTransform: `translate3d(-${activeIndex * 25}%, 0, 0)`,
-            willChange: isTransitioning ? 'transform' : 'auto',
-            backfaceVisibility: 'hidden',
-            WebkitBackfaceVisibility: 'hidden',
-          }}
-        >
-          {/* VIEW 1: 兵团驻地大厅 (完全固定，无滚轮) */}
+        {shouldRenderTrack ? (
           <div
-            className={`w-1/4 shrink-0 h-full overflow-hidden transition-opacity duration-300 ${
-              activeTab === 'home' ? 'opacity-100' : 'opacity-85 pointer-events-none'
-            }`}
+            className="tab-track-transition flex w-[400%] h-full"
             style={{
-              visibility: isTransitioning || activeTab === 'home' ? 'visible' : 'hidden',
-              contain: activeTab === 'home' ? 'none' : 'strict',
-            }}
-            aria-hidden={activeTab !== 'home'}
-            inert={activeTab !== 'home' ? true : undefined}
+              '--tab-track-from': `${(TAB_INDEX_MAP[prevTabRef.current] ?? 0) * -25}%`,
+              '--tab-track-to': `${activeIndex * -25}%`,
+              transform: `translateX(-${activeIndex * 25}%)`,
+            } as React.CSSProperties}
           >
-            {isMounted('home') && <ImmersiveGameHome
-              onNavigateTab={handleNavigate}
-              onPreloadTab={handlePreloadTab}
-              onShowToast={showToast}
-              isSoundMuted={isSoundMuted}
-              onToggleSound={handleToggleSound}
-            />}
+            {ORDERED_TABS.map((tab) => (
+              <div
+                key={tab}
+                className={`w-1/4 shrink-0 h-full overflow-hidden transition-opacity duration-300 ${activeTab === tab ? 'opacity-100' : 'opacity-85 pointer-events-none'}`}
+                style={{ contain: activeTab === tab ? 'none' : 'strict' }}
+                aria-hidden={activeTab !== tab}
+                inert={activeTab !== tab ? true : undefined}
+              >
+                {renderTab(tab)}
+              </div>
+            ))}
           </div>
-
-          {/* VIEW 2: 巨树餐厅 (同人归档) */}
-          <div
-            className={`w-1/4 shrink-0 h-full overflow-hidden transition-opacity duration-300 ${
-              activeTab === 'resources' ? 'opacity-100' : 'opacity-85 pointer-events-none'
-            }`}
-            style={{
-              visibility: isTransitioning || activeTab === 'resources' ? 'visible' : 'hidden',
-              contain: activeTab === 'resources' ? 'none' : 'strict',
-            }}
-            aria-hidden={activeTab !== 'resources'}
-            inert={activeTab !== 'resources' ? true : undefined}
-          >
-            {isMounted('resources') && <GameStageLayout
-              activeTab="resources"
-              onNavigateTab={handleNavigate}
-              isSoundMuted={isSoundMuted}
-              onToggleSound={handleToggleSound}
-              onShowToast={showToast}
-            >
-              <Suspense fallback={<RestaurantLoadingSkeleton />}><DoujinshiArchive
-                mode="main"
-                onCopyCode={handleCopyExtractionCode}
-                onShowToast={showToast}
-              /></Suspense>
-            </GameStageLayout>}
+        ) : (
+          <div className="w-full h-full overflow-hidden">
+            {renderTab(activeTab)}
           </div>
-
-          {/* VIEW 3: 团长茶话会 (同好茶室·故事接龙·安科创作) */}
-          <div
-            className={`w-1/4 shrink-0 h-full overflow-hidden transition-opacity duration-300 ${
-              activeTab === 'doujinshi' ? 'opacity-100' : 'opacity-85 pointer-events-none'
-            }`}
-            style={{
-              visibility: isTransitioning || activeTab === 'doujinshi' ? 'visible' : 'hidden',
-              contain: activeTab === 'doujinshi' ? 'none' : 'strict',
-            }}
-            aria-hidden={activeTab !== 'doujinshi'}
-            inert={activeTab !== 'doujinshi' ? true : undefined}
-          >
-            {isMounted('doujinshi') && <Suspense fallback={<TeaPartyLoadingSkeleton />}><RestaurantForum
-              onBack={() => handleNavigate('home')}
-              onShowToast={showToast}
-            /></Suspense>}
-          </div>
-
-          {/* VIEW 4: 调查联络 (飞鸽信使·投递·讨论·营地) */}
-          <div
-            className={`w-1/4 shrink-0 h-full overflow-hidden transition-opacity duration-300 ${
-              activeTab === 'dispatch' ? 'opacity-100' : 'opacity-85 pointer-events-none'
-            }`}
-            style={{
-              visibility: isTransitioning || activeTab === 'dispatch' ? 'visible' : 'hidden',
-              contain: activeTab === 'dispatch' ? 'none' : 'strict',
-            }}
-            aria-hidden={activeTab !== 'dispatch'}
-            inert={activeTab !== 'dispatch' ? true : undefined}
-          >
-            {isMounted('dispatch') && <GameStageLayout
-              activeTab="dispatch"
-              onNavigateTab={handleNavigate}
-              isSoundMuted={isSoundMuted}
-              onToggleSound={handleToggleSound}
-              onShowToast={showToast}
-            >
-              <Suspense fallback={<DispatchLoadingSkeleton />}><DispatchHub onShowToast={showToast} /></Suspense>
-            </GameStageLayout>}
-          </div>
-        </div>
+        )}
       </div>
 
       {/* 勇者大冒险 · 底部行军路线与走动小人导航栏 (常驻底部，小人跑向对应地标) */}

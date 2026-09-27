@@ -28,14 +28,16 @@
       // 之后它去拉「旧版 chunk 文件名」（新部署里已 404）→ 模块加载失败 → 整页白屏。
       // 对策：拿到新版就自动刷一次，chunk 加载失败也自动刷一次。
       (function () {
-        var FLAG = 'lh-auto-reload';
+        var FLAG = 'lh-auto-reload-version';
         var reloading = false;
         function safeReload() {
           if (reloading) return;
           reloading = true;
           try {
-            if (sessionStorage.getItem(FLAG) === '1') return; // 本会话已自动刷过 → 放弃（防死循环）
-            sessionStorage.setItem(FLAG, '1');
+            var entry = document.querySelector('script[type="module"][src*="/assets/"]');
+            var VERSION = (entry && entry.src) || location.href;
+            if (sessionStorage.getItem(FLAG) === VERSION) return;
+            sessionStorage.setItem(FLAG, VERSION);
           } catch (e) { /* 隐私模式不可写：靠内存标记兜底 */ }
           var el = document.activeElement;
           var typing = !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));

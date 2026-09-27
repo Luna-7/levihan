@@ -9,7 +9,7 @@ interface Props {
   onPreloadTab?: (tabId: string) => void;
 }
 
-export const MiniProgramJumpGrid: React.FC<Props> = ({
+export const MiniProgramJumpGrid: React.FC<Props> = React.memo(({
   onOpenGameModal,
   onOpenResourceModal,
   onPreloadTab,
@@ -153,4 +153,4 @@ export const MiniProgramJumpGrid: React.FC<Props> = ({
       )}
     </div>
   );
-};
+});

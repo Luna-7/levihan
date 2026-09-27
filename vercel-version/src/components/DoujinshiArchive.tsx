@@ -36,6 +36,7 @@ interface Props {
 }
 
 export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources, mode = 'main' }) => {
+  const PAGE_SIZE = 24;
   // 归档数据状态（优先加载远端 COS archive.json，兜底使用本地 Excel 录入数据）
   const [books, setBooks] = useState<DoujinBookItem[]>(DOUJIN_ARCHIVE_DATA);
   const [isLoadingArchive, setIsLoadingArchive] = useState<boolean>(false);
@@ -73,6 +74,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   const [shareCardBook, setShareCardBook] = useState<DoujinBookItem | null>(null);
   const deepLinkHandledRef = useRef(false);
   const [linkedBookId, setLinkedBookId] = useState('');
+  const [visibleBookCount, setVisibleBookCount] = useState(PAGE_SIZE);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // 在线小说索引（novels.json，含合订本与同好来稿）；SWR 预载，若有本地/内存缓存则首屏瞬出
   const [novels, setNovels] = useState<GroupNovel[]>(() => cosService.getCachedNovelList());
@@ -265,7 +268,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   };
 
   // 过滤同人本列表
-  const filteredBooks = books.filter((book) => {
+  const filteredBooks = useMemo(() => books.filter((book) => {
     const matchCat = (book.category || '漫画本') === selectedCategory;
     const matchTag = selectedTag === '全部' || book.tags.includes(selectedTag);
     const matchAuthor =
@@ -282,7 +285,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
       book.tags.some((t) => t.toLowerCase().includes(q));
 
     return matchCat && matchTag && matchAuthor && matchSearch;
-  });
+  }), [books, searchQuery, selectedAuthor, selectedCategory, selectedTag]);
 
   // 排序：默认「从新到旧」；按 updatedAt/createdAt 降序。
   // 早期归档没有日期，以递增的 lh-NNN ID 代表收录顺序，因此兜底必须倒序。
@@ -309,6 +312,33 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     }
     return arr;
   }, [filteredBooks, sortBy]);
+
+  const visibleBooks = useMemo(
+    () => sortedBooks.slice(0, visibleBookCount),
+    [sortedBooks, visibleBookCount]
+  );
+
+  useEffect(() => {
+    setVisibleBookCount(PAGE_SIZE);
+  }, [searchQuery, selectedAuthor, selectedCategory, selectedTag, sortBy]);
+
+  useEffect(() => {
+    if (!linkedBookId) return;
+    const index = sortedBooks.findIndex((book) => book.id === linkedBookId);
+    if (index >= visibleBookCount) setVisibleBookCount(index + 1);
+  }, [linkedBookId, sortedBooks, visibleBookCount]);
+
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || visibleBookCount >= sortedBooks.length || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisibleBookCount((count) => Math.min(count + PAGE_SIZE, sortedBooks.length));
+      }
+    }, { rootMargin: '600px 0px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [sortedBooks.length, visibleBookCount]);
 
   useEffect(() => {
     if (!linkedBookId) return;
@@ -610,7 +640,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
       {selectedCategory !== '小说本' && (selectedCategory !== '漫画本' || isMangaVisible) && (
         <>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4.5 w-full items-stretch">
-        {sortedBooks.map((book) => {
+        {visibleBooks.map((book) => {
           // 通过 COS 逻辑层动态生成封面 CDN 地址
           const coverUrl = cosService.getCoverUrl(book);
           const commentCount = getCommentCountByBookId(book.id);
@@ -800,6 +830,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
           );
         })}
           </div>
+          {visibleBookCount < sortedBooks.length && (
+            <div ref={loadMoreRef} className="col-span-full h-px" aria-hidden="true" />
+          )}
           {filteredBooks.length === 0 && (
             <div className="p-8 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
               没有检索到符合条件的同人本，您可以清空搜索条件或调整分类～

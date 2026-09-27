@@ -22,6 +22,7 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        injectRegister: 'auto',
         manifest: false,
         includeAssets: [
           'manifest.webmanifest',
@@ -39,10 +40,45 @@ export default defineConfig(() => {
             'assets/pdfjs-vendor-*.js',
             'assets/pdf.worker.min-*.js',
           ],
-          navigateFallback: 'comic.html',
-          navigateFallbackDenylist: [/^\/api\//],
+          // Navigation 由下方 NetworkFirst 独占，避免 precache fallback 抢先返回旧 HTML。
+          navigateFallback: null,
           cleanupOutdatedCaches: true,
+          skipWaiting: true,
+          clientsClaim: true,
           runtimeCaching: [
+            {
+              urlPattern: ({ url }) =>
+                /^\/(?:api(?:\/|$)|auth(?:\/|$)|admin-upload(?:\/|$)|__cf(?:\/|$)|admin(?:\/|$))/i.test(url.pathname) ||
+                (url.hostname.endsWith('.service.tcloudbase.com') && /^\/(?:auth|admin-upload)(?:\/|$)/i.test(url.pathname)),
+              handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: ({ url }) =>
+                /^\/(?:api(?:\/|$)|auth(?:\/|$)|admin-upload(?:\/|$)|__cf(?:\/|$)|admin(?:\/|$))/i.test(url.pathname) ||
+                (url.hostname.endsWith('.service.tcloudbase.com') && /^\/(?:auth|admin-upload)(?:\/|$)/i.test(url.pathname)),
+              handler: 'NetworkOnly',
+              method: 'POST',
+            },
+            {
+              urlPattern: ({ request, sameOrigin }) => request.mode === 'navigate' && sameOrigin,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'levihan-comic-navigation-v1',
+                networkTimeoutSeconds: 4,
+                expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 7 },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+            {
+              urlPattern: ({ url, sameOrigin }) =>
+                sameOrigin && /^\/assets\/.*-[A-Za-z0-9_-]{8,}\.(?:js|css)$/i.test(url.pathname),
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'levihan-comic-hashed-assets-v1',
+                expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 30 },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
             {
               // 漫画封面：容量受限的 CacheFirst，避免无限膨胀。
               urlPattern: /^https:\/\/levihan-1325571558\.cos-website\.ap-nanjing\.myqcloud\.com\/lh-[^/?]+\/[^?]+\.webp$/i,
