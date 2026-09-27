@@ -301,6 +301,12 @@
     }
   }
 
+  /* ============================================================
+     桌面浏览器（≥1024px 且非 PWA）的首页滚动覆盖规则见文件末尾——
+     必须放在 @layer base 之外：utilities 层在后，layer 内选择器
+     优先级再高也赢不过 .flex-1 等工具类（实测踩坑）。
+     ============================================================ */
+
   /* PWA Safe Area Utilities */
   .safe-pt {
     padding-top: max(env(safe-area-inset-top, 0px), 4px);
@@ -1360,5 +1366,36 @@ body.immersive-on .retro-frame-card > .absolute {
     animation: none !important;
     transition: none !important;
     transform: none !important;
+  }
+}
+
+/* ============================================================
+   桌面浏览器（≥1024px 且非 PWA）：首页恢复正常文档流滚动。
+   「单屏收放」挤压（@layer base 里那套 max-height 媒体查询）只服务
+   手机竖屏 / 手机横屏 / PWA——桌面窗口高度不够时硬压进一屏，会把
+   home-main-content（flex-1 min-h-0）压缩到只剩几像素（604px 高窗口
+   实测公告区仅 4px），叠加 no-scrollbar 隐藏滚动条，看起来就是
+   header 和中间内容都滚不动。桌面改为不压缩：header 保持原比例、
+   内容自然高度，超出视口的部分由 #view-main 的滚动兜底。
+   ⚠️ 必须放在 @layer base 之外：utilities 层在后，layer 内选择器
+   优先级再高也赢不过 .flex-1 等工具类。
+   ============================================================ */
+@media (min-width: 1024px) {
+  html:not(.pwa-standalone) .home-fixed-page {
+    min-height: 0;
+  }
+  html:not(.pwa-standalone) .home-main-content {
+    flex: 0 0 auto;
+    justify-content: flex-start;
+  }
+  html:not(.pwa-standalone) .home-announcements {
+    max-height: none;
+  }
+  html:not(.pwa-standalone) .short-screen-scale {
+    transform: none;
+  }
+  html:not(.pwa-standalone) .short-screen-m-neg {
+    margin-top: 0;
+    margin-bottom: 0;
   }
 }
