@@ -94,6 +94,7 @@ export const NovelModule: React.FC<Props> = ({
     }
   }, [initialReadingNovel]);
 
+
   // 上传弹窗打开时：作者名默认填当前登录昵称（可直接改成笔名）
   useEffect(() => {
     if (showUpload && profile?.nickname) {
@@ -334,14 +335,6 @@ export const NovelModule: React.FC<Props> = ({
                 {sectionTitle} · 共 {filteredNovels.length} 篇
               </h3>
             </div>
-            {/* 上传入口：与后台「小说管理」同款格式投稿 */}
-            <button
-              type="button"
-              onClick={() => { soundManager.playWoodTap(); setShowUpload(true); }}
-              className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#B7791F] border border-[#9A6519] text-[#FFFEEF] font-pixel text-[11px] font-bold cursor-pointer transition-colors hover:bg-[#9A6519]"
-            >
-              ✍️ 上传文
-            </button>
           </div>
           {isLoading && filteredNovels.length === 0 ? (
             <div className="columns-2 gap-3.5 sm:gap-4.5 w-full animate-pulse">
@@ -459,7 +452,7 @@ export const NovelModule: React.FC<Props> = ({
             <div className="relative flex items-center justify-between gap-3 border-b border-[#D5C9AF] pb-2">
               <div>
                 <h3 className="font-pixel text-sm font-bold text-[#1E4334]">
-                  {editingNovel ? '✏️ 编辑小说' : '上传文'}
+                  {editingNovel ? '✏️ 编辑小说' : '投递文'}
                 </h3>
                 <p className="text-[10px] text-[#7A6958] mt-1">
                   {editingNovel

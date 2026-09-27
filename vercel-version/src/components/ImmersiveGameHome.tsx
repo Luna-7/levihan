@@ -6,6 +6,8 @@ import {
 import { MiniProgramJumpGrid } from './MiniProgramJumpGrid';
 import { HomeAnnouncementGrid } from './HomeAnnouncementGrid';
 import { HomeTodaysUpdates } from './HomeTodaysUpdates';
+import { RandomLeviHanBite } from './RandomLeviHanBite';
+import { HomeQuickSubmission } from './HomeQuickSubmission';
 const RestaurantForum = React.lazy(() => import('./RestaurantForum').then(m => ({ default: m.RestaurantForum })));
 const TatakaruGame = React.lazy(() => import('./TatakaruGame').then(m => ({ default: m.TatakaruGame })));
 const GameLeaderboard = React.lazy(() => import('./GameLeaderboard').then(m => ({ default: m.GameLeaderboard })));
@@ -33,6 +35,7 @@ export const ImmersiveGameHome: React.FC<Props> = ({
   isSoundMuted,
   onToggleSound,
 }) => {
+  const [quickSubmissionCharacter, setQuickSubmissionCharacter] = useState('');
   // 选中的沉浸游戏（点击下方街机进入后全屏直接玩）
   const [activeGame, setActiveGame] = useState<'daxigua' | 'hange' | 'lihan' | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -122,15 +125,15 @@ export const ImmersiveGameHome: React.FC<Props> = ({
       id="view-main"
       className="relative w-full h-full select-none flex flex-col overflow-y-auto no-scrollbar overscroll-contain bg-[#FFFEEF]/80 md:bg-[#FFFEEF]/55 md:backdrop-blur-md"
     >
-      <div className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto flex flex-col min-h-full justify-between">
+      <div className="home-fixed-page w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto flex min-h-full flex-col justify-between">
         {/* ====================================================
             1. 顶部 Header 横幅（随内容自然增高可向上滚动移出）
             打开网页时 header PNG 自动向下移入（animate-header-slide-down）
            ==================================================== */}
-        <div className="relative shrink-0 animate-header-slide-down w-full mx-auto">
+        <div className="home-header-shell relative shrink-0 animate-header-slide-down w-full mx-auto overflow-hidden">
           {/* header 横幅：宽度始终与导航栏对齐，高度按图片比例等比缩放 */}
           <img
-            src="/images/header.webp"
+            src="/images/header-home.webp"
             alt="LEVI × HANS WAREHOUSE 调查兵团特别驻地 · 情报与粮草整备"
             className="home-header-art w-full h-auto max-w-full block"
             referrerPolicy="no-referrer"
@@ -171,16 +174,21 @@ export const ImmersiveGameHome: React.FC<Props> = ({
           </header>
         </div>
 
+        <div className="home-quick-actions">
+          <RandomLeviHanBite onNavigateTab={onNavigateTab} onShowToast={onShowToast} onPairChange={setQuickSubmissionCharacter} />
+          <HomeQuickSubmission onShowToast={onShowToast} characterImageUrl={quickSubmissionCharacter} />
+        </div>
+
         {/* ====================================================
             2. 主体内容区：按照参考图排版
            ==================================================== */}
-        <main className="w-full mx-auto px-2.5 sm:px-4 lg:px-6 pt-1 sm:pt-2 lg:pt-4 clear-adventure-nav-home flex-1 flex flex-col justify-start gap-4 sm:gap-5 lg:gap-8">
+        <main className="home-main-content w-full mx-auto px-2.5 sm:px-4 lg:px-6 pt-1 clear-adventure-nav-home flex-1 min-h-0 flex flex-col justify-between gap-1.5 sm:gap-2">
           {/* ====================================================
               【上段】：首页最多 3 条公告卡片 (显现内容、时间、发布人)
              ==================================================== */}
           <section
             id="home-announce-scroll"
-            className="w-full flex flex-col px-1 py-1"
+            className="home-announcements w-full flex flex-col px-1 py-0.5 min-h-0 overflow-hidden"
           >
             <HomeAnnouncementGrid
               onNavigateTab={onNavigateTab}

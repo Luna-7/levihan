@@ -167,7 +167,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, 
   };
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 z-40 select-none">
+    <footer className="adventure-bottom-nav fixed bottom-0 left-0 right-0 z-40 select-none">
       <div className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto">
         {/* 行军进度条（无背景，常驻可见；点击直接切换对应页面） */}
         <div
@@ -325,9 +325,9 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, 
         </div>
       </div>
 
-      {/* iOS 安全区垫条（透明，仅占位避免贴边） */}
+      {/* iOS 安全区延伸层：与导航底色连成一体，避免 PWA 底部出现悬空缝隙。 */}
       <div
-        className="w-full"
+        className="adventure-bottom-safe-area w-full"
         style={{ height: 'max(env(safe-area-inset-bottom, 0px), 4px)' }}
       />
     </footer>

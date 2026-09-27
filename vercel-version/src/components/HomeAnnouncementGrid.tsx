@@ -4,6 +4,9 @@ import { Calendar, Megaphone, FileText, AlertCircle, ArrowRight } from 'lucide-r
 import { soundManager } from '../utils/audio';
 import { submitToInbox } from '../utils/submissionInbox';
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
+import { useAppShellStore } from '../stores/appShellStore';
+import { useAuthStore } from '../stores/authStore';
+import { getAccessToken } from '../utils/cloudbaseToken';
 
 /** 与后台 announcementSave 的字段契约保持一致（id/tag/title/author/time/link/description/image） */
 export interface AnnouncementItem {
@@ -17,11 +20,15 @@ export interface AnnouncementItem {
   image?: string;
 }
 
-/** 后台标签是自由文本，按关键词归类配色与图标；未命中用默认绿 */
+/** 后台标签是自由文本，按内容语义归类；首页以调查兵团绿与主题紫为主。 */
 function badgeStyle(tag: string) {
-  if (/活动|祭|展|企划|招募/.test(tag)) return { bg: 'bg-[#9E4A3B]', Icon: Megaphone };
-  if (/通知|公告|重要|调整/.test(tag)) return { bg: 'bg-[#7A4C32]', Icon: AlertCircle };
-  return { bg: 'bg-[#586E56]', Icon: FileText };
+  if (/功能|更新|版本|新增|优化|企划|活动|祭|展|招募/.test(tag)) {
+    return { bg: 'bg-[#563B68]', tone: 'purple', Icon: Megaphone } as const;
+  }
+  if (/维护|修复|服务器|站务|通知|公告|重要|调整/.test(tag)) {
+    return { bg: 'bg-[#1E4334]', tone: 'green', Icon: AlertCircle } as const;
+  }
+  return { bg: 'bg-[#1E4334]', tone: 'green', Icon: FileText } as const;
 }
 
 const HANGE_TEA_LINES = [
@@ -52,7 +59,9 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
   const [proposalBusy, setProposalBusy] = useState(false);
   const [proposalImage, setProposalImage] = useState<File | null>(null);
   const [proposalPreview, setProposalPreview] = useState('');
-  const [proposalCrop, setProposalCrop] = useState({ x: 50, y: 50, zoom: 1 });
+  const profile = useAuthStore((state) => state.profile);
+  const submissionRequest = useAppShellStore((state) => state.submissionRequest);
+  const clearSubmissionRequest = useAppShellStore((state) => state.clearSubmissionRequest);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,9 +120,21 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
 
   const openProposal = () => {
     soundManager.playWoodTap();
+    if (!profile?.uid || !profile.nickname) {
+      onShowToast('请先登录账号再投递');
+      useAppShellStore.getState().openLogin();
+      return;
+    }
     setShowDetailModal(null);
+    setProposal((current) => ({ ...current, author: profile.nickname }));
     setShowProposal(true);
   };
+
+  useEffect(() => {
+    if (submissionRequest !== 'announcement') return;
+    openProposal();
+    clearSubmissionRequest();
+  }, [submissionRequest, clearSubmissionRequest]);
 
   const hangeLine = useMemo(
     () => HANGE_TEA_LINES[Math.floor(Math.random() * HANGE_TEA_LINES.length)],
@@ -140,27 +161,20 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
     }
     setProposalBusy(true);
     try {
+      const token = await getAccessToken();
+      if (!token) throw new Error('登录状态已失效，请重新登录');
       let image = '';
       if (proposalImage && proposalPreview) {
-        const cropped = await new Promise<string>((resolve, reject) => {
+        const converted = await new Promise<string>((resolve, reject) => {
           const img = new Image();
           img.onload = () => {
             try {
-              const ratio = 16 / 9;
-              let sw = img.naturalWidth,
-                sh = sw / ratio;
-              if (sh > img.naturalHeight) {
-                sh = img.naturalHeight;
-                sw = sh * ratio;
-              }
-              sw /= proposalCrop.zoom;
-              sh /= proposalCrop.zoom;
-              const sx = ((img.naturalWidth - sw) * proposalCrop.x) / 100,
-                sy = ((img.naturalHeight - sh) * proposalCrop.y) / 100;
+              const maxSide = 1800;
+              const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
               const canvas = document.createElement('canvas');
-              canvas.width = 1200;
-              canvas.height = 675;
-              canvas.getContext('2d')!.drawImage(img, sx, sy, sw, sh, 0, 0, 1200, 675);
+              canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+              canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+              canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
               resolve(canvas.toDataURL('image/webp', 0.86).split(',')[1] || '');
             } catch (error) {
               reject(error);
@@ -171,8 +185,8 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
         });
         const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-          body: JSON.stringify({ action: 'announcementImageUpload', imageBase64: cropped }),
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: 'announcementImageUpload', imageBase64: converted }),
         });
         const result = await response.json();
         if (!response.ok || !result.ok) throw new Error(result.error || '图片上传失败');
@@ -183,7 +197,6 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
       setProposal({ title: '', time: '', author: '', link: '', description: '' });
       setProposalImage(null);
       setProposalPreview('');
-      setProposalCrop({ x: 50, y: 50, zoom: 1 });
       setShowProposal(false);
       onShowToast('企划已提交，管理员审核通过后会显示在公告栏 ✨');
     } catch (error) {
@@ -231,18 +244,11 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
         {!loadingAnnouncements && announcements.length === 0 && (
           <div className="py-5 text-center">
             <p className="font-retro-jp text-[11px] text-[#9A8B77]">暂无公告 ✦</p>
-            <button
-              type="button"
-              onClick={openProposal}
-              className="mt-1 font-retro-jp text-[11px] text-[#B0A18C] hover:text-[#6B5138] underline decoration-dotted underline-offset-2 transition-colors cursor-pointer"
-            >
-              ✎ 投递利韩企划 / 公告
-            </button>
           </div>
         )}
 
         {announcements.slice(0, 3).map((item) => {
-          const { bg: badgeBg, Icon: BadgeIcon } = badgeStyle(item.tag);
+          const { bg: badgeBg, tone, Icon: BadgeIcon } = badgeStyle(item.tag);
 
           return (
             <div
@@ -253,14 +259,13 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
               }}
               onMouseEnter={() => handleCardHover(item)}
               onTouchStart={() => handleCardHover(item)}
-              className="announcement-board group relative shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-between gap-2.5 sm:gap-3 active:scale-[0.99]"
-              style={{ padding: '9px 12px' }}
+              className={`announcement-board announcement-board--${tone} group relative hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-between gap-3 sm:gap-4 active:scale-[0.99]`}
             >
               {/* 左侧内容区：徽章 + 文本 + 日期 */}
               <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
                 {/* 类别胶囊标 */}
                 <div
-                  className={`mt-0.5 ${badgeBg} text-white px-2.5 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-2xs shrink-0`}
+                  className={`announcement-badge mt-0.5 ${badgeBg} text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 shrink-0`}
                 >
                   <BadgeIcon size={14} className="shrink-0" />
                   <span className="whitespace-nowrap">{item.tag}</span>
@@ -269,7 +274,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
                 {/* 标题、描述、发布人 */}
                 <div className="flex flex-col min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
-                    <h4 className="font-serif-title text-sm sm:text-base font-black text-[#2C2016] leading-snug tracking-tight truncate group-hover:text-[#1E4334] transition-colors min-w-0 flex-1">
+                    <h4 className="font-serif-title text-[15px] sm:text-[17px] font-black text-[#253C31] leading-snug tracking-tight truncate group-hover:text-[#1E4334] transition-colors min-w-0 flex-1">
                       {item.title}
                     </h4>
 
@@ -283,7 +288,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
 
                   {/* 公告正文（管理台 description） */}
                   {item.description && (
-                    <p className="font-serif-title text-xs sm:text-sm text-[#5D4733] mt-1 line-clamp-1 leading-normal">
+                    <p className="font-serif-title text-xs sm:text-sm text-[#665343] mt-1.5 line-clamp-2 leading-normal">
                       {item.description}
                     </p>
                   )}
@@ -299,10 +304,10 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
 
               {/* 右侧进入/展开指示图标 (仅图标，移除文字按钮) */}
               <div
-                className="w-7 h-7 rounded-full bg-[#7D5233]/10 group-hover:bg-[#7D5233] text-[#7D5233] group-hover:text-white flex items-center justify-center transition-all group-hover:scale-105 shrink-0 ml-1"
+                className="announcement-arrow w-9 h-9 rounded-full flex items-center justify-center transition-all group-hover:scale-105 shrink-0 ml-1"
                 title="点击展开公告"
               >
-                <ArrowRight size={14} />
+                <ArrowRight size={17} strokeWidth={2.4} />
               </div>
             </div>
           );
@@ -387,17 +392,6 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
                   {showDetailModal.description}
                 </p>
               )}
-
-              {/* 投递企划入口：浅色小字（无按钮） */}
-              <div className="mt-4 text-center">
-                <button
-                  type="button"
-                  onClick={openProposal}
-                  className="font-retro-jp text-[11px] text-[#B0A18C] hover:text-[#6B5138] underline decoration-dotted underline-offset-2 transition-colors cursor-pointer"
-                >
-                  ✎ 投递利韩企划 / 公告
-                </button>
-              </div>
 
               {/* 底部彩蛋：韩吉端茶简笔画 + 台词气泡 */}
               <figure className="rules-scroll-hange relative mt-4 pt-3 border-t border-dashed border-[#C5A059] flex items-center justify-center gap-3 flex-wrap">
@@ -507,9 +501,9 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
               <label className="block text-xs font-bold text-[#1E4334]">
                 发布人 *
                 <input
-                  value={proposal.author}
-                  onChange={(e) => setProposal({ ...proposal, author: e.target.value })}
-                  className="mt-1 w-full p-2 border border-[#D5C19A] rounded-lg bg-white text-[#16273B]"
+                  value={profile?.nickname || proposal.author}
+                  readOnly
+                  className="mt-1 w-full p-2 border border-[#D5C19A] rounded-lg bg-[#EEE8D8] text-[#16273B]"
                   required
                 />
               </label>
@@ -534,68 +528,33 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
                 required
               />
             </label>
-            <label className="block text-xs font-bold text-[#1E4334]">
-              上传图片（选填，固定 16:9）
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0] || null;
-                  if (proposalPreview) URL.revokeObjectURL(proposalPreview);
-                  setProposalImage(file);
-                  setProposalPreview(file ? URL.createObjectURL(file) : '');
-                }}
-                className="mt-1 w-full p-2 border border-[#D5C19A] rounded-lg bg-white text-xs"
-              />
-            </label>
+            <div>
+              <span className="block text-xs font-bold text-[#1E4334]">上传图片（选填）</span>
+              <label className="mt-1 flex min-h-16 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-[#B7791F] bg-[#FFF8E8] px-3 py-3 text-[#6B4515] transition-colors hover:bg-[#F8EBCB]">
+                <span className="text-xl">🖼️</span>
+                <span className="text-sm font-bold">{proposalImage ? proposalImage.name : '选择企划或公告图片'}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    if (proposalPreview) URL.revokeObjectURL(proposalPreview);
+                    setProposalImage(file);
+                    setProposalPreview(file ? URL.createObjectURL(file) : '');
+                  }}
+                  className="sr-only"
+                />
+              </label>
+              <p className="mt-1 text-[10px] text-[#8C7A68]">保留原图宽高比，提交时自动转换为 WebP。</p>
+            </div>
             {proposalPreview && (
               <div className="space-y-2">
-                <div className="aspect-video overflow-hidden rounded-lg border-2 border-[#C5A059] bg-[#E8E0CB]">
+                <div className="overflow-hidden rounded-lg border-2 border-[#C5A059] bg-[#E8E0CB]">
                   <img
                     src={proposalPreview}
-                    alt="企划图片裁切预览"
-                    className="w-full h-full object-cover"
-                    style={{
-                      objectPosition: `${proposalCrop.x}% ${proposalCrop.y}%`,
-                      transform: `scale(${proposalCrop.zoom})`,
-                    }}
+                    alt="企划图片预览"
+                    className="block max-h-64 w-full object-contain"
                   />
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-[10px]">
-                  <label>
-                    左右
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={proposalCrop.x}
-                      onChange={(e) => setProposalCrop({ ...proposalCrop, x: Number(e.target.value) })}
-                      className="w-full"
-                    />
-                  </label>
-                  <label>
-                    上下
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={proposalCrop.y}
-                      onChange={(e) => setProposalCrop({ ...proposalCrop, y: Number(e.target.value) })}
-                      className="w-full"
-                    />
-                  </label>
-                  <label>
-                    缩放
-                    <input
-                      type="range"
-                      min="1"
-                      max="2"
-                      step="0.05"
-                      value={proposalCrop.zoom}
-                      onChange={(e) => setProposalCrop({ ...proposalCrop, zoom: Number(e.target.value) })}
-                      className="w-full"
-                    />
-                  </label>
                 </div>
               </div>
             )}
@@ -603,7 +562,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = ({
               disabled={proposalBusy}
               className="w-full py-2.5 bg-[#1E4334] hover:bg-[#2C5C46] text-[#F9E79F] rounded-xl font-bold disabled:opacity-50 transition-colors shadow-md cursor-pointer"
             >
-              {proposalBusy ? '提交中…' : '提交审核'}
+              {proposalBusy ? '提交中…' : '提交'}
             </button>
           </form>
         </div>,

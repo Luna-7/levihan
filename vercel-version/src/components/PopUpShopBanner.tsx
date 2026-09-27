@@ -353,17 +353,6 @@ export const PopUpShopBanner: React.FC<Props> = ({
               </div>
             </div>
             </>}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                soundManager.playWoodTap();
-                setShowProposal(true);
-              }}
-              className="mt-0.5 self-end text-[9px] sm:text-[10px] text-[#8C7A65] hover:text-[#1E4334] cursor-pointer"
-            >
-              投递利韩企划
-            </button>
           </div>
         </div>
       </div>

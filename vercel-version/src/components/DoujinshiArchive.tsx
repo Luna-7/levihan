@@ -143,6 +143,14 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   // 首页「今日上新」点小说本 → 切到「小说本」分类（由 appShellStore 信号触发）
   const pendingNovelCategory = useAppShellStore((state) => state.pendingNovelCategory);
   const pendingNovelId = useAppShellStore((state) => state.pendingNovelId);
+  const pendingArchiveCategory = useAppShellStore((state) => state.pendingArchiveCategory);
+  useEffect(() => {
+    if (!pendingArchiveCategory || !allCategories.includes(pendingArchiveCategory)) return;
+    setSelectedCategory(pendingArchiveCategory);
+    setSelectedTag('全部');
+    setSelectedAuthor('全部');
+    useAppShellStore.getState().clearArchiveCategory();
+  }, [pendingArchiveCategory, allCategories]);
   useEffect(() => {
     if (pendingNovelCategory === 0) return;
     setSelectedCategory('小说本');

@@ -178,6 +178,16 @@
                   border-radius:8px;background:#EEE7D7;display:block;margin-top:8px}
   .notice-row{display:flex;gap:10px;align-items:center;padding:9px;border:1.5px solid var(--rule);
               border-radius:8px;background:var(--card);margin-top:8px}
+  .goods-admin-card{position:relative;padding-top:42px}
+  .goods-admin-actions{position:absolute;top:7px;right:7px;display:flex;gap:6px}
+  .goods-crop-wrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+  .goods-crop-stage{position:relative;width:225px;aspect-ratio:3/4;overflow:hidden;border:2px solid var(--green-2);
+                    border-radius:9px;background:#E9E1D1;touch-action:none;cursor:grab;box-shadow:inset 0 0 0 1px #fff}
+  .goods-crop-stage:active{cursor:grabbing}
+  .goods-crop-stage img{position:absolute;max-width:none;max-height:none;user-select:none;pointer-events:none;transform-origin:center}
+  .goods-batch-list{display:flex;gap:6px;flex-wrap:wrap;max-width:520px}
+  .goods-batch-list button{padding:4px 7px;font-size:11px}
+  .goods-batch-list button.active{background:var(--green-2);color:var(--paper)}
   .notice-row img{width:120px;aspect-ratio:16/9;object-fit:cover;border-radius:5px;background:#EDE7D8;flex:none}
   .notice-row .info{flex:1;min-width:0}
   /* ---- author registry table ---- */
@@ -354,7 +364,7 @@
 
     <nav class="admin-tabs" aria-label="管理台功能切换">
       <button type="button" class="admin-tab active" data-admin-tab="manga">📚 漫画上传</button>
-      <button type="button" class="admin-tab" data-admin-tab="novel">✍️ 小说管理</button>
+      <button type="button" class="admin-tab" data-admin-tab="novel">📮 投递管理</button>
       <button type="button" class="admin-tab" data-admin-tab="announcement">📢 公告管理</button>
       <button type="button" class="admin-tab" data-admin-tab="goods">🖼 周边橱窗</button>
       <button type="button" class="admin-tab" data-admin-tab="support">🤝 支持</button>
@@ -433,16 +443,22 @@
       <div class="msg" id="an-msg"></div>
     </div>
 
-    <div class="admin-page-head hide" data-admin-page="goods"><h2>🖼 周边橱窗</h2><div class="muted">上传、排序和统一调整人物在卡片中的显示大小。</div></div>
+    <div class="admin-page-head hide" data-admin-page="goods"><h2>🖼 周边橱窗</h2><div class="muted">批量上传并在固定 3:4 画布中拖动裁切，前台可切换新旧排序。</div></div>
     <div class="panel hide" id="goods-panel" data-admin-page="goods">
       <div class="spread" style="margin-bottom:12px"><h2 style="margin:0">🖼 橱窗图片管理</h2><button class="btn-sm" id="goods-reload">↻ 刷新图片</button></div>
       <div id="goods-list"><p class="muted">登录后自动载入橱窗。</p></div>
-      <div class="grid" style="margin-top:16px">
-        <div class="f span2"><label for="goods-image">人物图片 <span class="tag">新增时必选；自动转为 WebP，单张不超过 4MB</span></label><input type="file" id="goods-image" accept="image/png,image/jpeg,image/webp,image/avif"><img id="goods-preview" class="notice-preview hide" alt="周边图片预览" style="object-fit:contain;aspect-ratio:3/4;max-height:300px"></div>
-        <div class="f"><label for="goods-title">名称 <span class="tag">选填</span></label><input id="goods-title" maxlength="60" placeholder="人物或周边名称"></div>
-        <div class="f"><label for="goods-note">备注 <span class="tag">选填</span></label><input id="goods-note" maxlength="120" placeholder="来源、款式等"></div>
-        <div class="f"><label for="goods-order">排序 <span class="tag">数字越小越靠前</span></label><input type="number" id="goods-order" min="0" step="1" value="0"></div>
-        <div class="f"><label for="goods-scale">人物大小 <span class="tag" id="goods-scale-value">100%</span></label><input type="range" id="goods-scale" min="60" max="130" step="5" value="100"></div>
+      <div class="goods-crop-wrap" style="margin-top:16px">
+        <div class="f">
+          <label for="goods-image">人物图片 <span class="tag">可批量选择；输出固定 900×1200 WebP</span></label>
+          <input type="file" id="goods-image" accept="image/png,image/jpeg,image/webp,image/avif" multiple>
+          <div class="goods-batch-list" id="goods-batch-list"></div>
+        </div>
+        <div class="f">
+          <label>固定裁切框 <span class="tag">拖动图片调整位置</span></label>
+          <div class="goods-crop-stage hide" id="goods-crop-stage"><img id="goods-preview" alt="周边图片裁切预览"></div>
+          <label for="goods-scale">缩放 <span class="tag" id="goods-scale-value">100%</span></label>
+          <input type="range" id="goods-scale" min="100" max="220" step="5" value="100">
+        </div>
         <div class="f" style="justify-content:flex-end"><label style="align-items:center"><input type="checkbox" id="goods-visible" checked style="width:auto"> 在前台展示</label></div>
       </div>
       <div class="row" style="margin-top:14px"><button class="btn-gold" id="goods-save">上传到橱窗</button><button class="btn-sm" id="goods-clear">清空表单</button></div>
@@ -850,8 +866,8 @@
       <p class="muted" style="margin-top:10px" data-page-node-id="01H5C0IL4bWY24eaSpxX4g">「仅更新信息」不传图片，适合只改标题 / 标签 / 页数。单张图片上限 4MB。</p>
     </div>
 
-    <!-- 在线小说 -->
-    <div class="admin-page-head hide" data-admin-page="novel"><h2>✍️ 小说管理</h2><div class="muted">发布、编辑或删除在线小说。</div></div>
+    <!-- 小说与插画投递管理 -->
+    <div class="admin-page-head hide" data-admin-page="novel"><h2>📮 投递管理</h2><div class="muted">集中审核小说、插画投递，并管理已收录小说。</div></div>
     <div class="panel hide" id="nv-panel-top" data-admin-page="novel" data-page-node-id="nvpanel0000000000000000000a">
       <div class="spread" style="margin-bottom:12px" data-page-node-id="nvpanel0000000000000000000b">
         <h2 style="margin:0" data-page-node-id="nvpanel0000000000000000000c"><span class="n" data-page-node-id="nvpanel0000000000000000000d">D</span> 在线小说 <span class="muted" id="nv-count" data-page-node-id="nvpanel0000000000000000000e"></span></h2>
@@ -860,7 +876,7 @@
           <button class="btn-sm" id="btn-nv-clear" data-page-node-id="nvpanel00000000000000000011">清空表单</button>
         </div>
       </div>
-      <div class="row" style="margin-bottom:12px"><button class="btn-sm btn-primary" data-novel-admin-kind="novels">已收录作品</button><button class="btn-sm" data-novel-admin-kind="review">待审核</button></div>
+      <div class="row" style="margin-bottom:12px"><button class="btn-sm btn-primary" data-novel-admin-kind="novels">已收录小说</button><button class="btn-sm" data-novel-admin-kind="review">小说 / 插画待审核</button></div>
       <div id="nv-review" class="hide"><p class="muted">暂无待审核投稿</p></div>
       <!-- 站外推荐已迁至前台「兵长茶会 → 安利墙」，此面板仅保留容器以维持脚本引用有效，不再展示入口 -->
       <div id="rec-admin" class="hide"><div id="rec-admin-list"></div><p class="muted">站外推荐已迁至安利墙。</p></div>
@@ -1011,9 +1027,9 @@ var supporters = [];
 var supporterEditingId = '';
 var goodsItems = [];
 var goodsEditingFile = '';
-var goodsImageBase64 = '';
-var goodsImageWidth = 0;
-var goodsImageHeight = 0;
+var goodsPending = [];
+var goodsCropIndex = -1;
+var goodsDrag = null;
 
 /* ============ 小工具 ============ */
 function $(id){ return document.getElementById(id); }
@@ -1340,10 +1356,9 @@ function renderGoods(){
   var box = $('goods-list');
   if (!goodsItems.length) { box.innerHTML = '<p class="muted">橱窗暂时没有图片。</p>'; return; }
   box.innerHTML = goodsItems.map(function(item){
-    var scale = Math.min(130, Math.max(60, Number(item.scale || 100)));
-    return '<div class="notice-row"><div style="width:68px;height:88px;overflow:hidden;background:#F2ECE0;border:1px solid var(--line);border-radius:5px;flex:none"><img src="' + esc(goodsUrl(item.file) + '?imageMogr2/thumbnail/160x/format/webp') + '" alt="" style="width:100%;height:100%;object-fit:contain;transform:scale(' + (scale/100) + ')"></div>' +
-      '<div class="info"><b>' + esc(item.title || item.file) + '</b><div class="muted">' + esc(item.file) + ' · 排序 ' + Number(item.order||0) + ' · 大小 ' + scale + '%' + (item.visible===false?' · 已隐藏':' · 前台展示') + '</div></div>' +
-      '<button class="btn-sm" data-goods-edit="' + esc(item.file) + '">编辑</button><button class="btn-sm btn-danger" data-goods-del="' + esc(item.file) + '">删除</button></div>';
+    return '<div class="notice-row goods-admin-card"><div class="goods-admin-actions"><button class="btn-sm" data-goods-edit="' + esc(item.file) + '">编辑裁切</button><button class="btn-sm btn-danger" data-goods-del="' + esc(item.file) + '">删除</button></div>' +
+      '<div style="width:90px;aspect-ratio:3/4;overflow:hidden;background:#F2ECE0;border:1px solid var(--line);border-radius:5px;flex:none"><img src="' + esc(goodsUrl(item.file) + '?imageMogr2/thumbnail/180x/format/webp') + '" alt="" style="width:100%;height:100%;object-fit:cover"></div>' +
+      '<div class="info"><b>' + esc(item.file) + '</b><div class="muted">900×1200 WebP' + (item.visible===false?' · 已隐藏':' · 前台展示') + '</div></div></div>';
   }).join('');
 }
 function loadGoods(){
@@ -1351,31 +1366,55 @@ function loadGoods(){
   api({action:'goodsList'}).then(function(d){goodsItems=d.items||[];renderGoods();}).catch(function(err){if(onAuthFail(err))return;$('goods-list').innerHTML='<p class="muted">读取失败：'+esc(err.message||err)+'</p>';});
 }
 function resetGoodsForm(){
-  goodsEditingFile=''; goodsImageBase64=''; goodsImageWidth=0; goodsImageHeight=0;
-  $('goods-image').value=''; $('goods-title').value=''; $('goods-note').value=''; $('goods-order').value='0'; $('goods-scale').value='100'; $('goods-scale-value').textContent='100%'; $('goods-visible').checked=true;
-  $('goods-preview').src=''; $('goods-preview').style.transform=''; $('goods-preview').classList.add('hide'); $('goods-save').textContent='上传到橱窗'; hide($('goods-msg'));
+  goodsPending.forEach(function(x){if(x.localUrl)URL.revokeObjectURL(x.localUrl);});
+  goodsEditingFile=''; goodsPending=[]; goodsCropIndex=-1; goodsDrag=null;
+  $('goods-image').value=''; $('goods-scale').value='100'; $('goods-scale-value').textContent='100%'; $('goods-visible').checked=true;
+  $('goods-preview').src=''; $('goods-crop-stage').classList.add('hide'); $('goods-batch-list').innerHTML=''; $('goods-save').textContent='上传到橱窗'; hide($('goods-msg'));
 }
-function prepareGoodsImage(file){
-  if(!file||!/^image\//.test(file.type)) return Promise.reject(new Error('请选择图片文件。'));
-  if(file.size>MAX_FILE) return Promise.reject(new Error('图片超过 4MB 上限。'));
+function loadGoodsCropSource(src,name,localUrl){
   return new Promise(function(resolve,reject){
-    var img=new Image(),url=URL.createObjectURL(file);
-    img.onload=function(){try{var max=1800,ratio=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.max(1,Math.round(img.naturalWidth*ratio)),h=Math.max(1,Math.round(img.naturalHeight*ratio)),canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;canvas.getContext('2d').drawImage(img,0,0,w,h);URL.revokeObjectURL(url);goodsImageWidth=w;goodsImageHeight=h;resolve(canvas.toDataURL('image/webp',.9));}catch(e){URL.revokeObjectURL(url);reject(e);}};
-    img.onerror=function(){URL.revokeObjectURL(url);reject(new Error('图片读取失败。'));}; img.src=url;
+    var img=new Image(); img.crossOrigin='anonymous';
+    img.onload=function(){resolve({name:name||'图片',src:src,localUrl:localUrl||'',img:img,zoom:1,x:0,y:0});};
+    img.onerror=function(){reject(new Error('图片读取失败：'+(name||'')));}; img.src=src;
   });
 }
-$('goods-image').addEventListener('change',function(){var file=this.files&&this.files[0];if(!file)return;show($('goods-msg'),'info','正在处理图片…');prepareGoodsImage(file).then(function(data){goodsImageBase64=data.split(',')[1]||'';$('goods-preview').src=data;$('goods-preview').classList.remove('hide');hide($('goods-msg'));}).catch(function(err){show($('goods-msg'),'err',err.message||String(err));});});
-$('goods-scale').addEventListener('input',function(){$('goods-scale-value').textContent=this.value+'%';$('goods-preview').style.transform='scale('+(Number(this.value)/100)+')';});
-function saveGoods(){
-  if(!goodsEditingFile&&!goodsImageBase64){show($('goods-msg'),'err','请选择要上传的人物图片。');return;}
-  var item={file:goodsEditingFile||undefined,title:$('goods-title').value.trim(),note:$('goods-note').value.trim(),order:Number($('goods-order').value||0),scale:Number($('goods-scale').value||100),visible:$('goods-visible').checked,width:goodsImageWidth||undefined,height:goodsImageHeight||undefined};
+function renderGoodsCrop(){
+  var item=goodsPending[goodsCropIndex],stage=$('goods-crop-stage'),preview=$('goods-preview');
+  if(!item){stage.classList.add('hide');return;} stage.classList.remove('hide'); preview.src=item.src;
+  var sw=225,sh=300,base=Math.max(sw/item.img.naturalWidth,sh/item.img.naturalHeight),scale=base*item.zoom,w=item.img.naturalWidth*scale,h=item.img.naturalHeight*scale;
+  item.x=Math.max((sw-w)/2,Math.min((w-sw)/2,item.x)); item.y=Math.max((sh-h)/2,Math.min((h-sh)/2,item.y));
+  preview.style.width=w+'px';preview.style.height=h+'px';preview.style.left=(sw/2-w/2+item.x)+'px';preview.style.top=(sh/2-h/2+item.y)+'px';
+  $('goods-scale').value=String(Math.round(item.zoom*100));$('goods-scale-value').textContent=Math.round(item.zoom*100)+'%';
+  $('goods-batch-list').innerHTML=goodsPending.map(function(x,i){return '<button type="button" class="'+(i===goodsCropIndex?'active':'')+'" data-goods-crop="'+i+'">'+(i+1)+' '+esc(x.name)+'</button>';}).join('');
+}
+function cropGoodsBase64(item){
+  var canvas=document.createElement('canvas');canvas.width=900;canvas.height=1200;var ctx=canvas.getContext('2d');
+  var base=Math.max(900/item.img.naturalWidth,1200/item.img.naturalHeight),scale=base*item.zoom,w=item.img.naturalWidth*scale,h=item.img.naturalHeight*scale;
+  ctx.drawImage(item.img,450-w/2+item.x*4,600-h/2+item.y*4,w,h);return canvas.toDataURL('image/webp',.9).split(',')[1]||'';
+}
+$('goods-image').addEventListener('change',function(){
+  var files=Array.prototype.slice.call(this.files||[]);if(!files.length)return;
+  var bad=files.find(function(f){return !/^image\//.test(f.type)||f.size>MAX_FILE;});if(bad){show($('goods-msg'),'err','仅支持单张不超过 4MB 的图片。');return;}
+  resetGoodsForm();show($('goods-msg'),'info','正在载入 '+files.length+' 张图片…');
+  Promise.all(files.map(function(file){var url=URL.createObjectURL(file);return loadGoodsCropSource(url,file.name,url);})).then(function(list){goodsPending=list;goodsCropIndex=0;renderGoodsCrop();hide($('goods-msg'));}).catch(function(err){show($('goods-msg'),'err',err.message||String(err));});
+});
+$('goods-scale').addEventListener('input',function(){var item=goodsPending[goodsCropIndex];if(!item)return;item.zoom=Number(this.value)/100;renderGoodsCrop();});
+$('goods-batch-list').addEventListener('click',function(e){var b=e.target.closest('[data-goods-crop]');if(!b)return;goodsCropIndex=Number(b.getAttribute('data-goods-crop'));renderGoodsCrop();});
+$('goods-crop-stage').addEventListener('pointerdown',function(e){if(!goodsPending[goodsCropIndex])return;goodsDrag={x:e.clientX,y:e.clientY,ox:goodsPending[goodsCropIndex].x,oy:goodsPending[goodsCropIndex].y};this.setPointerCapture(e.pointerId);});
+$('goods-crop-stage').addEventListener('pointermove',function(e){if(!goodsDrag)return;var item=goodsPending[goodsCropIndex];item.x=goodsDrag.ox+e.clientX-goodsDrag.x;item.y=goodsDrag.oy+e.clientY-goodsDrag.y;renderGoodsCrop();});
+$('goods-crop-stage').addEventListener('pointerup',function(){goodsDrag=null;});
+async function saveGoods(){
+  if(!goodsPending.length){show($('goods-msg'),'err','请选择要上传的人物图片。');return;}
   var btn=$('goods-save');btn.disabled=true;
-  api({action:'goodsSave',item:item,imageBase64:goodsImageBase64}).then(function(d){goodsItems=d.items||[];renderGoods();resetGoodsForm();show($('goods-msg'),'ok','✓ 橱窗已更新。');}).catch(function(err){if(onAuthFail(err))return;show($('goods-msg'),'err',err.message||String(err));}).then(function(){btn.disabled=false;});
+  try{
+    for(var i=0;i<goodsPending.length;i++){show($('goods-msg'),'info','正在上传 '+(i+1)+' / '+goodsPending.length+'…');var item={file:goodsEditingFile||undefined,visible:$('goods-visible').checked,width:900,height:1200,scale:100};var d=await api({action:'goodsSave',item:item,imageBase64:cropGoodsBase64(goodsPending[i])});goodsItems=d.items||goodsItems;goodsEditingFile='';}
+    renderGoods();resetGoodsForm();show($('goods-msg'),'ok','✓ '+i+' 张图片已裁切并上传。');
+  }catch(err){if(onAuthFail(err))return;show($('goods-msg'),'err',err.message||String(err));}finally{btn.disabled=false;}
 }
 $('goods-save').addEventListener('click',saveGoods); $('goods-clear').addEventListener('click',resetGoodsForm); $('goods-reload').addEventListener('click',loadGoods);
 $('goods-list').addEventListener('click',function(e){
   var edit=e.target.closest('[data-goods-edit]'),del=e.target.closest('[data-goods-del]');
-  if(edit){var item=goodsItems.find(function(x){return x.file===edit.getAttribute('data-goods-edit');});if(!item)return;goodsEditingFile=item.file;goodsImageBase64='';goodsImageWidth=0;goodsImageHeight=0;$('goods-title').value=item.title||'';$('goods-note').value=item.note||'';$('goods-order').value=String(Number(item.order||0));$('goods-scale').value=String(Number(item.scale||100));$('goods-scale-value').textContent=Number(item.scale||100)+'%';$('goods-visible').checked=item.visible!==false;$('goods-preview').src=goodsUrl(item.file);$('goods-preview').style.transform='scale('+(Number(item.scale||100)/100)+')';$('goods-preview').classList.remove('hide');$('goods-save').textContent='保存修改';window.scrollTo({top:$('goods-panel').offsetTop-12,behavior:'smooth'});}
+  if(edit){var item=goodsItems.find(function(x){return x.file===edit.getAttribute('data-goods-edit');});if(!item)return;resetGoodsForm();goodsEditingFile=item.file;$('goods-visible').checked=item.visible!==false;loadGoodsCropSource(goodsUrl(item.file),item.file,'').then(function(source){goodsPending=[source];goodsCropIndex=0;renderGoodsCrop();$('goods-save').textContent='保存裁切';window.scrollTo({top:$('goods-panel').offsetTop-12,behavior:'smooth'});}).catch(function(err){show($('goods-msg'),'err',err.message||String(err));});}
   else if(del){var file=del.getAttribute('data-goods-del');if(!confirm('确定删除这张橱窗图片及原图？'))return;api({action:'goodsDelete',file:file}).then(function(d){goodsItems=d.items||[];renderGoods();resetGoodsForm();}).catch(function(err){if(onAuthFail(err))return;show($('goods-msg'),'err',err.message||String(err));});}
 });
 
@@ -2590,15 +2629,16 @@ function loadInbox(){
     $('inbox-badge').classList.toggle('hide', items.length === 0);
     renderInboxReports(items, $('inbox-contacts'));
     renderReviewItems(items.filter(function(item){ return item.type === 'announcement'; }), $('an-review'), '企划');
-    renderReviewItems(items.filter(function(item){ return item.type === 'novel' || item.type === 'recommend'; }), $('nv-review'), '投稿');
+    renderReviewItems(items.filter(function(item){ return item.type === 'novel' || item.type === 'artwork'; }), $('nv-review'), '小说或插画投稿');
   }).catch(function(err){ $('inbox-status').textContent = '读取失败：' + (err.message || String(err)); });
 }
 function renderReviewItems(items, container, label){
   if (!items.length) { container.innerHTML='<p class="muted">暂无待审核' + label + '</p>'; return; }
   container.innerHTML=items.map(function(item){
-    var kind=item.type==='announcement'?'企划公告':item.type==='recommend'?'站外推荐':'在线小说';
+    var kind=item.type==='announcement'?'企划公告':item.type==='artwork'?'同人插画/短漫':'在线小说';
     var detail=item.body||item.description||item.reason||'';
-    return '<div class="notice-row" data-inbox-id="'+esc(item._id)+'"><div class="info"><b>'+esc(kind+' · '+(item.title||'未命名'))+'</b><div class="muted">提交人：'+esc(item.author||'匿名')+(item.link?' · '+esc(item.link):'')+'</div>'+(detail?'<details><summary>查看内容</summary><pre style="white-space:pre-wrap">'+esc(detail)+'</pre></details>':'')+'</div><button class="btn-sm btn-gold" data-review="approve">通过</button><button class="btn-sm btn-danger" data-review="reject">拒绝</button></div>';
+    var previews=Array.isArray(item.files)&&item.folder?'<div class="row" style="gap:6px;margin-top:8px;overflow-x:auto">'+item.files.slice(0,8).map(function(name){return '<img src="'+esc(CDN+'/'+item.folder+'/'+name)+'" alt="投稿预览" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--rule)">';}).join('')+'</div>':'';
+    return '<div class="notice-row" data-inbox-id="'+esc(item._id)+'"><div class="info"><b>'+esc(kind+' · '+(item.title||'未命名'))+'</b><div class="muted">提交人：'+esc(item.author||'匿名')+(item.homepage?' · '+esc(item.homepage):'')+'</div>'+previews+(detail?'<details><summary>查看内容</summary><pre style="white-space:pre-wrap">'+esc(detail)+'</pre></details>':'')+'</div><button class="btn-sm btn-gold" data-review="approve">通过并收录</button><button class="btn-sm btn-danger" data-review="reject">拒绝</button></div>';
   }).join('');
 }
 function renderInboxReports(items, container){

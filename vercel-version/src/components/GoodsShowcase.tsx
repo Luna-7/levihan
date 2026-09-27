@@ -245,6 +245,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
   const [items, setItems] = useState<GoodsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
+  const [newestFirst, setNewestFirst] = useState(true);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [downloading, setDownloading] = useState('');
 
@@ -269,9 +270,9 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
 
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((it) => (it.title || '').toLowerCase().includes(q));
-  }, [items, keyword]);
+    const matched = q ? items.filter((it) => (it.title || '').toLowerCase().includes(q)) : items;
+    return newestFirst ? [...matched].reverse() : [...matched];
+  }, [items, keyword, newestFirst]);
 
   const activeItem = activeIndex >= 0 ? filtered[activeIndex] : undefined;
   /** 灯箱标题：没有名字时用序号定位，不留空标题 */
@@ -319,26 +320,34 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
         </div>
       </div>
 
-      {/* 搜索：图多、且清单里确实有名字时才出现 */}
-      {hasNamed && items.length > 8 && (
-        <div className="flex items-center gap-1.5">
+      <div className="flex items-center justify-end gap-1.5">
+        {/* 搜索：图多、且清单里确实有名字时才出现 */}
+        {hasNamed && items.length > 8 && (
           <input
             type="text"
             placeholder="搜索周边名称…"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            className="px-2.5 py-1.5 text-xs sm:text-sm font-retro-jp bg-[#FAF5E8] border border-[#BFA985] rounded-xs w-full focus:outline-none focus:border-[#1E4334]"
+            className="px-2.5 py-1.5 text-xs sm:text-sm font-retro-jp bg-[#FAF5E8] border border-[#BFA985] rounded-xs min-w-0 flex-1 focus:outline-none focus:border-[#1E4334]"
           />
-          {keyword && (
+        )}
+        {keyword && (
             <button
               onClick={() => setKeyword('')}
               className="text-xs sm:text-sm text-[#8C7A68] hover:text-[#1E4334] px-1 cursor-pointer whitespace-nowrap shrink-0"
             >
               ✕
             </button>
-          )}
-        </div>
-      )}
+        )}
+        <button
+          type="button"
+          onClick={() => { soundManager.playWoodTap(); setNewestFirst((value) => !value); setActiveIndex(-1); }}
+          className="shrink-0 rounded-md border border-[#1E4334] bg-[#FAF5E8] px-2.5 py-1.5 font-retro-jp text-[11px] font-bold text-[#1E4334] hover:bg-[#1E4334] hover:text-[#FFF8E7] cursor-pointer"
+          aria-label="切换橱窗排序"
+        >
+          {newestFirst ? '↓ 新到旧' : '↑ 旧到新'}
+        </button>
+      </div>
 
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">

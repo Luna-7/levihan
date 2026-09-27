@@ -1206,6 +1206,15 @@ async function authUid(bearer) {
   }
 }
 
+async function userNickname(uid) {
+  if (!uid) return '';
+  try {
+    const rows = assertDbResult(await inboxDb().from('app_users').select('nickname').eq('id', uid).limit(1));
+    const user = Array.isArray(rows) ? rows[0] : rows;
+    return String(user && user.nickname || '').trim().slice(0, 80);
+  } catch (_) { return ''; }
+}
+
 function assertDbResult(result) {
   if (result.error) throw httpError('云端收件箱数据库请求失败：' + result.error.message, 503);
   return result.data;
@@ -1246,11 +1255,9 @@ async function submitToInbox(type, payload) {
   let item;
   if (type === 'novel') {
     const title = String(payload.title || '').trim();
-    const author = String(payload.author || '').trim();
-    const email = String(payload.email || '').trim();
+    const author = await userNickname(payload.__uid);
     const body = String(payload.body || '').replace(/\r\n?/g, '\n').trim();
     if (!title || title.length > 120 || !author || author.length > 80) throw httpError('请填写有效的标题和作者', 400);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120) throw httpError('请填写有效邮箱', 400);
     if (!body || body.length > MAX_NOVEL_CHARS) throw httpError('正文不能为空或超过字数上限', 400);
     const authorUrl = String(payload.authorUrl || '').trim();
     if (authorUrl) {
@@ -1264,18 +1271,28 @@ async function submitToInbox(type, payload) {
       : String(payload.tags || '').split(/[,，]/);
     const tags = rawTags.map((t) => String(t == null ? '' : t).trim()).filter(Boolean).slice(0, 20);
     const warning = String(payload.warning || '').trim().slice(0, 100);
-    item = { title, author, email, body,
+    item = { title, author, body, userUid: String(payload.__uid || ''),
       authorUrl: authorUrl.slice(0, 300),
       notes: String(payload.notes || '').trim().slice(0, 2000) };
     if (tags.length) item.tags = tags;
     if (warning) item.warning = warning;
+  } else if (type === 'artwork') {
+    const title = String(payload.title || '').trim().slice(0, 120);
+    const author = await userNickname(payload.__uid);
+    const homepage = String(payload.homepage || '').trim().slice(0, 300);
+    const folder = String(payload.folder || '').trim();
+    const files = Array.isArray(payload.files) ? payload.files.map((name) => String(name)).filter((name) => /^image\d{2}\.webp$/.test(name)).slice(0, 60) : [];
+    if (!title || !author) throw httpError('请填写标题和创作者', 400);
+    if (!/^submissions\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(folder) || !files.length) throw httpError('请至少上传一张有效图片', 400);
+    item = { title, author, homepage, folder, files, userUid: String(payload.__uid || ''),
+      notes: String(payload.notes || '').trim().slice(0, 2000) };
   } else if (type === 'announcement') {
     const title = String(payload.title || '').trim().slice(0, 100);
-    const author = String(payload.author || '').trim().slice(0, 40);
+    const author = (await userNickname(payload.__uid)).slice(0, 40);
     if (!title || !author) throw httpError('请填写企划标题和发布人', 400);
     const description = String(payload.description || '').trim().slice(0, 2000);
     if (!description) throw httpError('请填写企划宣传文本', 400);
-    item = { title, author, time: String(payload.time || '').trim().slice(0, 40), description,
+    item = { title, author, userUid:String(payload.__uid || ''), time: String(payload.time || '').trim().slice(0, 40), description,
       link: String(payload.link || '').trim().slice(0, 500), image: String(payload.image || '').trim().slice(0, 500), tag: '企划' };
   } else if (type === 'recommend') {
     const title = String(payload.title || '').trim().slice(0, 120);
@@ -1311,6 +1328,17 @@ async function reviewInbox(payload) {
       await handle('novelSave', { id: novelId, title: item.title, author: item.author,
         authorUrl: item.authorUrl, body: item.body, authorNote: item.notes,
         tags: item.tags, warning: item.warning });
+    } else if (item.type === 'artwork') {
+      const books = await readArchive();
+      const used = new Set(books.map((book) => String(book && book.id || '')));
+      let seq = Math.max(1, ...books.map((book) => Number(String(book && book.id || '').replace(/^lh-/, '')) || 0)) + 1;
+      while (used.has(`lh-${seq}`)) seq += 1;
+      const now = new Date().toISOString();
+      books.push(normalizeBook({ id:`lh-${seq}`, titleZh:item.title, titleJp:'', circle:item.author,
+        authorUrl:item.homepage, category:'插画集', tags:['同好投稿'], pages:item.files.length,
+        bookFolder:item.folder, coverFile:item.files[0], pageFiles:item.files, createdAt:now, updatedAt:now }));
+      await writeArchive(books);
+      try { await upsertAuthor(item.author, item.homepage); } catch (e) { console.error('[authorLib] 插画作者登记失败', e && e.message); }
     } else if (item.type === 'announcement') {
       await handle('announcementSave', { item: { tag: '利韩企划', title: item.title, time: item.time,
         author: item.author, link: item.link, image: item.image, description: item.description } });
@@ -1333,9 +1361,9 @@ async function reviewInbox(payload) {
 // 完全公开：无需登录、无需管理员 token（健康检查 / 读操作 / 匿名投递）
 const PUBLIC_ACTIONS = new Set([
   'status', 'login',
-  'submitNovel', 'submitContact', 'submitAnnouncement', 'submitRecommend',
+  'submitContact', 'submitRecommend',
   'submitCustomOrderEmail',
-  'announcementList', 'announcementImageUpload', 'supporterList',
+  'announcementList', 'supporterList',
   'forumList', 'forumTodayRelay', 'marketList',
   'novelCommentList',
   'leaderboard',
@@ -1345,6 +1373,7 @@ const USER_ACTIONS = new Set([
   'forumComment', 'forumPotato', 'forumClaim', 'forumReleaseClaim',
   'forumCommentDelete', 'forumEdit',
   'marketPublish', 'marketDelete',
+  'submitNovel', 'submitArtwork', 'submitAnnouncement', 'submissionImageUpload', 'announcementImageUpload',
   'novelDirectPublish', 'novelUpdate', 'novelCommentAdd',
   'novelBody',
   'submitScore',
@@ -1565,6 +1594,7 @@ async function handle(action, payload) {
     case 'submitScore': return submitGameScore(payload.__uid, payload);
 
     case 'submitNovel': return submitToInbox('novel', payload);
+    case 'submitArtwork': return submitToInbox('artwork', payload);
     case 'submitContact': return submitToInbox('contact', payload);
 
     // 商业定制需求函：不经收件箱/管理后台，直接邮件中继到站长邮箱
@@ -1685,6 +1715,18 @@ async function handle(action, payload) {
       const key = `${ANNOUNCEMENT_DIR}submissions/${Date.now()}-${crypto.randomBytes(4).toString('hex')}.webp`;
       await putObject({ Bucket: BUCKET, Region: REGION, Key: key, Body: Buffer.from(imageBase64, 'base64'), ContentType: 'image/webp', CacheControl: 'public, max-age=31536000' });
       return { ok: true, url: `https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${key}` };
+    }
+
+    case 'submissionImageUpload': {
+      const imageBase64 = String(payload.imageBase64 || '');
+      const submissionId = String(payload.submissionId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+      const index = Math.max(1, Math.min(60, Number(payload.index) || 1));
+      if (!submissionId || !imageBase64 || Math.floor((imageBase64.length * 3) / 4) > MAX_BYTES) throw httpError('图片为空或超过 4MB', 413);
+      const folder = `submissions/${payload.__uid}/${submissionId}`;
+      const fileName = `image${String(index).padStart(2, '0')}.webp`;
+      const key = `${folder}/${fileName}`;
+      await putObject({ Bucket: BUCKET, Region: REGION, Key:key, Body:Buffer.from(imageBase64, 'base64'), ContentType:'image/webp', CacheControl:'public, max-age=31536000' });
+      return { ok:true, folder, fileName, url:`https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${key}` };
     }
 
     case 'announcementSave': {

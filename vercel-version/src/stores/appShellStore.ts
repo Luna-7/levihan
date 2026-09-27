@@ -30,6 +30,9 @@ type AppShellState = {
   pendingNovelCategory: number;
   /** 需要自动打开的指定合订本 ID */
   pendingNovelId: string | null;
+  pendingArchiveCategory: string | null;
+  /** 首页「一键投递」发出的跨分区表单打开请求。 */
+  submissionRequest: 'novel' | 'announcement' | 'art' | null;
   /** 全局 toast 文案；null 表示不显示 */
   toast: string | null;
   /** 登录弹窗打开动作的单调递增信号；每次 +1 触发 UserEntry 打开 */
@@ -41,6 +44,10 @@ type AppShellState = {
   openDoujinArchive: () => void;
   openNovelCategory: () => void;
   openNovel: (id: string) => void;
+  openArchiveCategory: (category: string) => void;
+  clearArchiveCategory: () => void;
+  requestSubmission: (kind: 'novel' | 'announcement' | 'art') => void;
+  clearSubmissionRequest: () => void;
   clearPendingNovel: () => void;
   showToast: (msg: string) => void;
   dismissToast: () => void;
@@ -55,6 +62,8 @@ export const useAppShellStore = create<AppShellState>((set) => ({
   pendingDoujinOpen: 0,
   pendingNovelCategory: 0,
   pendingNovelId: null,
+  pendingArchiveCategory: null,
+  submissionRequest: null,
   toast: null,
   loginRequest: 0,
   novelIndexVersion: 0,
@@ -78,6 +87,10 @@ export const useAppShellStore = create<AppShellState>((set) => ({
     pendingNovelCategory: state.pendingNovelCategory + 1,
     pendingNovelId: id,
   })),
+  openArchiveCategory: (category) => set({ pendingArchiveCategory: category }),
+  clearArchiveCategory: () => set({ pendingArchiveCategory: null }),
+  requestSubmission: (kind) => set({ submissionRequest: kind }),
+  clearSubmissionRequest: () => set({ submissionRequest: null }),
   clearPendingNovel: () => set({ pendingNovelId: null }),
 
   showToast: (msg) => {

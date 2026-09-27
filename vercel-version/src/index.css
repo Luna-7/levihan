@@ -119,6 +119,134 @@
      矮屏导致下方内容溢出时，由 #view-main 的滚动兜底消化。 */
   .home-header-art {
     display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  /* 首页固定单屏：各区块随可用视口高度共同收放，不再靠整页滚动兜底。 */
+  .home-header-shell {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1242 / 872;
+  }
+  .home-random-bite {
+    flex: 0 0 auto;
+  }
+  /* 浏览器模式将两个首页快捷入口并排；主屏幕 PWA 改回上下两行，
+     为窄屏触控保留更大的单按钮点击区域。 */
+  .home-quick-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-auto-rows: 64px;
+    gap: 6px;
+    margin: 6px 18px 0;
+    flex: 0 0 auto;
+  }
+  .home-quick-actions > .home-quick-action-shell {
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .home-quick-actions > .home-quick-action-shell > .home-quick-card {
+    height: 100%;
+  }
+  html.pwa-standalone .home-quick-actions {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: 72px;
+    gap: 9px;
+  }
+  html.pwa-standalone .home-quick-actions .home-quick-card {
+    border-radius: 14px;
+    padding-left: 16px;
+    padding-right: 76px;
+  }
+  html.pwa-standalone .home-quick-actions .home-quick-card img {
+    width: 68px;
+  }
+  html.pwa-standalone .home-quick-actions .home-quick-card .font-serif-title {
+    font-size: 18px !important;
+  }
+  html.pwa-standalone .home-quick-actions .home-quick-card span span:last-child {
+    font-size: 12px !important;
+  }
+  html.pwa-standalone .home-main-content .announcement-board {
+    min-height: 76px;
+    padding: 10px 14px !important;
+  }
+  html.pwa-standalone .home-main-content .announcement-board h3 {
+    font-size: 16px !important;
+  }
+  html.pwa-standalone .home-main-content .announcement-board p {
+    display: block !important;
+    font-size: 12px !important;
+  }
+
+  @media (min-width: 640px) {
+    .home-quick-actions { margin-right: 24px; margin-left: 24px; }
+  }
+  @media (min-width: 1024px) {
+    .home-quick-actions { margin-right: 32px; margin-left: 32px; }
+  }
+
+  /* standalone 下让 fixed 导航自身覆盖至真实屏幕底边，并把 Home Indicator
+     安全区染成同一底色，消除导航下方看起来未贴底的透明缝隙。 */
+  html.pwa-standalone .adventure-bottom-nav {
+    bottom: 0 !important;
+    background: #F6F1E3;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+  }
+  html.pwa-standalone .adventure-bottom-safe-area {
+    background: #F6F1E3;
+    height: env(safe-area-inset-bottom, 0px) !important;
+    min-height: 0;
+  }
+  .home-jump-art {
+    width: clamp(76px, 14dvh, 132px) !important;
+  }
+  .home-jump-grid {
+    flex: 0 0 auto;
+  }
+  .home-main-content .announcement-board {
+    min-height: clamp(78px, 9dvh, 96px);
+    padding: clamp(10px, 1.4dvh, 15px) 14px !important;
+  }
+
+  @media (max-height: 760px) {
+    .home-random-bite { margin-top: 0 !important; padding: 0 !important; }
+    .home-random-bite h2 { font-size: 12px !important; }
+    .home-random-bite p { line-height: 1.25 !important; }
+    .home-main-content { gap: 4px !important; }
+    .home-main-content .announcement-board { min-height: 70px; padding: 8px 10px !important; }
+    .home-main-content .announcement-board p { margin-top: 2px !important; font-size: 10px !important; }
+    .home-jump-art { width: clamp(68px, 12dvh, 96px) !important; }
+  }
+
+  @media (max-height: 620px) {
+    .home-random-bite { font-size: 90%; }
+    .home-random-bite p { -webkit-line-clamp: 2; }
+    .home-main-content .announcement-board p { -webkit-line-clamp: 1; }
+    .home-jump-art { width: 54px !important; }
+    .clear-adventure-nav-home { padding-bottom: calc(64px + 60px + 6px) !important; }
+  }
+
+  /* 手机横屏与桌面矮窗口：压缩纵向留白，同时保留随机卡片、公告和三个入口。 */
+  @media (max-height: 620px) and (min-width: 640px) {
+    .home-random-bite { margin-top: 0 !important; padding: 0 !important; }
+    .home-random-heading { margin-bottom: 3px !important; }
+    .home-random-heading > div > p { display: none; }
+    .home-random-content { grid-template-columns: minmax(96px, 30%) 1fr; gap: 6px !important; }
+    .home-random-pair { height: 62px; padding: 0 !important; }
+    .home-random-image { height: 62px; aspect-ratio: auto !important; }
+    .home-random-card { height: 62px; padding: 5px 7px !important; overflow: hidden; }
+    .home-random-card h3 { margin-top: 2px !important; font-size: 10px !important; }
+    .home-random-card p { margin-top: 1px !important; font-size: 8px !important; line-height: 1.2 !important; }
+    .home-random-card p:last-of-type { display: none; }
+    .home-random-card > span:last-child { bottom: 4px !important; right: 6px !important; font-size: 8px !important; }
+    .home-announcements { max-height: 150px; }
   }
 
   /* Height-based adjustments to prevent scroll on short screens
@@ -826,10 +954,34 @@ body.immersive-on .retro-frame-card > .absolute {
    木板底图，改为主题纸色纯 CSS 卡片，与全站配色一致。
    ============================================================ */
 .announcement-board {
-  background-color: #F8F1DE;
-  border: 1.5px solid #E0D2B4;
-  border-radius: 12px;
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(105deg, rgba(255,255,255,.7), rgba(250,243,225,.93)), #F8F1DE;
+  border: 1.5px solid #D8C59F;
+  border-radius: 16px;
   padding: 12px 14px;
+  box-shadow: 0 4px 12px rgba(82, 61, 38, .12), inset 0 1px 0 rgba(255,255,255,.8);
+}
+.announcement-board::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--announcement-accent, #1E4334);
+}
+.announcement-board--green { --announcement-accent: #1E4334; }
+.announcement-board--purple { --announcement-accent: #563B68; }
+.announcement-badge {
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--announcement-accent, #1E4334) 28%, transparent);
+}
+.announcement-arrow {
+  color: var(--announcement-accent, #1E4334);
+  background: color-mix(in srgb, var(--announcement-accent, #1E4334) 12%, #FFF9EC);
+  border: 1px solid color-mix(in srgb, var(--announcement-accent, #1E4334) 22%, #E7D7B8);
+}
+.announcement-board:hover .announcement-arrow {
+  color: white;
+  background: var(--announcement-accent, #1E4334);
 }
 
 /* Vintage Envelope Styling & Patterns */

@@ -607,16 +607,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
         {/* ====================================================
             卡片组：独立操作区域
            ==================================================== */}
-        {inboxReplies.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setActiveReply(inboxReplies[0])}
-            className="relative self-center mb-3 inline-flex items-center gap-2 rounded-lg border-2 border-[#B7791F] bg-[#F3C45E] px-4 py-2 text-[#3E2C16] font-pixel text-[11px] font-bold shadow-[3px_3px_0_rgba(140,108,71,.32)] animate-pulse hover:bg-[#F7D47C] cursor-pointer"
-          >
-            <span>💌</span><span>管理员回信</span>
-            <span className="absolute -right-2 -top-2 min-w-5 h-5 px-1 rounded-full bg-[#C6452D] text-white text-[10px] flex items-center justify-center border border-[#FFF6DD]">{inboxReplies.length}</span>
-          </button>
-        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 shrink-0">
           {/* 卡片 A：致谢同好 (Supporters Card)；框体向下延伸，底部两侧立绘致意 */}
           <div className="p-3.5 border-2 border-dashed border-[#8C6C47]/40 rounded-xl bg-[#FAF3E3]/50 backdrop-blur-xs relative overflow-hidden flex flex-col justify-between min-h-[190px]">
@@ -672,8 +662,9 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
             />
           </div>
 
-          {/* 卡片 B：呈递调查报告 (Report Card) */}
-          <button
+          {/* 卡片 B：呈递调查报告 + 紧随其后的管理员回信 */}
+          <div className="flex flex-col gap-2">
+            <button
             type="button"
             onClick={() => setIsReportModalOpen(true)}
             className="group p-3.5 border-2 border-[#1E4334] rounded-xl bg-[#FAF3E3]/90 relative overflow-hidden flex flex-col justify-between text-left transition-all hover:border-[#11281E] hover:bg-[#F3EAD5] active:scale-[0.98] shadow-[0_2px_8px_rgba(30,67,52,0.12)] cursor-pointer min-h-[105px]"
@@ -693,7 +684,18 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
             <p className="text-[10px] text-[#5C4A3A] mt-1 italic opacity-75 group-hover:opacity-100">
               点此填写战术研讨建议或异常排查报告...
             </p>
-          </button>
+            </button>
+            {inboxReplies.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveReply(inboxReplies[0])}
+                className="relative w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-[#B7791F] bg-[#F3C45E] px-4 py-2 text-[#3E2C16] font-pixel text-[11px] font-bold shadow-[3px_3px_0_rgba(140,108,71,.32)] animate-pulse hover:bg-[#F7D47C] cursor-pointer"
+              >
+                <span>💌</span><span>管理员回信</span>
+                <span className="absolute -right-2 -top-2 min-w-5 h-5 px-1 rounded-full bg-[#C6452D] text-white text-[10px] flex items-center justify-center border border-[#FFF6DD]">{inboxReplies.length}</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* 联络子模块切换 (如果未来有更多子模块) */}

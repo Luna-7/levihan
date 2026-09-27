@@ -16,7 +16,7 @@ async function inboxRequest(action: string, fields: Record<string, unknown> = {}
 }
 
 export async function submitToInbox(
-  action: 'submitNovel' | 'submitContact' | 'submitAnnouncement' | 'submitRecommend' | 'submitCustomOrderEmail',
+  action: 'submitNovel' | 'submitArtwork' | 'submitContact' | 'submitAnnouncement' | 'submitRecommend' | 'submitCustomOrderEmail',
   fields: Record<string, unknown>
 ) {
   const result = await inboxRequest(action, fields) as { ok?: boolean; id?: string; status?: 'pending' };

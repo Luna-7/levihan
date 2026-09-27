@@ -17,7 +17,7 @@ export const MiniProgramJumpGrid: React.FC<Props> = ({
   const [showCinemaNotice, setShowCinemaNotice] = useState(false);
 
   return (
-    <div className="w-full select-none relative z-20 px-1 sm:px-2 -mt-1 sm:-mt-2">
+    <div className="home-jump-grid w-full select-none relative z-20 px-1 sm:px-2 -mt-1">
       {/* ====================================================
           首页 3 个复古羊皮纸勋章入口 (缩放更紧凑精致)
           1. 塔塔开 (街机训练)
@@ -43,7 +43,7 @@ export const MiniProgramJumpGrid: React.FC<Props> = ({
           title="进入塔塔开·街机训练"
         >
           {/* 三层原画已在构建资产中预合成，避免 WebKit 为一个按钮解码并合成三张大图。 */}
-          <div className="relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[676/637]">
+          <div className="home-jump-art relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[676/637]">
             <img
               src="/images/tatakaru-button.webp"
               alt="塔塔开"
@@ -65,7 +65,7 @@ export const MiniProgramJumpGrid: React.FC<Props> = ({
           id="btn-jump-cinema"
           title="影视厅 · 待定"
         >
-          <div className="relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[681/647]">
+          <div className="home-jump-art relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[681/647]">
             <img
               src="/images/cinema-button.webp"
               alt="影视厅"
@@ -100,7 +100,7 @@ export const MiniProgramJumpGrid: React.FC<Props> = ({
           id="btn-jump-resources"
           title="进入巨人资源·官方典藏"
         >
-          <div className="relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[714/678]">
+          <div className="home-jump-art relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[714/678]">
             <img
               src="/images/giant-button.webp"
               alt="巨人资源"
