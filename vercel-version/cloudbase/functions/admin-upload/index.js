@@ -1633,8 +1633,10 @@ async function handle(action, payload) {
       if (!current.userUid) throw httpError('该来信未绑定登录账号，无法发送站内回信', 409);
       const now = new Date().toISOString();
       const nextPayload = { ...current, adminReply: body, repliedAt: now, replyReadAt: null };
-      assertDbResult(await db.from(INBOX_COLLECTION).update({ payload: nextPayload, status: 'replied', updated_at: now }).eq('id', id));
-      return { ok: true, id, status: 'replied' };
+      // submission_inbox_status_check 只允许既有工作流状态；回信状态放在 payload 中，
+      // 记录本身沿用 published，既退出待处理收件箱，也不触发数据库约束错误。
+      assertDbResult(await db.from(INBOX_COLLECTION).update({ payload: nextPayload, status: 'published', updated_at: now }).eq('id', id));
+      return { ok: true, id, status: 'published' };
     }
     case 'inboxReplyList': {
       const rows = assertDbResult(await inboxDb().from(INBOX_COLLECTION).select('id,payload,updated_at').order('updated_at', { ascending: false }).limit(500));
