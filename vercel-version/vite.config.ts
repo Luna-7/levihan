@@ -100,8 +100,8 @@ export default defineConfig(() => {
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      // 新 SW 安装完成后立即接管；页面侧 controllerchange 会马上切到新 HTML，
-      // 不让旧页面继续引用已被部署清理的旧 hash chunk。
+      // 新 SW 自动激活并接管后续请求；当前页面不因 controllerchange 强制重载，
+      // 旧 chunk 失效时由 index.html 的加载错误监听定点自愈。
       injectRegister: 'auto',
       manifest: false,
       includeAssets: [
@@ -152,29 +152,15 @@ export default defineConfig(() => {
             method: 'POST',
           },
           {
-            // 文档导航始终先取线上最新版；断网/超时才回退到最近一次成功页面。
+            // 秒开优先：已有 HTML 立即返回，同时后台更新；首次无缓存才等待网络。
             urlPattern: ({ request, url, sameOrigin }) =>
               request.mode === 'navigate' &&
               sameOrigin &&
               !/^\/(?:api|admin|daxigua|save-hange|comics)(?:\/|$)/i.test(url.pathname),
-            handler: 'NetworkFirst',
+            handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'levihan-navigation-v1',
-              networkTimeoutSeconds: 4,
               expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 7 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // 未被 precache 覆盖的 Vite hash 分包按不可变资源处理；新版本文件名变化，
-            // 因而不会用旧内容冒充新 chunk，也不会每次导航重复下载。
-            urlPattern: ({ url, sameOrigin }) =>
-              sameOrigin &&
-              /^\/assets\/.*-[A-Za-z0-9_-]{8,}\.(?:js|css)$/i.test(url.pathname),
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'levihan-hashed-assets-v1',
-              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 30 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

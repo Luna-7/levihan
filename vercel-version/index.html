@@ -97,15 +97,9 @@
           if (CHUNK_RE.test(String((e && e.message) || ''))) safeReload();
         }, true);
 
-        if ('serviceWorker' in navigator) {
-          var hadController = !!navigator.serviceWorker.controller; // 首次安装为 false → 不刷
-          var swDone = false;
-          navigator.serviceWorker.addEventListener('controllerchange', function () {
-            if (!hadController || swDone) return;
-            swDone = true;
-            safeReload();
-          });
-        }
+        // controllerchange 不主动 reload：iOS 首屏刚打开时二次刷新会造成明显闪烁和卡顿。
+        // 新 HTML 由 navigation 的后台更新供下次打开使用；若旧页面真的请求到已删除
+        // chunk，上面的 preloadError/error 监听仍会立即 safeReload 自愈。
       })();
     </script>
     <title>利韩土豆仓</title>

@@ -221,8 +221,6 @@
   html.pwa-standalone .adventure-bottom-nav {
     bottom: 0 !important;
     background: #F6F1E3;
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
   }
   html.pwa-standalone .adventure-bottom-safe-area {
     background: #F6F1E3;
@@ -1454,6 +1452,12 @@ body.immersive-on .retro-frame-card > .absolute {
   html.ios-chrome .home-announcement-list .announcement-board {
     gap: 6px !important;
   }
+  html.ios-chrome .home-announcement-list {
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    scroll-snap-type: y mandatory;
+    touch-action: pan-y;
+  }
   html.ios-chrome .home-announcement-list time,
   html.ios-chrome .home-announcement-list .announcement-arrow {
     display: none !important;
@@ -1467,6 +1471,36 @@ body.immersive-on .retro-frame-card > .absolute {
   /* PWA 不在导航面板下额外留一条视觉空带，面板直接贴屏幕底边。 */
   html.pwa-standalone .adventure-bottom-safe-area {
     height: 0 !important;
+  }
+
+  /* PWA 高度充足：公告恢复网页同款信息密度与卡片比例，不使用 Chrome 的压缩行。 */
+  html.pwa-standalone .home-announcements {
+    flex-basis: 174px;
+    max-height: 174px !important;
+  }
+  html.pwa-standalone .home-announcement-region,
+  html.pwa-standalone .home-announcement-list {
+    height: 174px;
+    max-height: 174px;
+  }
+  html.pwa-standalone .home-announcement-list > .announcement-board {
+    flex-basis: 83px;
+    min-height: 83px;
+    height: 83px;
+    padding: 11px 14px !important;
+  }
+  html.pwa-standalone .home-announcement-list p {
+    display: -webkit-box !important;
+    margin-top: 4px !important;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+  }
+  html.pwa-standalone .home-announcement-list time,
+  html.pwa-standalone .home-announcement-list .announcement-arrow {
+    display: flex !important;
   }
 }
 
@@ -1504,7 +1538,6 @@ body.immersive-on .retro-frame-card > .absolute {
 
 /* 声明式类名模式：直接渲染即触发平滑呼出动效 */
 .modal-layer {
-  will-change: opacity, transform;
   animation: modalLayerIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -1548,7 +1581,6 @@ body.immersive-on .retro-frame-card > .absolute {
 .modal-layer .modal-box,
 .modal-layer .modal-content,
 .modal-layer .modal-card {
-  will-change: transform, opacity;
   transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1),
               opacity 0.26s cubic-bezier(0.16, 1, 0.3, 1);
 }

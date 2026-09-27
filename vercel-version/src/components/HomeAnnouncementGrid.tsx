@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, Megaphone, FileText, AlertCircle, ArrowRight } from 'lucide-react';
 import { soundManager } from '../utils/audio';
@@ -7,6 +7,7 @@ import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint'
 import { useAppShellStore } from '../stores/appShellStore';
 import { useAuthStore } from '../stores/authStore';
 import { getAccessToken } from '../utils/cloudbaseToken';
+import { scheduleNonCriticalTask } from '../utils/scheduleNonCriticalTask';
 
 /** 与后台 announcementSave 的字段契约保持一致（id/tag/title/author/time/link/description/image） */
 export interface AnnouncementItem {
@@ -54,6 +55,8 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
   const [showDetailModal, setShowDetailModal] = useState<AnnouncementItem | null>(null);
+  const [expandedImage, setExpandedImage] = useState('');
+  const announcementListRef = useRef<HTMLDivElement>(null);
   const [showProposal, setShowProposal] = useState(false);
   const [proposal, setProposal] = useState({ title: '', time: '', author: '', link: '', description: '' });
   const [proposalBusy, setProposalBusy] = useState(false);
@@ -100,7 +103,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
     };
 
     // 首次加载 + 定时轮询（管理台改动后无需刷新页面即可同步）
-    load(false);
+    const cancelInitialLoad = scheduleNonCriticalTask(() => load(false), 650);
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') load(true);
     }, 120_000);
@@ -113,6 +116,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
 
     return () => {
       cancelled = true;
+      cancelInitialLoad();
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
@@ -140,6 +144,11 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
     () => HANGE_TEA_LINES[Math.floor(Math.random() * HANGE_TEA_LINES.length)],
     [showDetailModal]
   );
+
+  // 公告刷新后必须从第一条顶部开始，避免 iOS 恢复滚动位置后露出半张卡片。
+  useEffect(() => {
+    announcementListRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+  }, [announcements]);
 
   const handleActionClick = (item: AnnouncementItem) => {
     soundManager.playScrollOpen();
@@ -234,6 +243,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
           避免底图在宽屏上被压扁。上限 204px 防止桌面端卡片过高。
          ==================================================== */}
       <div
+        ref={announcementListRef}
         className="home-announcement-list w-full flex flex-col gap-2 sm:gap-2.5 max-w-md sm:max-w-2xl lg:max-w-3xl mx-auto no-scrollbar"
         style={{ containerType: 'inline-size' }}
       >
@@ -379,11 +389,21 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
 
               {/* 封面图 */}
               {showDetailModal.image && (
-                <img
-                  src={showDetailModal.image}
-                  alt=""
-                  className="w-full aspect-video object-cover rounded-lg border border-[#D5C19A] mb-3 shadow-xs"
-                />
+                <button
+                  type="button"
+                  className="group relative block w-full mb-3 cursor-zoom-in"
+                  onClick={() => setExpandedImage(showDetailModal.image || '')}
+                  aria-label="放大查看公告图片"
+                >
+                  <img
+                    src={showDetailModal.image}
+                    alt={showDetailModal.title}
+                    className="w-full aspect-video object-cover rounded-lg border border-[#D5C19A] shadow-xs"
+                  />
+                  <span className="absolute right-2 bottom-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-bold text-white opacity-90">
+                    点击放大
+                  </span>
+                </button>
               )}
 
               {/* 公告正文（管理台 description） */}
@@ -429,6 +449,32 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
             {/* 底轴 */}
             <div className="rules-scroll-rod rules-scroll-rod-bottom z-20 w-full" aria-hidden="true" />
           </div>
+        </div>,
+        document.body
+      )}
+
+      {typeof document !== 'undefined' && expandedImage && createPortal(
+        <div
+          className="fixed inset-0 z-[1700] flex items-center justify-center bg-black/90 p-3 sm:p-6 cursor-zoom-out"
+          role="dialog"
+          aria-modal="true"
+          aria-label="公告图片预览"
+          onClick={() => setExpandedImage('')}
+        >
+          <button
+            type="button"
+            className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 flex h-9 w-9 items-center justify-center rounded-full border border-white/50 bg-black/70 text-lg text-white"
+            onClick={() => setExpandedImage('')}
+            aria-label="关闭图片预览"
+          >
+            ✕
+          </button>
+          <img
+            src={expandedImage}
+            alt={showDetailModal?.title || '公告图片'}
+            className="max-h-[calc(100dvh-32px)] max-w-full object-contain shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          />
         </div>,
         document.body
       )}

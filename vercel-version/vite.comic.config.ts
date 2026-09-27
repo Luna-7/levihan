@@ -61,21 +61,10 @@ export default defineConfig(() => {
             },
             {
               urlPattern: ({ request, sameOrigin }) => request.mode === 'navigate' && sameOrigin,
-              handler: 'NetworkFirst',
+              handler: 'StaleWhileRevalidate',
               options: {
                 cacheName: 'levihan-comic-navigation-v1',
-                networkTimeoutSeconds: 4,
                 expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 7 },
-                cacheableResponse: { statuses: [0, 200] },
-              },
-            },
-            {
-              urlPattern: ({ url, sameOrigin }) =>
-                sameOrigin && /^\/assets\/.*-[A-Za-z0-9_-]{8,}\.(?:js|css)$/i.test(url.pathname),
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'levihan-comic-hashed-assets-v1',
-                expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 30 },
                 cacheableResponse: { statuses: [0, 200] },
               },
             },

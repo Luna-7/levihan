@@ -7,6 +7,7 @@ import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint'
 import { soundManager } from '../utils/audio';
 import { useAppShellStore } from '../stores/appShellStore';
 import { CardPatternOverlay } from './CardPatternOverlay';
+import { scheduleNonCriticalTask } from '../utils/scheduleNonCriticalTask';
 
 type BiteItem = {
   id: string;
@@ -68,7 +69,7 @@ export const RandomLeviHanBite: React.FC<{
 
   useEffect(() => {
     let cancelled = false;
-    Promise.allSettled([
+    const cancelSchedule = scheduleNonCriticalTask(() => { void Promise.allSettled([
       cosService.loadGoodsList(), cosService.loadNovelList(), cosService.loadArchiveData(),
       fetchBackend(ADMIN_UPLOAD_ENDPOINT, { method:'POST', headers:{'Content-Type':'text/plain;charset=UTF-8'}, body:JSON.stringify({action:'forumList'}) }).then((r) => r.json()),
     ]).then((results) => {
@@ -89,8 +90,8 @@ export const RandomLeviHanBite: React.FC<{
       }
       setPool(next);
       setSelected(pick(next) || null);
-    });
-    return () => { cancelled = true; };
+    }); }, 1100);
+    return () => { cancelled = true; cancelSchedule(); };
   }, []);
 
   const pair = useMemo(() => goods.length >= 2 ? [goods[pairStart % goods.length], goods[(pairStart + 1) % goods.length]] : goods.slice(0, 2), [goods, pairStart]);

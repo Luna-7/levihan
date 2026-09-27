@@ -70,15 +70,7 @@
           if (CHUNK_RE.test(String((e && e.message) || ''))) safeReload();
         }, true);
 
-        if ('serviceWorker' in navigator) {
-          var hadController = !!navigator.serviceWorker.controller;
-          var swDone = false;
-          navigator.serviceWorker.addEventListener('controllerchange', function () {
-            if (!hadController || swDone) return;
-            swDone = true;
-            safeReload();
-          });
-        }
+        // SW 接管本身不刷新首屏；旧 chunk 加载失败时仍由上方错误监听自动自愈。
       })();
     </script>
     <title>403 Forbidden</title>

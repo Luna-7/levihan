@@ -6,6 +6,7 @@ import { fmtTime } from '../utils/forumFormat';
 import type { ForumPost } from './RestaurantForum';
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { useAppShellStore } from '../stores/appShellStore';
+import { scheduleNonCriticalTask } from '../utils/scheduleNonCriticalTask';
 
 /** 三种更新来源的归类 */
 type UpdateKind = 'novel' | 'relay';
@@ -134,7 +135,7 @@ export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, o
         });
     };
 
-    load();
+    const cancelInitialLoad = scheduleNonCriticalTask(load, 1500);
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') load();
     }, 120_000);
@@ -142,6 +143,7 @@ export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, o
     document.addEventListener('visibilitychange', onVis);
     return () => {
       cancelled = true;
+      cancelInitialLoad();
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVis);
     };

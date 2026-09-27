@@ -5,6 +5,7 @@ import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { useAuthStore } from './stores/authStore';
 import { setupIOSViewportGuard } from './utils/iosViewportGuard';
 import { setupPwaAutoUpdate } from './utils/pwaUpdate';
+import { scheduleNonCriticalTask } from './utils/scheduleNonCriticalTask';
 import './index.css';
 
 setupIOSViewportGuard();
@@ -19,7 +20,6 @@ document.addEventListener('visibilitychange', syncPageVisibilityClass, { passive
 if (window.location.pathname.replace(/\/$/, '') === '/comics') {
   window.location.replace('/?tab=resources');
 } else {
-  void useAuthStore.getState().refreshProfile();
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <AppErrorBoundary>
@@ -27,4 +27,7 @@ if (window.location.pathname.replace(/\/$/, '') === '/comics') {
       </AppErrorBoundary>
     </StrictMode>,
   );
+  scheduleNonCriticalTask(() => {
+    void useAuthStore.getState().refreshProfile();
+  }, 900);
 }
