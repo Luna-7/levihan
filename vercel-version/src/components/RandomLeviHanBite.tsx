@@ -121,7 +121,7 @@ export const RandomLeviHanBite: React.FC<{
   return <section className="home-quick-action-shell home-random-bite mx-2.5 sm:mx-4 lg:mx-6 mt-1.5">
     <button type="button" onClick={() => selected && setDetailOpen(true)} className="home-quick-card relative block h-full w-full overflow-hidden rounded-xl bg-[#FAF3E3]/95 pl-3 pr-16 shadow-[0_2px_7px_rgba(140,108,71,.18)] transition-transform hover:bg-[#FFF8E9] active:scale-[.99] cursor-pointer">
       <CardPatternOverlay opacity={0.07} mode="multiply" />
-      {pair[0] && <img src={cosService.getGoodsThumbUrl(pair[0].file, 240)} alt={pair[0].title || '随机人物'} className="absolute bottom-0 right-1 h-[92%] w-14 object-contain" loading="lazy" decoding="async" />}
+      {pair[0] && <img src={cosService.getGoodsThumbUrl(pair[0].file, 240)} alt={pair[0].title || '随机人物'} className="home-quick-character absolute right-1 object-contain object-bottom" loading="lazy" decoding="async" />}
       <span className="relative z-10 flex h-full min-w-0 flex-col items-start justify-center text-left">
         <span className="font-serif-title text-sm sm:text-base font-black text-[#1E4334]">🎲 嗑一口利韩</span>
         <span className="mt-0.5 flex items-center gap-1 text-[9px] text-[#8C6C47]">点击抽取今日份利韩 <b className="text-[10px]">›</b></span>

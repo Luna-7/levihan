@@ -153,6 +153,13 @@
   .home-quick-actions > .home-quick-action-shell > .home-quick-card {
     height: 100%;
   }
+  .home-quick-character {
+    top: 6px;
+    bottom: 3px;
+    width: clamp(44px, 18%, 62px);
+    height: calc(100% - 9px);
+    max-width: 24%;
+  }
   html.pwa-standalone .home-quick-actions {
     grid-template-columns: minmax(0, 1fr);
     grid-auto-rows: 72px;
@@ -164,7 +171,10 @@
     padding-right: 76px;
   }
   html.pwa-standalone .home-quick-actions .home-quick-card img {
-    width: 68px;
+    top: 7px;
+    bottom: 4px;
+    width: clamp(52px, 20%, 68px);
+    height: calc(100% - 11px);
   }
   html.pwa-standalone .home-quick-actions .home-quick-card .font-serif-title {
     font-size: 18px !important;

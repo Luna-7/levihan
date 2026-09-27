@@ -570,6 +570,57 @@
   }
 
   /* ============================================================
+   * PDF 单独加密：沿用工具箱既有的本地逐页渲染流程，不上传服务器。
+   * ============================================================ */
+  async function encryptPdfOnly() {
+    var file = $('tk-encryptPdfFile').files[0];
+    var password = val('tk-encryptPassword') || CONFIG.pdfPassword;
+    if (!file) { msg('tk-encrypt-msg', 'err', '请先选择 PDF 文件。'); return; }
+
+    setBusy('tk-encryptPdf', true, '加密中…');
+    clearMsg('tk-encrypt-msg');
+    msg('tk-encrypt-msg', 'info', '正在本地重新封装并加密，请勿关闭页面…');
+
+    try {
+      needLib('jspdf');
+      needLib('pdfjs');
+      var pdf = await getPdfDoc(file);
+      setBar('tk-encrypt-bar', 'tk-encrypt-bar-text', 0, pdf.numPages, '页');
+      var oldPassword = CONFIG.pdfPassword;
+      CONFIG.pdfPassword = password;
+      var doc = null;
+      var done = 0;
+      try {
+        await eachPageCanvas([file], [], function (canvas) {
+          if (!doc) {
+            doc = createEncryptedPdf(canvas);
+            addCanvasToPdf(doc, canvas, true);
+          } else {
+            addCanvasToPdf(doc, canvas, false);
+          }
+          canvas.width = 0;
+          canvas.height = 0;
+          done += 1;
+          setBar('tk-encrypt-bar', 'tk-encrypt-bar-text', done, pdf.numPages, '页');
+        });
+      } finally {
+        CONFIG.pdfPassword = oldPassword;
+      }
+      var stem = cleanName(file.name.replace(/\.pdf$/i, '')) || 'PDF';
+      var outputName = stem + '_加密.pdf';
+      downloadBlob(doc.output('blob'), outputName);
+      msg('tk-encrypt-msg', 'ok', '✓ 已加密下载：' + outputName + '（' + done + ' 页，密码 ' + password + '）');
+      resetBar('tk-encrypt-bar', 'tk-encrypt-bar-text');
+    } catch (err) {
+      console.error(err);
+      msg('tk-encrypt-msg', 'err', '✗ PDF 加密失败：' + (err.message || err));
+      resetBar('tk-encrypt-bar', 'tk-encrypt-bar-text');
+    } finally {
+      setBusy('tk-encryptPdf', false);
+    }
+  }
+
+  /* ============================================================
    * ② PDF 转图片
    * ============================================================ */
   async function pdfToImages() {
@@ -828,6 +879,7 @@
     $('tk-customWarning').addEventListener('change', toggleCustomWarning);
 
     $('tk-imageFiles').addEventListener('change', function () { updateMixedLabel('tk-imageFiles', 'tk-imageFilesName'); });
+    $('tk-encryptPdfFile').addEventListener('change', function () { updateFileLabel('tk-encryptPdfFile', 'tk-encryptPdfFileName'); });
     $('tk-pdfFile').addEventListener('change', function () { updateFileLabel('tk-pdfFile', 'tk-pdfFileName'); });
     $('tk-stripFiles').addEventListener('change', function () { updateFileLabel('tk-stripFiles', 'tk-stripFilesName'); });
     $('tk-lineartFiles').addEventListener('change', function () { updateFileLabel('tk-lineartFiles', 'tk-lineartFilesName'); });
@@ -841,6 +893,7 @@
       });
 
     $('tk-makePdf').addEventListener('click', makeEncryptedPdf);
+    $('tk-encryptPdf').addEventListener('click', encryptPdfOnly);
     $('tk-splitPdf').addEventListener('click', pdfToImages);
     $('tk-makeStrip').addEventListener('click', processStrip);
     $('tk-processLineart').addEventListener('click', processLineart);

@@ -216,10 +216,10 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, 
             aria-hidden="true"
           />
           <div
-            className="absolute left-[12.5%] h-[3px] -mt-px bg-[#C52B2B] rounded-full transition-all duration-[650ms] ease-out"
+            className="absolute left-[6%] h-[3px] -mt-px bg-[#C52B2B] rounded-full transition-all duration-[650ms] ease-out"
             style={{
               top: LINE_TOP,
-              width: `${(safeIndex / (STAGES.length - 1)) * 75}%`,
+              width: `${Math.max(0, NODE_X[safeIndex] - 6)}%`,
             }}
             aria-hidden="true"
           />

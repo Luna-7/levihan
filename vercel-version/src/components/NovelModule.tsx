@@ -87,12 +87,21 @@ export const NovelModule: React.FC<Props> = ({
   /* 当前登录者 uid：卡片上「编辑」按钮只对 uid 匹配的那几篇显示 */
   const profile = useAuthStore((state) => state.profile);
   const myUid = profile?.uid || null;
+  const submissionRequest = useAppShellStore((state) => state.submissionRequest);
+  const clearSubmissionRequest = useAppShellStore((state) => state.clearSubmissionRequest);
 
   useEffect(() => {
     if (initialReadingNovel) {
       setReading(initialReadingNovel);
     }
   }, [initialReadingNovel]);
+
+  useEffect(() => {
+    if (submissionRequest !== 'novel') return;
+    setEditingNovel(null);
+    setShowUpload(true);
+    clearSubmissionRequest();
+  }, [submissionRequest, clearSubmissionRequest]);
 
 
   // 上传弹窗打开时：作者名默认填当前登录昵称（可直接改成笔名）

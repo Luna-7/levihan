@@ -541,11 +541,12 @@
     <!-- ================= 文件工具箱 ================= -->
     <div class="admin-page-head hide" data-admin-page="manga" data-sub="toolkit">
       <h2>🧰 文件工具箱</h2>
-      <div class="muted">群内资源处理：图片/文件转加密 PDF、PDF 拆图、加长白条、线条变色、文件名生成。全部在浏览器本地运算，不会上传到服务器。</div>
+      <div class="muted">群内资源处理：图片/文件转加密 PDF、PDF 单独加密、PDF 拆图、加长白条、线条变色、文件名生成。全部在浏览器本地运算，不会上传到服务器。</div>
     </div>
     <div class="panel hide" id="toolkit-panel" data-admin-page="manga" data-sub="toolkit">
       <div class="tool-tabs" id="tk-tabs" role="tablist" aria-label="工具切换">
         <button type="button" class="tool-tab active" data-tool="pdf" role="tab">🖼 图片/文件转加密 PDF</button>
+        <button type="button" class="tool-tab" data-tool="encrypt" role="tab">🔐 PDF 加密</button>
         <button type="button" class="tool-tab" data-tool="split" role="tab">📄 PDF 转图片</button>
         <button type="button" class="tool-tab" data-tool="strip" role="tab">⬜ 加长白条</button>
         <button type="button" class="tool-tab" data-tool="recolor" role="tab">🎨 线条变色</button>
@@ -589,9 +590,32 @@
         <div class="note">生成物统一加口令 <b>levihan</b>。勾选水印时在每页右下角标注来源声明；不勾选则仅添加密码与标准化文件名。PDF 会先按页渲染成图再合并加密；一次选到多个 PDF（或图片与 PDF 混选）时，会先询问「合并为一份」还是「分别导出」。</div>
       </div>
 
-      <!-- ② PDF 转图片 -->
+      <!-- ② PDF 单独加密 -->
+      <div class="tool-page" data-tool-page="encrypt" role="tabpanel">
+        <h2><span class="n">2</span> PDF 加密</h2>
+        <div class="grid">
+          <div class="f span2">
+            <label for="tk-encryptPdfFile">上传 PDF <span class="tag">单文件，本地处理，不会上传服务器</span></label>
+            <input type="file" id="tk-encryptPdfFile" accept=".pdf,application/pdf">
+            <div class="tool-file-name" id="tk-encryptPdfFileName">未选择任何文件</div>
+          </div>
+          <div class="f">
+            <label for="tk-encryptPassword">打开密码</label>
+            <input type="text" id="tk-encryptPassword" value="levihan" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn-gold" id="tk-encryptPdf">加密并下载</button>
+        </div>
+        <div class="bar"><i id="tk-encrypt-bar"></i></div>
+        <div class="tool-bar-text" id="tk-encrypt-bar-text"></div>
+        <div class="msg" id="tk-encrypt-msg"></div>
+        <div class="note">默认密码为 <b>levihan</b>，可在生成前修改。PDF 会在浏览器本地逐页重新封装并添加打开密码。</div>
+      </div>
+
+      <!-- ③ PDF 转图片 -->
       <div class="tool-page" data-tool-page="split" role="tabpanel">
-        <h2><span class="n">2</span> PDF 转图片</h2>
+        <h2><span class="n">3</span> PDF 转图片</h2>
         <div class="f">
           <label for="tk-pdfFile">上传 PDF <span class="tag">单文件，本地按页拆图</span></label>
           <input type="file" id="tk-pdfFile" accept=".pdf,application/pdf">
