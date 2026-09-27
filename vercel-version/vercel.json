@@ -35,13 +35,13 @@
     {
       "src": "^/admin(?:/.*)?$",
       "has": [{ "type": "host", "value": "www.levihan.asia" }],
-      "dest": "https://admin.levihan.asia/",
+      "dest": "https://admin.levihan.asia/admin/index.html",
       "statusCode": 308
     },
     {
       "src": "^/admin(?:/.*)?$",
       "has": [{ "type": "host", "value": "levihan.asia" }],
-      "dest": "https://admin.levihan.asia/",
+      "dest": "https://admin.levihan.asia/admin/index.html",
       "statusCode": 308
     },
     { "src": "^/comics/?$", "dest": "/?tab=resources", "statusCode": 308 },
