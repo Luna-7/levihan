@@ -51,13 +51,50 @@ type SecureComicReaderProps = {
 
 type Phase = 'locked' | 'working' | 'ready';
 
-// PDF.js 绘制会占用主线程和大块位图内存；滚动时只允许一页实际绘制。
-let renderQueue: Promise<void> = Promise.resolve();
-const queuePageRender = (draw: () => Promise<void>): Promise<void> => {
-  const next = renderQueue.catch(() => undefined).then(draw);
-  renderQueue = next.catch(() => undefined);
-  return next;
+// PDF.js 绘制会占用主线程和大块位图内存；每个阅读器实例独立排队，
+// 关闭阅读器时可以一次性取消旧实例的任务，不让旧漫画继续占用主线程。
+type QueuedRender = {
+  cancelled: boolean;
+  draw: () => Promise<void>;
 };
+
+class ComicRenderScheduler {
+  private queue: QueuedRender[] = [];
+  private active: QueuedRender | null = null;
+  private running = false;
+
+  schedule(draw: () => Promise<void>): () => void {
+    const item: QueuedRender = { cancelled: false, draw };
+    this.queue.push(item);
+    this.pump();
+    return () => {
+      item.cancelled = true;
+      this.queue = this.queue.filter((queued) => queued !== item);
+    };
+  }
+
+  cancelAll() {
+    this.queue.forEach((item) => { item.cancelled = true; });
+    this.queue = [];
+    if (this.active) this.active.cancelled = true;
+  }
+
+  private pump() {
+    if (this.running) return;
+    const item = this.queue.shift();
+    if (!item) return;
+    this.running = true;
+    this.active = item;
+    Promise.resolve()
+      .then(() => item.cancelled ? undefined : item.draw())
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.active === item) this.active = null;
+        this.running = false;
+        this.pump();
+      });
+  }
+}
 
 /** 密文直链：comic_vault/{id}_secure.txt */
 export const getSecureVaultUrl = (book: DoujinBookItem): string =>
@@ -76,11 +113,17 @@ function looksLikePdf(bytes: Uint8Array): boolean {
 }
 
 /* ============================================================================
- * 单页 Canvas：进入视口才画，远离视口就把画布内容抹掉
- * 抹掉有两个作用：① 长本子不会把几十张全尺寸画布同时留在内存里；
- *                ② 想靠"一路滚到底再批量另存"来整本扒走的人拿不到完整内容。
+ * 单页 Canvas：进入滑动窗口才画，离开窗口一段时间后才释放。
+ * 快速反向滚动时保留已完成的 Canvas，优先保证 iOS 惯性滚动稳定。
  * ========================================================================== */
-const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pageNumber }) => {
+const SecureCanvasPage: React.FC<{
+  doc: any;
+  pageNumber: number;
+  scheduler: ComicRenderScheduler;
+}> = ({ doc, pageNumber, scheduler }) => {
+  const OBSERVER_ROOT_MARGIN = '100% 0px 100% 0px';
+  const LEAVE_GRACE_MS = 1800;
+  const RELEASE_DELAY_MS = 1200;
   const holderRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [visible, setVisible] = useState(false);
@@ -88,8 +131,12 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
   const [failed, setFailed] = useState(false);
   const [rendered, setRendered] = useState(false);
   const leaveTimerRef = useRef<number | null>(null);
+  const renderedRef = useRef(false);
+  const renderingRef = useRef(false);
+  const pageRef = useRef<any>(null);
 
-  // 提前两屏开始画，并延迟清理离开的页面，兼顾 iOS 惯性滚动与位图内存。
+  // 只提前约 1.2 屏开始画，避免一次性创建过多高分辨率 Canvas。
+  // 已画好的页面不会因为刚离开范围就被清空；延迟释放形成约前后 2–3 页的滑动窗口。
   useEffect(() => {
     const el = holderRef.current;
     if (!el) return undefined;
@@ -100,9 +147,9 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
         setVisible(true);
         return;
       }
-      // 给 iOS 惯性滚动留出缓冲区，避免边界抖动导致 Canvas 清空后立刻重绘。
-      leaveTimerRef.current = window.setTimeout(() => setVisible(false), 750);
-    }, { root: null, rootMargin: '200% 0px 200% 0px', threshold: 0 });
+      if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = window.setTimeout(() => setVisible(false), LEAVE_GRACE_MS);
+    }, { root: null, rootMargin: OBSERVER_ROOT_MARGIN, threshold: 0 });
     observer.observe(el);
     return () => {
       observer.disconnect();
@@ -111,17 +158,19 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
   }, []);
 
   useEffect(() => {
-    if (!doc || !visible) return undefined;
+    if (!doc || !visible || renderedRef.current || renderingRef.current) return undefined;
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
 
     let cancelled = false;
     let task: { cancel: () => void; promise: Promise<void> } | null = null;
+    renderingRef.current = true;
 
     const draw = async () => {
       try {
-        const page = await doc.getPage(pageNumber);
+        const page = pageRef.current || await doc.getPage(pageNumber);
         if (cancelled) return;
+        pageRef.current = page;
         const baseViewport = page.getViewport({ scale: 1 });
         const displayWidth = Math.min(holderRef.current?.clientWidth || window.innerWidth, baseViewport.width);
         const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
@@ -134,24 +183,30 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
 
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
-        setAspect(viewport.height / viewport.width);
+        // 先确定占位比例，再开始绘制；Canvas 显示前尺寸不会再从默认值跳变。
+        setAspect((current) => current === 1.4 ? viewport.height / viewport.width : current);
 
         task = page.render({ canvasContext: ctx, viewport });
         await task.promise;
-        if (!cancelled) setRendered(true);
+        if (!cancelled) {
+          renderedRef.current = true;
+          setRendered(true);
+        }
       } catch (err: any) {
         // 渲染被打断（快速滚动、切页、卸载）是常态，不算失败
         if (err && (err.name === 'RenderingCancelledException' || err.name === 'AbortException')) return;
         if (!cancelled) setFailed(true);
+      } finally {
+        renderingRef.current = false;
       }
     };
 
-    void queuePageRender(async () => {
-      if (!cancelled) await draw();
-    });
+    const cancelQueued = scheduler.schedule(draw);
 
     return () => {
       cancelled = true;
+      cancelQueued();
+      renderingRef.current = false;
       try {
         task?.cancel();
       } catch {
@@ -160,16 +215,36 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
     };
   }, [doc, pageNumber, visible]);
 
-  // 离开视口后清空画布：抹掉像素，同时释放这块位图内存
+  // 只有真正离开滑动窗口一段时间后才释放；快速反向滚动会保留已画好的 Canvas。
   useEffect(() => {
     if (visible) return;
+    if (renderedRef.current || renderingRef.current) {
+      if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = window.setTimeout(() => {
+        if (renderingRef.current || visible || !renderedRef.current) return;
+        const canvas = canvasRef.current;
+        if (canvas?.width) {
+          const ctx = canvas.getContext('2d');
+          ctx?.clearRect(0, 0, canvas.width, canvas.height);
+          canvas.width = 0;
+          canvas.height = 0;
+        }
+        try {
+          pageRef.current?.cleanup?.();
+        } catch {
+          /* PDF.js 页面已清理时忽略 */
+        }
+        pageRef.current = null;
+        renderedRef.current = false;
+        setRendered(false);
+      }, RELEASE_DELAY_MS);
+      return () => {
+        if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
+      };
+    }
     const canvas = canvasRef.current;
-    if (!canvas || !canvas.width) return;
-    const ctx = canvas.getContext('2d');
-    ctx?.clearRect(0, 0, canvas.width, canvas.height);
-    canvas.width = 0;
-    canvas.height = 0;
-    setRendered(false);
+    if (!canvas || !canvas.width) return undefined;
+    return undefined;
   }, [visible]);
 
   return (
@@ -187,7 +262,7 @@ const SecureCanvasPage: React.FC<{ doc: any; pageNumber: number }> = ({ doc, pag
         <canvas
           ref={canvasRef}
           className="w-full h-auto block select-none"
-          style={{ display: visible && rendered ? 'block' : 'none', WebkitTouchCallout: 'none' }}
+          style={{ display: rendered ? 'block' : 'none', WebkitTouchCallout: 'none' }}
           draggable={false}
           onContextMenu={(e) => e.preventDefault()}
         />
@@ -204,6 +279,8 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
   const [doc, setDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
   const docRef = useRef<any>(null);
+  const schedulerRef = useRef<ComicRenderScheduler | null>(null);
+  if (!schedulerRef.current) schedulerRef.current = new ComicRenderScheduler();
   const autoAttemptedRef = useRef(false);
 
   /* ---------------- 反爬与防手滑：只在阅读器挂载期间生效 ---------------- */
@@ -239,6 +316,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
   // 组件卸载时销毁 pdf 文档，释放 worker 里的那份数据
   useEffect(
     () => () => {
+      schedulerRef.current?.cancelAll();
       try {
         docRef.current?.destroy();
       } catch {
@@ -445,7 +523,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
 
       <div className="pt-3 space-y-3">
         {pages.map((n) => (
-          <SecureCanvasPage key={n} doc={doc} pageNumber={n} />
+          <SecureCanvasPage key={n} doc={doc} pageNumber={n} scheduler={schedulerRef.current!} />
         ))}
       </div>
 

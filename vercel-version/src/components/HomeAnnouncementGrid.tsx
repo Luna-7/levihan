@@ -103,7 +103,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
     };
 
     // 首次加载 + 定时轮询（管理台改动后无需刷新页面即可同步）
-    const cancelInitialLoad = scheduleNonCriticalTask(() => load(false), 650);
+    const cancelInitialLoad = scheduleNonCriticalTask(() => load(false), 0, 0);
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') load(true);
     }, 120_000);
@@ -272,7 +272,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
               className={`announcement-board announcement-board--${tone} group relative hover:shadow-md transition-all duration-200 cursor-pointer flex items-center justify-between gap-3 sm:gap-4 active:scale-[0.99]`}
             >
               {/* 左侧内容区：徽章 + 文本 + 日期 */}
-              <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
+              <div className="announcement-board-content flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
                 {/* 类别胶囊标 */}
                 <div
                   className={`announcement-badge mt-0.5 ${badgeBg} text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 shrink-0`}
@@ -298,7 +298,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
 
                   {/* 公告正文（管理台 description） */}
                   {item.description && (
-                    <p className="font-serif-title text-xs sm:text-sm text-[#665343] mt-1.5 line-clamp-2 leading-normal">
+                    <p className="font-serif-title text-xs sm:text-sm text-[#665343] mt-1.5 line-clamp-2 leading-normal min-w-0">
                       {item.description}
                     </p>
                   )}

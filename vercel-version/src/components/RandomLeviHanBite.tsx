@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cosService } from '../services/cosClient';
 import type { GoodsItem } from '../types';
@@ -75,12 +75,14 @@ export const RandomLeviHanBite: React.FC<{
     ]).then((results) => {
       if (cancelled) return;
       const next: BiteItem[] = TRIVIA.map((detail, index) => ({ id:`trivia-${index}`, kind:'trivia', label:'琐事', title:'LeviHan 琐事', detail, source:'LeviHan Wiki · Trivia（外链）', externalUrl:WIKI_URL }));
+      let nextGoods: GoodsItem[] | null = null;
+      let nextPairStart: number | null = null;
       if (results[0].status === 'fulfilled') {
         const loadedGoods = results[0].value;
-        setGoods(loadedGoods);
+        nextGoods = loadedGoods;
         // 每次页面重新加载时，从 12、34、56…这类相邻偶数配对中随机抽取一组。
         const pairCount = Math.max(1, Math.floor(loadedGoods.length / 2));
-        setPairStart(Math.floor(Math.random() * pairCount) * 2);
+        nextPairStart = Math.floor(Math.random() * pairCount) * 2;
       }
       if (results[1].status === 'fulfilled') (results[1].value as GroupNovel[]).forEach((novel) => next.push({ id:`novel-${novel.id}`, kind:novel.isRelayCompiled?'anthology':'novel', label:novel.isRelayCompiled?'合订本':'小说', title:novel.title, detail:novel.authorNote || `${novel.author} · ${novel.chars || 0} 字`, source:`站内${novel.isRelayCompiled?'接龙合订本':'小说'} · ${novel.author}`, targetId:novel.id }));
       if (results[2].status === 'fulfilled') (results[2].value as DoujinBookItem[]).filter((book) => (book.category || '') === '插画集').forEach((book) => next.push({ id:`art-${book.id}`, kind:'illustration', label:'插画', title:book.titleZh, detail:`${book.circle} · ${(book.tags || []).join(' · ') || '利韩插画集'}`, source:`站内插画集 · ${book.circle}`, targetId:book.id }));
@@ -88,9 +90,13 @@ export const RandomLeviHanBite: React.FC<{
         const posts = Array.isArray(results[3].value?.posts) ? results[3].value.posts : [];
         posts.filter((post: any) => post?.category === 'links').forEach((post: any) => next.push({ id:`rec-${post.id}`, kind:'recommend', label:'安利墙', title:post.title || post.link?.ogTitle || '同好安利', detail:post.body || post.link?.ogDescription || '来自同好的站外作品推荐', source:`站内安利墙 · ${post.author || '同好'}`, targetId:post.id }));
       }
-      setPool(next);
-      setSelected(pick(next) || null);
-    }); }, 1100);
+      startTransition(() => {
+        if (nextGoods) setGoods(nextGoods);
+        if (nextPairStart !== null) setPairStart(nextPairStart);
+        setPool(next);
+        setSelected(pick(next) || null);
+      });
+    }); }, 0, 1);
     return () => { cancelled = true; cancelSchedule(); };
   }, []);
 

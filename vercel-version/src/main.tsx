@@ -29,5 +29,5 @@ if (window.location.pathname.replace(/\/$/, '') === '/comics') {
   );
   scheduleNonCriticalTask(() => {
     void useAuthStore.getState().refreshProfile();
-  }, 900);
+  }, 0, 3);
 }
