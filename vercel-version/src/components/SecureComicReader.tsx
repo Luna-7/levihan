@@ -96,6 +96,38 @@ class ComicRenderScheduler {
   }
 }
 
+type RenderedCanvasEntry = { lastUsed: number; release: () => boolean };
+
+/** 只保留当前页及邻近页，避免整本漫画的 Canvas 长期占用内存。 */
+class ComicCanvasWindow {
+  private readonly maxPages = 3;
+  private entries = new Map<number, RenderedCanvasEntry>();
+
+  markRendered(pageNumber: number, release: () => boolean) {
+    this.entries.set(pageNumber, { lastUsed: performance.now(), release });
+    this.evict(pageNumber);
+  }
+
+  touch(pageNumber: number) {
+    const entry = this.entries.get(pageNumber);
+    if (entry) entry.lastUsed = performance.now();
+    this.evict(pageNumber);
+  }
+
+  remove(pageNumber: number) { this.entries.delete(pageNumber); }
+
+  private evict(currentPage: number) {
+    while (this.entries.size > this.maxPages) {
+      const candidates = [...this.entries.entries()]
+        .filter(([pageNumber]) => pageNumber !== currentPage)
+        .sort(([, a], [, b]) => a.lastUsed - b.lastUsed);
+      const oldest = candidates[0];
+      if (!oldest || !oldest[1].release()) return;
+      this.entries.delete(oldest[0]);
+    }
+  }
+}
+
 /** 密文直链：comic_vault/{id}_secure.txt */
 export const getSecureVaultUrl = (book: DoujinBookItem): string =>
   cosService.getObjectUrl(`${VAULT_DIR}/${String(book.id).replace(/[^A-Za-z0-9_-]/g, '')}_secure.txt`);
@@ -120,7 +152,8 @@ const SecureCanvasPage: React.FC<{
   doc: any;
   pageNumber: number;
   scheduler: ComicRenderScheduler;
-}> = ({ doc, pageNumber, scheduler }) => {
+  canvasWindow: ComicCanvasWindow;
+}> = ({ doc, pageNumber, scheduler, canvasWindow }) => {
   const OBSERVER_ROOT_MARGIN = '100% 0px 100% 0px';
   const LEAVE_GRACE_MS = 1800;
   const RELEASE_DELAY_MS = 1200;
@@ -134,6 +167,33 @@ const SecureCanvasPage: React.FC<{
   const renderedRef = useRef(false);
   const renderingRef = useRef(false);
   const pageRef = useRef<any>(null);
+  const visibleRef = useRef(false);
+  const releaseRequestedRef = useRef(false);
+
+  const releaseCanvasIfSafe = () => {
+    if (visibleRef.current || renderingRef.current) {
+      releaseRequestedRef.current = true;
+      return false;
+    }
+    const canvas = canvasRef.current;
+    if (canvas?.width) {
+      const ctx = canvas.getContext('2d');
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    try {
+      pageRef.current?.cleanup?.();
+    } catch {
+      /* PDF.js 页面已清理时忽略 */
+    }
+    pageRef.current = null;
+    renderedRef.current = false;
+    releaseRequestedRef.current = false;
+    canvasWindow.remove(pageNumber);
+    setRendered(false);
+    return true;
+  };
 
   // 只提前约 1.2 屏开始画，避免一次性创建过多高分辨率 Canvas。
   // 已画好的页面不会因为刚离开范围就被清空；延迟释放形成约前后 2–3 页的滑动窗口。
@@ -144,11 +204,16 @@ const SecureCanvasPage: React.FC<{
       if (entry.isIntersecting) {
         if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
         leaveTimerRef.current = null;
+        visibleRef.current = true;
         setVisible(true);
+        canvasWindow.touch(pageNumber);
         return;
       }
       if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
-      leaveTimerRef.current = window.setTimeout(() => setVisible(false), LEAVE_GRACE_MS);
+      leaveTimerRef.current = window.setTimeout(() => {
+        visibleRef.current = false;
+        setVisible(false);
+      }, LEAVE_GRACE_MS);
     }, { root: null, rootMargin: OBSERVER_ROOT_MARGIN, threshold: 0 });
     observer.observe(el);
     return () => {
@@ -157,6 +222,11 @@ const SecureCanvasPage: React.FC<{
     };
   }, []);
 
+  useEffect(() => () => {
+    canvasWindow.remove(pageNumber);
+    releaseCanvasIfSafe();
+  }, [canvasWindow, pageNumber]);
+
   useEffect(() => {
     if (!doc || !visible || renderedRef.current || renderingRef.current) return undefined;
     const canvas = canvasRef.current;
@@ -164,9 +234,9 @@ const SecureCanvasPage: React.FC<{
 
     let cancelled = false;
     let task: { cancel: () => void; promise: Promise<void> } | null = null;
-    renderingRef.current = true;
-
     const draw = async () => {
+      if (cancelled) return;
+      renderingRef.current = true;
       try {
         const page = pageRef.current || await doc.getPage(pageNumber);
         if (cancelled) return;
@@ -191,6 +261,7 @@ const SecureCanvasPage: React.FC<{
         if (!cancelled) {
           renderedRef.current = true;
           setRendered(true);
+          canvasWindow.markRendered(pageNumber, releaseCanvasIfSafe);
         }
       } catch (err: any) {
         // 渲染被打断（快速滚动、切页、卸载）是常态，不算失败
@@ -198,6 +269,7 @@ const SecureCanvasPage: React.FC<{
         if (!cancelled) setFailed(true);
       } finally {
         renderingRef.current = false;
+        if (releaseRequestedRef.current && !visibleRef.current) releaseCanvasIfSafe();
       }
     };
 
@@ -206,7 +278,6 @@ const SecureCanvasPage: React.FC<{
     return () => {
       cancelled = true;
       cancelQueued();
-      renderingRef.current = false;
       try {
         task?.cancel();
       } catch {
@@ -222,21 +293,7 @@ const SecureCanvasPage: React.FC<{
       if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
       leaveTimerRef.current = window.setTimeout(() => {
         if (renderingRef.current || visible || !renderedRef.current) return;
-        const canvas = canvasRef.current;
-        if (canvas?.width) {
-          const ctx = canvas.getContext('2d');
-          ctx?.clearRect(0, 0, canvas.width, canvas.height);
-          canvas.width = 0;
-          canvas.height = 0;
-        }
-        try {
-          pageRef.current?.cleanup?.();
-        } catch {
-          /* PDF.js 页面已清理时忽略 */
-        }
-        pageRef.current = null;
-        renderedRef.current = false;
-        setRendered(false);
+        releaseCanvasIfSafe();
       }, RELEASE_DELAY_MS);
       return () => {
         if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
@@ -281,6 +338,8 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
   const docRef = useRef<any>(null);
   const schedulerRef = useRef<ComicRenderScheduler | null>(null);
   if (!schedulerRef.current) schedulerRef.current = new ComicRenderScheduler();
+  const canvasWindowRef = useRef<ComicCanvasWindow | null>(null);
+  if (!canvasWindowRef.current) canvasWindowRef.current = new ComicCanvasWindow();
   const autoAttemptedRef = useRef(false);
 
   /* ---------------- 反爬与防手滑：只在阅读器挂载期间生效 ---------------- */
@@ -523,7 +582,13 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
 
       <div className="pt-3 space-y-3">
         {pages.map((n) => (
-          <SecureCanvasPage key={n} doc={doc} pageNumber={n} scheduler={schedulerRef.current!} />
+          <SecureCanvasPage
+            key={n}
+            doc={doc}
+            pageNumber={n}
+            scheduler={schedulerRef.current!}
+            canvasWindow={canvasWindowRef.current!}
+          />
         ))}
       </div>
 
