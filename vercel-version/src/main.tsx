@@ -1,6 +1,7 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
+import { Analytics } from '@vercel/analytics/react';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { useAuthStore } from './stores/authStore';
 import { setupIOSViewportGuard } from './utils/iosViewportGuard';
@@ -24,6 +25,7 @@ if (window.location.pathname.replace(/\/$/, '') === '/comics') {
     <StrictMode>
       <AppErrorBoundary>
         <App />
+        <Analytics />
       </AppErrorBoundary>
     </StrictMode>,
   );
