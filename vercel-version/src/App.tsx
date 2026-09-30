@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense, useCallback } from 'react';
-const Analytics = () => null;
+import { Analytics } from '@vercel/analytics/react';
 import { RetroPixelFrame } from './components/RetroPixelFrame';
 import { ImmersiveGameHome } from './components/ImmersiveGameHome';
 import { GameStageLayout } from './components/GameStageLayout';
