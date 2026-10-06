@@ -96,7 +96,7 @@ export default defineConfig(() => {
           manualChunks: {
             'react-vendor': ['react', 'react-dom'],
             'pdfjs-vendor': ['pdfjs-dist'],
-            'vendor': ['crypto-js', 'react-pinch-zoom-pan'],
+            'vendor': ['crypto-js'],
           },
         },
       },

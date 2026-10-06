@@ -240,7 +240,7 @@ export default defineConfig(() => {
           // CloudBase SDK
           'cloudbase-vendor': ['@cloudbase/js-sdk'],
           // 其他第三方库
-          'vendor': ['lucide-react', 'qrcode', 'html-to-image', 'react-pinch-zoom-pan'],
+          'vendor': ['lucide-react', 'qrcode', 'html-to-image'],
         },
       },
     },
