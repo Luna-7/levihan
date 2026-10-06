@@ -20,6 +20,7 @@ import { TeaPartyShareModal, ShareTargetData } from './TeaPartyShareModal';
 import { LinkShare, LinkShareCard, LinkShareModal, canEmbedLink, platformForLink, platformLabel } from './LinkShareCard';
 import { fmtTime, normalizeShareLink } from '../utils/forumFormat';
 import { toForumWebp } from '../utils/forumImage';
+import { notifyBrowser, truncateNotificationText } from '../utils/browserNotifications';
 export { fmtTime, normalizeShareLink } from '../utils/forumFormat';
 
 export type PostCategory = 'chat' | 'relay' | 'roleplay' | 'market' | 'links';
@@ -339,6 +340,7 @@ const MARKET_STORAGE_KEY = 'levihan_market_items';
 
 export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory }) => {
   const [posts, setPosts] = useState<ForumPost[]>(loadPosts);
+  const postsRef = useRef(posts);
   const pendingPotatoes = useRef(new Set<string>());
   const pendingLinkEnrich = useRef(new Set<string>());
   const [activeCategory, setActiveCategory] = useState<'all' | 'chat' | 'relay' | 'roleplay' | 'market' | 'links'>(initialCategory || 'all');
@@ -649,9 +651,28 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   useEffect(() => {
     // 本地缓存只作首屏占位，账号切换后立即清除旧账号的点赞选中态。
     setPosts((current) => current.map((post) => ({ ...post, potatoGiven: false })));
-    void api('forumList')
+    const refreshForum = (initial: boolean) => api('forumList')
       .then((result) => {
         if (Array.isArray(result.posts) && result.posts.length > 0) {
+          if (!initial) {
+            const known = new Set(postsRef.current.map((post) => post.id));
+            result.posts.filter((post: ForumPost) => !known.has(post.id) && post.uid !== currentUid).slice(0, 3).forEach((post: ForumPost) => {
+              notifyBrowser(`论坛新帖：${truncateNotificationText(post.title || '未命名帖子', 32)}`, {
+                body: truncateNotificationText(post.body),
+                tag: `forum-${post.id}`,
+                dedupeKey: `forum-${post.id}`,
+              });
+            });
+            const knownComments = new Set(postsRef.current.flatMap((post) => (post.comments || []).map((comment) => comment.id)));
+            result.posts.flatMap((post: ForumPost) => (post.comments || []).map((comment) => ({ post, comment })))
+              .filter(({ comment }) => !knownComments.has(comment.id) && comment.uid !== currentUid).slice(0, 3).forEach(({ post, comment }) => {
+                notifyBrowser(`论坛新回复：${truncateNotificationText(post.title || '帖子', 32)}`, {
+                  body: truncateNotificationText(comment.body),
+                  tag: `forum-comment-${comment.id}`,
+                  dedupeKey: `forum-comment-${comment.id}`,
+                });
+              });
+          }
           persist(result.posts);
           result.posts.forEach((post: ForumPost) => {
             if (post.uid === currentUid && post.category === 'links' && (
@@ -663,6 +684,11 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       })
       .catch(() => undefined);
 
+    void refreshForum(true);
+    const timer = window.setInterval(() => {
+      void refreshForum(false);
+    }, 120_000);
+
     void api('marketList')
       .then((result) => {
         if (Array.isArray(result.items) && result.items.length > 0) {
@@ -672,9 +698,11 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       })
       .catch(() => undefined);
 
+    return () => window.clearInterval(timer);
   }, [currentUid]);
 
   const persist = (next: ForumPost[]) => {
+    postsRef.current = next;
     setPosts(next);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
