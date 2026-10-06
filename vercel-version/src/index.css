@@ -1293,6 +1293,68 @@ body.immersive-on .retro-frame-card > .absolute {
   }
 }
 
+/* 首页公告采用自然文档流：正文撑开卡片，页面统一滚动，不再切成固定视口。 */
+.home-announcements,
+html.pwa-standalone .home-announcements {
+  flex: 0 0 auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.home-announcement-region,
+.home-announcement-list,
+html.pwa-standalone .home-announcement-region,
+html.pwa-standalone .home-announcement-list {
+  height: auto !important;
+  max-height: none !important;
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+  scroll-snap-type: none;
+}
+
+.home-announcement-list > .announcement-board,
+html.pwa-standalone .home-announcement-list > .announcement-board {
+  flex: 0 0 auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+@media (max-width: 767px) {
+  #view-main {
+    overflow-y: auto !important;
+    overscroll-behavior-y: auto;
+  }
+
+  .home-fixed-page,
+  html.pwa-standalone .home-fixed-page {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+  }
+
+  .home-main-content,
+  html.pwa-standalone .home-main-content {
+    flex: 0 0 auto !important;
+    justify-content: flex-start !important;
+    gap: 12px !important;
+  }
+
+  .home-announcement-list > .announcement-board,
+  html.pwa-standalone .home-announcement-list > .announcement-board {
+    padding: 12px !important;
+  }
+
+  .home-announcement-list p,
+  html.pwa-standalone .home-announcement-list p {
+    display: -webkit-box !important;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+}
+
 /* ============================================================
    首页视口契约：手机竖屏固定比例；仅桌面与横屏平板允许整页滚动。
    公告区域恒定只露出两条，更多公告在区域内部滚动。

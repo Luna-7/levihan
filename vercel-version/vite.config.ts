@@ -113,6 +113,7 @@ export default defineConfig(() => {
         'images/archive-maintenance.webp',
       ],
       workbox: {
+        importScripts: ['/push-sw.js'],
         // Only the app shell is installed up front. Games and comics stay on demand.
         globPatterns: ['index.html', 'assets/**/*.{js,css}'],
         // 加密阅读器（pdfjs-dist）只服务「含有敏感元素」的本子，

@@ -9,8 +9,9 @@ import { useAuthStore } from '../stores/authStore';
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { scheduleNonCriticalTask } from '../utils/scheduleNonCriticalTask';
 import { browserNotificationPermission, requestBrowserNotifications, notifyBrowser, truncateNotificationText } from '../utils/browserNotifications';
+import { enableWebPush, webPushPermission } from '../utils/webPush';
 
-/** 与后台 announcementSave 的字段契约保持一致（id/tag/title/author/time/link/description/image） */
+/** 与后台 announcementSave 的字段契约保持一致（id/tag/title/author/time/link/description/image/updatedAt） */
 export interface AnnouncementItem {
   id: string;
   tag: string;
@@ -20,6 +21,7 @@ export interface AnnouncementItem {
   link?: string;
   description?: string;
   image?: string;
+  updatedAt?: string;
 }
 
 /** 后台标签是自由文本，按内容语义归类；首页以调查兵团绿与主题紫为主。 */
@@ -94,16 +96,18 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
               link: item.link ? String(item.link) : '',
               description: item.description ? String(item.description) : '',
               image: item.image ? String(item.image) : '',
+              updatedAt: item.updatedAt ? String(item.updatedAt) : '',
             }));
           const newest = cloudItems[0];
-          if (announcementBaseline.current && newest && newest.id !== announcementBaseline.current) {
+          const newestVersion = newest ? `${newest.id}:${newest.updatedAt || newest.time || ''}` : '';
+          if (announcementBaseline.current && newest && newestVersion !== announcementBaseline.current) {
             notifyBrowser('公告栏更新', {
               body: truncateNotificationText(newest.title),
               tag: `announcement-${newest.id}`,
               dedupeKey: `announcement-${newest.id}`,
             });
           }
-          announcementBaseline.current = newest?.id || announcementBaseline.current;
+          announcementBaseline.current = newestVersion || announcementBaseline.current;
           setAnnouncements(cloudItems);
         })
         .catch(() => {
@@ -135,7 +139,13 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
   }, []);
 
   const enableNotifications = async () => {
-    const permission = await requestBrowserNotifications();
+    let permission = webPushPermission();
+    try {
+      if (permission !== 'unsupported') permission = await enableWebPush();
+      else permission = await requestBrowserNotifications();
+    } catch {
+      permission = await requestBrowserNotifications();
+    }
     setNotificationPermission(permission);
     if (permission === 'granted') onShowToast('新消息通知已开启：论坛和公告栏有更新时会提醒你');
     else if (permission === 'denied') onShowToast('通知权限已关闭，请在浏览器设置中重新允许');
@@ -267,7 +277,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
           type="button"
           onClick={() => void enableNotifications()}
           disabled={notificationPermission === 'unsupported'}
-          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] text-[#6F5A45] hover:bg-[#E9DFC7] disabled:opacity-55 disabled:cursor-not-allowed"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 py-1 text-[11px] text-[#6F5A45] hover:bg-[#E9DFC7] disabled:opacity-55 disabled:cursor-not-allowed"
           title={notificationPermission === 'granted' ? '已开启新消息通知' : '开启论坛和公告栏新消息通知'}
         >
           {notificationPermission === 'granted' ? <Bell size={13} /> : <BellOff size={13} />}

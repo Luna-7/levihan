@@ -45,6 +45,7 @@
 const http = require('http');
 const crypto = require('crypto');
 const COS = require('cos-nodejs-sdk-v5');
+const webpush = require('web-push');
 
 const BUCKET = process.env.COS_BUCKET || 'levihan-1325571558';
 const REGION = process.env.COS_REGION || 'ap-nanjing';
@@ -53,6 +54,7 @@ const TAGS_KEY = 'tags.json';   // 全站标签库（string[]），供上传台�
 const AUTHORS_KEY = 'authors.json'; // 作者链接登记表（[{name,url,createdAt,updatedAt}]），上传台自动补全 + 可导出 Excel
 const ANNOUNCEMENTS_KEY = 'announcements.json'; // 首页公告栏（公开读取、管理员写入）
 const ANNOUNCEMENT_DIR = 'announcements/';
+const PUSH_SUBSCRIPTIONS_KEY = 'push-subscriptions.json';
 const SUPPORTERS_KEY = 'supporters.json'; // 支持墙（[{id,name,kind,order,visible}]）
 const GOODS_KEY = 'goods/manifest.json';
 const GOODS_DIR = 'goods/';
@@ -130,6 +132,15 @@ const cos = new COS({
   SecurityToken: process.env.TENCENTCLOUD_SESSIONTOKEN,
   Protocol: 'https:',
 });
+
+function configureWebPush() {
+  const publicKey = String(process.env.VAPID_PUBLIC_KEY || '').trim();
+  const privateKey = String(process.env.VAPID_PRIVATE_KEY || '').trim();
+  const subject = String(process.env.VAPID_SUBJECT || 'mailto:admin@levihan.asia').trim();
+  if (!publicKey || !privateKey) return false;
+  webpush.setVapidDetails(subject, publicKey, privateKey);
+  return true;
+}
 
 /* ------------------------------ 基础设施 ------------------------------ */
 
@@ -279,6 +290,55 @@ async function writeAnnouncements(items) {
     Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'),
     ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache',
   });
+}
+
+async function readPushSubscriptions() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: PUSH_SUBSCRIPTIONS_KEY });
+    const parsed = JSON.parse(Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+
+async function writePushSubscriptions(items) {
+  await putObject({
+    Bucket: BUCKET, Region: REGION, Key: PUSH_SUBSCRIPTIONS_KEY,
+    Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'),
+    ContentType: 'application/json; charset=utf-8', CacheControl: 'no-cache',
+  });
+}
+
+function validPushSubscription(subscription) {
+  return subscription && typeof subscription === 'object' &&
+    typeof subscription.endpoint === 'string' && subscription.endpoint.startsWith('https://') &&
+    subscription.keys && typeof subscription.keys.p256dh === 'string' && typeof subscription.keys.auth === 'string';
+}
+
+async function sendPushUpdate({ title, body, tag, url = '/' }) {
+  try {
+    if (!configureWebPush()) {
+      console.warn('[push] VAPID keys are not configured; skip background notification');
+      return;
+    }
+    const subscriptions = await readPushSubscriptions();
+    if (!subscriptions.length) return;
+    const payload = JSON.stringify({ title, body, tag, url });
+    const expired = new Set();
+    await Promise.allSettled(subscriptions.map(async (subscription) => {
+      try {
+        await webpush.sendNotification(subscription, payload, { TTL: 86400 });
+      } catch (err) {
+        if (err && (err.statusCode === 404 || err.statusCode === 410)) expired.add(subscription.endpoint);
+        else console.error('[push] send failed', err && err.message);
+      }
+    }));
+    if (expired.size) await writePushSubscriptions(subscriptions.filter((item) => !expired.has(item.endpoint)));
+  } catch (err) {
+    console.error('[push] notification skipped', err && err.message);
+  }
 }
 
 const SUPPORT_KINDS = new Set(['translation', 'typesetting', 'tech', 'donation']);
@@ -1340,7 +1400,7 @@ async function reviewInbox(payload) {
       await writeArchive(books);
       try { await upsertAuthor(item.author, item.homepage); } catch (e) { console.error('[authorLib] 插画作者登记失败', e && e.message); }
     } else if (item.type === 'announcement') {
-      await handle('announcementSave', { item: { tag: '利韩企划', title: item.title, time: item.time,
+      await handle('announcementSave', { item: { tag: '公告', title: item.title, time: item.time,
         author: item.author, link: item.link, image: item.image, description: item.description } });
     } else if (item.type === 'recommend') {
       const recs = await readRecs();
@@ -1365,6 +1425,7 @@ const PUBLIC_ACTIONS = new Set([
   'submitCustomOrderEmail',
   'announcementList', 'supporterList',
   'forumList', 'forumTodayRelay', 'marketList',
+  'pushSubscribe', 'pushUnsubscribe',
   'novelCommentList',
   'leaderboard',
 ]);
@@ -1709,6 +1770,25 @@ async function handle(action, payload) {
       return { ok: true, count: items.length, items };
     }
 
+    case 'pushSubscribe': {
+      const subscription = payload.subscription;
+      if (!validPushSubscription(subscription)) throw httpError('推送订阅格式无效', 400);
+      const subscriptions = await readPushSubscriptions();
+      const now = new Date().toISOString();
+      const next = subscriptions.filter((item) => item && item.endpoint !== subscription.endpoint);
+      next.push({ endpoint: subscription.endpoint, keys: subscription.keys, createdAt: now, updatedAt: now });
+      await writePushSubscriptions(next.slice(-1000));
+      return { ok: true };
+    }
+
+    case 'pushUnsubscribe': {
+      const endpoint = String(payload.endpoint || '').trim();
+      if (!endpoint.startsWith('https://')) throw httpError('推送地址无效', 400);
+      const subscriptions = await readPushSubscriptions();
+      await writePushSubscriptions(subscriptions.filter((item) => item && item.endpoint !== endpoint));
+      return { ok: true };
+    }
+
     case 'announcementImageUpload': {
       const imageBase64 = String(payload.imageBase64 || '');
       if (!imageBase64 || Math.floor((imageBase64.length * 3) / 4) > MAX_BYTES) throw httpError('图片为空或超过 4MB', 413);
@@ -1748,6 +1828,7 @@ async function handle(action, payload) {
       if (index >= 0) items[index] = next;
       else items.unshift({ ...next, createdAt: now });
       await writeAnnouncements(items.slice(0, 30));
+      await sendPushUpdate({ title: '公告栏更新', body: String(next.title || '有新的公告'), tag: `announcement-${next.id}` });
       return { ok: true, item: next, items };
     }
 
@@ -1939,6 +2020,12 @@ async function handle(action, payload) {
         createdAt: new Date().toISOString(), comments: [],
       };
       posts.unshift(post); await writeForum(posts.slice(0, 300));
+      await sendPushUpdate({
+        title: '论坛新帖',
+        body: String(post.title || post.body || '论坛有新的帖子').slice(0, 120),
+        tag: `forum-${post.id}`,
+        url: '/?tab=doujinshi',
+      });
       // 故事接龙：建立接力即自动建立合订本，收入在线小说 novels.json
       if (category === 'relay') {
         try { await saveRelayNovel(compileRelayToNovel(post)); }
@@ -2011,6 +2098,12 @@ async function handle(action, payload) {
       // 故事接龙：递交接棒后立即释放羽毛笔，否则下次 forumList 会把锁还原回来（一直显示锁定/旧棒数）
       if (post.category === 'relay') post.quillClaim = undefined;
       await writeForum(posts);
+      await sendPushUpdate({
+        title: '论坛新回复',
+        body: String(comment.body || '帖子有新的回复').slice(0, 120),
+        tag: `forum-comment-${comment.id}`,
+        url: '/?tab=doujinshi',
+      });
       // 故事接龙：接棒后自动重编译，把最新一棒并入合订本
       if (post.category === 'relay') {
         try { await saveRelayNovel(compileRelayToNovel(post)); }

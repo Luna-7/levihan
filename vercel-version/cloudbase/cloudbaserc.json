@@ -18,6 +18,9 @@
         "CLOUDBASE_APIKEY": "{{env.CLOUDBASE_APIKEY}}",
         "COS_BUCKET": "levihan-1325571558",
         "COS_REGION": "ap-nanjing",
+        "VAPID_PUBLIC_KEY": "{{env.VAPID_PUBLIC_KEY}}",
+        "VAPID_PRIVATE_KEY": "{{env.VAPID_PRIVATE_KEY}}",
+        "VAPID_SUBJECT": "{{env.VAPID_SUBJECT}}",
         "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:4173,https://admin.levihan.asia,https://www.levihan.asia,https://levihan.asia"
       }
     },
