@@ -156,7 +156,9 @@ const SecureCanvasPage: React.FC<{
 }> = ({ doc, pageNumber, scheduler, canvasWindow }) => {
   const OBSERVER_ROOT_MARGIN = '100% 0px 100% 0px';
   const LEAVE_GRACE_MS = 1800;
-  const RELEASE_DELAY_MS = 1200;
+  // 移动端惯性滚动会让观察区边缘短暂反复进出，延长保留时间，避免
+  // 刚画完就清空，下一帧又从占位重新开始。
+  const RELEASE_DELAY_MS = 2600;
   const holderRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [visible, setVisible] = useState(false);
@@ -508,7 +510,11 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
               </div>
 
               {/* 解析表单：文案全程不提"密码""漫画" */}
-              <form onSubmit={(event) => { event.preventDefault(); void handleUnlock(code.trim()); }} className="mt-6 flex flex-col sm:flex-row gap-2.5">
+              <form
+                onSubmit={(event) => { event.preventDefault(); void handleUnlock(code.trim()); }}
+                className="mt-6 flex flex-col sm:flex-row gap-2.5"
+                aria-busy={phase === 'working'}
+              >
                 <input
                   type="password"
                   value={code}
@@ -522,7 +528,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
                 <button
                   type="submit"
                   disabled={phase === 'working'}
-                  className="px-5 py-2.5 text-[13px] font-bold rounded-[3px] bg-[#1f2328] text-white hover:bg-[#33383f] disabled:bg-[#9aa0a6] disabled:cursor-wait transition-colors"
+                  className="min-w-[92px] px-5 py-2.5 text-[13px] font-bold rounded-[3px] bg-[#1f2328] text-white hover:bg-[#33383f] disabled:bg-[#9aa0a6] disabled:cursor-wait transition-colors"
                 >
                   {phase === 'working' ? workingStage : '启动解析'}
                 </button>

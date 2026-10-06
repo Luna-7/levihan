@@ -14,18 +14,20 @@ import { BookShareModal } from './BookShareModal';
 //
 // 构建时切除：宣发主站（VITE_COMIC_ENABLED=false）不含漫画本，也就用不到加密阅读器，
 // 这里把 lazy import 换成 null，让 rollup 物理上不把 pdfjs-dist / crypto-js 打进主站产物。
-const SecureComicReader = import.meta.env.VITE_COMIC_ENABLED === 'false'
+const loadSecureComicReader = import.meta.env.VITE_COMIC_ENABLED === 'false'
   ? null
-  : React.lazy(() => import('./SecureComicReader'));
+  : () => import('./SecureComicReader');
+const SecureComicReader = loadSecureComicReader
+  ? React.lazy(loadSecureComicReader)
+  : null;
 import { AuthorWithLink } from '../utils/authorLink';
 import { MangaCommentSection } from './MangaCommentSection';
 import { getCommentCountByBookId } from '../data/mangaComments';
 import { useAppShellStore } from '../stores/appShellStore';
+import { scheduleNonCriticalTask } from '../utils/scheduleNonCriticalTask';
 
 interface Props {
-  onCopyCode?: (code: string) => void;
   onShowToast: (msg: string) => void;
-  onGoToResources?: () => void;
   /**
    * 站点模式：
    * - 'main'（默认）：宣发主站，只显示「小说本（合订本）+ 插画集」，不显示漫画本；
@@ -35,7 +37,7 @@ interface Props {
   mode?: 'main' | 'comic';
 }
 
-export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources, mode = 'main' }) => {
+export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }) => {
   const PAGE_SIZE = 24;
   // 归档数据状态（优先加载远端 COS archive.json，兜底使用本地 Excel 录入数据）
   const [books, setBooks] = useState<DoujinBookItem[]>(DOUJIN_ARCHIVE_DATA);
@@ -132,6 +134,13 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     });
   }, []);
 
+  // 解析器是独立分包。归档首屏稳定后在后台预取，点击加密本时不再先闪
+  // 一整块 Suspense 加载页，用户只会看到稳定的解析状态。
+  useEffect(() => {
+    if (mode !== 'comic' || !loadSecureComicReader) return undefined;
+    return scheduleNonCriticalTask(() => { void loadSecureComicReader(); }, 0, 3);
+  }, [mode]);
+
   // 投稿免审直发：小说本新上架后立即刷新索引（novels.json 为 no-cache，重拉即最新）
   const novelIndexVersion = useAppShellStore((state) => state.novelIndexVersion);
   useEffect(() => {
@@ -214,8 +223,21 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
     // 所以不进长图画廊，改走 SecureComicReader（维护页 → 校验码 → 内存解密 → Canvas）
     if (book.secure && SecureComicReader) {
       archiveScrollYRef.current = window.scrollY;
-      setSecureBook(book);
-      onShowToast(`《${book.titleZh}》资源已被安全隔离，需校验码解析 🔒`);
+      onShowToast(`《${book.titleZh}》正在加载安全解析节点…`);
+      if (loadSecureComicReader) {
+        // 等解析器分包到位后再切换阅读器，避免列表先卸载、Suspense 再闪现。
+        void loadSecureComicReader()
+          .then(() => {
+            setSecureBook(book);
+            onShowToast(`《${book.titleZh}》资源已被安全隔离，需校验码解析 🔒`);
+          })
+          .catch(() => {
+            // 分包失败时仍进入原有错误边界，保留可重试路径。
+            setSecureBook(book);
+          });
+      } else {
+        setSecureBook(book);
+      }
       return;
     }
 
@@ -388,7 +410,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, onGoToResources
   }
 
   // ==========================================
-  // 📖 无缝长图阅读模式 (基于 腾讯云 COS CDN 映射 + react-pinch-zoom-pan)
+  // 📖 无缝长图阅读模式 (基于腾讯云 COS CDN 映射)
   // ==========================================
   if (readingBook && ((readingBook.category || '漫画本') !== '漫画本' || isMangaVisible)) {
     const totalPages = detectedPages || readingBook.pages || 30;

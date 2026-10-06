@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, Suspense, useCallback } from 'react';
-const Analytics = () => null;
 import { RetroPixelFrame } from './components/RetroPixelFrame';
 import { ImmersiveGameHome } from './components/ImmersiveGameHome';
 import { GameStageLayout } from './components/GameStageLayout';
@@ -253,18 +252,6 @@ export default function App() {
     }
   }, [showToast]);
 
-  const handleCopyExtractionCode = useCallback((code: string) => {
-    soundManager.playCoin();
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(code).then(
-        () => showToast(`已复制提取码：${code} 📋`),
-        () => showToast(`提取码为：${code}`)
-      );
-    } else {
-      showToast(`提取码为：${code}`);
-    }
-  }, [showToast]);
-
   const handleToggleSound = useCallback(() => {
     const muted = soundManager.toggleMute();
     setIsSoundMuted(muted);
@@ -304,7 +291,6 @@ export default function App() {
         >
           <Suspense fallback={<RestaurantLoadingSkeleton />}><DoujinshiArchive
             mode="main"
-            onCopyCode={handleCopyExtractionCode}
             onShowToast={showToast}
           /></Suspense>
         </GameStageLayout>;
@@ -390,8 +376,6 @@ export default function App() {
       {/* Back to Top Floating Button */}
       {activeTab !== 'home' && <BackToTopButton />}
 
-      {/* Vercel Analytics */}
-      <Analytics />
     </main>
   );
 }

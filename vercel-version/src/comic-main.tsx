@@ -37,21 +37,10 @@ function ComicApp() {
     window.setTimeout(() => setToast((cur) => (cur === msg ? null : cur)), 2800);
   }, []);
 
-  const copyCode = useCallback((code: string) => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(code).then(
-        () => showToast(`已复制提取码：${code} 📋`),
-        () => showToast(`提取码为：${code}`)
-      );
-    } else {
-      showToast(`提取码为：${code}`);
-    }
-  }, [showToast]);
-
   return (
     <>
       <ComicGate>
-        <DoujinshiArchive mode="comic" onShowToast={showToast} onCopyCode={copyCode} />
+        <DoujinshiArchive mode="comic" onShowToast={showToast} />
       </ComicGate>
       <BackToTopButton />
       {toast && (

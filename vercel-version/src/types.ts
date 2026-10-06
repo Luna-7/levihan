@@ -19,36 +19,6 @@ export interface GroupInfo {
   activeAnnouncement: string;
 }
 
-export interface GroupRule {
-  id: string;
-  title: string;
-  summary: string;
-  details: string[];
-  icon: string;
-  level: 'critical' | 'warning' | 'info';
-  badge: string;
-}
-
-export interface DoujinshiBook {
-  id: string;
-  title: string;
-  originalTitle?: string;
-  authorOrCircle: string;
-  source?: string;
-  translator?: string;
-  typesetter?: string;
-  category: 'canon' | 'sweet' | 'serious' | 'au' | 'artbook';
-  format: 'PDF汉化精修' | '全彩画集' | '高清单行本' | '图文特典';
-  pages?: string;
-  coverTag: string;
-  description: string;
-  downloadUrl: string;
-  bucketPreviewUrl?: string;
-  code?: string;
-  platform: '百度网盘' | '夸克网盘';
-  isR18?: boolean;
-}
-
 export interface PixivArtist {
   name: string;
   url: string;

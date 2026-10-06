@@ -1,4 +1,4 @@
-import { GroupInfo, GroupRule, DoujinshiBook, PixivArtist, ResourceLink } from '../types';
+import { GroupInfo, PixivArtist, ResourceLink } from '../types';
 
 export const GROUP_INFO: GroupInfo = {
   name: '利韩土豆群',
@@ -18,227 +18,6 @@ export const GROUP_INFO: GroupInfo = {
   activeAnnouncement: '📢 粮仓近期完成多项补档！现已开放一群至四群联合交流。入群申请请务必写【三条利韩的磕点】。已收录 S1-S4 完结4K高清Cut、分镜手稿、漫画全集以及汉化精修同人本A-Z卷。群内资源仅限内部同好交流，严禁二次倒卖与外传！'
 };
 
-export const GROUP_RULES: GroupRule[] = [
-  {
-    id: 'rule-1',
-    title: '绝对红线：严禁商业化与二次倒卖',
-    summary: '群内所有汉化同人本、剪辑素材、原画扫描仅供群友内部交流学习，严禁任何形式的盈利倒卖。',
-    details: [
-      '严禁将本群分享的汉化本、生肉本或网盘资源上传至闲鱼、淘宝、拼多多、微店等平台有偿售卖。',
-      '严禁将群内汉化作品打包制作所谓的“付费网盘合集”或私信收费。',
-      '一旦发现倒卖倒流行为，将永久移出本群并全网同步黑名单追责。'
-    ],
-    icon: '🚫',
-    level: 'critical',
-    badge: '绝对红线'
-  },
-  {
-    id: 'rule-2',
-    title: '核心原则：利韩专一向，禁止逆拆KY',
-    summary: '本群定位为【利威尔 × 韩吉（无差/互攻均可）】专一向社群，圈地自萌，拒绝拉踩。',
-    details: [
-      '请勿在群内提及或安利利韩以外的不相干CP（包括但不限于利艾、团兵、艾韩、让韩等）。',
-      '无差、互攻、左右固定均属正常同好偏好，尊重彼此创作者与读者的XP，禁止就攻受问题产生攻击性争论。',
-      '禁止拉踩原著角色或侮辱角色人格，保持同好之间基本的友善与爱护。'
-    ],
-    icon: '⚔️',
-    level: 'critical',
-    badge: '专一守护'
-  },
-  {
-    id: 'rule-3',
-    title: '创作者保护：严禁二传外网打扰原作者',
-    summary: '尊重海内外原画师与同人创作者的心血，严禁未经授权将作品与汉化二传至公开社交平台。',
-    details: [
-      '切勿将汉化同人本、群内切片截图搬运至 Twitter/X、Instagram、TikTok 等外网公开平台。',
-      '严禁前往原作者的推特或评论区询问“是否可以汉化”、发送机翻中文或提及非正规盗印。',
-      '有能力的小伙伴请积极前往 PIXIV / 虎穴 / 蜜瓜 购买支持作者正版同人志与点赞收藏。'
-    ],
-    icon: '🛡️',
-    level: 'warning',
-    badge: '保护作者'
-  },
-  {
-    id: 'rule-4',
-    title: '交流规范：防雷预警与分级自觉',
-    summary: '群内交流文明得体，涉及敏感题材、剧透或高虐情节请提前标明预警。',
-    details: [
-      '涉及 R18 / 成人级同人讨论请勿在群内公开发送露骨图文（请善用群文件防撤回或私下交流）。',
-      '涉及重度死亡梗（如巨树之森、地鸣、最终告别）或高虐情节时，请提前加上【高虐预警】或折叠防雷。',
-      '禁止人身攻击、阴阳怪气、发泄无关现实负能量或挑起群体对立。'
-    ],
-    icon: '⚠️',
-    level: 'warning',
-    badge: '交流礼仪'
-  },
-  {
-    id: 'rule-5',
-    title: '粮仓互助：进群审核与资源补档机制',
-    summary: '群内提倡资源共享与长效维护，遇到链接失效请联系管理补档，欢迎投喂。',
-    details: [
-      '申请进群请务必按提示写【三条利韩的磕点】，无答案、恶意烂梗或空白小号将被拒绝通过。',
-      '若本站或群文件中的百度网盘、夸克网盘链接出现失效/被吞，请在群内艾特管理员登记补档。',
-      '热烈欢迎有能力的群友投喂自己整理的利韩原画、同人志生肉/熟肉或高清Cut！'
-    ],
-    icon: '🥔',
-    level: 'info',
-    badge: '粮仓公约'
-  }
-];
-
-export const DOUJINSHI_BOOKS: DoujinshiBook[] = [
-  {
-    id: 'dj-1',
-    title: '【汉化精修】利韩经典同人本合集 A-Z 全卷',
-    originalTitle: 'Levi x Hans Doujinshi Anthologies & Collections',
-    authorOrCircle: '日本各大利韩知名社团联合作品集',
-    source: 'Comic City / C88-C99 展会精选 / 知名社团合集',
-    translator: '利韩土豆汉化组 · 特邀翻译小队',
-    typesetter: '兵团精修嵌字工坊',
-    category: 'canon',
-    format: 'PDF汉化精修',
-    pages: '超大容量（多册合辑）',
-    coverTag: '镇群神卷',
-    description: '涵盖早期至完结篇数十本经典汉化作品，包含正剧剧情篇、战役间隙的私语、羁绊起源与深情独白。群内汉化组精修嵌字。',
-    downloadUrl: 'https://pan.baidu.com/s/1yD-cKBVlTC43lwtT7IuQrQ?pwd=lh99',
-    bucketPreviewUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    code: 'lh99',
-    platform: '百度网盘',
-    isR18: false
-  },
-  {
-    id: 'dj-2',
-    title: '【原画高清】同人画集、明信片与公式特典合辑',
-    originalTitle: 'Levi & Hans Memorial Artbooks & Postcards',
-    authorOrCircle: '多位 Pixiv 知名画师及日本同人展会特典',
-    source: '「調査兵団の休日」「翼を広げて」线下同人展现场',
-    translator: '原画图集（附场刊独白译文）',
-    typesetter: '高精扫描重置及色彩校对组',
-    category: 'artbook',
-    format: '全彩画集',
-    pages: '全彩高清原分辨率扫描',
-    coverTag: '视觉盛宴',
-    description: '收录历届利韩专属同人展（如「調査兵団の休日」「翼を広げて」等）现场特典插画、明信片、官方风宣传图与纪念画册。',
-    downloadUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    bucketPreviewUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    platform: '夸克网盘',
-    isR18: false
-  },
-  {
-    id: 'dj-3',
-    title: '《夜明けの歌》（黎明之歌）精修全本',
-    originalTitle: 'Song of the Dawn',
-    authorOrCircle: 'モクメ / 木名',
-    source: 'COMIC CITY SPARK 12 个人首发原刊',
-    translator: '利韩同好自发汉化 / 浅葱',
-    typesetter: '兵团地下街修嵌组',
-    category: 'serious',
-    format: 'PDF汉化精修',
-    pages: '64P 精装本',
-    coverTag: '正剧名篇',
-    description: '以王政篇为背景的严肃向长篇作品。细腻刻画了两人在面对墙内权力更迭与人类命运巨浪时，于静默中交付后背与信任的深刻心路。',
-    downloadUrl: 'https://pan.baidu.com/s/1yD-cKBVlTC43lwtT7IuQrQ?pwd=lh99',
-    bucketPreviewUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    code: 'lh99',
-    platform: '百度网盘',
-    isR18: false
-  },
-  {
-    id: 'dj-4',
-    title: '《紅茶と眼鏡の引力》（红茶与眼镜的引力法则）',
-    originalTitle: 'Gravity of Black Tea and Glasses',
-    authorOrCircle: 'クラノ / KURANO',
-    source: '同人志即卖会 / 虎之穴委任通贩',
-    translator: '红茶泡芙翻译部',
-    typesetter: '韩吉眼镜研究所嵌字组',
-    category: 'sweet',
-    format: 'PDF汉化精修',
-    pages: '42P',
-    coverTag: '温馨日常',
-    description: '调查兵团驻地生活轻喜剧。讲述韩吉的实验器皿不小心沾到了兵长最珍视的红茶茶叶，展开的一场鸡飞狗跳又暗含温存的驻地追逐战。',
-    downloadUrl: 'https://pan.baidu.com/s/1yD-cKBVlTC43lwtT7IuQrQ?pwd=lh99',
-    bucketPreviewUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    code: 'lh99',
-    platform: '百度网盘',
-    isR18: false
-  },
-  {
-    id: 'dj-5',
-    title: '《自由の翼の下で》（在自由之翼的阴影与晴空下）',
-    originalTitle: 'Under the Wings of Freedom',
-    authorOrCircle: '皐妃 / Satsuki',
-    source: 'COMIC MARKET (C94) 利韩正剧专场',
-    translator: '调查兵团特别文献汉化组',
-    typesetter: '自由之翼嵌字协力',
-    category: 'canon',
-    format: 'PDF汉化精修',
-    pages: '88P 厚本',
-    coverTag: '原作深度向',
-    description: '时间线贯穿夺还作战至玛雷远征前夕。兵长与团长身份切换之间的眼神交换，在巨大的宿命感中展现两人独一无二的默契。',
-    downloadUrl: 'https://pan.baidu.com/s/1yD-cKBVlTC43lwtT7IuQrQ?pwd=lh99',
-    bucketPreviewUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    code: 'lh99',
-    platform: '百度网盘',
-    isR18: false
-  },
-  {
-    id: 'dj-6',
-    title: '《81号实验室与特别搜查官》（现代刑侦AU）',
-    originalTitle: 'Laboratory 81 & Special Inspector',
-    authorOrCircle: 'Lily & 蓮本',
-    source: 'WEB同人连载完结纪念实体增补本',
-    translator: '法医实验室双人翻校组',
-    typesetter: '现代AU精修嵌字分队',
-    category: 'au',
-    format: '图文特典',
-    pages: '76P',
-    coverTag: '平行世界AU',
-    description: '现代架空都市背景。冷静毒舌的重案组利巡查部长 × 行动派法医狂人韩吉主任，联手破获重大疑案的欢喜冤家刑侦AU故事。',
-    downloadUrl: 'https://pan.baidu.com/s/1yD-cKBVlTC43lwtT7IuQrQ?pwd=lh99',
-    bucketPreviewUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    code: 'lh99',
-    platform: '百度网盘',
-    isR18: false
-  },
-  {
-    id: 'dj-7',
-    title: '《四月一日の嘘》（四月一日的善意谎言）',
-    originalTitle: 'April Fools Promise',
-    authorOrCircle: 'マミヤ / Mamiya',
-    source: '春季同人交流会「Wall Sina」限定刊',
-    translator: '四月同好汉化小分队',
-    typesetter: '甜份超标修字组',
-    category: 'sweet',
-    format: '高清单行本',
-    pages: '36P',
-    coverTag: '糖分超标',
-    description: '愚人节当天韩吉假装自己失忆、不认得调查兵团里有个叫利威尔的人，结果却被兵长用一系列霸道又无可奈何的方式当场揭穿的暖心故事。',
-    downloadUrl: 'https://pan.baidu.com/s/1yD-cKBVlTC43lwtT7IuQrQ?pwd=lh99',
-    bucketPreviewUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    code: 'lh99',
-    platform: '百度网盘',
-    isR18: false
-  },
-  {
-    id: 'dj-8',
-    title: '《MEMORIES OF SCOUTS》（兵团回想录）同人图集',
-    originalTitle: 'Scouts Nostalgia Collection',
-    authorOrCircle: '多位画师联绘合同志',
-    source: '利韩专一向合同志策划委员会出版',
-    translator: '全彩画集（附短篇独白精翻）',
-    typesetter: '全彩图集精修校正组',
-    category: 'artbook',
-    format: '全彩画集',
-    pages: '120P 全彩大图',
-    coverTag: '珍稀画册',
-    description: '高精扫描版全彩插画集，从最初的相遇、训练兵营的擦肩、到并肩作战的岁月，每一张都能作为高清壁纸收藏。',
-    downloadUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    bucketPreviewUrl: 'https://pan.quark.cn/s/ee4920b9c9f7#/list/share',
-    platform: '夸克网盘',
-    isR18: false
-  }
-];
-
 export const POTATO_EGG_QUOTES = [
   '「喂，韩吉，手里的烤土豆分我一半，别烫到嘴了。」—— 调查兵团夜间巡逻随想',
   '「既然没有现成的粮仓，那就由我们一块砖、一个土豆地建起来！」—— 韩吉团长的土豆群动员令',
@@ -246,7 +25,6 @@ export const POTATO_EGG_QUOTES = [
   '「红茶配热土豆？虽然听起来怪异，但既然是你递过来的，我就勉强吃一个。」—— 兵长备忘录',
   '【粮仓彩蛋】今天也发现了崭新的利韩美味粮！请继续守护这份爱与羁绊！🥔✨'
 ];
-
 export const RESOURCE_LINKS: ResourceLink[] = [
   {
     id: 'r-1',
@@ -359,14 +137,6 @@ export const RESOURCE_LINKS: ResourceLink[] = [
     category: 'link',
     description: '氛围感极佳的经典利韩同人文'
   }
-];
-
-export const CHEST_DAILY_SECRETS = [
-  '「你已经做得很好了，把接下来的事交给我吧。」—— 兵长的手帕已备好。获得 +10 XP！',
-  '「喂，韩吉，别再凑那么近了，眼镜要掉进汤里了。」—— 调查兵团第 104 次茶会。获得 +15 XP！',
-  '你发现了一张泛黄的古羊皮纸：【心臓を捧げよ】勇士，你的探索之路已被星光标记！',
-  '「既然没有前人走过的路，那就由我们来踏出第一步！」—— 韩吉的求知火种点燃了你的日志！',
-  '【稀有掉落】你获得了一块无垢巨人结晶糖 🍬，今日运气：大吉！获得 +20 XP！'
 ];
 
 // Raw data of Pixiv artists from the user's prompt
