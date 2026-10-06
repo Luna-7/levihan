@@ -1,6 +1,10 @@
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from './cloudbaseEndpoint';
 
-const PUBLIC_KEY = String(import.meta.env.VITE_VAPID_PUBLIC_KEY || '').trim();
+// VAPID 公钥本来就会随订阅请求发送给浏览器；保留环境变量覆盖，生产构建没有额外配置时也能工作。
+const PUBLIC_KEY = String(
+  import.meta.env.VITE_VAPID_PUBLIC_KEY ||
+  'BFL95lRhUzXe3H5bR4wn6PYdS6yDSWCuITi1wpYtgCblCNr89H2fbbfLuma8y0wCkIPESXifHyJVTyyExpR5f2A',
+).trim();
 
 export type WebPushState = 'unsupported' | 'default' | 'granted' | 'denied';
 
