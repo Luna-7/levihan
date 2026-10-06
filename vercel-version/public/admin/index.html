@@ -62,6 +62,13 @@
   input:focus,select:focus,textarea:focus{border-color:var(--green-2);box-shadow:0 0 0 3px rgba(30,67,52,.08)}
   input:disabled{background:#F2EDE2;color:var(--ink-3)}
   textarea{resize:vertical;min-height:38px}
+  /* 管理台表单统一控件节奏：同行字段使用相同标签槽和输入高度，避免上下错位。 */
+  [data-admin-page] .grid > .f > label:first-child{height:36px;min-height:36px;line-height:18px;align-items:flex-start;overflow:hidden}
+  [data-admin-page] .grid > .f > input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),
+  [data-admin-page] .grid > .f > select,
+  [data-admin-page] .grid > .f > .row > input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),
+  [data-admin-page] .grid > .f > .row > button{height:40px;min-height:40px;box-sizing:border-box}
+  [data-admin-page] .grid > .f > textarea{box-sizing:border-box}
   /* ---- buttons ---- */
   button{font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border-radius:6px;
          padding:8px 14px;border:1.5px solid var(--green-2);background:var(--paper);color:var(--green-2);
@@ -79,7 +86,7 @@
   .mode-switch{margin:16px 0 18px;padding:10px 14px;background:var(--paper);border:1.5px solid var(--green-2);
                border-radius:8px;box-shadow:2px 2px 0 rgba(30,67,52,.12)}
   .mode-switch select{width:min(260px,100%)}
-  .admin-tabs{position:sticky;top:10px;z-index:45;display:flex;gap:7px;overflow-x:auto;margin:16px 0 18px;
+  .admin-tabs{display:flex;gap:7px;overflow-x:auto;margin:16px 0 18px;
               padding:8px;background:rgba(251,247,236,.96);backdrop-filter:blur(10px);border:2px solid var(--green-2);
               border-radius:12px;box-shadow:3px 3px 0 rgba(30,67,52,.14);scrollbar-width:thin}
   .admin-tab{flex:1 0 auto;min-width:122px;border-color:transparent;background:transparent;color:var(--ink-3);white-space:nowrap}
@@ -87,8 +94,36 @@
   .admin-tab.active{background:var(--green-2);color:var(--paper);border-color:var(--green-2);box-shadow:0 3px 8px rgba(30,67,52,.2)}
   .admin-page-head{margin:0 0 12px;padding:12px 15px;border-left:4px solid var(--gold);background:#FFF9EC;border-radius:0 8px 8px 0}
   .admin-page-head h2{margin:0 0 2px;font-size:17px}
+  .admin-toolbar{min-height:40px;margin:0 0 12px;align-items:center}
   [data-admin-page].hide+.panel{margin-top:0}
-  .category-select{cursor:pointer;border-color:var(--green-2);background:#FFFCF4;font-weight:700}
+  /* ---- 管理台桌面布局：左侧导航 + 右侧内容，避免多层卡片边框 ---- */
+  @media(min-width:861px){
+    .wrap{max-width:none;margin:0;padding-left:24px;padding-right:24px}
+    #view-main{display:grid;grid-template-columns:208px minmax(0,1fr);gap:28px;align-items:start}
+    #view-main > nav.admin-tabs{grid-column:1;grid-row:1 / span 20;position:sticky;top:18px;align-self:start;display:flex;flex-direction:column;gap:3px;
+      width:208px;margin:0;padding:8px 10px 8px 0;background:transparent;border:0;
+      border-radius:0;box-shadow:none;backdrop-filter:none;overflow:visible}
+    #view-main > nav.admin-tabs::after{content:"";position:absolute;top:0;right:0;width:1px;height:100vh;background:var(--line);pointer-events:none}
+    #view-main > nav.admin-tabs .admin-tab{width:100%;min-width:0;flex:none;text-align:left;border:0;border-radius:8px;
+      padding:10px 12px;background:transparent;box-shadow:none}
+    #view-main > nav.admin-tabs .admin-tab.active{background:var(--green-2);color:var(--paper);box-shadow:none}
+    #view-main > :not(nav.admin-tabs){grid-column:2;min-width:0}
+    #view-main > .admin-page-head + .panel{padding-top:0}
+    #view-main > .panel{padding:18px 0;background:transparent;border:0;border-radius:0;box-shadow:none}
+    #view-main > .panel + .panel{margin-top:22px}
+    #view-main > .mode-switch{margin:0 0 10px;padding:8px 0;background:transparent;border:0;border-bottom:1px solid var(--line);
+      border-radius:0;box-shadow:none}
+  }
+  @media(max-width:860px){
+    .admin-sidebar-footer{display:none}
+    #view-main > nav.admin-tabs{position:static;gap:4px;margin:8px 0 16px;padding:0 0 8px;background:transparent;
+      border:0;border-bottom:1px solid var(--line);border-radius:0;box-shadow:none;backdrop-filter:none}
+    #view-main > nav.admin-tabs .admin-tab.active{box-shadow:none}
+  }
+  .admin-sidebar-footer{display:flex;flex-direction:column;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+  .admin-sidebar-footer #btn-logout{width:100%;text-align:left}
+  .admin-sidebar-footer #env-info{line-height:1.55}
+  @media(max-width:860px){.admin-sidebar-footer{display:none}}
   /* ---- 漫画上传页功能区左右切换 ---- */
   .sub-switch{display:inline-flex;align-items:center;border:1.5px solid var(--green-2);border-radius:8px;
               background:#FFFCF4;overflow:hidden;box-shadow:2px 2px 0 rgba(30,67,52,.12)}
@@ -189,8 +224,71 @@
            align-items:center;gap:6px;font-family:var(--font-ui);font-size:10.5px;color:#8C7A68}
   .nv-acts{display:flex;gap:6px;flex:none}
   .nv-acts button{padding:3px 9px;font-size:11px;border-radius:5px}
-  .notice-preview{width:100%;max-width:560px;aspect-ratio:16/9;object-fit:cover;border:1.5px solid var(--line);
+  .announcement-form{grid-template-columns:repeat(6,minmax(0,1fr));grid-template-areas:
+    'tag tag time time author author'
+    'title title title link link link'
+    'description description description image image image';align-items:start}
+  .announcement-form .an-field-tag{grid-area:tag}
+  .announcement-form .an-field-time{grid-area:time}
+  .announcement-form .an-field-author{grid-area:author}
+  .announcement-form .an-field-title{grid-area:title}
+  .announcement-form .an-field-link{grid-area:link}
+  .announcement-form .an-field-description{grid-area:description}
+  .announcement-form .an-field-image{grid-area:image}
+  .announcement-form .f{min-width:0}
+  .notice-preview{width:100%;max-width:560px;max-height:420px;object-fit:contain;border:1.5px solid var(--line);
                   border-radius:8px;background:#EEE7D7;display:block;margin-top:8px}
+  .image-drop{display:flex;align-items:center;justify-content:center;min-height:112px;padding:16px;border:2px dashed var(--line);
+              border-radius:8px;background:var(--card);color:var(--ink-3);text-align:center;cursor:pointer;transition:.15s}
+  .image-drop:hover,.image-drop.over,.image-drop:focus-within{border-color:var(--green-2);background:#F5F0E2;color:var(--green-2)}
+  .image-drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+  .image-drop strong{display:block;color:var(--green-2);font-size:13px}
+  .image-drop kbd{display:inline-block;margin:0 2px;padding:1px 5px;border:1px solid var(--line);border-radius:4px;background:#fff;font-family:var(--font-code),var(--font-ui);font-size:11px}
+  @media(max-width:760px){
+    .announcement-form{grid-template-columns:1fr;grid-template-areas:
+      'tag' 'time' 'author' 'title' 'link' 'description' 'image'}
+  .announcement-form .f.span2{grid-column:auto}
+    .notice-preview{max-height:320px}
+  }
+  .announcement-form .an-field-description textarea,
+  .announcement-form .an-field-image .image-drop{height:116px;min-height:116px;box-sizing:border-box}
+  .novel-admin-form{grid-template-columns:repeat(6,minmax(0,1fr));grid-template-areas:
+    'title title author author homepage homepage'
+    'tags tags tags warning warning warning'
+    'note note note note note note'
+    'body body body body body body';align-items:start}
+  .novel-admin-form .nv-field-title{grid-area:title}
+  .novel-admin-form .nv-field-author{grid-area:author}
+  .novel-admin-form .nv-field-homepage{grid-area:homepage}
+  .novel-admin-form .nv-field-tags{grid-area:tags}
+  .novel-admin-form .nv-field-warning{grid-area:warning}
+  .novel-admin-form .nv-field-note{grid-area:note}
+  .novel-admin-form .nv-field-body{grid-area:body}
+  @media(max-width:760px){
+    .novel-admin-form{grid-template-columns:1fr;grid-template-areas:
+      'title' 'author' 'homepage' 'tags' 'warning' 'note' 'body'}
+    .novel-admin-form .f.span2{grid-column:auto}
+  }
+  .artwork-admin-form{grid-template-columns:repeat(6,minmax(0,1fr));grid-template-areas:
+    'title title author author homepage homepage'
+    'tags tags tags notes notes notes'
+    'upload upload upload upload upload upload';align-items:start}
+  .artwork-admin-form .art-admin-title{grid-area:title}
+  .artwork-admin-form .art-admin-author{grid-area:author}
+  .artwork-admin-form .art-admin-homepage{grid-area:homepage}
+  .artwork-admin-form .art-admin-tags{grid-area:tags}
+  .artwork-admin-form .art-admin-notes{grid-area:notes}
+  .artwork-admin-form .art-admin-upload{grid-area:upload}
+  .artwork-admin-form .f{display:flex;flex-direction:column;min-width:0}
+  .artwork-admin-form input,.artwork-admin-form textarea{min-height:40px}
+  .artwork-admin-form .art-admin-notes textarea{height:40px;resize:vertical}
+  .artwork-admin-form .drop{min-height:116px;display:flex;flex-direction:column;justify-content:center}
+  #art-admin-save,#art-admin-publish-only{min-height:44px}
+  #art-admin-drop{padding:18px 12px}
+  #art-admin-files{grid-template-columns:repeat(auto-fill,minmax(92px,1fr));max-height:300px}
+  #art-admin-files .file img{aspect-ratio:1/1;object-fit:contain}
+  .artwork-admin-card{align-items:flex-start}
+  .artwork-admin-card>img{width:110px;height:84px;object-fit:contain;border:1px solid var(--line);border-radius:5px;background:#EDE7D8;flex:none}
   .notice-row{display:flex;gap:10px;align-items:center;padding:9px;border:1.5px solid var(--rule);
               border-radius:8px;background:var(--card);margin-top:8px}
   .goods-admin-card{position:relative;padding-top:42px}
@@ -203,7 +301,7 @@
   .goods-batch-list{display:flex;gap:6px;flex-wrap:wrap;max-width:520px}
   .goods-batch-list button{padding:4px 7px;font-size:11px}
   .goods-batch-list button.active{background:var(--green-2);color:var(--paper)}
-  .notice-row img{width:120px;aspect-ratio:16/9;object-fit:cover;border-radius:5px;background:#EDE7D8;flex:none}
+  .notice-row img{width:120px;height:90px;object-fit:contain;border-radius:5px;background:#EDE7D8;flex:none}
   .notice-row .info{flex:1;min-width:0}
   /* ---- author registry table ---- */
   .author-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
@@ -230,8 +328,8 @@
   .hide{display:none!important}
   .sw{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--ink-2)}
   /* ---- 标签选择器（类名统一 tag* 前缀，避开 .tag/.chip 既有样式） ---- */
-  .tagbox{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:5px;min-height:36px;
-          padding:4px 30px 4px 6px;border:1.5px solid var(--line);border-radius:6px;background:#fff;cursor:text}
+  .tagbox{position:relative;display:flex;flex-wrap:wrap;align-items:center;align-content:center;gap:5px;height:auto;min-height:40px;
+          padding:4px 30px 4px 6px;border:1.5px solid var(--line);border-radius:6px;background:#fff;cursor:text;box-sizing:border-box}
   .tagbox:focus-within{border-color:var(--green-2)}
   .tagchips{display:contents}
   .tagchip{display:inline-flex;align-items:center;gap:4px;background:#EDF3EE;border:1.5px solid #BFD8C8;
@@ -241,13 +339,12 @@
                   color:#3C5A48;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center}
   .tagchip button:hover{background:var(--danger);color:#fff}
   .taginput{flex:1 1 90px;min-width:80px;border:0;outline:0;background:transparent;font:inherit;font-size:13px;
-            padding:3px 2px;color:var(--ink)}
-  .tagcaret{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:26px;height:26px;padding:0;
+            height:28px;min-height:28px;padding:3px 2px;color:var(--ink);box-sizing:border-box}
+  .tagcaret{position:absolute;right:2px;top:4px;width:26px;height:26px;padding:0;
             border:0;background:transparent;color:var(--ink-3);font-size:13px;line-height:1;border-radius:5px}
   .tagcaret:hover{background:#F0EADD;color:var(--green-2)}
-  .tagmenu{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;max-height:236px;overflow:auto;
-           background:#fff;border:1.5px solid var(--green-2);border-radius:8px;box-shadow:0 8px 22px rgba(30,67,52,.18);
-           padding:4px}
+  .tagmenu{position:static;order:3;flex:0 0 100%;width:100%;max-height:236px;overflow:auto;
+           margin:4px 0 0;background:#fff;border:0;border-radius:0;padding:4px 0 0;box-sizing:border-box}
   .tagmenu .empty{padding:8px 10px;font-size:12px;color:var(--ink-3)}
   .tagopt{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-size:12.5px;cursor:pointer}
   .tagopt:hover{background:#F1F6F2}
@@ -366,17 +463,6 @@
   <!-- ================= 主界面 ================= -->
   <section id="view-main" class="hide" data-page-node-id="DZX1H4Kk69FKiv0MWMu2GT">
 
-    <div class="panel" data-page-node-id="0nn7AKWhiADooIohbrkyJX">
-      <div class="spread" data-page-node-id="KMBwiIYoDF4mulEVzuZWE8">
-        <div class="row" style="gap:10px" data-page-node-id="tevdWb7M7rtCleQ6UBgCwC">
-          <span class="px" style="font-size:13px;color:var(--green-2)" data-page-node-id="OgUHoEra8mGLsvBnAXfRPy">🥔</span>
-          <h1 data-page-node-id="AkgGLQnIiRmBbCRn8qX3lr">利韩土豆仓 · 管理工作台</h1>
-        </div>
-        <button class="btn-sm" id="btn-logout" data-page-node-id="naJKsiaxQiHVY36RklDKI7">退出登录</button>
-      </div>
-      <div class="muted" style="margin-top:8px" id="env-info" data-page-node-id="EamxdIFL8xzWob8c0TtHxf">正在连接…</div>
-    </div>
-
     <nav class="admin-tabs" aria-label="管理台功能切换">
       <button type="button" class="admin-tab active" data-admin-tab="manga">📚 漫画上传</button>
       <button type="button" class="admin-tab" data-admin-tab="novel">📮 投递管理</button>
@@ -386,6 +472,10 @@
       <button type="button" class="admin-tab" data-admin-tab="inbox">📬 调查报告收件箱 <span id="inbox-badge" class="hide" style="display:inline-flex;min-width:19px;height:19px;padding:0 5px;align-items:center;justify-content:center;border-radius:10px;background:#C6452D;color:#fff;font-size:11px">0</span></button>
       <button type="button" class="admin-tab" data-admin-tab="authors">📇 作者登记</button>
       <button type="button" class="admin-tab" data-admin-tab="forum">🌳 餐厅论坛</button>
+      <div class="admin-sidebar-footer">
+        <button class="btn-sm" id="btn-logout">退出登录</button>
+        <div class="muted" id="env-info">正在连接…</div>
+      </div>
     </nav>
 
     <div class="row mode-switch" data-admin-page="manga" aria-label="功能区与作品分类选择">
@@ -397,13 +487,6 @@
       </div>
       <span class="row" data-sub="upload" style="gap:8px"></span>
     </div>
-    <!-- 作品类型选择器已按需求移除；上传接口仍需要 category 字段，保留隐藏默认值「漫画本」 -->
-    <select id="f-category" class="hide" aria-hidden="true" tabindex="-1">
-      <option value="漫画本" selected>漫画本</option>
-      <option value="插画集">插画集</option>
-      <option value="商业志">商业志</option>
-    </select>
-
     <div class="admin-page-head hide" data-admin-page="inbox"><h2>📬 调查报告收件箱</h2><div class="muted">接收并处理前台「调查报告呈递」提交的所有来信与报告。</div></div>
     <div class="panel hide" id="inbox-panel" data-admin-page="inbox">
       <div class="spread" style="margin-bottom:12px">
@@ -414,7 +497,7 @@
       <div id="inbox-contacts" style="margin-top:14px"></div>
     </div>
 
-    <div class="admin-page-head hide" data-admin-page="announcement"><h2>📢 公告管理</h2><div class="muted">维护首页公告卡片、横版图片与跳转入口。</div></div>
+    <div class="admin-page-head hide" data-admin-page="announcement"><h2>📢 公告管理</h2><div class="muted">维护首页公告卡片、图片与跳转入口。</div></div>
     <div class="panel hide" id="announcement-panel" data-admin-page="announcement">
       <div class="spread" style="margin-bottom:12px">
         <h2 style="margin:0">📢 首页公告栏</h2>
@@ -422,33 +505,35 @@
       </div>
       <details open style="margin-bottom:16px"><summary>待审核企划</summary><div id="an-review"><p class="muted">暂无待审核企划</p></div></details>
       <div id="an-list"><p class="muted">登录后自动载入公告。</p></div>
-      <div class="grid" style="margin-top:16px">
-        <div class="f">
-          <label for="an-tag">标签 <span class="req">*</span> <span class="tag">如：粮仓特报、功能更新、利韩企划</span></label>
-          <input type="text" id="an-tag" maxlength="20" list="an-tag-list" placeholder="粮仓特报">
-          <datalist id="an-tag-list"><option value="粮仓特报"><option value="功能更新"><option value="利韩企划"></datalist>
+      <div class="grid announcement-form" style="margin-top:16px">
+        <div class="f an-field-tag">
+          <label for="an-tag">标签 <span class="req">*</span></label>
+          <input type="text" id="an-tag" maxlength="20" placeholder="公告标签">
         </div>
-        <div class="f span2">
+        <div class="f span2 an-field-title">
           <label for="an-title">标题 <span class="req">*</span></label>
           <input type="text" id="an-title" maxlength="100" placeholder="公告标题">
         </div>
-        <div class="f">
+        <div class="f an-field-time">
           <label for="an-time">时间 <span class="tag">选填</span></label>
           <input type="date" id="an-time">
         </div>
-        <div class="f">
+        <div class="f an-field-author">
           <label for="an-author">发布人 <span class="req">*</span></label>
           <input type="text" id="an-author" maxlength="40" placeholder="粮仓管理员">
         </div>
-        <div class="f span2">
+        <div class="f span2 an-field-link">
           <label for="an-link">跳转链接 <span class="tag">选填；填写后公告才显示跳转按钮</span></label>
           <input type="url" id="an-link" maxlength="500" placeholder="https://… 或 /站内路径">
         </div>
-        <div class="f span2"><label for="an-description">公告宣传文本 <span class="tag">选填</span></label><textarea id="an-description" rows="4" maxlength="2000" placeholder="公告栏正文"></textarea></div>
-        <div class="f span2">
-          <label for="an-image">横版图片 <span class="tag">选填；将自动居中裁成 16:9、1200×675 WebP</span></label>
-          <input type="file" id="an-image" accept="image/*">
-          <img id="an-image-preview" class="notice-preview hide" alt="公告横版图片预览">
+        <div class="f span2 an-field-description"><label for="an-description">公告宣传文本 <span class="tag">选填</span></label><textarea id="an-description" rows="4" maxlength="2000" placeholder="公告栏正文"></textarea></div>
+        <div class="f span2 an-field-image">
+          <label for="an-image">图片 <span class="tag">选填；保持原比例并自动转换为 WebP</span></label>
+          <label class="image-drop" id="an-image-drop" for="an-image" tabindex="0">
+            <span><strong>选择图片</strong>或将图片拖入此处，也可以直接按 <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>V</kbd> 粘贴</span>
+            <input type="file" id="an-image" accept="image/*">
+          </label>
+          <img id="an-image-preview" class="notice-preview hide" alt="公告图片预览">
         </div>
       </div>
       <div class="row" style="margin-top:14px">
@@ -526,7 +611,7 @@
           <button class="btn-sm btn-gold" id="author-export">⬇ 导出 Excel</button>
         </div>
       </div>
-      <div class="muted" id="author-status">发布作品或在线小说时，会自动把「作者名 + 主页链接」登记到这里；下次输入同名作者，上传台会自动带出链接。</div>
+      <div class="muted" id="author-status">发布作品或同人文时，会自动把「作者名 + 主页链接」登记到这里；下次输入同名作者，上传台会自动带出链接。</div>
       <div class="row" style="margin:10px 0;gap:6px;flex-wrap:wrap">
         <input type="text" id="al-name" placeholder="作者 / 社团名" style="max-width:220px">
         <input type="url" id="al-url" placeholder="https:// 主页链接（可空）" style="max-width:320px">
@@ -790,28 +875,6 @@
         </div>
       </div>
 
-      <details style="margin-top:14px" data-page-node-id="FGA8QttqrgHBeb2bnKAKoX">
-        <summary data-page-node-id="SS5ZdxriB4pZmiD1H89sG8">高级设置（存储路径 / 命名规则）</summary>
-        <div class="grid" style="margin-top:10px" data-page-node-id="2QZmxg2vDyKyZBYvcbxYdv">
-          <div class="f" data-page-node-id="NqDNRCOCcFzDQ6qjFV4eUI">
-            <label for="f-bookFolder" data-page-node-id="NgnQs4X6lsaRmTokTRxt72">存储目录 <span class="tag" data-page-node-id="PkOSVpt4KO2vGfgWLbWueA">默认同 ID</span></label>
-            <input type="text" id="f-bookFolder" placeholder="lh-001" data-page-node-id="NQx0mpkR574IlG5sdU5JV2">
-          </div>
-          <div class="f" data-page-node-id="utGWWSz5TNhn7QiKOZaAI7">
-            <label for="f-pagePrefix" data-page-node-id="uwM46KJtZKgu6pKa4j8DMz">图片前缀 <span class="tag" data-page-node-id="Pqw0mn44PSAqA4KrzlDeLM">默认 image</span></label>
-            <input type="text" id="f-pagePrefix" placeholder="image" data-page-node-id="0nb5WUiRmeP0LlJCtXDDsH">
-          </div>
-          <div class="f" data-page-node-id="cUkXUWsBFD0KOzRJo1sVrv">
-            <label for="f-pagePadDigits" data-page-node-id="2YZm2Vrrjz1xLxWsHvu7bD">页码位数 <span class="tag" data-page-node-id="dpE85f3WocUghzGGZUqqn4">默认 2</span></label>
-            <input type="number" id="f-pagePadDigits" min="1" max="5" step="1" placeholder="2" data-page-node-id="Eluk8yO8UMdPfumyMgbuT0">
-          </div>
-          <div class="f" data-page-node-id="l2pzVXbrWKYbGmQ0DOlfGi">
-            <label for="f-coverFile" data-page-node-id="tIXwaf06IpqQj6HrzDbvCI">封面文件 <span class="tag" data-page-node-id="vu53S6vh6SLqeaCIop0aVN">默认第 1 张</span></label>
-            <input type="text" id="f-coverFile" placeholder="image01.webp" data-page-node-id="2P4JzeC2nzHl54fhWhxxSy">
-          </div>
-        </div>
-        <p class="muted" style="margin:10px 0 0" data-page-node-id="6ejCGP42lpS66Cqr56qgGg">留空即使用默认值；站点按 <code data-page-node-id="MgVJqYeRKk0jkUoxoEyvFN">{目录}/{前缀}{页码}.webp</code> 读取内页。</p>
-      </details>
     </div>
 
     <!-- 上传图片 -->
@@ -906,41 +969,57 @@
     </div>
 
     <!-- 小说与插画投递管理 -->
-    <div class="admin-page-head hide" data-admin-page="novel"><h2>📮 投递管理</h2><div class="muted">集中审核小说、插画投递，并管理已收录小说。</div></div>
+      <div class="admin-page-head hide" data-admin-page="novel"><h2>📮 投递管理</h2><div class="muted">集中管理同人文与插画集。</div></div>
     <div class="panel hide" id="nv-panel-top" data-admin-page="novel" data-page-node-id="nvpanel0000000000000000000a">
-      <div class="spread" style="margin-bottom:12px" data-page-node-id="nvpanel0000000000000000000b">
-        <h2 style="margin:0" data-page-node-id="nvpanel0000000000000000000c"><span class="n" data-page-node-id="nvpanel0000000000000000000d">D</span> 在线小说 <span class="muted" id="nv-count" data-page-node-id="nvpanel0000000000000000000e"></span></h2>
-        <div class="row" style="gap:8px" data-page-node-id="nvpanel0000000000000000000f">
+      <div id="nv-toolbar" class="spread admin-toolbar" data-page-node-id="nvpanel0000000000000000000b">
+        <div class="row" style="gap:8px" data-page-node-id="nvpanel0000000000000000000g">
+          <button class="btn-sm btn-primary" data-novel-admin-kind="novels">同人文管理</button>
+          <button class="btn-sm" data-novel-admin-kind="artwork">插画集管理</button>
+        </div>
+        <div id="nv-novel-actions" class="row" style="gap:8px" data-page-node-id="nvpanel0000000000000000000f">
           <button class="btn-sm" id="btn-nv-reload" data-page-node-id="nvpanel00000000000000000010">↻ 刷新列表</button>
           <button class="btn-sm" id="btn-nv-clear" data-page-node-id="nvpanel00000000000000000011">清空表单</button>
         </div>
+        <div id="art-admin-actions" class="row hide" style="gap:8px"><button class="btn-sm" id="art-admin-clear">清空表单</button></div>
       </div>
-      <div class="row" style="margin-bottom:12px"><button class="btn-sm btn-primary" data-novel-admin-kind="novels">已收录小说</button><button class="btn-sm" data-novel-admin-kind="review">小说 / 插画待审核</button></div>
-      <div id="nv-review" class="hide"><p class="muted">暂无待审核投稿</p></div>
+      <div id="nv-artwork-panel" class="hide">
+        <div id="art-admin-list"><p class="muted">暂无已收录插画集。</p></div>
+        <div class="grid artwork-admin-form" style="margin-top:14px">
+          <div class="f art-admin-title"><label for="art-admin-title">标题 <span class="req">*</span></label><input type="text" id="art-admin-title" maxlength="100" placeholder="插画集标题"></div>
+          <div class="f art-admin-author"><label for="art-admin-author">创作者 <span class="req">*</span></label><input type="text" id="art-admin-author" maxlength="80" placeholder="画师昵称 / 社团"></div>
+          <div class="f art-admin-homepage"><label for="art-admin-homepage">主页链接 <span class="tag">可选</span></label><input type="url" id="art-admin-homepage" maxlength="300" placeholder="https://..."></div>
+          <div class="f art-admin-tags"><label for="art-admin-tags">标签 <span class="req">*</span></label><input type="text" id="art-admin-tags" maxlength="200" placeholder="逗号分隔，如：同人,彩插"></div>
+          <div class="f art-admin-notes"><label for="art-admin-notes">备注 <span class="tag">可选</span></label><textarea id="art-admin-notes" rows="3" maxlength="1000" placeholder="作品说明或展示备注"></textarea></div>
+          <div class="f art-admin-upload"><label>上传图片 <span class="tag">自动转 WebP，保持比例</span></label><div class="drop" id="art-admin-drop"><div style="font-size:24px">🎨</div><div style="font-weight:700;color:var(--ink);margin-top:4px">拖入图片，或点击选择</div><div class="muted" style="margin-top:3px">JPG / PNG / GIF / WebP，最多 60 张</div><input type="file" id="art-admin-picker" accept="image/*" multiple class="hide"></div><div class="files" id="art-admin-files"></div></div>
+        </div>
+        <div class="row" style="margin-top:14px"><button class="btn-gold" id="art-admin-save">上传并发布插画集</button><button class="btn-sm" id="art-admin-publish-only">仅更新信息</button></div>
+        <div class="msg" id="art-admin-msg"></div>
+      </div>
       <!-- 站外推荐已迁至前台「兵长茶会 → 安利墙」，此面板仅保留容器以维持脚本引用有效，不再展示入口 -->
       <div id="rec-admin" class="hide"><div id="rec-admin-list"></div><p class="muted">站外推荐已迁至安利墙。</p></div>
 
+      <div id="nv-novel-content">
       <div id="nv-list" data-page-node-id="nvpanel00000000000000000012"><p class="muted" data-page-node-id="nvpanel00000000000000000013">加载中…</p></div>
 
-      <div class="grid" style="margin-top:12px" data-page-node-id="nvpanel00000000000000000014">
-        <div class="f" data-page-node-id="nvpanel00000000000000000015">
+      <div class="grid novel-admin-form" style="margin-top:12px" data-page-node-id="nvpanel00000000000000000014">
+        <div class="f nv-field-title" data-page-node-id="nvpanel00000000000000000015">
           <label for="nv-title" data-page-node-id="nvpanel00000000000000000016">标题 <span class="req">*</span></label>
           <input type="text" id="nv-title" placeholder="例如：雨夜与糖（上）" data-page-node-id="nvpanel00000000000000000017">
         </div>
-        <div class="f" data-page-node-id="nvpanel00000000000000000018">
+        <div class="f nv-field-author" data-page-node-id="nvpanel00000000000000000018">
           <label for="nv-author" data-page-node-id="nvpanel00000000000000000019">作者 <span class="req">*</span></label>
           <input type="text" id="nv-author" placeholder="例如：阿蓝" data-page-node-id="nvpanel00000000000000000020">
         </div>
-        <div class="f" data-page-node-id="novel-author-homepage">
+        <div class="f nv-field-homepage" data-page-node-id="novel-author-homepage">
           <label for="nv-authorUrl">主页链接 <span class="tag">可选</span></label>
           <input type="url" id="nv-authorUrl" placeholder="https://www.pixiv.net/users/..." autocomplete="url">
           <div class="muted author-link-hint" id="nv-author-link-hint" aria-live="polite"></div>
         </div>
-        <div class="f span2" data-page-node-id="nvpanel00000000000000000021">
+        <div class="f span2 nv-field-tags" data-page-node-id="nvpanel00000000000000000021">
           <label for="nv-tags" data-page-node-id="nvpanel00000000000000000022">标签 <span class="req">*</span> <span class="tag" data-page-node-id="nvpanel00000000000000000023">英文逗号分隔，如：原作向,R</span></label>
           <input type="text" id="nv-tags" placeholder="例如：原作向,R" data-page-node-id="nvpanel00000000000000000024">
         </div>
-        <div class="f span2" data-page-node-id="nvpanel00000000000000000025">
+        <div class="f span2 nv-field-warning" data-page-node-id="nvpanel00000000000000000025">
           <label style="align-items:center" data-page-node-id="nvpanel00000000000000000026">
             <input type="checkbox" id="nv-warn-on" style="width:auto" data-page-node-id="nvpanel00000000000000000027">
             ⚠ 内容预警 <span class="tag" data-page-node-id="nvpanel00000000000000000028">勾选后填写，站点卡片会显示</span>
@@ -949,11 +1028,11 @@
             <textarea id="nv-warning" rows="2" maxlength="100" data-page-node-id="nvpanel00000000000000000030"></textarea>
           </div>
         </div>
-        <div class="f span2" data-page-node-id="nvpanel00000000000000000031">
+        <div class="f span2 nv-field-note" data-page-node-id="nvpanel00000000000000000031">
           <label for="nv-note" data-page-node-id="nvpanel00000000000000000032">作者说的话 <span class="req">*</span> <span class="tag" data-page-node-id="nvpanel00000000000000000033">卡片引用块展示</span></label>
           <textarea id="nv-note" rows="2" maxlength="2000" data-page-node-id="nvpanel00000000000000000034"></textarea>
         </div>
-        <div class="f span2" data-page-node-id="nvpanel00000000000000000035">
+        <div class="f span2 nv-field-body" data-page-node-id="nvpanel00000000000000000035">
           <div class="row" style="justify-content:space-between">
             <label for="nv-body" data-page-node-id="nvpanel00000000000000000036">正文 <span class="req">*</span> <span class="tag" data-page-node-id="nvpanel00000000000000000037">段落之间空一行，站点按空行分段 · 上限 50 万字</span></label>
             <button type="button" class="btn-sm" id="btn-nv-import-docx">📄 导入 Word / 文本</button>
@@ -969,6 +1048,7 @@
       </div>
       <div class="msg" id="nv-msg" data-page-node-id="nvpanel00000000000000000042"></div>
       <p class="muted" style="margin-top:10px" data-page-node-id="nvpanel00000000000000000043">正文以纯文本存入 COS novels/{id}.txt，索引写入 novels.json；与上面的图片上传互相独立。</p>
+      </div>
     </div>
 
   </section>
@@ -1068,7 +1148,10 @@ var goodsItems = [];
 var goodsEditingFile = '';
 var goodsPending = [];
 var goodsCropIndex = -1;
-var goodsDrag = null;
+  var goodsDrag = null;
+  var artAdminEditingId = '';
+  var artAdminFiles = [];
+  var uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'' };
 
 /* ============ 小工具 ============ */
 function $(id){ return document.getElementById(id); }
@@ -1182,10 +1265,6 @@ function suggestNovelAuthorUrl(){
   var src = authorUrlSource($('nv-author').value);
   $('nv-author-link-hint').textContent = found ? '✓ 已从' + src + '匹配主页链接，可手动修改。' : '';
 }
-function syncCategory(){
-  // 功能区改为独立页面后，作品类型只影响漫画归档字段，不再承担页面切换。
-}
-
 var activeAdminPage = 'manga';
 function switchAdminPage(page, updateHash){
   var allowed = ['manga','novel','announcement','goods','support','inbox','authors','forum','toolkit'];
@@ -1206,7 +1285,9 @@ function switchAdminPage(page, updateHash){
   });
   // 只有漫画页才有功能区；离开漫画页必须把带 data-sub 的面板整批收起，
   // 否则它们带着 data-sub="upload" 会被一并放出来，串到小说 / 公告等页面上。
-  if (isManga) setMangaSub(sub, false);
+  if (isManga) {
+    setMangaSub(sub, false);
+  }
   else hideAllSubPanels();
   if (updateHash !== false) history.replaceState(null, '', '#admin-' + (sub === 'toolkit' ? 'toolkit' : page));
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1332,24 +1413,35 @@ function resetAnnouncementForm(){
   $('an-image-preview').src = ''; $('an-image-preview').classList.add('hide');
   $('an-save').textContent = '发布公告'; hide($('an-msg'));
 }
-function cropAnnouncementImage(file){
+function convertAnnouncementImage(file){
   if (!file || !/^image\//.test(file.type)) return Promise.reject(new Error('请选择图片文件。'));
   return new Promise(function(resolve, reject){
     var img = new Image(); var url = URL.createObjectURL(file);
     img.onload = function(){
       try {
-        var canvas = document.createElement('canvas'); canvas.width = 1200; canvas.height = 675;
-        var sw = img.naturalWidth, sh = Math.round(sw * 9 / 16);
-        if (sh > img.naturalHeight) { sh = img.naturalHeight; sw = Math.round(sh * 16 / 9); }
-        var sx = Math.round((img.naturalWidth - sw) / 2), sy = Math.round((img.naturalHeight - sh) / 2);
-        canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, 1200, 675);
+        // 不裁切、不强制比例；仅限制超大图的长边，避免浏览器画布和接口请求过大。
+        var maxEdge = 2400, scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+        var width = Math.max(1, Math.round(img.naturalWidth * scale));
+        var height = Math.max(1, Math.round(img.naturalHeight * scale));
+        var canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
         URL.revokeObjectURL(url);
-        var data = canvas.toDataURL('image/webp', .86); resolve(data);
+        var data = canvas.toDataURL('image/webp', .86);
+        if (data.indexOf('data:image/webp,') !== 0) throw new Error('当前浏览器不支持 WebP 转换，请更换现代浏览器。');
+        resolve(data);
       } catch(e) { URL.revokeObjectURL(url); reject(e); }
     };
     img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('图片读取失败。')); };
     img.src = url;
   });
+}
+function setAnnouncementImage(file){
+  if (!file) return;
+  show($('an-msg'),'info','正在转换为 WebP…');
+  convertAnnouncementImage(file).then(function(data){
+    anImageBase64 = data.split(',')[1] || ''; $('an-image-preview').src = data;
+    $('an-image-preview').alt = '公告图片预览'; $('an-image-preview').classList.remove('hide'); hide($('an-msg'));
+  }).catch(function(err){ show($('an-msg'),'err',err.message || String(err)); });
 }
 function saveAnnouncement(){
   var item = { id: anEditingId || undefined, tag:$('an-tag').value.trim(), title:$('an-title').value.trim(),
@@ -1364,11 +1456,24 @@ function saveAnnouncement(){
 }
 $('an-image').addEventListener('change', function(){
   var file = this.files && this.files[0]; if (!file) return;
-  show($('an-msg'),'info','正在生成 16:9 横版图片…');
-  cropAnnouncementImage(file).then(function(data){
-    anImageBase64 = data.split(',')[1] || ''; $('an-image-preview').src = data;
-    $('an-image-preview').classList.remove('hide'); hide($('an-msg'));
-  }).catch(function(err){ show($('an-msg'),'err',err.message || String(err)); });
+  setAnnouncementImage(file);
+});
+['dragenter','dragover'].forEach(function(type){ $('an-image-drop').addEventListener(type, function(e){ e.preventDefault(); this.classList.add('over'); }); });
+['dragleave','drop'].forEach(function(type){ $('an-image-drop').addEventListener(type, function(e){ e.preventDefault(); this.classList.remove('over'); }); });
+$('an-image-drop').addEventListener('drop', function(e){
+  var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  setAnnouncementImage(file);
+});
+$('an-image-drop').addEventListener('keydown', function(e){
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('an-image').click(); }
+});
+$('announcement-panel').addEventListener('paste', function(e){
+  var items = e.clipboardData && e.clipboardData.items || [];
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].kind === 'file' && /^image\//.test(items[i].type)) {
+      e.preventDefault(); setAnnouncementImage(items[i].getAsFile()); return;
+    }
+  }
 });
 $('an-save').addEventListener('click', saveAnnouncement);
 $('an-clear').addEventListener('click', resetAnnouncementForm);
@@ -1547,6 +1652,7 @@ function loadBooks(){
     });
     tagLib = d.tagLib || [];
     renderTagUI();
+    renderArtAdminList();
     $('bk-count').textContent = '共 ' + books.length + ' 本';
     if (!books.length) { box.innerHTML = '<p class="muted">归档还是空的，先在上面新建一本吧。</p>'; return; }
     box.innerHTML = books.map(function(b){
@@ -1572,6 +1678,92 @@ function loadBooks(){
   });
 }
 
+/* ============ 插画管理（投递管理内模式） ============ */
+function renderArtAdminList(){
+  var box = $('art-admin-list');
+  var items = books.filter(function(b){ return b && b.category === '插画集'; });
+  if (!items.length) { box.innerHTML = '<p class="muted">暂无已收录插画集。</p>'; return; }
+  box.innerHTML = items.map(function(b){
+    var cover = CDN + '/' + (b.bookFolder || b.id) + '/' + (b.coverFile || 'image01.webp');
+    return '<div class="notice-row artwork-admin-card"><img src="' + esc(cover) + '" alt="" loading="lazy" onerror="this.style.opacity=.25">' +
+      '<div class="info"><b>' + esc(b.titleZh) + '</b><div class="muted">' + esc(b.circle || '未填写创作者') + ' · ' + (b.pages || 0) + ' 张' +
+      (b.authorUrl ? ' · 已设置主页' : '') + '</div><div class="muted">' + esc(b.id) + '</div></div>' +
+      '<button class="btn-sm" data-art-admin-edit="' + esc(b.id) + '">编辑</button>' +
+      '<button class="btn-sm btn-danger" data-art-admin-del="' + esc(b.id) + '">删除</button></div>';
+  }).join('');
+}
+function renderArtAdminFiles(){
+  var box = $('art-admin-files');
+  box.innerHTML = artAdminFiles.map(function(item, index){
+    return '<div class="file" data-art-file-index="' + index + '"><img src="' + esc(item.url) + '" alt="' + esc(item.name) + '"><div class="meta"><span title="' + esc(item.name) + '">' + esc(item.name) + '</span><button type="button" class="btn-sm btn-danger" data-art-file-del="' + index + '" aria-label="移除 ' + esc(item.name) + '">×</button></div></div>';
+  }).join('');
+}
+function resetArtAdminForm(){
+  artAdminFiles.forEach(function(item){ if (item.url) URL.revokeObjectURL(item.url); });
+  artAdminEditingId = ''; artAdminFiles = [];
+  ['art-admin-title','art-admin-author','art-admin-homepage','art-admin-tags','art-admin-notes'].forEach(function(id){ $(id).value = ''; });
+  $('art-admin-picker').value = ''; $('art-admin-files').innerHTML = '';
+  $('art-admin-save').textContent = '上传并发布插画集'; $('art-admin-publish-only').disabled = true; hide($('art-admin-msg'));
+}
+function fillArtAdminForm(book){
+  artAdminFiles.forEach(function(item){ if (item.url) URL.revokeObjectURL(item.url); });
+  artAdminFiles = []; artAdminEditingId = book.id;
+  $('art-admin-title').value = book.titleZh || '';
+  $('art-admin-author').value = book.circle || '';
+  $('art-admin-homepage').value = book.authorUrl || '';
+  $('art-admin-tags').value = (book.tags || []).join(',');
+  $('art-admin-notes').value = book.warning || '';
+  $('art-admin-files').innerHTML = '';
+  $('art-admin-save').textContent = '保存并替换图片'; $('art-admin-publish-only').disabled = false;
+  $('nv-artwork-panel').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+function addArtAdminFiles(list){
+  var incoming = Array.prototype.slice.call(list || []).filter(function(file){ return /^image\//.test(file.type); });
+  if (!incoming.length) { show($('art-admin-msg'),'err','请选择图片文件。'); return; }
+  var room = Math.max(0, 60 - artAdminFiles.length);
+  incoming.slice(0, room).forEach(function(file){ artAdminFiles.push({ file:file, name:file.name, url:URL.createObjectURL(file) }); });
+  if (incoming.length > room) show($('art-admin-msg'),'info','最多上传 60 张图片，已忽略超出部分。');
+  renderArtAdminFiles();
+}
+function artAdminBookPayload(id, pageFiles){
+  var tags = $('art-admin-tags').value.split(/[,，]/).map(function(tag){ return tag.trim(); }).filter(Boolean);
+  return { id:id, titleZh:$('art-admin-title').value.trim(), titleJp:'', circle:$('art-admin-author').value.trim(), authorUrl:$('art-admin-homepage').value.trim(),
+    category:'插画集', tags:tags, source:'原创插画', translator:'—', typesetter:'—', pages:pageFiles.length, bookFolder:id, coverFile:pageFiles[0] || 'image01.webp', pageFiles:pageFiles,
+    warning:$('art-admin-notes').value.trim() };
+}
+function validateArtAdmin(){
+  var title = $('art-admin-title').value.trim(), author = $('art-admin-author').value.trim();
+  var tags = $('art-admin-tags').value.split(/[,，]/).map(function(tag){ return tag.trim(); }).filter(Boolean);
+  if (!title) { show($('art-admin-msg'),'err','请填写插画集标题。'); return false; }
+  if (!author) { show($('art-admin-msg'),'err','请填写创作者。'); return false; }
+  if (!tags.length) { show($('art-admin-msg'),'err','请至少填写一个标签。'); return false; }
+  return true;
+}
+function saveArtAdmin(withFiles){
+  if (!validateArtAdmin()) return;
+  var current = books.filter(function(book){ return book.id === artAdminEditingId; })[0];
+  var id = artAdminEditingId || nextId();
+  var oldFiles = current && Array.isArray(current.pageFiles) && current.pageFiles.length ? current.pageFiles.slice() : [];
+  if (!withFiles && !oldFiles.length) { show($('art-admin-msg'),'err','新建插画集请先选择图片。'); return; }
+  var btn = withFiles ? $('art-admin-save') : $('art-admin-publish-only'); btn.disabled = true; hide($('art-admin-msg'));
+  var upload = Promise.resolve([]);
+  if (withFiles) {
+    upload = Promise.all(artAdminFiles.map(function(item, index){
+      return convertAnnouncementImage(item.file).then(function(data){
+        var fileName = 'image' + String(index + 1).padStart(2, '0') + '.webp';
+        return api({ action:'upload', bookId:id, fileName:fileName, dataBase64:data.split(',')[1] || '', contentType:'image/webp' }).then(function(){ return fileName; });
+      });
+    }));
+  }
+  upload.then(function(uploaded){
+    var pageFiles = withFiles ? uploaded : oldFiles;
+    return api({ action:'publish', book:artAdminBookPayload(id, pageFiles) });
+  }).then(function(d){
+    books = d.books || books; renderArtAdminList(); loadBooks(); resetArtAdminForm();
+    show($('art-admin-msg'),'ok','✓ 插画集已保存并发布。');
+  }).catch(function(err){ if (onAuthFail(err)) return; show($('art-admin-msg'),'err',err.message || String(err)); })
+    .then(function(){ btn.disabled = false; });
+}
 /* ============ 表单 ============ */
 function nextId(){
   var max = 0;
@@ -1583,25 +1775,22 @@ function nextId(){
 }
 
 function readForm(){
-  // 可选数值：非法/留空时返回 undefined，JSON 序列化时会整个字段消失，
-  // 避免把 pagePadDigits:0 写进归档（会让站点把 image01 读成 image1）。
-  var pad = parseInt($('f-pagePadDigits').value, 10);
   return {
     id: $('f-id').value.trim(),
     titleZh: $('f-titleZh').value.trim(),
     titleJp: $('f-titleJp').value.trim(),
     circle: $('f-circle').value.trim(),
     authorUrl: $('f-authorUrl').value.trim(),
-    category: $('f-category').value.trim(),
+    category: '漫画本',
     tags: selTags.slice(),
     source: $('f-source').value.trim(),
     translator: $('f-translator').value.trim(),
     typesetter: $('f-typesetter').value.trim(),
     pages: parseInt($('f-pages').value, 10) || 0,
-    bookFolder: $('f-bookFolder').value.trim(),
-    pagePrefix: $('f-pagePrefix').value.trim(),
-    pagePadDigits: (pad >= 1 && pad <= 5) ? pad : undefined,
-    coverFile: $('f-coverFile').value.trim(),
+    bookFolder: uploadConfig.bookFolder,
+    pagePrefix: uploadConfig.pagePrefix,
+    pagePadDigits: uploadConfig.pagePadDigits,
+    coverFile: uploadConfig.coverFile,
     warning: $('f-warn-on').checked ? $('f-warning').value.trim() : ''
   };
 }
@@ -1614,8 +1803,6 @@ function fillForm(b){
   $('f-authorUrl').value = b.authorUrl || '';
   lastSuggestedAuthorUrl = '';
   $('author-link-hint').textContent = '';
-  $('f-category').value = b.category || '漫画本';
-  syncCategory();
   selTags = (b.tags || []).slice();
   $('f-tags').value = '';
   renderTagUI();
@@ -1623,11 +1810,12 @@ function fillForm(b){
   $('f-translator').value = b.translator || '';
   $('f-typesetter').value = b.typesetter || '';
   $('f-pages').value = b.pages || '';
-  $('f-bookFolder').value = b.bookFolder && b.bookFolder !== b.id ? b.bookFolder : '';
-  $('f-pagePrefix').value = b.pagePrefix || '';
-  $('f-pagePadDigits').value = b.pagePadDigits && b.pagePadDigits !== 2 ? b.pagePadDigits : '';
-  $('f-coverFile').value = b.coverFile && b.coverFile !== 'image01.webp' ? b.coverFile : '';
-  coverFileWritten = '';   // 载入的记录值不是本控件写的，别让「移除封面」误清它
+  uploadConfig = {
+    bookFolder: b.bookFolder && b.bookFolder !== b.id ? b.bookFolder : '',
+    pagePrefix: b.pagePrefix || '',
+    pagePadDigits: (b.pagePadDigits >= 1 && b.pagePadDigits <= 5) ? b.pagePadDigits : undefined,
+    coverFile: b.coverFile || ''
+  };
   $('f-warn-on').checked = !!b.warning;
   $('f-warning').value = b.warning || '';
   syncWarn();
@@ -1637,10 +1825,8 @@ function fillForm(b){
 
 function resetForm(){
   ['f-id','f-titleZh','f-titleJp','f-circle','f-authorUrl','f-tags','f-source',
-   'f-translator','f-typesetter','f-pages','f-bookFolder','f-pagePrefix',
-   'f-pagePadDigits','f-coverFile'].forEach(function(k){ $(k).value = ''; });
-  $('f-category').value = '漫画本';
-  syncCategory();
+   'f-translator','f-typesetter','f-pages'].forEach(function(k){ $(k).value = ''; });
+  uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'' };
   lastSuggestedAuthorUrl = '';
   $('author-link-hint').textContent = '';
   $('mode-hint').textContent = '（新建）';
@@ -1736,7 +1922,7 @@ function loadNovels(){
   }).catch(function(err){
     if (onAuthFail(err)) return;
     box.innerHTML = '';
-    show($('nv-msg'), 'err', '读取在线小说失败：' + (err.message || err));
+    show($('nv-msg'), 'err', '读取同人文失败：' + (err.message || err));
   });
 }
 
@@ -1807,8 +1993,7 @@ function saveNovel(){
 
 function renderNovelList(){
   var box = $('nv-list');
-  $('nv-count').textContent = '共 ' + novels.length + ' 篇';
-  if (!novels.length) { box.innerHTML = '<p class="muted">还没有在线小说，在下面粘贴正文发布第一篇吧。</p>'; return; }
+  if (!novels.length) { box.innerHTML = '<p class="muted">还没有同人文，在下面粘贴正文发布第一篇吧。</p>'; return; }
   // 瀑布流多列（窄屏 2 列 / 中屏 3 列 / 宽屏 4 列），与前台小说区一致
   box.innerHTML = '<div class="nv-cards">' + sortNovels(novels).map(novelCardHTML).join('') + '</div>';
   syncNvSaveBtn();   // 编辑态/新建态的保存按钮文案跟随 nvEditingId
@@ -2551,8 +2736,6 @@ function moveFile(i, d){
 
 function syncPages(){
   if (files.length) $('f-pages').value = files.length;
-  var id = $('f-id').value.trim();
-  if (id && !$('f-bookFolder').value.trim()) $('f-bookFolder').placeholder = id;
   if (secureCover) renderSecureCover();   // 封面「入库地址」跟着 ID 变
   syncButtons();
 }
@@ -2668,16 +2851,15 @@ function loadInbox(){
     $('inbox-badge').classList.toggle('hide', items.length === 0);
     renderInboxReports(items, $('inbox-contacts'));
     renderReviewItems(items.filter(function(item){ return item.type === 'announcement'; }), $('an-review'), '企划');
-    renderReviewItems(items.filter(function(item){ return item.type === 'novel' || item.type === 'artwork'; }), $('nv-review'), '小说或插画投稿');
   }).catch(function(err){ $('inbox-status').textContent = '读取失败：' + (err.message || String(err)); });
 }
 function renderReviewItems(items, container, label){
   if (!items.length) { container.innerHTML='<p class="muted">暂无待审核' + label + '</p>'; return; }
   container.innerHTML=items.map(function(item){
-    var kind=item.type==='announcement'?'企划公告':item.type==='artwork'?'同人插画/短漫':'在线小说';
+    var kind=item.type==='announcement'?'企划公告':item.type==='artwork'?'同人插画/短漫':'同人文';
     var detail=item.body||item.description||item.reason||'';
     var previews=Array.isArray(item.files)&&item.folder?'<div class="row" style="gap:6px;margin-top:8px;overflow-x:auto">'+item.files.slice(0,8).map(function(name){return '<img src="'+esc(CDN+'/'+item.folder+'/'+name)+'" alt="投稿预览" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--rule)">';}).join('')+'</div>':'';
-    return '<div class="notice-row" data-inbox-id="'+esc(item._id)+'"><div class="info"><b>'+esc(kind+' · '+(item.title||'未命名'))+'</b><div class="muted">提交人：'+esc(item.author||'匿名')+(item.homepage?' · '+esc(item.homepage):'')+'</div>'+previews+(detail?'<details><summary>查看内容</summary><pre style="white-space:pre-wrap">'+esc(detail)+'</pre></details>':'')+'</div><button class="btn-sm btn-gold" data-review="approve">通过并收录</button><button class="btn-sm btn-danger" data-review="reject">拒绝</button></div>';
+    return '<div class="notice-row" data-inbox-id="'+esc(item._id)+'"><div class="info"><b>'+esc(kind+' · '+(item.title||'未命名'))+'</b><div class="muted">提交人：'+esc(item.author||'匿名')+(item.email?' · '+esc(item.email):'')+(item.homepage?' · '+esc(item.homepage):'')+'</div>'+previews+(detail?'<details><summary>查看内容</summary><pre style="white-space:pre-wrap">'+esc(detail)+'</pre></details>':'')+'</div><button class="btn-sm btn-gold" data-review="approve">通过并收录</button><button class="btn-sm btn-danger" data-review="reject">拒绝</button></div>';
   }).join('');
 }
 function renderInboxReports(items, container){
@@ -2754,7 +2936,7 @@ $('inbox-panel').addEventListener('click', function(event){
   if (!card) return;
   reviewInbox(card.getAttribute('data-inbox-id'), button.getAttribute('data-review'));
 });
-['an-review','nv-review'].forEach(function(id){ $(id).addEventListener('click',function(event){
+['an-review'].forEach(function(id){ $(id).addEventListener('click',function(event){
   var button=event.target.closest('[data-review]'); if(!button)return;
   var card=button.closest('[data-inbox-id]'); if(!card)return;
   reviewInbox(card.getAttribute('data-inbox-id'),button.getAttribute('data-review'));
@@ -2769,7 +2951,22 @@ function renderRecsAdmin(){
   $('rec-admin-list').innerHTML=adminRecs.length?adminRecs.map(function(r,i){return '<div class="notice-row"><div class="info"><b>'+esc(r.title)+'</b><div class="muted">'+esc(r.type)+' · '+esc(r.url)+'</div></div><button class="btn-sm btn-danger" data-rec-del="'+i+'">删除</button></div>';}).join(''):'<p class="muted">暂无站外推荐</p>';
 }
 $('rec-admin-list').addEventListener('click',function(e){var b=e.target.closest('[data-rec-del]');if(!b)return;var i=Number(b.getAttribute('data-rec-del'));if(!confirm('删除这条站外推荐？'))return;adminRecs.splice(i,1);api({action:'recs',items:adminRecs}).then(function(res){adminRecs=res.items||adminRecs;renderRecsAdmin();});});
-document.querySelectorAll('[data-novel-admin-kind]').forEach(function(btn){btn.addEventListener('click',function(){var k=btn.getAttribute('data-novel-admin-kind');$('nv-list').classList.toggle('hide',k!=='novels');$('rec-admin').classList.toggle('hide',k!=='recs');$('nv-review').classList.toggle('hide',k!=='review');document.querySelectorAll('[data-novel-admin-kind]').forEach(function(x){x.classList.toggle('btn-primary',x===btn);});});});
+document.querySelectorAll('[data-novel-admin-kind]').forEach(function(btn){btn.addEventListener('click',function(){var k=btn.getAttribute('data-novel-admin-kind');$('nv-novel-actions').classList.toggle('hide',k!=='novels');$('art-admin-actions').classList.toggle('hide',k!=='artwork');$('nv-novel-content').classList.toggle('hide',k!=='novels');$('rec-admin').classList.toggle('hide',k!=='recs');$('nv-artwork-panel').classList.toggle('hide',k!=='artwork');document.querySelectorAll('[data-novel-admin-kind]').forEach(function(x){x.classList.toggle('btn-primary',x===btn);});if(k==='artwork')renderArtAdminList();});});
+
+$('art-admin-clear').onclick = resetArtAdminForm;
+$('art-admin-picker').onchange = function(e){ addArtAdminFiles(e.target.files); e.target.value = ''; };
+$('art-admin-drop').onclick = function(){ $('art-admin-picker').click(); };
+['dragenter','dragover'].forEach(function(ev){ $('art-admin-drop').addEventListener(ev,function(e){e.preventDefault();$('art-admin-drop').classList.add('over');}); });
+['dragleave','drop'].forEach(function(ev){ $('art-admin-drop').addEventListener(ev,function(e){e.preventDefault();$('art-admin-drop').classList.remove('over');}); });
+$('art-admin-drop').addEventListener('drop',function(e){addArtAdminFiles(e.dataTransfer && e.dataTransfer.files);});
+$('art-admin-files').addEventListener('click',function(e){var b=e.target.closest('[data-art-file-del]');if(!b)return;var i=Number(b.getAttribute('data-art-file-del'));var item=artAdminFiles[i];if(item&&item.url)URL.revokeObjectURL(item.url);artAdminFiles.splice(i,1);renderArtAdminFiles();});
+$('art-admin-save').onclick = function(){ saveArtAdmin(true); };
+$('art-admin-publish-only').onclick = function(){ saveArtAdmin(false); };
+$('art-admin-list').addEventListener('click',function(e){
+  var edit=e.target.closest('[data-art-admin-edit]'), del=e.target.closest('[data-art-admin-del]');
+  if(edit){var book=books.filter(function(item){return item.id===edit.getAttribute('data-art-admin-edit');})[0];if(book)fillArtAdminForm(book);return;}
+  if(del){var id=del.getAttribute('data-art-admin-del');if(!confirm('删除这个插画集及其全部图片？此操作不可恢复。'))return;api({action:'remove',id:id,deleteFiles:true}).then(function(d){books=d.books||[];renderArtAdminList();loadBooks();}).catch(function(err){if(onAuthFail(err))return;show($('art-admin-msg'),'err',err.message||String(err));});}
+});
 
 var forumPosts=[];
 function loadForumAdmin(){if(LOCAL_PREVIEW)return;api({action:'forumList'}).then(function(res){forumPosts=res.posts||[];renderForumAdmin();}).catch(function(err){show($('forum-msg'),'err',err.message||String(err));});}
@@ -2789,7 +2986,7 @@ function loadAuthorLib(){
 }
 function renderAuthorLib(){
   var box = $('author-list');
-  if (!authorLib.length) { box.innerHTML = '<p class="muted">还没有登记记录；发布作品或在线小说时会自动登记。</p>'; return; }
+  if (!authorLib.length) { box.innerHTML = '<p class="muted">还没有登记记录；发布作品或同人文时会自动登记。</p>'; return; }
   box.innerHTML = '<table class="author-table"><thead><tr><th style="width:22%">作者 / 社团</th><th>主页链接</th><th style="width:12%">更新日期</th><th style="width:70px"></th></tr></thead><tbody>' +
     authorLib.map(function(a, i){
       return '<tr>' +
@@ -2901,7 +3098,6 @@ var autoCoverPage = 1;         // PDF 时取第几页（1 起）
 var autoCoverBusy = false;     // 生成中标记，避免连点重复渲染
 var autoCoverPending = false;  // 生成期间又来了新请求 → 结束后补跑，保证最后一次生效
 var autoCoverError = '';       // 最近一次生成失败的原因（空串 = 无错误）
-var coverFileWritten = '';     // 上一次由本控件写进 #f-coverFile 的值
 
 function coverExt(name){
   var m = String(name || '').match(/\.(webp|jpe?g|png|gif|avif)$/i);
@@ -3118,17 +3314,6 @@ async function refreshAutoCover(){
   }
 }
 
-/** 把封面名同步进「封面文件」字段；只在「字段里是我们自己写的值」时才回退，不踩管理员手填的内容 */
-function syncCoverFileField(){
-  var f = $('f-coverFile');
-  if (!f) return;
-  var cur = activeCover();
-  var next = cur ? secureCoverName(cur.name) : '';
-  if (next) { f.value = next; coverFileWritten = next; return; }
-  if (f.value.trim() && f.value.trim() === coverFileWritten) f.value = '';
-  coverFileWritten = '';
-}
-
 function setSecureCover(file){
   if (!file) return;
   var isImg = /^image\//.test(file.type || '') || /\.(jpe?g|png|webp|gif|avif)$/i.test(file.name || '');
@@ -3167,7 +3352,6 @@ function renderSecureCover(){
   if ($('secure-cover-err-text')) {
     $('secure-cover-err-text').textContent = autoCoverError ? ('⚠ ' + autoCoverError) : '';
   }
-  syncCoverFileField();
   if ($('secure-cover-key')) {
     var id = ($('f-id').value || '').trim() || 'lh-???';
     $('secure-cover-key').textContent = has
@@ -4153,13 +4337,10 @@ $('btn-logout').onclick = logout;
 $('btn-reload').onclick = loadBooks;
 $('btn-nextid').onclick = function(){ $('f-id').value = nextId(); syncPages(); };
 $('f-id').addEventListener('input', syncPages);
-$('f-category').addEventListener('change', syncCategory);
 $('f-circle').addEventListener('input', suggestAuthorUrl);
 $('f-authorUrl').addEventListener('input', function(){ lastSuggestedAuthorUrl = ''; $('author-link-hint').textContent = ''; });
 $('nv-author').addEventListener('input', suggestNovelAuthorUrl);
 $('nv-authorUrl').addEventListener('input', function(){ lastSuggestedNovelAuthorUrl = ''; $('nv-author-link-hint').textContent = ''; });
-syncCategory();
-
 $('drop').onclick = function(){ $('picker').click(); };
 $('picker').onchange = function(e){ addFiles(e.target.files); e.target.value = ''; };
 ['dragenter','dragover'].forEach(function(ev){

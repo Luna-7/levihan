@@ -5,6 +5,8 @@ import { loadUnreadInboxReplies, markInboxReplyRead, submitToInbox, type InboxRe
 import { cosService } from '../services/cosClient';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { useAuthStore } from '../stores/authStore';
+import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
+import { getAccessToken } from '../utils/cloudbaseToken';
 
 interface Props {
   onShowToast: (msg: string) => void;
@@ -14,6 +16,7 @@ interface UploadedFileItem {
   id: string;
   name: string;
   size: number;
+  file: File;
 }
 
 type SupportKind = 'translation' | 'typesetting' | 'tech' | 'donation';
@@ -113,6 +116,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
   const [artEmail, setArtEmail] = useState<string>('');
   const [artNotes, setArtNotes] = useState<string>('');
   const [artFiles, setArtFiles] = useState<UploadedFileItem[]>([]);
+  const [isArtSubmitting, setIsArtSubmitting] = useState(false);
 
   // Form States - Recommend
   const [recTitle, setRecTitle] = useState<string>('');
@@ -176,6 +180,27 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
     return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email);
   };
 
+  const fileToWebpBase64 = async (file: File) => {
+    const bitmap = await createImageBitmap(file);
+    const maxSide = 2200;
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) { bitmap.close(); throw new Error('当前浏览器无法转换图片'); }
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', 0.88));
+    if (!blob) throw new Error(`无法转换 ${file.name}`);
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+      reader.onerror = () => reject(new Error(`无法读取 ${file.name}`));
+      reader.readAsDataURL(blob);
+    });
+  };
+
   // 联络呈递：把表单内容真正送进管理员后台的「联络收件箱」；失败时返回 false，由调用方走剪贴板兜底
   const sendToInbox = async (kind: string, fields: Record<string, string>) => {
     try {
@@ -201,6 +226,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       id: `${f.name}-${Date.now()}-${Math.random()}`,
       name: f.name,
       size: f.size,
+      file: f,
     }));
     setter((prev) => [...prev, ...newItems]);
     onShowToast(`已添加 ${newItems.length} 个本地文件 📁`);
@@ -366,6 +392,10 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
 
   // 4. 呈递插画/短漫
   const handleSubmitArtComic = async () => {
+    if (!profile?.uid) {
+      onShowToast('请先登录账号再上传插画 ⚠️');
+      return;
+    }
     if (!artTitle.trim()) {
       onShowToast('请填写作品名 ⚠️');
       return;
@@ -374,39 +404,42 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       onShowToast('请填写有效的邮箱联系方式 ⚠️');
       return;
     }
-
-    const fileNames = artFiles.map((f) => f.name).join(', ');
-    const dateStr = new Date().toLocaleString('zh-CN', { hour12: false });
-    const letterText = [
-      `【利韩土豆仓 · 同人插画/短漫呈递函】`,
-      `作品名: ${artTitle.trim()}`,
-      `创作者: ${artAuthor.trim() || '未署名'}`,
-      `主页链接: ${artHomepage.trim() || '未提供'}`,
-      `邮箱联系方式: ${artEmail.trim()}`,
-      `上传附件: ${fileNames || '未附加本地文件'}`,
-      `备注: ${artNotes.trim() || '无'}`,
-      `呈递时间: ${dateStr}`,
-      `----------------------------------------`,
-    ].join('\n');
-
-    const sent = await sendToInbox('art-comic', {
-      title: artTitle,
-      author: artAuthor,
-      homepage: artHomepage,
-      email: artEmail,
-      notes: artNotes,
-      content: fileNames,
-    });
-    if (sent) {
-      onShowToast('插画/短漫函已呈递至收件箱！📬');
+    if (!artFiles.length) {
+      onShowToast('请至少选择一张插画或短漫图片 ⚠️');
       return;
     }
-
-    const copied = await copyToClipboard(letterText);
-    if (copied) {
-      onShowToast('联络通道繁忙，插画函已复制到剪贴板 📋');
-    } else {
-      onShowToast('联络通道繁忙，请稍后重试 ⚠️');
+    const token = await getAccessToken();
+    if (!token) {
+      onShowToast('登录状态已失效，请重新登录 ⚠️');
+      return;
+    }
+    setIsArtSubmitting(true);
+    try {
+      const submissionId = `art-${Date.now().toString(36)}`;
+      const files: string[] = [];
+      let folder = '';
+      for (let index = 0; index < artFiles.length; index += 1) {
+        const imageBase64 = await fileToWebpBase64(artFiles[index].file);
+        const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: 'submissionImageUpload', submissionId, index: index + 1, imageBase64 }),
+        });
+        const result = await response.json() as { ok?: boolean; error?: string; folder?: string; fileName?: string };
+        if (!response.ok || !result.ok || !result.folder || !result.fileName) throw new Error(result.error || `第 ${index + 1} 张图片上传失败`);
+        folder = result.folder;
+        files.push(result.fileName);
+        onShowToast(`图片上传中：${index + 1} / ${artFiles.length}`);
+      }
+      await submitToInbox('submitArtwork', {
+        title: artTitle.trim(), author: artAuthor.trim(), homepage: artHomepage.trim(), email: artEmail.trim(),
+        notes: artNotes.trim(), folder, files,
+      });
+      onShowToast('插画已转为 WebP 并提交，等待管理员审核 🎨');
+    } catch (error) {
+      onShowToast(error instanceof Error ? error.message : '插画上传失败，请稍后重试');
+    } finally {
+      setIsArtSubmitting(false);
     }
   };
 
@@ -1312,6 +1345,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                         <input
                           ref={fileInputRefArt}
                           type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
                           multiple
                           onChange={(e) => handleAddFiles(e.target.files, setArtFiles)}
                           className="hidden"
@@ -1319,10 +1353,10 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                         <div className="flex flex-col items-center gap-1">
                           <span className="text-xl">🎨</span>
                           <span className="text-xs font-bold text-[#203429]">
-                            点击选择文件 或 拖拽至此处
+                            点击选择图片 或 拖拽至此处
                           </span>
                           <span className="text-[10px] text-[#5C4A3A]">
-                            支持 JPG / PNG / GIF / PSD / 压缩包
+                            支持 JPG / PNG / GIF / WebP，最多 60 张
                           </span>
                         </div>
                       </div>
@@ -1369,10 +1403,12 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                     <button
                       type="button"
                       onClick={handleSubmitArtComic}
+                      disabled={isArtSubmitting}
+                      aria-busy={isArtSubmitting}
                       className="w-full shrink-0 py-2 px-3 bg-gradient-to-b from-[#1E4334] to-[#153025] hover:from-[#245340] hover:to-[#1a3d2f] text-[#F9E79F]  font-bold text-xs sm:text-sm cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_#153025] flex items-center justify-center gap-1.5"
                     >
                       <span>🎨</span>
-                      <span>呈递插画/短漫</span>
+                      <span>{isArtSubmitting ? '上传并提交中…' : '呈递插画/短漫'}</span>
                     </button>
                   </div>
                 )}

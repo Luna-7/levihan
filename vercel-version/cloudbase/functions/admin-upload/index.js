@@ -1338,13 +1338,15 @@ async function submitToInbox(type, payload) {
     if (warning) item.warning = warning;
   } else if (type === 'artwork') {
     const title = String(payload.title || '').trim().slice(0, 120);
-    const author = await userNickname(payload.__uid);
+    const author = String(payload.author || '').trim().slice(0, 80) || await userNickname(payload.__uid);
     const homepage = String(payload.homepage || '').trim().slice(0, 300);
+    const email = String(payload.email || '').trim().slice(0, 120);
     const folder = String(payload.folder || '').trim();
     const files = Array.isArray(payload.files) ? payload.files.map((name) => String(name)).filter((name) => /^image\d{2}\.webp$/.test(name)).slice(0, 60) : [];
     if (!title || !author) throw httpError('请填写标题和创作者', 400);
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw httpError('请填写有效的邮箱联系方式', 400);
     if (!/^submissions\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(folder) || !files.length) throw httpError('请至少上传一张有效图片', 400);
-    item = { title, author, homepage, folder, files, userUid: String(payload.__uid || ''),
+    item = { title, author, email, homepage, folder, files, userUid: String(payload.__uid || ''),
       notes: String(payload.notes || '').trim().slice(0, 2000) };
   } else if (type === 'announcement') {
     const title = String(payload.title || '').trim().slice(0, 100);
