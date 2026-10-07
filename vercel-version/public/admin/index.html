@@ -275,18 +275,17 @@
     .novel-admin-form .f.span2{grid-column:auto}
   }
   .artwork-admin-form{grid-template-columns:repeat(6,minmax(0,1fr));grid-template-areas:
-    'title title author author homepage homepage'
-    'tags tags tags notes notes notes'
+    'text text author author homepage homepage'
+    'tags tags tags tags tags tags'
     'upload upload upload upload upload upload';align-items:start}
-  .artwork-admin-form .art-admin-title{grid-area:title}
+  .artwork-admin-form .art-admin-text{grid-area:text}
   .artwork-admin-form .art-admin-author{grid-area:author}
   .artwork-admin-form .art-admin-homepage{grid-area:homepage}
   .artwork-admin-form .art-admin-tags{grid-area:tags}
-  .artwork-admin-form .art-admin-notes{grid-area:notes}
   .artwork-admin-form .art-admin-upload{grid-area:upload}
   .artwork-admin-form .f{display:flex;flex-direction:column;min-width:0}
   .artwork-admin-form input,.artwork-admin-form textarea{min-height:40px}
-  .artwork-admin-form .art-admin-notes textarea{height:40px;resize:vertical}
+  .artwork-admin-form .art-admin-text textarea{height:40px;resize:vertical}
   .artwork-admin-form .drop{min-height:116px;display:flex;flex-direction:column;justify-content:center}
   #art-admin-save,#art-admin-publish-only{min-height:44px}
   #art-admin-drop{padding:18px 12px}
@@ -1038,11 +1037,10 @@
       <div id="nv-artwork-panel" class="hide">
         <div id="art-admin-list"><p class="muted">暂无已收录插画集。</p></div>
         <div class="grid artwork-admin-form" style="margin-top:14px">
-          <div class="f art-admin-title"><label for="art-admin-title">标题 <span class="req">*</span></label><input type="text" id="art-admin-title" maxlength="100" placeholder="插画集标题"></div>
+          <div class="f art-admin-text"><label for="art-admin-text">文本 <span class="tag">可选</span></label><textarea id="art-admin-text" rows="2" maxlength="2000" placeholder="作品说明、配图文字或展示备注"></textarea></div>
           <div class="f art-admin-author"><label for="art-admin-author">创作者 <span class="req">*</span></label><input type="text" id="art-admin-author" maxlength="80" placeholder="画师昵称 / 社团"></div>
           <div class="f art-admin-homepage"><label for="art-admin-homepage">主页链接 <span class="tag">可选</span></label><input type="url" id="art-admin-homepage" maxlength="300" placeholder="https://..."></div>
           <div class="f art-admin-tags"><label for="art-admin-tags">标签 <span class="req">*</span></label><input type="text" id="art-admin-tags" maxlength="200" placeholder="逗号分隔，如：同人,彩插"></div>
-          <div class="f art-admin-notes"><label for="art-admin-notes">备注 <span class="tag">可选</span></label><textarea id="art-admin-notes" rows="3" maxlength="1000" placeholder="作品说明或展示备注"></textarea></div>
           <div class="f art-admin-upload"><label>上传图片 <span class="tag">自动转 WebP，保持比例</span></label><div class="drop" id="art-admin-drop"><div style="font-size:24px">🎨</div><div style="font-weight:700;color:var(--ink);margin-top:4px">拖入图片，或点击选择</div><div class="muted" style="margin-top:3px">JPG / PNG / GIF / WebP，最多 60 张</div><input type="file" id="art-admin-picker" accept="image/*" multiple class="hide"></div><div class="files" id="art-admin-files"></div></div>
         </div>
         <div class="row" style="margin-top:14px"><button class="btn-gold" id="art-admin-save">上传并发布插画集</button><button class="btn-sm" id="art-admin-publish-only">仅更新信息</button></div>
@@ -1919,7 +1917,7 @@ function renderArtAdminList(){
   box.innerHTML = items.map(function(b){
     var cover = CDN + '/' + (b.bookFolder || b.id) + '/' + (b.coverFile || 'image01.webp');
     return '<div class="notice-row artwork-admin-card"><img src="' + esc(cover) + '" alt="" loading="lazy" onerror="this.style.opacity=.25">' +
-      '<div class="info"><b>' + esc(b.titleZh) + '</b><div class="muted">' + esc(b.circle || '未填写创作者') + ' · ' + (b.pages || 0) + ' 张' +
+      '<div class="info"><b>作者：' + esc(b.circle || '未填写创作者') + '</b><div>' + esc(b.text || b.titleZh || '暂无文本') + '</div><div class="muted">标签：' + esc((b.tags || []).join(' / ') || '暂无') + ' · ' + (b.pages || 0) + ' 张' +
       (b.authorUrl ? ' · 已设置主页' : '') + '</div><div class="muted">' + esc(b.id) + '</div></div>' +
       '<button class="btn-sm" data-art-admin-edit="' + esc(b.id) + '">编辑</button>' +
       '<button class="btn-sm btn-danger" data-art-admin-del="' + esc(b.id) + '">删除</button></div>';
@@ -1934,18 +1932,17 @@ function renderArtAdminFiles(){
 function resetArtAdminForm(){
   artAdminFiles.forEach(function(item){ if (item.url) URL.revokeObjectURL(item.url); });
   artAdminEditingId = ''; artAdminFiles = [];
-  ['art-admin-title','art-admin-author','art-admin-homepage','art-admin-tags','art-admin-notes'].forEach(function(id){ $(id).value = ''; });
+  ['art-admin-text','art-admin-author','art-admin-homepage','art-admin-tags'].forEach(function(id){ $(id).value = ''; });
   $('art-admin-picker').value = ''; $('art-admin-files').innerHTML = '';
   $('art-admin-save').textContent = '上传并发布插画集'; $('art-admin-publish-only').disabled = true; hide($('art-admin-msg'));
 }
 function fillArtAdminForm(book){
   artAdminFiles.forEach(function(item){ if (item.url) URL.revokeObjectURL(item.url); });
   artAdminFiles = []; artAdminEditingId = book.id;
-  $('art-admin-title').value = book.titleZh || '';
+  $('art-admin-text').value = book.text || book.titleZh || '';
   $('art-admin-author').value = book.circle || '';
   $('art-admin-homepage').value = book.authorUrl || '';
   $('art-admin-tags').value = (book.tags || []).join(',');
-  $('art-admin-notes').value = book.warning || '';
   $('art-admin-files').innerHTML = '';
   $('art-admin-save').textContent = '保存并替换图片'; $('art-admin-publish-only').disabled = false;
   $('nv-artwork-panel').scrollIntoView({ behavior:'smooth', block:'start' });
@@ -1960,14 +1957,14 @@ function addArtAdminFiles(list){
 }
 function artAdminBookPayload(id, pageFiles){
   var tags = $('art-admin-tags').value.split(/[,，]/).map(function(tag){ return tag.trim(); }).filter(Boolean);
-  return { id:id, titleZh:$('art-admin-title').value.trim(), titleJp:'', circle:$('art-admin-author').value.trim(), authorUrl:$('art-admin-homepage').value.trim(),
+  var text = $('art-admin-text').value.trim();
+  return { id:id, titleZh:text.slice(0, 120) || '同好插画集', text:text, titleJp:'', circle:$('art-admin-author').value.trim(), authorUrl:$('art-admin-homepage').value.trim(),
     category:'插画集', tags:tags, source:'原创插画', translator:'—', typesetter:'—', pages:pageFiles.length, bookFolder:id, coverFile:pageFiles[0] || 'image01.webp', pageFiles:pageFiles,
-    warning:$('art-admin-notes').value.trim() };
+    warning:'' };
 }
 function validateArtAdmin(){
-  var title = $('art-admin-title').value.trim(), author = $('art-admin-author').value.trim();
+  var author = $('art-admin-author').value.trim();
   var tags = $('art-admin-tags').value.split(/[,，]/).map(function(tag){ return tag.trim(); }).filter(Boolean);
-  if (!title) { show($('art-admin-msg'),'err','请填写插画集标题。'); return false; }
   if (!author) { show($('art-admin-msg'),'err','请填写创作者。'); return false; }
   if (!tags.length) { show($('art-admin-msg'),'err','请至少填写一个标签。'); return false; }
   return true;
@@ -3287,6 +3284,12 @@ document.querySelectorAll('[data-novel-admin-kind]').forEach(function(btn){btn.a
 $('art-admin-clear').onclick = resetArtAdminForm;
 $('art-admin-picker').onchange = function(e){ addArtAdminFiles(e.target.files); e.target.value = ''; };
 $('art-admin-drop').onclick = function(){ $('art-admin-picker').click(); };
+document.getElementById('nv-artwork-panel').addEventListener('paste', function(e){
+  var items = Array.prototype.slice.call(e.clipboardData && e.clipboardData.items || []);
+  var files = items.filter(function(item){ return item.kind === 'file' && /^image\//.test(item.type); }).map(function(item){ return item.getAsFile(); }).filter(Boolean);
+  if (!files.length) return;
+  e.preventDefault(); addArtAdminFiles(files);
+});
 ['dragenter','dragover'].forEach(function(ev){ $('art-admin-drop').addEventListener(ev,function(e){e.preventDefault();$('art-admin-drop').classList.add('over');}); });
 ['dragleave','drop'].forEach(function(ev){ $('art-admin-drop').addEventListener(ev,function(e){e.preventDefault();$('art-admin-drop').classList.remove('over');}); });
 $('art-admin-drop').addEventListener('drop',function(e){addArtAdminFiles(e.dataTransfer && e.dataTransfer.files);});

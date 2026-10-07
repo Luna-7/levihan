@@ -4,6 +4,7 @@ export interface DoujinBookItem {
   id: string; // ID编号，如 "lh-001"
   titleZh: string; // 本子名
   titleJp?: string; // 日文原名（可选）
+  text?: string; // 插画集文本说明（可选）
   circle: string; // 作者
   authorUrl?: string; // 作者主页外链（可选，如Pixiv等）
   createdAt?: string; // 归档加入时间（旧作品可能没有）

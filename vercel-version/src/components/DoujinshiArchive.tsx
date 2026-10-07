@@ -698,10 +698,10 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                         </span>
                       )}
                     </div>
-                    <h3 className="font-pixel text-sm sm:text-base font-bold text-[#1E3A2B] group-hover:text-[#B7791F] mt-1 break-words leading-snug transition-colors">
+                    {book.category !== '插画集' && <h3 className="font-pixel text-sm sm:text-base font-bold text-[#1E3A2B] group-hover:text-[#B7791F] mt-1 break-words leading-snug transition-colors">
                       {book.titleZh}
-                    </h3>
-                    {book.titleJp && (
+                    </h3>}
+                    {book.category !== '插画集' && book.titleJp && (
                       <div className="text-xs font-retro-jp text-[#8C7A68] italic truncate">
                         {book.titleJp}
                       </div>
@@ -764,15 +764,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                       <div className="text-2xl">📖</div>
                       <div className="font-pixel text-xs text-[#1E4334] mt-1 font-bold">{book.titleZh}</div>
                       <div className="text-[10px] text-[#8C7A68] mt-0.5 font-mono">{book.bookFolder || book.id}/{book.coverFile || 'image01.webp'}</div>
-                      <div className="text-[10px] text-[#B7791F] mt-0.5">点击进入长图画廊</div>
+                      <div className="text-[10px] text-[#B7791F] mt-0.5">封面暂不可用</div>
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <span className="px-3.5 py-2 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs sm:text-sm rounded-xs shadow-lg flex items-center gap-1.5 whitespace-nowrap">
-                      <span>{book.secure ? '🔒 校验码解析' : '📖 点击阅读长图'}</span>
-                      <span>→</span>
-                    </span>
-                  </div>
                 </div>
 
                 {/* 内容预警：后台勾选并填写后展示，未填写时整块不渲染 */}
@@ -785,7 +779,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                   </div>
                 )}
 
-                {/* 字段区：“作者”、来源、汉化、嵌字 */}
+                {/* 字段区：插画集只展示作者、文本；漫画本保留来源、汉化、嵌字 */}
                 <div className="bg-[#FAF5E8] border border-[#EBE3D0] rounded-xs p-2.5 space-y-1.5 text-xs sm:text-[13px] font-retro-jp">
                   <div className="flex items-start gap-1">
                     <span className="font-bold text-[#8C6B38] shrink-0 w-11 text-right">作者:</span>
@@ -794,21 +788,28 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                     </span>
                   </div>
 
-                  {book.source && (
+                  {book.category === '插画集' && (
+                    <div className="flex items-start gap-1">
+                      <span className="font-bold text-[#7A6958] shrink-0 w-11 text-right">文本:</span>
+                      <span className="text-[#5B4636] flex-1 break-words whitespace-pre-wrap">{book.text || '—'}</span>
+                    </div>
+                  )}
+
+                  {book.category !== '插画集' && book.source && (
                     <div className="flex items-start gap-1">
                       <span className="font-bold text-[#7A6958] shrink-0 w-11 text-right">来源:</span>
                       <span className="text-[#5B4636] flex-1 break-words">{book.source}</span>
                     </div>
                   )}
 
-                  {book.translator && (
+                  {book.category !== '插画集' && book.translator && (
                     <div className="flex items-start gap-1">
                       <span className="font-bold text-[#27AE60] shrink-0 w-11 text-right">汉化:</span>
                       <span className="text-[#2D5A3A] flex-1 break-words">{book.translator}</span>
                     </div>
                   )}
 
-                  {book.typesetter && (
+                  {book.category !== '插画集' && book.typesetter && (
                     <div className="flex items-start gap-1">
                       <span className="font-bold text-[#6A4C93] shrink-0 w-11 text-right">嵌字:</span>
                       <span className="text-[#4E376B] flex-1 break-words">{book.typesetter}</span>
@@ -843,10 +844,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                 ) : (
                   <span>共 {book.pages || 30} 页</span>
                 )}
-                <span className="text-[#1E4334] font-pixel text-xs group-hover:translate-x-0.5 transition-transform flex items-center gap-1 font-bold whitespace-nowrap">
-                  <span>进入长图阅读</span>
-                  <span>→</span>
-                </span>
               </div>
             </div>
           );

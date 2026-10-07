@@ -1003,6 +1003,9 @@ function normalizeBook(raw) {
     coverFile: String(raw.coverFile || '').trim() || 'image01.webp',
   };
 
+  const text = String(raw.text || '').trim().slice(0, 2000);
+  if (text) book.text = text;
+
   for (const field of ['titleJp', 'source', 'translator', 'typesetter']) {
     const v = String(raw[field] || '').trim();
     if (v) book[field] = v;
@@ -1359,17 +1362,17 @@ async function submitToInbox(type, payload) {
     if (tags.length) item.tags = tags;
     if (warning) item.warning = warning;
   } else if (type === 'artwork') {
-    const title = String(payload.title || '').trim().slice(0, 120);
+    const text = String(payload.text || payload.notes || '').trim().slice(0, 2000);
+    const title = String(payload.title || text || '同好插画集').trim().slice(0, 120);
     const author = String(payload.author || '').trim().slice(0, 80) || await userNickname(payload.__uid);
     const homepage = String(payload.homepage || '').trim().slice(0, 300);
     const email = String(payload.email || '').trim().slice(0, 120);
     const folder = String(payload.folder || '').trim();
     const files = Array.isArray(payload.files) ? payload.files.map((name) => String(name)).filter((name) => /^image\d{2}\.webp$/.test(name)).slice(0, 60) : [];
-    if (!title || !author) throw httpError('请填写标题和创作者', 400);
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw httpError('请填写有效的邮箱联系方式', 400);
+    if (!author) throw httpError('请填写创作者', 400);
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw httpError('请填写有效的邮箱联系方式', 400);
     if (!/^submissions\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(folder) || !files.length) throw httpError('请至少上传一张有效图片', 400);
-    item = { title, author, email, homepage, folder, files, userUid: String(payload.__uid || ''),
-      notes: String(payload.notes || '').trim().slice(0, 2000) };
+    item = { title, text, author, email, homepage, folder, files, userUid: String(payload.__uid || '') };
   } else if (type === 'announcement') {
     const title = String(payload.title || '').trim().slice(0, 100);
     const author = (await userNickname(payload.__uid)).slice(0, 40);
@@ -1418,8 +1421,8 @@ async function reviewInbox(payload) {
       let seq = Math.max(1, ...books.map((book) => Number(String(book && book.id || '').replace(/^lh-/, '')) || 0)) + 1;
       while (used.has(`lh-${seq}`)) seq += 1;
       const now = new Date().toISOString();
-      books.push(normalizeBook({ id:`lh-${seq}`, titleZh:item.title, titleJp:'', circle:item.author,
-        authorUrl:item.homepage, category:'插画集', tags:['同好投稿'], pages:item.files.length,
+      books.push(normalizeBook({ id:`lh-${seq}`, titleZh:item.title || item.text || '同好插画集', text:item.text,
+        titleJp:'', circle:item.author, authorUrl:item.homepage, category:'插画集', tags:['同好投稿'], pages:item.files.length,
         bookFolder:item.folder, coverFile:item.files[0], pageFiles:item.files, createdAt:now, updatedAt:now }));
       await writeArchive(books);
       await sendPushUpdate({
