@@ -110,10 +110,8 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
   const [nvFiles, setNvFiles] = useState<UploadedFileItem[]>([]);
 
   // Form States - Art Comic
-  const [artTitle, setArtTitle] = useState<string>('');
   const [artAuthor, setArtAuthor] = useState<string>('');
   const [artHomepage, setArtHomepage] = useState<string>('');
-  const [artEmail, setArtEmail] = useState<string>('');
   const [artNotes, setArtNotes] = useState<string>('');
   const [artFiles, setArtFiles] = useState<UploadedFileItem[]>([]);
   const [isArtSubmitting, setIsArtSubmitting] = useState(false);
@@ -396,14 +394,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       onShowToast('请先登录账号再上传插画 ⚠️');
       return;
     }
-    if (!artTitle.trim()) {
-      onShowToast('请填写作品名 ⚠️');
-      return;
-    }
-    if (!artEmail.trim() || !isValidEmail(artEmail.trim())) {
-      onShowToast('请填写有效的邮箱联系方式 ⚠️');
-      return;
-    }
     if (!artFiles.length) {
       onShowToast('请至少选择一张插画或短漫图片 ⚠️');
       return;
@@ -432,8 +422,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
         onShowToast(`图片上传中：${index + 1} / ${artFiles.length}`);
       }
       await submitToInbox('submitArtwork', {
-        title: artTitle.trim(), author: artAuthor.trim(), homepage: artHomepage.trim(), email: artEmail.trim(),
-        notes: artNotes.trim(), folder, files,
+        text: artNotes.trim(), author: artAuthor.trim(), homepage: artHomepage.trim(), folder, files,
       });
       onShowToast('插画已转为 WebP 并提交，等待管理员审核 🎨');
     } catch (error) {
@@ -1263,21 +1252,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                 {workType === 'art-comic' && (
                   <div className="space-y-2.5 pt-1 flex-1 flex flex-col">
                     <div className="space-y-1">
-                      <label htmlFor="art-title" className="text-xs font-bold text-[#203429] block">
-                        作品名 <span className="text-[#A8321E]">*</span>
-                      </label>
-                      <input
-                        id="art-title"
-                        type="text"
-                        value={artTitle}
-                        onChange={(e) => setArtTitle(e.target.value)}
-                        maxLength={60}
-                        placeholder="例如：调查兵团日常绘卷"
-                        className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2.5 py-1.5 text-xs outline-hidden"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
                       <label htmlFor="art-author" className="text-xs font-bold text-[#203429] block">
                         创作者
                       </label>
@@ -1303,21 +1277,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                         onChange={(e) => setArtHomepage(e.target.value)}
                         maxLength={150}
                         placeholder="Pixiv / 微博 / Twitter 主页链接"
-                        className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2.5 py-1.5 text-xs outline-hidden"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label htmlFor="art-email-input" className="text-xs font-bold text-[#203429] block">
-                        邮箱联系方式 <span className="text-[#A8321E]">*</span>
-                      </label>
-                      <input
-                        id="art-email-input"
-                        type="email"
-                        value={artEmail}
-                        onChange={(e) => setArtEmail(e.target.value)}
-                        maxLength={80}
-                        placeholder="用于接收收录通知"
                         className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2.5 py-1.5 text-xs outline-hidden"
                       />
                     </div>
@@ -1388,7 +1347,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
 
                     <div className="space-y-1 flex-1 flex flex-col min-h-0">
                       <label htmlFor="art-notes" className="text-xs font-bold text-[#203429] block shrink-0">
-                        备注
+                        文本
                       </label>
                       <textarea
                         id="art-notes"
