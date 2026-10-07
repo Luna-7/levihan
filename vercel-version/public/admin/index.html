@@ -296,20 +296,10 @@
   .artwork-admin-card>img{width:110px;height:84px;object-fit:contain;border:1px solid var(--line);border-radius:5px;background:#EDE7D8;flex:none}
   .notice-row{display:flex;gap:10px;align-items:center;padding:9px;border:1.5px solid var(--rule);
               border-radius:8px;background:var(--card);margin-top:8px}
-  .goods-admin-card{position:relative;display:grid;grid-template-columns:90px minmax(0,1fr) minmax(240px,300px);align-items:center}
+  .goods-admin-card{position:relative;display:grid;grid-template-columns:90px minmax(0,1fr);align-items:center}
   .goods-admin-actions{position:absolute;top:9px;right:9px;display:flex;gap:6px}
-  .goods-inline-editor{grid-column:3;grid-row:1;min-width:0;padding:8px 10px;border-left:1px solid var(--line);background:#FFF9EC;border-radius:6px}
-  .goods-admin-card.is-editing .goods-inline-editor{padding-top:42px}
-  .goods-inline-editor .inline-scale-row{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;white-space:nowrap}
-  .goods-inline-editor .inline-scale-row label{flex:0 0 auto;white-space:nowrap}
-  .goods-inline-editor .inline-scale-row output{flex:0 0 auto;min-width:34px;text-align:right;color:var(--green-2);font-size:12px;font-weight:700}
-  .goods-inline-editor input[type=range]{flex:1 1 auto;width:auto;min-width:80px;height:18px;margin:0;padding:0;border:0;box-shadow:none;accent-color:var(--green-2);background:transparent;cursor:pointer}
-  .goods-inline-editor input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:999px;background:#BFD8C8}
-  .goods-inline-editor input[type=range]::-webkit-slider-thumb{appearance:none;width:16px;height:16px;margin-top:-5px;border:2px solid var(--green-2);border-radius:50%;background:#F8F4E8}
-  .goods-inline-editor input[type=range]::-moz-range-track{height:6px;border-radius:999px;background:#BFD8C8}
-  .goods-inline-editor input[type=range]::-moz-range-thumb{width:12px;height:12px;border:2px solid var(--green-2);border-radius:50%;background:#F8F4E8}
-  .goods-inline-editor .inline-actions{display:flex;gap:6px;margin-top:7px}
-  .goods-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 14px;padding-bottom:12px;border-bottom:1px solid #E6DDCA}
+  .goods-editor-panel{margin:12px 0 16px;padding:12px;border:1px solid var(--line);border-radius:8px;background:#FFF9EC}
+  .goods-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid #E6DDCA}
   .goods-crop-wrap{display:grid;grid-template-columns:minmax(180px,1fr) minmax(225px,1fr) minmax(180px,.7fr);gap:16px;align-items:start}
   .goods-crop-stage{position:relative;width:225px;aspect-ratio:3/4;overflow:hidden;border:2px solid var(--green-2);
                     border-radius:9px;background:#E9E1D1;touch-action:none;cursor:default;box-shadow:inset 0 0 0 1px #fff}
@@ -318,7 +308,7 @@
   .goods-batch-list button{padding:4px 7px;font-size:11px}
   .goods-batch-list button.active{background:var(--green-2);color:var(--paper)}
   @media(max-width:900px){.goods-crop-wrap{grid-template-columns:1fr 1fr}.goods-crop-wrap>.f:last-child{grid-column:1/-1}}
-  @media(max-width:760px){.goods-admin-card{grid-template-columns:90px minmax(0,1fr)}.goods-inline-editor{grid-column:1/-1;grid-row:auto;border-left:0;border-top:1px solid var(--line);margin-top:4px}.goods-admin-card.is-editing .goods-inline-editor{padding-top:8px}}
+  @media(max-width:760px){.goods-admin-card{grid-template-columns:90px minmax(0,1fr)}}
   @media(max-width:600px){.goods-crop-wrap{grid-template-columns:1fr}.goods-crop-stage{width:min(225px,100%)}}
   .notice-row img{width:120px;height:90px;object-fit:contain;border-radius:5px;background:#EDE7D8;flex:none}
   .notice-row .info{flex:1;min-width:0}
@@ -591,27 +581,29 @@
     <div class="admin-page-head hide" data-admin-page="goods"><h2>🖼 周边素材</h2><div class="muted">统一按前台 3:4 比例预览，原图保持完整并等比例显示，可进入编辑调整显示缩放。</div></div>
     <div class="panel hide" id="goods-panel" data-admin-page="goods">
       <div class="spread"><h2 style="margin:0">🖼 周边素材管理</h2><button class="btn-sm" id="goods-reload">↻ 刷新素材</button></div>
-      <div class="goods-toolbar">
-        <button type="button" class="btn-gold" id="goods-upload-trigger">＋ 上传素材</button>
-        <span class="muted">可批量选择；原图不裁切，保持比例保存</span>
-        <input type="file" id="goods-image" accept="image/png,image/jpeg,image/webp,image/avif,image/gif" multiple class="hide" aria-label="选择周边素材">
+      <div class="goods-editor-panel">
+        <div class="goods-toolbar">
+          <button type="button" class="btn-gold" id="goods-upload-trigger">＋ 上传素材</button>
+          <span class="muted">上传、处理和保存集中在这里；原图不裁切，保持比例保存</span>
+          <input type="file" id="goods-image" accept="image/png,image/jpeg,image/webp,image/avif,image/gif" multiple class="hide" aria-label="选择周边素材">
+        </div>
+        <div class="goods-crop-wrap">
+          <div class="f">
+            <label>已选素材 <span class="tag">点击编号切换图片</span></label>
+            <div class="goods-batch-list" id="goods-batch-list"></div>
+          </div>
+          <div class="f">
+            <label>编辑图片 <span class="tag">100% 完整显示，滑动调整缩放</span></label>
+            <div class="goods-crop-stage hide" id="goods-crop-stage"><img id="goods-preview" alt="周边图片编辑预览"></div>
+            <label for="goods-scale">缩放 <span class="tag" id="goods-scale-value">100%</span></label>
+            <input type="range" id="goods-scale" min="60" max="100" step="5" value="100">
+          </div>
+          <div class="f" style="justify-content:flex-end"><label style="align-items:center"><input type="checkbox" id="goods-visible" checked style="width:auto"> 主站显示</label></div>
+        </div>
+        <div class="row" style="margin-top:14px"><button class="btn-gold" id="goods-save">保存图片设置</button><button class="btn-sm" id="goods-clear">清空编辑</button></div>
+        <div class="msg" id="goods-msg"></div>
       </div>
       <div id="goods-list"><p class="muted">登录后自动载入周边素材。</p></div>
-      <div class="goods-crop-wrap" style="margin-top:16px">
-        <div class="f">
-          <label>已选素材 <span class="tag">点击编号切换图片</span></label>
-          <div class="goods-batch-list" id="goods-batch-list"></div>
-        </div>
-        <div class="f">
-          <label>编辑图片 <span class="tag">100% 完整显示，滑动调整缩放</span></label>
-          <div class="goods-crop-stage hide" id="goods-crop-stage"><img id="goods-preview" alt="周边图片编辑预览"></div>
-          <label for="goods-scale">缩放 <span class="tag" id="goods-scale-value">100%</span></label>
-          <input type="range" id="goods-scale" min="60" max="100" step="5" value="100">
-        </div>
-        <div class="f" style="justify-content:flex-end"><label style="align-items:center"><input type="checkbox" id="goods-visible" checked style="width:auto"> 主站显示</label></div>
-      </div>
-      <div class="row" style="margin-top:14px"><button class="btn-gold" id="goods-save">保存图片设置</button><button class="btn-sm" id="goods-clear">清空编辑</button></div>
-      <div class="msg" id="goods-msg"></div>
     </div>
 
     <div class="admin-page-head hide" data-admin-page="support"><h2>🤝 支持墙</h2><div class="muted">维护前台致谢卡片中的名字与贡献符号。</div></div>
@@ -1216,9 +1208,6 @@ var goodsItems = [];
 var goodsEditingFile = '';
 var goodsPending = [];
 var goodsCropIndex = -1;
-var goodsEditingDirty = false;
-var goodsEditingBaseScale = 100;
-var goodsEditingBaseVisible = true;
   var artAdminEditingId = '';
   var artAdminFiles = [];
   var uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'', pageFiles:[] };
@@ -1625,14 +1614,9 @@ function renderGoods(){
   box.innerHTML = goodsItems.map(function(item){
     var editing = goodsEditingFile === item.file && goodsPending[0];
     var scale = Math.min(1, Math.max(.6, Number(editing ? goodsPending[0].zoom * 100 : item.scale || 100) / 100));
-    var saveClass = goodsEditingDirty ? 'btn-sm btn-gold' : 'btn-sm';
-    var inlineEditor = editing ? '<div class="goods-inline-editor" data-goods-file="' + esc(item.file) + '">' +
-      '<div class="inline-scale-row"><label for="goods-inline-scale-' + esc(item.file) + '">缩放</label><input type="range" id="goods-inline-scale-' + esc(item.file) + '" data-goods-inline-scale="' + esc(item.file) + '" min="60" max="100" step="5" value="' + Math.round(scale * 100) + '"><output data-goods-inline-value>' + Math.round(scale * 100) + '%</output></div>' +
-      '<label class="sw" style="margin-top:7px"><input type="checkbox" data-goods-inline-visible style="width:auto"' + (item.visible === false ? '' : ' checked') + '> 主站显示</label>' +
-      '<div class="inline-actions"><button type="button" class="' + saveClass + '" data-goods-inline-save' + (goodsEditingDirty ? '' : ' disabled') + '>保存</button><button type="button" class="btn-sm" data-goods-inline-cancel>取消</button></div></div>' : '';
-    return '<div class="notice-row goods-admin-card' + (editing ? ' is-editing' : '') + '"><div class="goods-admin-actions"><button class="btn-sm" data-goods-edit="' + esc(item.file) + '">编辑图片</button><button class="btn-sm btn-danger" data-goods-del="' + esc(item.file) + '">删除</button></div>' +
+    return '<div class="notice-row goods-admin-card"><div class="goods-admin-actions"><button class="btn-sm" data-goods-edit="' + esc(item.file) + '">编辑图片</button><button class="btn-sm btn-danger" data-goods-del="' + esc(item.file) + '">删除</button></div>' +
       '<div style="width:90px;aspect-ratio:3/4;overflow:hidden;background:#F2ECE0;border:1px solid var(--line);border-radius:5px;display:flex;align-items:center;justify-content:center;flex:none"><img data-goods-preview="' + esc(item.file) + '" src="' + esc(goodsUrl(item.file) + '?imageMogr2/thumbnail/180x/format/webp') + '" alt="" style="width:100%;height:100%;object-fit:contain;transform:scale(' + scale + ');transform-origin:center"></div>' +
-      '<div class="info"><b>' + esc(item.file) + '</b></div>' + inlineEditor + '</div>';
+      '<div class="info"><b>' + esc(item.file) + '</b></div></div>';
   }).join('');
 }
 function loadGoods(){
@@ -1647,7 +1631,7 @@ function loadGoods(){
 }
 function resetGoodsForm(){
   goodsPending.forEach(function(x){if(x.localUrl)URL.revokeObjectURL(x.localUrl);});
-  goodsEditingFile=''; goodsPending=[]; goodsCropIndex=-1; goodsEditingDirty=false; goodsEditingBaseScale=100; goodsEditingBaseVisible=true;
+  goodsEditingFile=''; goodsPending=[]; goodsCropIndex=-1;
   $('goods-image').value=''; $('goods-scale').value='100'; $('goods-scale-value').textContent='100%'; $('goods-visible').checked=true;
   $('goods-preview').src=''; $('goods-crop-stage').classList.add('hide'); $('goods-batch-list').innerHTML=''; $('goods-save').textContent='保存图片设置'; hide($('goods-msg'));
 }
@@ -1719,23 +1703,9 @@ async function saveGoods(){
 }
 $('goods-save').addEventListener('click',saveGoods); $('goods-clear').addEventListener('click',resetGoodsForm); $('goods-reload').addEventListener('click',loadGoods);
 $('goods-list').addEventListener('click',function(e){
-  var edit=e.target.closest('[data-goods-edit]'),del=e.target.closest('[data-goods-del]'),inlineSave=e.target.closest('[data-goods-inline-save]'),inlineCancel=e.target.closest('[data-goods-inline-cancel]');
-  if(inlineSave){if(!goodsEditingDirty)return;var saveRow=inlineSave.closest('[data-goods-file]');$('goods-visible').checked=!!saveRow.querySelector('[data-goods-inline-visible]').checked;saveGoods();return;}
-  if(inlineCancel){resetGoodsForm();renderGoods();return;}
-  if(edit){var item=goodsItems.find(function(x){return x.file===edit.getAttribute('data-goods-edit');});if(!item)return;resetGoodsForm();goodsEditingFile=item.file;goodsEditingBaseScale=Math.min(100,Math.max(60,Math.round(Number(item.scale||100))));goodsEditingBaseVisible=item.visible!==false;$('goods-visible').checked=goodsEditingBaseVisible;loadGoodsCropSource(goodsUrl(item.file),item.file,'').then(function(source){source.zoom=Math.min(1,Math.max(.6,goodsEditingBaseScale/100));goodsPending=[source];goodsCropIndex=0;goodsEditingDirty=false;renderGoods();}).catch(function(err){goodsEditingFile='';show($('goods-msg'),'err','读取素材失败：'+(err.message||String(err)));});}
+  var edit=e.target.closest('[data-goods-edit]'),del=e.target.closest('[data-goods-del]');
+  if(edit){var item=goodsItems.find(function(x){return x.file===edit.getAttribute('data-goods-edit');});if(!item)return;resetGoodsForm();goodsEditingFile=item.file;$('goods-visible').checked=item.visible!==false;loadGoodsCropSource(goodsUrl(item.file),item.file,'').then(function(source){source.zoom=Math.min(1,Math.max(.6,Number(item.scale||100)/100));goodsPending=[source];goodsCropIndex=0;renderGoods();window.scrollTo({top:$('goods-panel').offsetTop-12,behavior:'smooth'});}).catch(function(err){goodsEditingFile='';show($('goods-msg'),'err','读取素材失败：'+(err.message||String(err)));});}
   else if(del){var file=del.getAttribute('data-goods-del');if(!confirm('确定删除这张周边素材及原图？'))return;api({action:'goodsDelete',file:file}).then(function(d){goodsItems=d.items||[];renderGoods();resetGoodsForm();}).catch(function(err){if(onAuthFail(err))return;show($('goods-msg'),'err',err.message||String(err));});}
-});
-$('goods-list').addEventListener('input',function(e){
-  var scaleInput=e.target.closest('[data-goods-inline-scale]');if(!scaleInput)return;
-  var file=scaleInput.getAttribute('data-goods-inline-scale'),pending=goodsPending[0];if(!pending||goodsEditingFile!==file)return;
-  pending.zoom=Number(scaleInput.value)/100;
-  var editor=scaleInput.closest('[data-goods-file]'),card=scaleInput.closest('.goods-admin-card'),value=editor.querySelector('[data-goods-inline-value]'),preview=card.querySelector('[data-goods-preview]');
-  value.textContent=scaleInput.value+'%';preview.style.transform='scale('+pending.zoom+')';goodsEditingDirty=Math.round(pending.zoom*100)!==goodsEditingBaseScale || editor.querySelector('[data-goods-inline-visible]').checked!==goodsEditingBaseVisible;var saveButton=editor.querySelector('[data-goods-inline-save]');saveButton.disabled=!goodsEditingDirty;saveButton.className=goodsEditingDirty?'btn-sm btn-gold':'btn-sm';
-});
-$('goods-list').addEventListener('change',function(e){
-  var visibleInput=e.target.closest('[data-goods-inline-visible]');if(!visibleInput)return;
-  var editor=visibleInput.closest('[data-goods-file]'),pending=goodsPending[0];if(!pending)return;
-  goodsEditingDirty=Math.round(pending.zoom*100)!==goodsEditingBaseScale || visibleInput.checked!==goodsEditingBaseVisible;var saveButton=editor.querySelector('[data-goods-inline-save]');saveButton.disabled=!goodsEditingDirty;saveButton.className=goodsEditingDirty?'btn-sm btn-gold':'btn-sm';
 });
 
 /* ============ 支持墙 ============ */
