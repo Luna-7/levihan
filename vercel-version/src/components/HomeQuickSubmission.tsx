@@ -8,7 +8,7 @@ import { useAppShellStore } from '../stores/appShellStore';
 import { submitToInbox } from '../utils/submissionInbox';
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { getAccessToken } from '../utils/cloudbaseToken';
-import { notifyBrowser } from '../utils/browserNotifications';
+import { formatNotificationBody, notifyBrowser } from '../utils/browserNotifications';
 
 type Mode = 'menu' | 'art';
 
@@ -118,24 +118,29 @@ export const HomeQuickSubmission: React.FC<{ onShowToast: (message: string) => v
     if (!profile?.nickname || !images.length) return onShowToast('请选择至少一张图片');
     const token = await getAccessToken();
     if (!token) { useAppShellStore.getState().openLogin(); return onShowToast('登录状态已失效，请重新登录'); }
-    setBusy(true);
-    try {
+    const pendingImages = images.map((item) => item.file);
+    const pendingText = text.trim();
+    const pendingHomepage = homepage.trim();
+    const pendingAuthor = profile.nickname;
+    setOpen(false);
+    setBusy(false);
+    void (async () => {
+      try {
       const submissionId = `art-${Date.now().toString(36)}`;
       let folder = '';
       const files: string[] = [];
-      for (let index = 0; index < images.length; index += 1) {
-        const imageBase64 = await fileToWebpBase64(images[index].file);
+      for (let index = 0; index < pendingImages.length; index += 1) {
+        const imageBase64 = await fileToWebpBase64(pendingImages[index]);
         const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, { method:'POST', headers:{'Content-Type':'text/plain;charset=UTF-8', Authorization:`Bearer ${token}`}, body:JSON.stringify({ action:'submissionImageUpload', submissionId, index:index + 1, imageBase64 }) });
         const result = await response.json() as { ok?: boolean; error?: string; folder?: string; fileName?: string };
         if (!response.ok || !result.ok || !result.folder || !result.fileName) throw new Error(result.error || '图片上传失败');
         folder = result.folder; files.push(result.fileName);
       }
-      await submitToInbox('submitArtwork', { text:text.trim(), author:profile.nickname, homepage:homepage.trim(), folder, files });
-      setOpen(false);
-      notifyBrowser('插画已上架', { body: '图片已转换为 WebP，已直接发布到插画集。', tag: 'artwork-submission' });
-      onShowToast('插画已转换为 WebP 并成功上架 🎨');
-    } catch (error) { onShowToast(error instanceof Error ? error.message : '插画投递失败'); }
-    finally { setBusy(false); }
+      await submitToInbox('submitArtwork', { text:pendingText, author:pendingAuthor, homepage:pendingHomepage, folder, files });
+      notifyBrowser('新图出锅', { body: formatNotificationBody('图片已转换为 WebP，已直接发布到插画集。'), tag: 'artwork-submission' });
+      onShowToast('插画已成功上架 🎨');
+      } catch (error) { onShowToast(error instanceof Error ? error.message : '插画后台上传失败'); }
+    })();
   };
 
   const addImages = (files: File[]) => {

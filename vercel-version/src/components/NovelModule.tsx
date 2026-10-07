@@ -11,7 +11,7 @@ import { useAppShellStore } from '../stores/appShellStore';
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { cosService } from '../services/cosClient';
 import { CardPatternOverlay } from './CardPatternOverlay';
-import { notifyBrowser } from '../utils/browserNotifications';
+import { formatNotificationBody, notifyBrowser } from '../utils/browserNotifications';
 
 /** 懒加载本地 mammoth（仅在选择 .docx 时才拉取 ~636KB 脚本，避免进主包） */
 let mammothPromise: Promise<MammothApi> | null = null;
@@ -264,45 +264,55 @@ export const NovelModule: React.FC<Props> = ({
       useAppShellStore.getState().openLogin();
       return;
     }
-    setIsUploading(true);
-    try {
+    const pendingEditingNovel = editingNovel;
+    const pendingTitle = uploadTitle.trim();
+    const pendingAuthor = uploadAuthor.trim();
+    const pendingAuthorUrl = uploadAuthorUrl.trim();
+    const pendingBody = uploadBody.trim();
+    const pendingAuthorNote = uploadNotes.trim();
+    const pendingTags = uploadTags.trim();
+    const pendingWarning = uploadWarnOn ? uploadWarning.trim() : '';
+    const pendingSensitive = uploadSensitive;
+    setShowUpload(false);
+    leaveEditMode();
+    setIsUploading(false);
+    useAppShellStore.getState().invalidateNovelIndex();
+    void (async () => {
+      try {
       const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          action: editingNovel ? 'novelUpdate' : 'novelDirectPublish',
-          id: editingNovel?.id,
-          sensitive: uploadSensitive,
-          title: uploadTitle.trim(),
-          author: uploadAuthor.trim(),
-          authorUrl: uploadAuthorUrl.trim(),
-          body: uploadBody.trim(),
-          authorNote: uploadNotes.trim(),
-          tags: uploadTags.trim(),
-          warning: uploadWarnOn ? uploadWarning.trim() : '',
+          action: pendingEditingNovel ? 'novelUpdate' : 'novelDirectPublish',
+          id: pendingEditingNovel?.id,
+          sensitive: pendingSensitive,
+          title: pendingTitle,
+          author: pendingAuthor,
+          authorUrl: pendingAuthorUrl,
+          body: pendingBody,
+          authorNote: pendingAuthorNote,
+          tags: pendingTags,
+          warning: pendingWarning,
         }),
       });
       const result = await response.json().catch(() => ({})) as { ok?: boolean; error?: string };
       if (!response.ok || !result.ok) throw new Error(result.error || '发布失败，请稍后重试');
-      setShowUpload(false);
-      leaveEditMode();
       useAppShellStore.getState().invalidateNovelIndex();
-      notifyBrowser(editingNovel ? '小说已更新' : '小说已上传', {
-        body: `《${uploadTitle.trim().slice(0, 24)}》${editingNovel ? '已更新。' : '已成功上架。'}`,
+      notifyBrowser(pendingEditingNovel ? '新文又开炖了' : '新文开炖', {
+        body: formatNotificationBody(`《${pendingTitle.slice(0, 24)}》${pendingEditingNovel ? '已更新。' : '已成功上架。'}`),
         tag: 'novel-submission',
       });
       onShowToast(
-        editingNovel
-          ? `已更新《${uploadTitle.trim().slice(0, 18)}》✏️`
-          : uploadSensitive
+        pendingEditingNovel
+          ? `已更新《${pendingTitle.slice(0, 18)}》✏️`
+          : pendingSensitive
             ? '已加密上架，感谢投稿 📚'
             : '已上架，感谢投稿 📚'
       );
-    } catch (error) {
-      onShowToast(error instanceof Error ? error.message : '投稿失败，请稍后重试');
-    } finally {
-      setIsUploading(false);
-    }
+      } catch (error) {
+        onShowToast(error instanceof Error ? error.message : '后台投稿失败，请稍后重试');
+      }
+    })();
   };
 
   const segCls = (active: boolean) =>

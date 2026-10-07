@@ -352,14 +352,10 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       return;
     }
 
-    try {
-      await submitToInbox('submitNovel', {
-        title: nvTitle, author: nvAuthor, authorUrl: nvHomepage, body: nvNotes,
-      });
-      onShowToast('小说已直接上架 📚');
-    } catch {
-      onShowToast('小说发布失败，请稍后重试 ⚠️');
-    }
+    const pendingNovel = { title: nvTitle, author: nvAuthor, authorUrl: nvHomepage, body: nvNotes };
+    void submitToInbox('submitNovel', pendingNovel)
+      .then(() => onShowToast('小说已直接上架 📚'))
+      .catch(() => onShowToast('小说后台发布失败，请稍后重试 ⚠️'));
   };
 
   // 4. 呈递插画/短漫
@@ -377,13 +373,19 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       onShowToast('登录状态已失效，请重新登录 ⚠️');
       return;
     }
-    setIsArtSubmitting(true);
-    try {
+    const pendingFiles = artFiles.slice();
+    const pendingText = artNotes.trim();
+    const pendingAuthor = artAuthor.trim();
+    const pendingHomepage = artHomepage.trim();
+    setArtFiles([]);
+    setIsArtSubmitting(false);
+    void (async () => {
+      try {
       const submissionId = `art-${Date.now().toString(36)}`;
       const files: string[] = [];
       let folder = '';
-      for (let index = 0; index < artFiles.length; index += 1) {
-        const imageBase64 = await fileToWebpBase64(artFiles[index].file);
+      for (let index = 0; index < pendingFiles.length; index += 1) {
+        const imageBase64 = await fileToWebpBase64(pendingFiles[index].file);
         const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
@@ -393,17 +395,16 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
         if (!response.ok || !result.ok || !result.folder || !result.fileName) throw new Error(result.error || `第 ${index + 1} 张图片上传失败`);
         folder = result.folder;
         files.push(result.fileName);
-        onShowToast(`图片上传中：${index + 1} / ${artFiles.length}`);
+        onShowToast(`图片后台上传中：${index + 1} / ${pendingFiles.length}`);
       }
       await submitToInbox('submitArtwork', {
-        text: artNotes.trim(), author: artAuthor.trim(), homepage: artHomepage.trim(), folder, files,
+        text: pendingText, author: pendingAuthor, homepage: pendingHomepage, folder, files,
       });
       onShowToast('插画已转为 WebP 并成功上架 🎨');
-    } catch (error) {
-      onShowToast(error instanceof Error ? error.message : '插画上传失败，请稍后重试');
-    } finally {
-      setIsArtSubmitting(false);
-    }
+      } catch (error) {
+        onShowToast(error instanceof Error ? error.message : '插画后台上传失败，请稍后重试');
+      }
+    })();
   };
 
   // 5. 呈递安利推荐
@@ -434,7 +435,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       content: recReason,
     });
     if (sent) {
-      onShowToast('安利推荐已呈递至收件箱！📬');
       setRecTitle('');
       setRecLink('');
       setRecReason('');

@@ -20,7 +20,7 @@ import { TeaPartyShareModal, ShareTargetData } from './TeaPartyShareModal';
 import { LinkShare, LinkShareCard, LinkShareModal, canEmbedLink, platformForLink, platformLabel } from './LinkShareCard';
 import { fmtTime, normalizeShareLink } from '../utils/forumFormat';
 import { toForumWebp } from '../utils/forumImage';
-import { notifyBrowser, truncateNotificationText } from '../utils/browserNotifications';
+import { formatNotificationBody, notifyBrowser } from '../utils/browserNotifications';
 export { fmtTime, normalizeShareLink } from '../utils/forumFormat';
 
 export type PostCategory = 'chat' | 'relay' | 'roleplay' | 'market' | 'links';
@@ -662,8 +662,8 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
           if (!initial) {
             const known = new Set(postsRef.current.map((post) => post.id));
             result.posts.filter((post: ForumPost) => !known.has(post.id) && post.uid !== currentUid).slice(0, 3).forEach((post: ForumPost) => {
-              notifyBrowser(`论坛新帖：${truncateNotificationText(post.title || '未命名帖子', 32)}`, {
-                body: truncateNotificationText(post.body),
+              notifyBrowser(post.category === 'links' ? '吃一口安利' : post.category === 'relay' ? '文章接龙' : post.category === 'roleplay' ? '角色语C' : '来唠两句', {
+                body: formatNotificationBody(post.title || post.body || '论坛有新的帖子'),
                 tag: `forum-${post.id}`,
                 dedupeKey: `forum-${post.id}`,
               });
@@ -671,8 +671,8 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             const knownComments = new Set(postsRef.current.flatMap((post) => (post.comments || []).map((comment) => comment.id)));
             result.posts.flatMap((post: ForumPost) => (post.comments || []).map((comment) => ({ post, comment })))
               .filter(({ comment }) => !knownComments.has(comment.id) && comment.uid !== currentUid).slice(0, 3).forEach(({ post, comment }) => {
-                notifyBrowser(`论坛新回复：${truncateNotificationText(post.title || '帖子', 32)}`, {
-                  body: truncateNotificationText(comment.body),
+                notifyBrowser(post.category === 'relay' ? '文章接龙' : post.category === 'roleplay' ? '角色语C' : post.category === 'links' ? '吃一口安利' : '有人接话', {
+                  body: formatNotificationBody(comment.body),
                   tag: `forum-comment-${comment.id}`,
                   dedupeKey: `forum-comment-${comment.id}`,
                 });
@@ -1120,7 +1120,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
         setImage(undefined);
         setShowComposer(false);
         soundManager.playCoin();
-        onShowToast(`已以【${charName}】身份发布角色拟音`);
 
         void api('forumPublish', {
           author: charName,
@@ -1332,7 +1331,14 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     const post = posts.find((item) => item.id === id);
     if (!post) return;
     const give = !post.potatoGiven;
+    const previousPotatoes = post.potatoes;
     pendingPotatoes.current.add(id);
+    const optimistic = posts.map((item) => item.id === id
+      ? { ...item, potatoes: Math.max(0, item.potatoes + (give ? 1 : -1)), potatoGiven: give }
+      : item);
+    persist(optimistic);
+    soundManager.playCoin();
+    if (give) onShowToast('投喂了 1 份蛋糕！🍰');
     try {
       const result = await api('forumPotato', { target: 'post', id, give });
       setPosts((current) => {
@@ -1342,10 +1348,14 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* storage fallback */ }
         return next;
       });
-      soundManager.playCoin();
-      if (give) onShowToast('投喂了 1 份蛋糕！🍰');
     } catch {
-      onShowToast('点赞同步失败，请重试');
+      setPosts((current) => {
+        const next = current.map((item) => item.id === id
+          ? { ...item, potatoes: previousPotatoes, potatoGiven: !give }
+          : item);
+        persist(next);
+        return next;
+      });
     } finally {
       pendingPotatoes.current.delete(id);
     }

@@ -1605,7 +1605,7 @@ $('announcement-panel').addEventListener('paste', function(e){
 });
 $('an-save').addEventListener('click', saveAnnouncement);
 $('an-clear').addEventListener('click', resetAnnouncementForm);
-$('an-reload').addEventListener('click', loadAnnouncements);
+$('an-reload').addEventListener('click', function(){ loadAnnouncements(); loadInbox(); });
 $('an-list').addEventListener('click', function(e){
   var edit = e.target.closest('[data-an-edit]'), del = e.target.closest('[data-an-del]');
   if (edit) {
@@ -3175,12 +3175,13 @@ function loadInbox(){
   $('inbox-status').textContent = '正在读取收件箱…';
   api({ action:'inboxList' }).then(function(res){
     var items = Array.isArray(res.items) ? res.items : [];
-    $('inbox-status').textContent = items.length ? '🔔 ' + items.length + ' 条新来信待处理' : '暂无未处理调查报告与来信';
-    $('inbox-status').style.color = items.length ? '#B63A2B' : '';
-    $('inbox-status').style.fontWeight = items.length ? '700' : '';
-    $('inbox-badge').textContent = String(items.length);
-    $('inbox-badge').classList.toggle('hide', items.length === 0);
-    renderInboxReports(items, $('inbox-contacts'));
+    var inboxItems = items.filter(function(item){ return item.type !== 'announcement'; });
+    $('inbox-status').textContent = inboxItems.length ? '🔔 ' + inboxItems.length + ' 条新来信待处理' : '暂无未处理调查报告与来信';
+    $('inbox-status').style.color = inboxItems.length ? '#B63A2B' : '';
+    $('inbox-status').style.fontWeight = inboxItems.length ? '700' : '';
+    $('inbox-badge').textContent = String(inboxItems.length);
+    $('inbox-badge').classList.toggle('hide', inboxItems.length === 0);
+    renderInboxReports(inboxItems, $('inbox-contacts'));
     renderReviewItems(items.filter(function(item){ return item.type === 'announcement'; }), $('an-review'), '企划');
   }).catch(function(err){ $('inbox-status').textContent = '读取失败：' + (err.message || String(err)); });
 }
@@ -3190,7 +3191,8 @@ function renderReviewItems(items, container, label){
     var kind=item.type==='announcement'?'企划公告':item.type==='artwork'?'同人插画/短漫':'同人文';
     var detail=item.body||item.description||item.reason||'';
     var previews=Array.isArray(item.files)&&item.folder?'<div class="row" style="gap:6px;margin-top:8px;overflow-x:auto">'+item.files.slice(0,8).map(function(name){return '<img src="'+esc(CDN+'/'+item.folder+'/'+name)+'" alt="投稿预览" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--rule)">';}).join('')+'</div>':'';
-    return '<div class="notice-row" data-inbox-id="'+esc(item._id)+'"><div class="info"><b>'+esc(kind+' · '+(item.title||'未命名'))+'</b><div class="muted">提交人：'+esc(item.author||'匿名')+(item.email?' · '+esc(item.email):'')+(item.homepage?' · '+esc(item.homepage):'')+'</div>'+previews+(detail?'<details><summary>查看内容</summary><pre style="white-space:pre-wrap">'+esc(detail)+'</pre></details>':'')+'</div><button class="btn-sm btn-gold" data-review="approve">通过并收录</button><button class="btn-sm btn-danger" data-review="reject">拒绝</button></div>';
+    var approveLabel = item.type === 'announcement' ? '审核通过并显示' : '通过并收录';
+    return '<div class="notice-row" data-inbox-id="'+esc(item._id)+'"><div class="info"><b>'+esc(kind+' · '+(item.title||'未命名'))+'</b><div class="muted">提交人：'+esc(item.author||'匿名')+(item.email?' · '+esc(item.email):'')+(item.homepage?' · '+esc(item.homepage):'')+'</div>'+previews+(detail?'<details><summary>查看内容</summary><pre style="white-space:pre-wrap">'+esc(detail)+'</pre></details>':'')+'</div><button class="btn-sm btn-gold" data-review="approve">'+approveLabel+'</button><button class="btn-sm btn-danger" data-review="reject">拒绝</button></div>';
   }).join('');
 }
 function renderInboxReports(items, container){

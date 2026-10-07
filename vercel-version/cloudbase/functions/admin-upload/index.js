@@ -55,6 +55,7 @@ const AUTHORS_KEY = 'authors.json'; // 作者链接登记表（[{name,url,create
 const ANNOUNCEMENTS_KEY = 'announcements.json'; // 首页公告栏（公开读取、管理员写入）
 const ANNOUNCEMENT_DIR = 'announcements/';
 const PUSH_SUBSCRIPTIONS_KEY = 'push-subscriptions.json';
+const ARTWORK_LIKES_KEY = 'artwork-likes.json'; // 插画集点赞记录（[{id, voters, likes}]）
 const SUPPORTERS_KEY = 'supporters.json'; // 支持墙（[{id,name,kind,order,visible}]）
 const GOODS_KEY = 'goods/manifest.json';
 const GOODS_DIR = 'goods/';
@@ -318,13 +319,44 @@ async function writePushSubscriptions(items) {
   });
 }
 
+async function readArtworkLikes() {
+  try {
+    const res = await getObject({ Bucket: BUCKET, Region: REGION, Key: ARTWORK_LIKES_KEY });
+    const parsed = JSON.parse(Buffer.isBuffer(res.Body) ? res.Body.toString('utf8') : String(res.Body));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    if (err && (err.statusCode === 404 || err.code === 'NoSuchKey')) return [];
+    throw err;
+  }
+}
+
+async function writeArtworkLikes(items) {
+  await putObject({
+    Bucket: BUCKET,
+    Region: REGION,
+    Key: ARTWORK_LIKES_KEY,
+    Body: Buffer.from(JSON.stringify(items, null, 2), 'utf8'),
+    ContentType: 'application/json; charset=utf-8',
+    CacheControl: 'no-cache',
+  });
+}
+
 function validPushSubscription(subscription) {
   return subscription && typeof subscription === 'object' &&
     typeof subscription.endpoint === 'string' && subscription.endpoint.startsWith('https://') &&
     subscription.keys && typeof subscription.keys.p256dh === 'string' && typeof subscription.keys.auth === 'string';
 }
 
-async function sendPushUpdate({ title, body, tag, url = '/' }) {
+function formatPushBody(body, allowLong = false) {
+  const text = String(body || '').replace(/\r\n?/g, '\n').trim();
+  if (allowLong) return text;
+  const lines = text.split('\n').filter(Boolean).slice(0, 3);
+  const clipped = lines.join('\n');
+  const compact = clipped.length > 120 ? `${clipped.slice(0, 119)}…` : clipped;
+  return `${compact}${text.length > clipped.length && !compact.endsWith('…') ? '…' : ''}`.trim();
+}
+
+async function sendPushUpdate({ title, body, tag, url = '/', allowLong = false }) {
   try {
     if (!configureWebPush()) {
       console.warn('[push] VAPID keys are not configured; skip background notification');
@@ -332,7 +364,7 @@ async function sendPushUpdate({ title, body, tag, url = '/' }) {
     }
     const subscriptions = await readPushSubscriptions();
     if (!subscriptions.length) return;
-    const payload = JSON.stringify({ title, body, tag, url });
+    const payload = JSON.stringify({ title, body: formatPushBody(body, allowLong), tag, url });
     const expired = new Set();
     await Promise.allSettled(subscriptions.map(async (subscription) => {
       try {
@@ -1427,7 +1459,7 @@ async function publishArtworkDirect(payload) {
   books.push(book);
   await writeArchive(books);
   await sendPushUpdate({
-    title: '新插画集上架',
+    title: '新图出锅',
     body: String(book.text || book.circle || '有新的插画集上架').slice(0, 120),
     tag: `artwork-${book.id}`,
     url: '/?tab=resources',
@@ -1463,14 +1495,14 @@ async function reviewInbox(payload) {
         bookFolder:item.folder, coverFile:item.files[0], pageFiles:item.files, createdAt:now, updatedAt:now }));
       await writeArchive(books);
       await sendPushUpdate({
-        title: '新插画集上架',
+        title: '新图出锅',
         body: String(item.title || '有新的插画集上架').slice(0, 120),
         tag: `artwork-${item.folder}`,
         url: '/?tab=resources',
       });
       try { await upsertAuthor(item.author, item.homepage); } catch (e) { console.error('[authorLib] 插画作者登记失败', e && e.message); }
     } else if (item.type === 'announcement') {
-      await handle('announcementSave', { item: { tag: '公告', title: item.title, time: item.time,
+      await handle('announcementSave', { item: { tag: item.tag || '利韩企划', title: item.title, time: item.time,
         author: item.author, link: item.link, image: item.image, description: item.description } });
     } else if (item.type === 'recommend') {
       const recs = await readRecs();
@@ -1478,6 +1510,12 @@ async function reviewInbox(payload) {
         rating: item.rating || '未分级', recommender: item.author, reason: item.reason,
         createdAt: new Date().toISOString() }])[0]);
       await writeRecs(recs);
+      await sendPushUpdate({
+        title: '吃一口安利',
+        body: String(item.reason || item.title || '有新的安利推荐').slice(0, 120),
+        tag: `recommend-${id}`,
+        url: '/?tab=resources',
+      });
     } else if (item.type !== 'contact') {
       // contact（联络来信）没有发布动作，approve 仅表示「已读处理」
       throw httpError('不支持的投稿类型', 400);
@@ -1507,11 +1545,12 @@ const USER_ACTIONS = new Set([
   'submitNovel', 'submitArtwork', 'submitAnnouncement', 'submissionImageUpload', 'announcementImageUpload',
   'novelDirectPublish', 'artworkDirectPublish', 'novelUpdate', 'novelCommentAdd',
   'novelBody',
+  'artworkLike',
   'submitScore',
   'inboxReplyList', 'inboxReplyRead',
 ]);
 // 匿名也可呈递；若请求带有效登录会话则顺带绑定账号，供管理员站内回信。
-const OPTIONAL_USER_ACTIONS = new Set(['submitContact']);
+const OPTIONAL_USER_ACTIONS = new Set(['submitContact', 'artworkLikeList']);
 /* 用户会话**或**管理员令牌任一即可：
    - 删评论 / 删帖子 = 本人（uid 比对）或管理员（管理员可清理任意垃圾贴）
    - linkPreview = 前台发布安利与后台发布安利都要用
@@ -1908,7 +1947,7 @@ async function handle(action, payload) {
       if (index >= 0) items[index] = next;
       else items.unshift({ ...next, createdAt: now });
       await writeAnnouncements(items.slice(0, 30));
-      await sendPushUpdate({ title: '公告栏更新', body: String(next.title || '有新的公告'), tag: `announcement-${next.id}` });
+      await sendPushUpdate({ title: '有新公告啦', body: String(next.description || next.title || '有新的公告'), tag: `announcement-${next.id}`, allowLong: true });
       return { ok: true, item: next, items };
     }
 
@@ -2101,7 +2140,7 @@ async function handle(action, payload) {
       };
       posts.unshift(post); await writeForum(posts.slice(0, 300));
       await sendPushUpdate({
-        title: '论坛新帖',
+        title: category === 'links' ? '吃一口安利' : category === 'relay' ? '文章接龙' : category === 'roleplay' ? '角色语C' : '来唠两句',
         body: String(post.title || post.body || '论坛有新的帖子').slice(0, 120),
         tag: `forum-${post.id}`,
         url: '/?tab=doujinshi',
@@ -2179,7 +2218,7 @@ async function handle(action, payload) {
       if (post.category === 'relay') post.quillClaim = undefined;
       await writeForum(posts);
       await sendPushUpdate({
-        title: '论坛新回复',
+        title: post.category === 'relay' ? '文章接龙' : post.category === 'roleplay' ? '角色语C' : post.category === 'links' ? '吃一口安利' : '有人接话',
         body: String(comment.body || '帖子有新的回复').slice(0, 120),
         tag: `forum-comment-${comment.id}`,
         url: '/?tab=doujinshi',
@@ -2215,8 +2254,75 @@ async function handle(action, payload) {
         hit.potatoVoters = give ? [...voters, payload.__uid] : voters.filter((uid) => uid !== payload.__uid);
         hit.potatoes = Math.max(0, (Number(hit.potatoes) || 0) + (give ? 1 : -1));
         await writeForum(posts);
+        if (give) {
+          const liker = await userNickname(payload.__uid);
+          const recipient = hit.author || '这条内容';
+          await sendPushUpdate({
+            title: '夸夸大厨',
+            body: `${liker || '有人'}给你投喂了一个土豆`,
+            tag: `potato-${target}-${id}`,
+            url: '/?tab=resources',
+          });
+        }
       }
       return { ok: true, id, potatoes: Number(hit.potatoes) || 0, potatoGiven: give };
+    }
+
+    case 'artworkLikeList': {
+      const books = await readArchive();
+      const artworkIds = new Set(books
+        .filter((book) => book && book.category === '插画集')
+        .map((book) => String(book.id || '')));
+      const uid = String(payload.__uid || '').trim();
+      const records = await readArtworkLikes();
+      return {
+        ok: true,
+        items: records
+          .filter((record) => record && artworkIds.has(String(record.id || '')))
+          .map((record) => {
+            const voters = Array.isArray(record.voters) ? record.voters : [];
+            return {
+              id: String(record.id),
+              likes: Math.max(0, Number(record.likes) || voters.length),
+              liked: Boolean(uid && voters.includes(uid)),
+            };
+          }),
+      };
+    }
+
+    case 'artworkLike': {
+      const id = String(payload.id || '').trim();
+      const give = payload.give !== false;
+      const uid = String(payload.__uid || '').trim();
+      if (!/^lh-[a-zA-Z0-9_-]+$/.test(id)) throw httpError('插画集参数无效', 400);
+      if (!uid) throw httpError('请先登录账号再点赞', 401);
+      const books = await readArchive();
+      if (!books.some((book) => book && book.id === id && book.category === '插画集')) {
+        throw httpError('插画集不存在', 404);
+      }
+      const records = await readArtworkLikes();
+      const index = records.findIndex((record) => record && record.id === id);
+      const record = index >= 0 ? records[index] : { id, likes: 0, voters: [] };
+      const voters = Array.isArray(record.voters) ? record.voters : [];
+      const alreadyLiked = voters.includes(uid);
+      if (give !== alreadyLiked) {
+        record.voters = give ? [...voters, uid] : voters.filter((voter) => voter !== uid);
+        record.likes = Math.max(0, (Number(record.likes) || voters.length) + (give ? 1 : -1));
+        if (index >= 0) records[index] = record;
+        else records.push(record);
+        await writeArtworkLikes(records);
+        if (give) {
+          const liker = await userNickname(uid);
+          const artwork = books.find((book) => book.id === id);
+          await sendPushUpdate({
+            title: '夸夸大厨',
+            body: `${liker || '有人'}给你投喂了一个赞`,
+            tag: `artwork-like-${id}-${uid}`,
+            url: '/?tab=resources',
+          });
+        }
+      }
+      return { ok: true, id, likes: Math.max(0, Number(record.likes) || 0), liked: give };
     }
 
     case 'forumClaim': {
@@ -2375,6 +2481,12 @@ async function handle(action, payload) {
       };
       const items = await readMarket();
       items.unshift(item); await writeMarket(items.slice(0, MAX_MARKET_ITEMS));
+      await sendPushUpdate({
+        title: '土豆市集',
+        body: String(description || title).slice(0, 120),
+        tag: `market-${item.id}`,
+        url: '/?tab=market',
+      });
       return { ok: true, item, items };
     }
 
@@ -2466,7 +2578,7 @@ async function handle(action, payload) {
       book.updatedAt = now;
       await writeArchive(books);
       await sendPushUpdate({
-        title: replaced ? '插画集已更新' : '新插画集上架',
+        title: replaced ? '新图又出锅了' : '新图出锅',
         body: String(book.titleZh || '插画集有新的内容').slice(0, 120),
         tag: `artwork-${book.id}`,
         url: '/?tab=resources',
@@ -2550,8 +2662,8 @@ async function handle(action, payload) {
       novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
       await writeNovels(novels);
       await sendPushUpdate({
-        title: '新小说上架',
-        body: String(meta.title || '有新的小说上架').slice(0, 120),
+        title: '新文开炖',
+        body: String(meta.authorNote || meta.title || '有新的小说上架').slice(0, 120),
         tag: `novel-${meta.id}`,
         url: '/?tab=resources',
       });
@@ -2591,8 +2703,8 @@ async function handle(action, payload) {
       novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
       await writeNovels(novels);
       await sendPushUpdate({
-        title: existing ? '小说已更新' : '新小说上架',
-        body: String(next.title || '小说有新的内容').slice(0, 120),
+        title: existing ? '新文又开炖了' : '新文开炖',
+        body: String(next.authorNote || next.title || '小说有新的内容').slice(0, 120),
         tag: `novel-${next.id}`,
         url: '/?tab=resources',
       });

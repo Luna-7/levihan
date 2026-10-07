@@ -25,6 +25,9 @@ import { MangaCommentSection } from './MangaCommentSection';
 import { getCommentCountByBookId } from '../data/mangaComments';
 import { useAppShellStore } from '../stores/appShellStore';
 import { scheduleNonCriticalTask } from '../utils/scheduleNonCriticalTask';
+import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
+import { getAccessToken } from '../utils/cloudbaseToken';
+import { useAuthStore } from '../stores/authStore';
 
 interface Props {
   onShowToast: (msg: string) => void;
@@ -35,6 +38,19 @@ interface Props {
    * 二者共用同一份组件与数据，但按模式过滤分类，保证主站零漫画、漫画站零合订本。
    */
   mode?: 'main' | 'comic';
+}
+
+type ArtworkLikeItem = { id: string; likes: number; liked: boolean };
+
+async function callArtworkApi(payload: Record<string, unknown>, token?: string | null) {
+  const headers: Record<string, string> = { 'Content-Type': 'text/plain;charset=UTF-8' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
+    method: 'POST', headers, body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; items?: ArtworkLikeItem[]; likes?: number; liked?: boolean };
+  if (!response.ok || !data.ok) throw new Error(data.error || '点赞操作失败，请稍后重试');
+  return data;
 }
 
 export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }) => {
@@ -50,6 +66,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
   // - comic 模式（私有漫画站）：恒可见，且不再依赖主站登录态；
   // - main 模式（宣发主站）：恒不可见（漫画本已迁走）。
   const isMangaVisible = mode === 'comic';
+  const profile = useAuthStore((state) => state.profile);
   const [selectedCategory, setSelectedCategory] = useState<string>(() =>
     isMangaVisible ? '漫画本' : '小说本'
   );
@@ -71,6 +88,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
 
   // 封面加载失败状态
   const [failedCovers, setFailedCovers] = useState<Set<string>>(new Set());
+  const [artworkLikes, setArtworkLikes] = useState<Record<string, ArtworkLikeItem>>({});
+  const [pendingArtworkLikes, setPendingArtworkLikes] = useState<Set<string>>(new Set());
 
   // 当前打开分享卡片的本子（普通本与加密解析本共用）。
   const [shareCardBook, setShareCardBook] = useState<DoujinBookItem | null>(null);
@@ -133,6 +152,19 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       setIsNovelsLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    void getAccessToken().then((token) => callArtworkApi({ action: 'artworkLikeList' }, token))
+      .then((data) => {
+        if (!alive) return;
+        const next: Record<string, ArtworkLikeItem> = {};
+        (data.items || []).forEach((item) => { next[item.id] = item; });
+        setArtworkLikes(next);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [profile?.uid]);
 
   // 解析器是独立分包。归档首屏稳定后在后台预取，点击加密本时不再先闪
   // 一整块 Suspense 加载页，用户只会看到稳定的解析状态。
@@ -201,9 +233,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       const loaded = await cosService.loadArchiveData();
       if (loaded && loaded.length > 0) {
         setBooks(loaded);
-        if (showToastNotice) {
-          onShowToast(`已同步 COS 存储桶归档数据，共 ${loaded.length} 部作品 📦`);
-        }
         return loaded;
       }
     } catch (err) {
@@ -212,6 +241,33 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       setIsLoadingArchive(false);
     }
     return books;
+  };
+
+  const handleArtworkLike = async (book: DoujinBookItem) => {
+    if (pendingArtworkLikes.has(book.id)) return;
+    const token = await getAccessToken();
+    if (!token || !profile?.uid) {
+      onShowToast('请先登录账号再点赞');
+      useAppShellStore.getState().openLogin();
+      return;
+    }
+    const previous = artworkLikes[book.id] || { id: book.id, likes: book.likes || 0, liked: Boolean(book.liked) };
+    const nextLiked = !previous.liked;
+    const optimistic = { ...previous, liked: nextLiked, likes: Math.max(0, previous.likes + (nextLiked ? 1 : -1)) };
+    setArtworkLikes((current) => ({ ...current, [book.id]: optimistic }));
+    setPendingArtworkLikes((current) => new Set(current).add(book.id));
+    try {
+      const data = await callArtworkApi({ action: 'artworkLike', id: book.id, give: nextLiked }, token);
+      setArtworkLikes((current) => ({ ...current, [book.id]: { id: book.id, likes: data.likes || 0, liked: Boolean(data.liked) } }));
+    } catch (error) {
+      setArtworkLikes((current) => ({ ...current, [book.id]: previous }));
+    } finally {
+      setPendingArtworkLikes((current) => {
+        const next = new Set(current);
+        next.delete(book.id);
+        return next;
+      });
+    }
   };
 
   // 点击卡片直接进入查看来源于 COS 的无缝长图
@@ -476,7 +532,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
               onClick={handleCloseReader}
               className="px-3.5 py-1.5 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs rounded-xs hover:bg-[#2B5E4A] cursor-pointer shadow-xs"
             >
-              返回本子列表 📚
+              返回{readingBook.category === '插画集' ? '插画集' : '本子'}列表 📚
             </button>
           </div>
         </div>
@@ -495,6 +551,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       </div>
     );
   }
+
+  const isIllustrationCategory = selectedCategory === '插画集';
 
   // ==========================================
   // 📚 典藏本列表主视图 (coverFile 映射为 腾讯云 COS CDN 链接)
@@ -657,24 +715,24 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
         />
       )}
 
-      {/* 典藏本卡片网格：横向先行（从左到右、从上到下）的规整 2 列网格，点击直接进入查看长图
-          门已收敛到入口层：comic 模式由 ComicGate 整站守护，main 模式只渲染插画集（公开）。 */}
+      {/* 插画集使用双列瀑布流；漫画站仍保持规整网格。 */}
       {selectedCategory !== '小说本' && (selectedCategory !== '漫画本' || isMangaVisible) && (
         <>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4.5 w-full items-stretch">
+        <div className={isIllustrationCategory ? 'columns-1 sm:columns-2 gap-3.5 sm:gap-4.5 w-full' : 'grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4.5 w-full items-stretch'}>
         {visibleBooks.map((book) => {
           // 通过 COS 逻辑层动态生成封面 CDN 地址
           const coverUrl = cosService.getCoverUrl(book);
           const commentCount = getCommentCountByBookId(book.id);
+          const like = artworkLikes[book.id] || { id: book.id, likes: book.likes || 0, liked: Boolean(book.liked) };
 
           return (
             <div
               id={`book-card-${book.id}`}
               key={book.id}
               onClick={() => handleOpenBookReader(book)}
-              className={`bg-[#FFFEEF] border-2 rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full h-full ${linkedBookId === book.id ? 'border-[#E5A93C] ring-4 ring-[#E5A93C]/35 shadow-xl animate-pulse' : 'border-[#D5C9AF] hover:border-[#1E4334]'}`}
+              className={`${isIllustrationCategory ? 'mb-3.5 sm:mb-4.5 break-inside-avoid' : ''} bg-[#FFFEEF] border-2 rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full ${isIllustrationCategory ? '' : 'h-full'} ${linkedBookId === book.id ? 'border-[#E5A93C] ring-4 ring-[#E5A93C]/35 shadow-xl animate-pulse' : 'border-[#D5C9AF] hover:border-[#1E4334]'}`}
               style={{ contentVisibility: 'auto', containIntrinsicSize: '720px' }}
-              title="点击直接打开查看无缝长图"
+              title={isIllustrationCategory ? '点击打开插画集' : '点击直接打开查看无缝长图'}
             >
               <div className="space-y-2">
                 {/* 顶部标题与分类徽章 */}
@@ -682,7 +740,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-pixel text-[10px] sm:text-xs px-2 py-0.5 bg-[#1E4334] text-[#F9E79F] rounded-xs font-bold whitespace-nowrap">
-                        {book.category || '漫画本'}
+                        {isIllustrationCategory ? '插画集' : (book.category || '漫画本')}
                       </span>
                       {book.secure && (
                         <span
@@ -710,7 +768,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                   <button
                     type="button"
                     aria-label={`分享《${book.titleZh}》`}
-                    title="分享本子卡片"
+                    title={isIllustrationCategory ? '分享插画集卡片' : '分享本子卡片'}
                     onClick={(event) => {
                       event.stopPropagation();
                       handleShareBook(book);
@@ -721,7 +779,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                   </button>
                 </div>
 
-                {/* 封面图片展示区 (来源 腾讯云 COS CDN 链接映射，竖版漫画本比例 2:3，悬浮显示点击阅读长图) */}
+                {/* 封面图片展示区：插画集与漫画本共用 COS 映射，点击卡片进入长图阅读。 */}
                 <div className="relative w-full aspect-[2/3] bg-[#FAF5E8] border border-[#E0D5BE] rounded-xs overflow-hidden group-hover:border-[#1E4334] flex items-center justify-center transition-colors">
                   {book.secure ? (
                     // 敏感本：内页在 COS 上只有密文，读不到任何图片。
@@ -761,10 +819,10 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                     />
                   ) : (
                     <div className="flex flex-col p-2 text-center w-full h-full items-center justify-center">
-                      <div className="text-2xl">📖</div>
+                      <div className="text-2xl">{isIllustrationCategory ? '🎨' : '📖'}</div>
                       <div className="font-pixel text-xs text-[#1E4334] mt-1 font-bold">{book.titleZh}</div>
                       <div className="text-[10px] text-[#8C7A68] mt-0.5 font-mono">{book.bookFolder || book.id}/{book.coverFile || 'image01.webp'}</div>
-                      <div className="text-[10px] text-[#B7791F] mt-0.5">封面暂不可用</div>
+                      <div className="text-[10px] text-[#B7791F] mt-0.5">{isIllustrationCategory ? '图片暂不可用' : '封面暂不可用'}</div>
                     </div>
                   )}
                 </div>
@@ -834,9 +892,24 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                 </div>
               </div>
 
-              {/* 底部引导栏：主站有本地评论计数时优先展示；漫画站一律显示页数 */}
+              {/* 底部信息：插画集提供可回退的点赞状态，点击卡片其它区域仍进入阅读器。 */}
               <div className="pt-2.5 border-t border-dashed border-[#E0D5BE] flex items-center justify-between text-xs font-retro-jp text-[#8C7A68] whitespace-nowrap">
-                {mode === 'main' && commentCount > 0 ? (
+                {isIllustrationCategory ? (
+                  <button
+                    type="button"
+                    aria-label={like.liked ? '取消点赞' : '点赞插画集'}
+                    aria-pressed={like.liked}
+                    disabled={pendingArtworkLikes.has(book.id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleArtworkLike(book);
+                    }}
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-1 transition-all active:scale-90 disabled:opacity-60 ${like.liked ? 'bg-[#FADBD8] text-[#C0392B]' : 'bg-[#F4EEDF] text-[#8C7A68] hover:bg-[#FADBD8] hover:text-[#C0392B]'}`}
+                  >
+                    <span aria-hidden="true">{like.liked ? '♥' : '♡'}</span>
+                    <span>{like.likes}</span>
+                  </button>
+                ) : mode === 'main' && commentCount > 0 ? (
                   <span className="flex items-center gap-1 text-[#5B4636] font-medium">
                     <span>💬</span>
                     <span>共 {commentCount} 条评论</span>
@@ -850,11 +923,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
         })}
           </div>
           {visibleBookCount < sortedBooks.length && (
-            <div ref={loadMoreRef} className="col-span-full h-px" aria-hidden="true" />
+            <div ref={loadMoreRef} className="h-px w-full" aria-hidden="true" />
           )}
           {filteredBooks.length === 0 && (
             <div className="p-8 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
-              没有检索到符合条件的同人本，您可以清空搜索条件或调整分类～
+              没有检索到符合条件的{isIllustrationCategory ? '插画集' : '同人本'}，您可以清空搜索条件或调整分类～
             </div>
           )}
         </>

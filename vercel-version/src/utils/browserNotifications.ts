@@ -5,6 +5,20 @@ export const truncateNotificationText = (value: string, maxLength = 48): string 
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 };
 
+/** 原生通知卡片的正文统一格式：正文最多三行，避免挤占标题层级。 */
+export const formatNotificationBody = (value: string, allowLong = false): string => {
+  const text = String(value || '').replace(/\r\n?/g, '\n').trim();
+  if (allowLong) return text;
+  const lines = text.split('\n').filter(Boolean).slice(0, 3);
+  const clipped = lines.join('\n');
+  const sourceLength = text.length > clipped.length ? 1 : 0;
+  const maxChars = 120;
+  const compact = clipped.length > maxChars
+    ? `${clipped.slice(0, maxChars - 1)}…`
+    : clipped;
+  return `${compact}${sourceLength && !compact.endsWith('…') ? '…' : ''}`.trim();
+};
+
 export const browserNotificationsSupported = (): boolean =>
   typeof window !== 'undefined' && 'Notification' in window;
 

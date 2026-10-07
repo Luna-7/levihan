@@ -258,7 +258,7 @@ export default function App() {
     if (!muted) {
       soundManager.playCoin();
     }
-    showToast(muted ? '已静音 🔇' : '已开启复古8位音效 🔊');
+    showToast(muted ? '已静音 🔇' : '已开启音效');
   }, [showToast]);
 
   const handleNavigate = useCallback((tab: NavigationTab) => {

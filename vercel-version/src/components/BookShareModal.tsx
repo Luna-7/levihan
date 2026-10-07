@@ -45,7 +45,7 @@ export function BookShareModal({ book, onClose, onShowToast }: Props) {
         return;
       }
       await navigator.clipboard.writeText(shareUrl);
-      onShowToast('本子链接已复制 ✨');
+      onShowToast(`${book.category === '插画集' ? '插画集' : '本子'}链接已复制 ✨`);
     } catch (error) {
       if ((error as DOMException)?.name === 'AbortError') return;
       try {
@@ -79,7 +79,7 @@ export function BookShareModal({ book, onClose, onShowToast }: Props) {
           <div ref={posterRef} className="bg-[#FAF3E3] border-2 border-[#1E4334] rounded-lg overflow-hidden shadow-xl">
             <div className="px-3 py-2 bg-[#1E4334] text-[#F9E79F] font-pixel text-[10px] flex justify-between">
               <span>✦ 利韩 · 典藏分享</span>
-              <span>{book.secure ? '🔒 解析本' : '漫画本'}</span>
+              <span>{book.secure ? '🔒 解析本' : book.category === '插画集' ? '插画集' : '漫画本'}</span>
             </div>
             <div className="flex gap-3 p-3">
               <div className="w-[112px] shrink-0 aspect-[2/3] bg-[#EDEFF2] border border-[#D5C9AF] overflow-hidden flex items-center justify-center">

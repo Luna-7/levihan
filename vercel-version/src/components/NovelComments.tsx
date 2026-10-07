@@ -80,6 +80,16 @@ export const NovelComments: React.FC<Props> = ({ novelId, novelAuthorUid, onToas
       useAppShellStore.getState().openLogin();
       return;
     }
+    const optimisticId = `pending-${Date.now()}`;
+    const optimisticComment: NovelComment = {
+      id: optimisticId,
+      author: myNickname || '佚名',
+      body: text,
+      uid: myUid || undefined,
+      createdAt: new Date().toISOString(),
+    };
+    setComments((current) => [...(current || []), optimisticComment]);
+    setDraft('');
     setPosting(true);
     try {
       const d = await callNovelApi(
@@ -87,10 +97,11 @@ export const NovelComments: React.FC<Props> = ({ novelId, novelAuthorUid, onToas
         token
       );
       setComments(d.comments || []);
-      setDraft('');
       soundManager.playCopySuccess();
       onToast?.('评论已发表 💬');
     } catch (error) {
+      setComments((current) => (current || []).filter((comment) => comment.id !== optimisticId));
+      setDraft(text);
       onToast?.(error instanceof Error ? error.message : '评论失败，请稍后重试');
     } finally {
       setPosting(false);

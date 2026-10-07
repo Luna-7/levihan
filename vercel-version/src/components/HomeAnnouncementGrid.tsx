@@ -8,7 +8,7 @@ import { useAppShellStore } from '../stores/appShellStore';
 import { useAuthStore } from '../stores/authStore';
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { scheduleNonCriticalTask } from '../utils/scheduleNonCriticalTask';
-import { browserNotificationPermission, requestBrowserNotifications, notifyBrowser, truncateNotificationText } from '../utils/browserNotifications';
+import { browserNotificationPermission, requestBrowserNotifications, notifyBrowser, formatNotificationBody } from '../utils/browserNotifications';
 import { enableWebPush, webPushPermission } from '../utils/webPush';
 
 /** 与后台 announcementSave 的字段契约保持一致（id/tag/title/author/time/link/description/image/updatedAt） */
@@ -106,8 +106,8 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
           const newest = cloudItems[0];
           const newestVersion = newest ? `${newest.id}:${newest.updatedAt || newest.time || ''}` : '';
           if (announcementBaseline.current && newest && newestVersion !== announcementBaseline.current) {
-            notifyBrowser('公告栏更新', {
-              body: truncateNotificationText(newest.title),
+      notifyBrowser('有新公告啦', {
+              body: formatNotificationBody(newest.description || newest.title || '有新的公告', true),
               tag: `announcement-${newest.id}`,
               dedupeKey: `announcement-${newest.id}`,
             });
@@ -225,11 +225,23 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
       return onShowToast('请填写企划标题、发布人和企划宣传文本');
     }
     setProposalBusy(true);
-    try {
-      const token = await getAccessToken();
-      if (!token) throw new Error('登录状态已失效，请重新登录');
+    const token = await getAccessToken();
+    if (!token) {
+      setProposalBusy(false);
+      onShowToast('登录状态已失效，请重新登录');
+      return;
+    }
+    const pendingProposal = { ...proposal };
+    const pendingPreview = proposalPreview;
+    setProposal({ title: '', time: '', author: '', link: '', description: '' });
+    setProposalImage(null);
+    setProposalPreview('');
+    setShowProposal(false);
+    setProposalBusy(false);
+    void (async () => {
+      try {
       let image = '';
-      if (proposalImage && proposalPreview) {
+      if (proposalImage && pendingPreview) {
         const converted = await new Promise<string>((resolve, reject) => {
           const img = new Image();
           img.onload = () => {
@@ -246,7 +258,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
             }
           };
           img.onerror = reject;
-          img.src = proposalPreview;
+          img.src = pendingPreview;
         });
         const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
           method: 'POST',
@@ -257,18 +269,14 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
         if (!response.ok || !result.ok) throw new Error(result.error || '图片上传失败');
         image = result.url;
       }
-      await submitToInbox('submitAnnouncement', { ...proposal, image, tag: '利韩企划' });
-      if (proposalPreview) URL.revokeObjectURL(proposalPreview);
-      setProposal({ title: '', time: '', author: '', link: '', description: '' });
-      setProposalImage(null);
-      setProposalPreview('');
-      setShowProposal(false);
+      await submitToInbox('submitAnnouncement', { ...pendingProposal, image, tag: '利韩企划' });
+      if (pendingPreview) URL.revokeObjectURL(pendingPreview);
       onShowToast('企划已提交，管理员审核通过后会显示在公告栏 ✨');
-    } catch (error) {
-      onShowToast(error instanceof Error ? error.message : '企划提交失败');
-    } finally {
-      setProposalBusy(false);
-    }
+      } catch (error) {
+        if (pendingPreview) URL.revokeObjectURL(pendingPreview);
+        onShowToast(error instanceof Error ? error.message : '企划后台提交失败');
+      }
+    })();
   };
 
   const handleCardHover = (item: AnnouncementItem) => {
