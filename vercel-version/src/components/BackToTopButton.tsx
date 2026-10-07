@@ -8,6 +8,7 @@ export const BackToTopButton: React.FC = () => {
   useEffect(() => {
     const handleScroll = () => {
       const containers = [
+        document.getElementById('view-main'),
         document.getElementById('resources-scroll-container'),
         document.getElementById('forum-scroll-container'),
         document.getElementById('general-stage-scroll-container'),
@@ -50,6 +51,7 @@ export const BackToTopButton: React.FC = () => {
     soundManager.playSoftSwoosh();
 
     const containers = [
+      document.getElementById('view-main'),
       document.getElementById('resources-scroll-container'),
       document.getElementById('forum-scroll-container'),
       document.getElementById('general-stage-scroll-container'),

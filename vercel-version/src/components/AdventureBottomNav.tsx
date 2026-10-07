@@ -44,6 +44,15 @@ const LINE_TOP = 36; // 行军直线在浮条内的纵向位置（px）：小人
 const RETRACT_MS = 900; // 切换动画(650ms)结束后缩回导航栏
 const WALK_DURATION = 650;
 
+const scrollActivePageToTop = () => {
+  const activeContainer = document.querySelector<HTMLElement>(
+    '[aria-hidden="false"] #view-main, [aria-hidden="false"] #resources-scroll-container, [aria-hidden="false"] #forum-scroll-container, [aria-hidden="false"] #general-stage-scroll-container',
+  ) || document.getElementById('view-main') || document.getElementById('resources-scroll-container')
+    || document.getElementById('forum-scroll-container') || document.getElementById('general-stage-scroll-container');
+
+  activeContainer?.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
 export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, onPreloadTab }) => {
   const [prevIndex, setPrevIndex] = useState<number>(() => {
     const idx = STAGES.findIndex((s) => s.id === activeTab);
@@ -118,7 +127,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, 
     if (best === safeIndex) {
       soundManager.playNavClick();
       // 点的是当前页：回到顶部即可，不出导航栏
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollActivePageToTop();
       return;
     }
     clearRetractTimer();
@@ -163,7 +172,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, 
     setTransientNav(false);
     if (tab === activeTab) {
       soundManager.playNavClick();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollActivePageToTop();
       return;
     }
     onNavigateTab(tab);

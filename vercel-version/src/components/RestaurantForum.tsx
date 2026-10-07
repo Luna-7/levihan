@@ -413,6 +413,11 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     }
     soundManager.playFilterClick();
     setActiveCategory(categoryKey);
+    // 分类内容替换后从顶部开始，避免沿用上一分类的 scrollTop，
+    // 导致新分类第一张角色立绘只显示下半身。
+    window.requestAnimationFrame(() => {
+      document.getElementById('forum-scroll-container')?.scrollTo({ top: 0, behavior: 'auto' });
+    });
   };
 
   // Market publication form states (inside composer)

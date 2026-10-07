@@ -1744,6 +1744,51 @@ html.pwa-standalone .home-announcement-list > .announcement-board {
   }
 }
 
+/* PWA 首页滚动契约：只保留 #view-main 一个纵向滚动容器。
+   之前的固定视口规则与公告/今日更新的内部 overflow 会让内容看似存在，
+   但触摸手势落在嵌套容器或被固定高度截断，导致首页无法自然向下滚动。 */
+@media (max-width: 767px) {
+  html.pwa-standalone #view-main {
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: auto !important;
+    touch-action: pan-y !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html.pwa-standalone .home-fixed-page {
+    height: auto !important;
+    min-height: 100% !important;
+    justify-content: flex-start !important;
+    overflow: visible !important;
+  }
+
+  html.pwa-standalone .home-main-content {
+    flex: 0 0 auto !important;
+    min-height: auto !important;
+    padding-bottom: calc(138px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  html.pwa-standalone .home-announcements,
+  html.pwa-standalone .home-announcement-region,
+  html.pwa-standalone .home-announcement-list,
+  html.pwa-standalone .home-todays-list {
+    height: auto !important;
+    max-height: none !important;
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+  }
+
+  html.pwa-standalone .home-announcement-list > .announcement-board,
+  html.pwa-standalone .home-todays-list > button {
+    height: auto !important;
+    min-height: 58px;
+  }
+}
+
 /* 公告栏外观契约：保留纸张主题，降低边框重量并固定三段比例。 */
 .home-announcement-list > .announcement-board {
   min-height: 58px !important;
