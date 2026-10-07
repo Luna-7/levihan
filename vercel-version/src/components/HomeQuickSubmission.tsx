@@ -8,6 +8,7 @@ import { useAppShellStore } from '../stores/appShellStore';
 import { submitToInbox } from '../utils/submissionInbox';
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { getAccessToken } from '../utils/cloudbaseToken';
+import { notifyBrowser } from '../utils/browserNotifications';
 
 type Mode = 'menu' | 'art';
 
@@ -103,6 +104,7 @@ export const HomeQuickSubmission: React.FC<{ onShowToast: (message: string) => v
       }
       await submitToInbox('submitArtwork', { title:title.trim(), author:profile.nickname, homepage:homepage.trim(), notes:notes.trim(), folder, files });
       setOpen(false);
+      notifyBrowser('插画投稿已提交', { body: `《${title.trim().slice(0, 24)}》已上传，等待管理员收录。`, tag: 'artwork-submission' });
       onShowToast('插画已转换为 WebP 并投递，等待管理员收录 🎨');
     } catch (error) { onShowToast(error instanceof Error ? error.message : '插画投递失败'); }
     finally { setBusy(false); }

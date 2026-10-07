@@ -1983,8 +1983,9 @@ function saveArtAdmin(withFiles){
   if (withFiles) {
     upload = Promise.all(artAdminFiles.map(function(item, index){
       return convertAnnouncementImage(item.file).then(function(data){
-        var fileName = 'image' + String(index + 1).padStart(2, '0') + '.webp';
-        return api({ action:'upload', bookId:id, fileName:fileName, dataBase64:data.split(',')[1] || '', contentType:'image/webp' }).then(function(){ return fileName; });
+        var extension = data.mime === 'image/jpeg' ? 'jpg' : data.mime.split('/')[1];
+        var fileName = 'image' + String(index + 1).padStart(2, '0') + '.' + extension;
+        return api({ action:'upload', bookId:id, fileName:fileName, dataBase64:data.dataUrl.split(',')[1] || '', contentType:data.mime }).then(function(){ return fileName; });
       });
     }));
   }

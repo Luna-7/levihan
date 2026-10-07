@@ -11,6 +11,7 @@ import { useAppShellStore } from '../stores/appShellStore';
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { cosService } from '../services/cosClient';
 import { CardPatternOverlay } from './CardPatternOverlay';
+import { notifyBrowser } from '../utils/browserNotifications';
 
 /** 懒加载本地 mammoth（仅在选择 .docx 时才拉取 ~636KB 脚本，避免进主包） */
 let mammothPromise: Promise<MammothApi> | null = null;
@@ -286,6 +287,10 @@ export const NovelModule: React.FC<Props> = ({
       setShowUpload(false);
       leaveEditMode();
       useAppShellStore.getState().invalidateNovelIndex();
+      notifyBrowser(editingNovel ? '小说已更新' : '小说已上传', {
+        body: `《${uploadTitle.trim().slice(0, 24)}》${editingNovel ? '已更新。' : '已成功上架。'}`,
+        tag: 'novel-submission',
+      });
       onShowToast(
         editingNovel
           ? `已更新《${uploadTitle.trim().slice(0, 18)}》✏️`

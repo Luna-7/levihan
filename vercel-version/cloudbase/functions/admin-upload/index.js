@@ -1422,6 +1422,12 @@ async function reviewInbox(payload) {
         authorUrl:item.homepage, category:'插画集', tags:['同好投稿'], pages:item.files.length,
         bookFolder:item.folder, coverFile:item.files[0], pageFiles:item.files, createdAt:now, updatedAt:now }));
       await writeArchive(books);
+      await sendPushUpdate({
+        title: '新插画集上架',
+        body: String(item.title || '有新的插画集上架').slice(0, 120),
+        tag: `artwork-${item.folder}`,
+        url: '/?tab=resources',
+      });
       try { await upsertAuthor(item.author, item.homepage); } catch (e) { console.error('[authorLib] 插画作者登记失败', e && e.message); }
     } else if (item.type === 'announcement') {
       await handle('announcementSave', { item: { tag: '公告', title: item.title, time: item.time,
@@ -2417,6 +2423,12 @@ async function handle(action, payload) {
       }
       book.updatedAt = now;
       await writeArchive(books);
+      await sendPushUpdate({
+        title: replaced ? '插画集已更新' : '新插画集上架',
+        body: String(book.titleZh || '插画集有新的内容').slice(0, 120),
+        tag: `artwork-${book.id}`,
+        url: '/?tab=resources',
+      });
 
       // 顺带把本子用到的标签并入标签库，保证「下拉里一定有新加的标签」
       const lib = await readTagLib();
@@ -2495,6 +2507,12 @@ async function handle(action, payload) {
       novels.unshift(meta);
       novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
       await writeNovels(novels);
+      await sendPushUpdate({
+        title: '新小说上架',
+        body: String(meta.title || '有新的小说上架').slice(0, 120),
+        tag: `novel-${meta.id}`,
+        url: '/?tab=resources',
+      });
       try { await upsertAuthor(meta.author, meta.authorUrl); } catch (e) { console.error('[authorLib] 登记失败', e && e.message); }
       return { ok: true, novel: meta, count: novels.length, novels };
     }
@@ -2530,6 +2548,12 @@ async function handle(action, payload) {
       else novels.unshift(next);
       novels.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
       await writeNovels(novels);
+      await sendPushUpdate({
+        title: existing ? '小说已更新' : '新小说上架',
+        body: String(next.title || '小说有新的内容').slice(0, 120),
+        tag: `novel-${next.id}`,
+        url: '/?tab=resources',
+      });
 
       // 在线小说同样自动登记作者链接
       try { await upsertAuthor(next.author, next.authorUrl); } catch (e) { console.error('[authorLib] 登记失败', e && e.message); }
