@@ -38,7 +38,7 @@ export interface ResourceLink {
 }
 
 /**
- * 「周边橱窗」单张周边图（清单来自 COS 的 goods/manifest.json，由 scripts/sync-goods.mjs 生成）
+ * 「周边素材」单张周边图（清单来自 COS 的 goods/manifest.json，由 scripts/sync-goods.mjs 生成）
  * 原图存放于 COS 的 goods/ 目录；缩略图/预览图由 COS 图片处理参数现场生成，不需要另存一份。
  */
 export interface GoodsItem {

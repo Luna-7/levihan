@@ -58,6 +58,13 @@ const PUSH_SUBSCRIPTIONS_KEY = 'push-subscriptions.json';
 const SUPPORTERS_KEY = 'supporters.json'; // 支持墙（[{id,name,kind,order,visible}]）
 const GOODS_KEY = 'goods/manifest.json';
 const GOODS_DIR = 'goods/';
+const ANNOUNCEMENT_IMAGE_TYPES = Object.freeze({
+  'image/webp': 'webp',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/avif': 'avif',
+});
 const FORUM_KEY = 'restaurant-forum.json';
 const FORUM_DIR = 'restaurant-forum/';
 const LINK_COVER_DIR = 'link-covers/';
@@ -836,6 +843,21 @@ function normalizeAnnouncement(raw) {
   const id = String(raw.id || `notice-${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60);
   if (!id) throw httpError('公告 ID 无效', 400);
   return { id, tag, title, author, time, link, description, image: String(raw.image || '').trim().slice(0, 500) };
+}
+
+function uploadImageType(raw) {
+  const mime = String(raw || 'image/webp').toLowerCase().split(';')[0];
+  const ext = ANNOUNCEMENT_IMAGE_TYPES[mime];
+  if (!ext) throw httpError('图片格式不受支持，请使用 WebP、JPG、PNG、GIF 或 AVIF', 400);
+  return { mime, ext };
+}
+
+function announcementImageKey(url) {
+  const prefix = `https://${BUCKET}.cos-website.${REGION}.myqcloud.com/`;
+  const value = String(url || '').split('?')[0];
+  if (!value.startsWith(prefix)) return '';
+  const key = value.slice(prefix.length);
+  return /^announcements\/(?:submissions\/)?[A-Za-z0-9_-]+\.(?:webp|jpe?g|png|gif|avif)$/i.test(key) ? key : '';
 }
 
 /** 读取全站标签库；文件不存在则视为空数组 */
@@ -1794,8 +1816,9 @@ async function handle(action, payload) {
     case 'announcementImageUpload': {
       const imageBase64 = String(payload.imageBase64 || '');
       if (!imageBase64 || Math.floor((imageBase64.length * 3) / 4) > MAX_BYTES) throw httpError('图片为空或超过 4MB', 413);
-      const key = `${ANNOUNCEMENT_DIR}submissions/${Date.now()}-${crypto.randomBytes(4).toString('hex')}.webp`;
-      await putObject({ Bucket: BUCKET, Region: REGION, Key: key, Body: Buffer.from(imageBase64, 'base64'), ContentType: 'image/webp', CacheControl: 'public, max-age=31536000' });
+      const imageType = uploadImageType(payload.imageContentType);
+      const key = `${ANNOUNCEMENT_DIR}submissions/${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${imageType.ext}`;
+      await putObject({ Bucket: BUCKET, Region: REGION, Key: key, Body: Buffer.from(imageBase64, 'base64'), ContentType: imageType.mime, CacheControl: 'public, max-age=31536000' });
       return { ok: true, url: `https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${key}` };
     }
 
@@ -1814,17 +1837,24 @@ async function handle(action, payload) {
     case 'announcementSave': {
       const item = normalizeAnnouncement(payload.item || {});
       const imageBase64 = String(payload.imageBase64 || '');
+      const items = await readAnnouncements();
+      const index = items.findIndex((entry) => entry && entry.id === item.id);
+      const previous = index >= 0 ? items[index] : null;
       if (imageBase64) {
         if (Math.floor((imageBase64.length * 3) / 4) > MAX_BYTES) throw httpError('公告图片超过 4MB 上限', 413);
         const body = Buffer.from(imageBase64, 'base64');
         if (!body.length) throw httpError('公告图片内容为空', 400);
-        const key = `${ANNOUNCEMENT_DIR}${item.id}.webp`;
+        const imageType = uploadImageType(payload.imageContentType);
+        const key = `${ANNOUNCEMENT_DIR}${item.id}.${imageType.ext}`;
         await putObject({ Bucket: BUCKET, Region: REGION, Key: key, Body: body,
-          ContentType: 'image/webp', CacheControl: 'public, max-age=31536000' });
+          ContentType: imageType.mime, CacheControl: 'public, max-age=31536000' });
+        const previousKey = announcementImageKey(previous && previous.image);
+        if (previousKey && previousKey !== key) await deleteMultipleObject({ Bucket: BUCKET, Region: REGION, Objects: [{ Key: previousKey }] });
         item.image = `https://${BUCKET}.cos-website.${REGION}.myqcloud.com/${key}?v=${Date.now()}`;
+      } else if (previous && previous.image && !item.image) {
+        const previousKey = announcementImageKey(previous.image);
+        if (previousKey) await deleteMultipleObject({ Bucket: BUCKET, Region: REGION, Objects: [{ Key: previousKey }] });
       }
-      const items = await readAnnouncements();
-      const index = items.findIndex((entry) => entry && entry.id === item.id);
       const now = new Date().toISOString();
       const next = { ...(index >= 0 ? items[index] : {}), ...item, updatedAt: now };
       if (index >= 0) items[index] = next;
@@ -1840,9 +1870,8 @@ async function handle(action, payload) {
       const items = await readAnnouncements();
       const target = items.find((entry) => entry && entry.id === id);
       if (!target) throw httpError('公告不存在', 404);
-      if (target.image && target.image.includes(`/${ANNOUNCEMENT_DIR}${id}.webp`)) {
-        await deleteMultipleObject({ Bucket: BUCKET, Region: REGION, Objects: [{ Key: `${ANNOUNCEMENT_DIR}${id}.webp` }] });
-      }
+      const imageKey = announcementImageKey(target.image);
+      if (imageKey) await deleteMultipleObject({ Bucket: BUCKET, Region: REGION, Objects: [{ Key: imageKey }] });
       const next = items.filter((entry) => entry && entry.id !== id);
       await writeAnnouncements(next);
       return { ok: true, id, items: next };
@@ -1856,7 +1885,8 @@ async function handle(action, payload) {
     case 'goodsSave': {
       const imageBase64 = String(payload.imageBase64 || '');
       if (imageBase64 && Math.floor((imageBase64.length * 3) / 4) > MAX_BYTES) throw httpError('周边图片超过 4MB 上限', 413);
-      const generatedFile = imageBase64 ? `admin-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.webp` : '';
+      const imageType = imageBase64 ? uploadImageType(payload.imageContentType) : null;
+      const generatedFile = imageBase64 ? `admin-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${imageType.ext}` : '';
       const item = normalizeGoodsItem(payload.item || {}, generatedFile);
       const items = await readGoods();
       const index = items.findIndex((entry) => entry && entry.file === item.file);
@@ -1865,7 +1895,7 @@ async function handle(action, payload) {
         const body = Buffer.from(imageBase64, 'base64');
         if (!body.length) throw httpError('周边图片内容为空', 400);
         await putObject({ Bucket: BUCKET, Region: REGION, Key: `${GOODS_DIR}${item.file}`, Body: body,
-          ContentType: 'image/webp', CacheControl: 'public, max-age=604800' });
+          ContentType: imageType.mime, CacheControl: 'public, max-age=604800' });
         item.bytes = body.length;
       }
       const next = { ...(index >= 0 ? items[index] : {}), ...item };

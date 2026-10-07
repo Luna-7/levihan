@@ -1,5 +1,5 @@
 /**
- * 周边橱窗上架脚本：本地 goods-src/*.(png|webp|jpg|avif) → 腾讯云 COS 的 goods/ 目录 + goods/manifest.json
+ * 周边素材上架脚本：本地 goods-src/*.(png|webp|jpg|avif) → 腾讯云 COS 的 goods/ 目录 + goods/manifest.json
  *
  * 为什么图片走 COS 而不是放进仓库：
  *   仓库里的静态资源会被 Vite 打进构建产物、还会被 Workbox 预缓存（2 MiB 上限），
@@ -13,7 +13,7 @@
  *   2) npm run sync:goods                        ← 全量上传 + 重建清单
  *      只上架某几个文件：npm run sync:goods -- 立牌.png 挂件.png
  *      只生成本地清单不上传：npm run sync:goods -- --dry
- *   3) 前台「巨人资源 → 周边橱窗」刷新即见（清单 no-store，图片 7 天缓存）
+ *   3) 前台「巨人资源 → 周边素材」刷新即见（清单 no-store，图片 7 天缓存）
  *
  * 关于「名字」：
  *   周边图往往没有名字，看到的只有图 —— 所以 title 是**可选**的。
@@ -265,7 +265,7 @@ try {
   console.log(`\n✅ 上架完成：${files.length} 张图 + goods/manifest.json`);
   console.log(`   清单地址：${CDN_BASE}/goods/manifest.json`);
   console.log(`   抽查一张：${CDN_BASE}/goods/${encodeURIComponent(files[0])}`);
-  console.log('   前台「巨人资源 → 周边橱窗」刷新即可看到。');
+  console.log('   前台「巨人资源 → 周边素材」刷新即可看到。');
 } catch (err) {
   console.error('✗ 上传失败：', err?.message || err);
   process.exit(1);

@@ -26,7 +26,7 @@ const atlasEntry = (src: string) => UI_SPRITES[src.slice(SPRITE_REF_PREFIX.lengt
 /**
  * Converts a sprite ref or missing asset into a plain image URL that can be handed to an outside
  * service (such as Weibo, QQ, or external cards) by picking a random PNG asset from
- * 巨人资源 & 周边橱窗.
+ * 巨人资源 & 周边素材.
  */
 export const externalArtworkUrl = (src: string): string => {
   if (!src || src === '/images/characters/levi_tea.jpg' || isSpriteRef(src)) {

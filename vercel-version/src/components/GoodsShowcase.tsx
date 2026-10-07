@@ -12,12 +12,12 @@ interface Props {
 }
 
 /**
- * 「周边橱窗」—— 巨人资源里的周边图片区块。
+ * 「周边素材」—— 巨人资源里的周边图片区块。
  *
  * 设计要点（前三条为「不占内存 / 不拖慢加载」服务）：
  * 1. **图片不进仓库、不进构建产物**：原图放在 COS 的 goods/ 目录，清单是 goods/manifest.json。
  *    仓库里只有这份组件，所以 Workbox 预缓存（2 MiB 上限）和访客首屏都不受图片体积影响。
- *    组件本身也只在切到「周边橱窗」分类时才挂载 —— 不进这个分类，零网络请求。
+ *    组件本身也只在切到「周边素材」分类时才挂载 —— 不进这个分类，零网络请求。
  * 2. **列表只加载缩略图**：同一张原图加 `?imageMogr2/thumbnail/420x/format/webp` 由 COS 现场生成；
  *    灯箱看大图用 1600px 预览，**只有点「下载」才取真正的原图**。
  *    ⚠️ 目标宽度一律不超过原图宽度：COS 的 thumbnail 参数会把小图**放大**（实测 115 KB → 297 KB）。
@@ -29,7 +29,7 @@ interface Props {
  * 一旦清单里出现带名字的条目，搜索框才会出现（纯图模式下不给用户一个搜不出东西的框）。
  *
  * 卡片尺寸**统一**：图片框固定用 CARD_RATIO，不按每张原图的真实比例撑高（理由见 CARD_RATIO 注释）；
- * 灯箱里已去掉「🔗 直链」按钮 —— 原图只通过「下载」这一条路径交付（同理，橱窗不对外提供直链）。
+ * 灯箱里已去掉「🔗 直链」按钮 —— 原图只通过「下载」这一条路径交付（同理，素材区不对外提供直链）。
  *
  * 下载走 fetch → blob → objectURL → <a download> → 立刻 revokeObjectURL（用完即释放）；
  * 桶本身带 CORS 与 Content-Disposition: attachment，所以取流失败时退回「新标签打开原图」也能直接保存。
@@ -249,7 +249,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
   const [activeIndex, setActiveIndex] = useState(-1);
   const [downloading, setDownloading] = useState('');
 
-  // 只在切到「周边橱窗」分类时才挂载 → 才去读清单，不进这个分类就零请求
+  // 只在切到「周边素材」分类时才挂载 → 才去读清单，不进这个分类就零请求
   useEffect(() => {
     let cancelled = false;
     cosService
@@ -315,7 +315,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
       {/* 说明条 */}
       <div className="p-2 px-3 bg-[#FBF3E4] border-l-3 border-[#B7791F] rounded-r-xs font-retro-jp text-[11px] text-[#5B4636] flex items-center">
         <div>
-          <span className="font-bold">🖼 周边橱窗：</span>
+          <span className="font-bold">🖼 周边素材：</span>
           陈列利韩相关的官方/同人周边原图。列表只加载缩略图，点开看大图，<b>「⬇ 下载」拿到的才是原图</b>。
         </div>
       </div>
@@ -325,7 +325,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
         {hasNamed && items.length > 8 && (
           <input
             type="text"
-            placeholder="搜索周边名称…"
+            placeholder="搜索素材名称…"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             className="px-2.5 py-1.5 text-xs sm:text-sm font-retro-jp bg-[#FAF5E8] border border-[#BFA985] rounded-xs min-w-0 flex-1 focus:outline-none focus:border-[#1E4334]"
@@ -343,7 +343,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
           type="button"
           onClick={() => { soundManager.playWoodTap(); setNewestFirst((value) => !value); setActiveIndex(-1); }}
           className="shrink-0 rounded-md border border-[#1E4334] bg-[#FAF5E8] px-2.5 py-1.5 font-retro-jp text-[11px] font-bold text-[#1E4334] hover:bg-[#1E4334] hover:text-[#FFF8E7] cursor-pointer"
-          aria-label="切换橱窗排序"
+          aria-label="切换素材排序"
         >
           {newestFirst ? '↓ 新到旧' : '↑ 旧到新'}
         </button>
@@ -380,8 +380,8 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
           <div className="text-2xl">🖼</div>
           {items.length === 0 ? (
             <>
-              <p className="font-bold text-[#5B4636]">橱窗还没上货</p>
-              <p>把周边图放进本地 goods-src/ 目录，跑一次 npm run sync:goods 就会上架。</p>
+              <p className="font-bold text-[#5B4636]">周边素材还没有内容</p>
+              <p>把周边图放进本地 goods-src/ 目录，跑一次 npm run sync:goods 就会发布。</p>
             </>
           ) : (
             <p>没有匹配「{keyword}」的周边，换个词试试～</p>

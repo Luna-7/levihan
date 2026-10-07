@@ -306,7 +306,7 @@ export class COSService {
   }
 
   /**
-   * 「周边橱窗」清单（goods/manifest.json）。读不到 → 空数组（区块显示「还没上货」）。
+   * 「周边素材」清单（goods/manifest.json）。读不到 → 空数组（区块显示空状态）。
    * 加图不改代码：把 PNG 丢进本地 goods-src/，跑一次 npm run sync:goods 即可上架。
    */
   public async loadGoodsList(): Promise<GoodsItem[]> {

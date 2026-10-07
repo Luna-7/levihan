@@ -1,11 +1,11 @@
 import { cosService } from '../services/cosClient';
 
 /**
- * 巨人资源 & 周边橱窗 PNG 分享随机图库池
- * 收录来自周边橱窗 (COS 官方正版/同人周边高清透明底图 PNG 1~60) 与巨人资源核心素材 PNG
+ * 巨人资源 & 周边素材 PNG 分享随机图库池
+ * 收录来自周边素材 (COS 官方正版/同人周边高清透明底图 PNG 1~60) 与巨人资源核心素材 PNG
  */
 
-// 周边橱窗 1~60.png 编号清单
+// 周边素材 1~60.png 编号清单
 const GOODS_PNG_FILES: string[] = Array.from({ length: 60 }, (_, i) => `${i + 1}.png`);
 
 // 巨人资源本站核心 PNG / WebP 优质图库
@@ -14,7 +14,7 @@ const RESOURCE_PNG_FILES: string[] = [
 ];
 
 /**
- * 获取所有周边橱窗与巨人资源的候选 PNG / 高清图直链池
+ * 获取所有周边素材与巨人资源的候选 PNG / 高清图直链池
  */
 export const getAllSharePngCandidates = (): string[] => {
   const cdnGoods = GOODS_PNG_FILES.map((file) => cosService.getGoodsOriginalUrl(file));
@@ -42,7 +42,7 @@ const simpleHash = (str: string): number => {
 };
 
 /**
- * 随机从「巨人资源」与「周边橱窗」的 PNG 中挑选一张作为分享图
+ * 随机从「巨人资源」与「周边素材」的 PNG 中挑选一张作为分享图
  * @param seed 可选的种子（如文章 ID、标题等），传了则相同种子每次选相同图，不传则纯随机
  * @param preferThumb 是否返回适合网页快速加载的缩略图版本（默认 true）
  */
