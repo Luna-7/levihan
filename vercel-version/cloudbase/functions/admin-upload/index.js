@@ -1399,6 +1399,43 @@ async function submitToInbox(type, payload) {
   return { ok: true, id, status: 'pending' };
 }
 
+async function publishArtworkDirect(payload) {
+  const uid = String(payload.__uid || '').trim();
+  if (!uid) throw httpError('请先登录账号再上传插画', 401);
+  const text = String(payload.text || payload.notes || '').trim().slice(0, 2000);
+  const author = String(payload.author || '').trim().slice(0, 80) || await userNickname(uid);
+  const homepage = String(payload.homepage || '').trim().slice(0, 300);
+  const folder = String(payload.folder || '').trim();
+  const files = Array.isArray(payload.files)
+    ? payload.files.map((name) => String(name)).filter((name) => /^image\d{2}\.webp$/.test(name)).slice(0, 60)
+    : [];
+  const escapedUid = uid.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+  const folderPattern = new RegExp(`^submissions/${escapedUid}/[a-zA-Z0-9_-]+$`);
+  if (!author) throw httpError('请填写创作者', 400);
+  if (!folderPattern.test(folder) || !files.length) throw httpError('请至少上传一张有效图片', 400);
+
+  const books = await readArchive();
+  const used = new Set(books.map((book) => String(book && book.id || '')));
+  let seq = Math.max(1, ...books.map((book) => Number(String(book && book.id || '').replace(/^lh-/, '')) || 0)) + 1;
+  while (used.has(`lh-${seq}`)) seq += 1;
+  const now = new Date().toISOString();
+  const book = normalizeBook({
+    id: `lh-${seq}`, titleZh: text || '同好插画集', text, titleJp: '', circle: author,
+    authorUrl: homepage, category: '插画集', tags: ['同好投稿'], pages: files.length,
+    bookFolder: folder, coverFile: files[0], pageFiles: files, createdAt: now, updatedAt: now,
+  });
+  books.push(book);
+  await writeArchive(books);
+  await sendPushUpdate({
+    title: '新插画集上架',
+    body: String(book.text || book.circle || '有新的插画集上架').slice(0, 120),
+    tag: `artwork-${book.id}`,
+    url: '/?tab=resources',
+  });
+  try { await upsertAuthor(author, homepage); } catch (e) { console.error('[authorLib] 插画作者登记失败', e && e.message); }
+  return { ok: true, book, count: books.length, books };
+}
+
 async function reviewInbox(payload) {
   const id = String(payload.id || '').trim();
   const decision = String(payload.decision || '').trim();
@@ -1468,7 +1505,7 @@ const USER_ACTIONS = new Set([
   'forumCommentDelete', 'forumEdit',
   'marketPublish', 'marketDelete',
   'submitNovel', 'submitArtwork', 'submitAnnouncement', 'submissionImageUpload', 'announcementImageUpload',
-  'novelDirectPublish', 'novelUpdate', 'novelCommentAdd',
+  'novelDirectPublish', 'artworkDirectPublish', 'novelUpdate', 'novelCommentAdd',
   'novelBody',
   'submitScore',
   'inboxReplyList', 'inboxReplyRead',
@@ -1687,8 +1724,10 @@ async function handle(action, payload) {
     case 'leaderboard': return readLeaderboard(payload.__uid);
     case 'submitScore': return submitGameScore(payload.__uid, payload);
 
-    case 'submitNovel': return submitToInbox('novel', payload);
-    case 'submitArtwork': return submitToInbox('artwork', payload);
+    // 登录用户的小说和插画直接上架；只有 submitAnnouncement 进入审核收件箱。
+    case 'submitNovel': return handle('novelDirectPublish', { ...payload, body: payload.body || payload.notes });
+    case 'submitArtwork': return publishArtworkDirect(payload);
+    case 'artworkDirectPublish': return publishArtworkDirect(payload);
     case 'submitContact': return submitToInbox('contact', payload);
 
     // 商业定制需求函：不经收件箱/管理后台，直接邮件中继到站长邮箱

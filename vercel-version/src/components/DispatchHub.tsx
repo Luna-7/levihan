@@ -105,7 +105,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
   const [nvTitle, setNvTitle] = useState<string>('');
   const [nvAuthor, setNvAuthor] = useState<string>('');
   const [nvHomepage, setNvHomepage] = useState<string>('');
-  const [nvEmail, setNvEmail] = useState<string>('');
   const [nvNotes, setNvNotes] = useState<string>('');
   const [nvFiles, setNvFiles] = useState<UploadedFileItem[]>([]);
 
@@ -348,43 +347,18 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       onShowToast('请填写作品名称 ⚠️');
       return;
     }
-    if (!nvEmail.trim() || !isValidEmail(nvEmail.trim())) {
-      onShowToast('请填写有效的邮箱联系方式 ⚠️');
+    if (!nvNotes.trim()) {
+      onShowToast('请填写小说正文 ⚠️');
       return;
     }
 
-    const fileNames = nvFiles.map((f) => f.name).join(', ');
-    const dateStr = new Date().toLocaleString('zh-CN', { hour12: false });
-    const letterText = [
-      `【利韩土豆仓 · 同人小说呈递函】`,
-      `作品名称: ${nvTitle.trim()}`,
-      `创作者: ${nvAuthor.trim() || '未署名'}`,
-      `主页链接: ${nvHomepage.trim() || '未提供'}`,
-      `邮箱联系方式: ${nvEmail.trim()}`,
-      `上传附件: ${fileNames || '未附加本地文件'}`,
-      `备注: ${nvNotes.trim() || '无'}`,
-      `呈递时间: ${dateStr}`,
-      `----------------------------------------`,
-    ].join('\n');
-
-    const sent = await sendToInbox('novel', {
-      title: nvTitle,
-      author: nvAuthor,
-      homepage: nvHomepage,
-      email: nvEmail,
-      notes: nvNotes,
-      content: fileNames,
-    });
-    if (sent) {
-      onShowToast('小说作品函已呈递至收件箱！📬');
-      return;
-    }
-
-    const copied = await copyToClipboard(letterText);
-    if (copied) {
-      onShowToast('联络通道繁忙，作品函已复制到剪贴板 📋');
-    } else {
-      onShowToast('联络通道繁忙，请稍后重试 ⚠️');
+    try {
+      await submitToInbox('submitNovel', {
+        title: nvTitle, author: nvAuthor, authorUrl: nvHomepage, body: nvNotes,
+      });
+      onShowToast('小说已直接上架 📚');
+    } catch {
+      onShowToast('小说发布失败，请稍后重试 ⚠️');
     }
   };
 
@@ -424,7 +398,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
       await submitToInbox('submitArtwork', {
         text: artNotes.trim(), author: artAuthor.trim(), homepage: artHomepage.trim(), folder, files,
       });
-      onShowToast('插画已转为 WebP 并提交，等待管理员审核 🎨');
+      onShowToast('插画已转为 WebP 并成功上架 🎨');
     } catch (error) {
       onShowToast(error instanceof Error ? error.message : '插画上传失败，请稍后重试');
     } finally {
@@ -1145,21 +1119,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                       />
                     </div>
 
-                    <div className="space-y-1">
-                      <label htmlFor="nv-email-input" className="text-xs font-bold text-[#203429] block">
-                        邮箱联系方式 <span className="text-[#A8321E]">*</span>
-                      </label>
-                      <input
-                        id="nv-email-input"
-                        type="email"
-                        value={nvEmail}
-                        onChange={(e) => setNvEmail(e.target.value)}
-                        maxLength={80}
-                        placeholder="用于接收收录通知"
-                        className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2.5 py-1.5 text-xs outline-hidden"
-                      />
-                    </div>
-
                     {/* 上传口 */}
                     <div className="space-y-1.5">
                       <div
@@ -1225,13 +1184,13 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
 
                     <div className="space-y-1 flex-1 flex flex-col min-h-0">
                       <label htmlFor="nv-notes" className="text-xs font-bold text-[#203429] block shrink-0">
-                        备注
+                        正文
                       </label>
                       <textarea
                         id="nv-notes"
                         value={nvNotes}
                         onChange={(e) => setNvNotes(e.target.value)}
-                        placeholder="篇幅分卷、阅读警告或寄语..."
+                        placeholder="请输入小说正文；登录后会直接上架。"
                         rows={2}
                         className="w-full flex-1 min-h-[60px] bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] p-2 text-xs outline-hidden resize-y"
                       />

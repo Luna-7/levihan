@@ -132,8 +132,8 @@ export const HomeQuickSubmission: React.FC<{ onShowToast: (message: string) => v
       }
       await submitToInbox('submitArtwork', { text:text.trim(), author:profile.nickname, homepage:homepage.trim(), folder, files });
       setOpen(false);
-      notifyBrowser('插画投稿已提交', { body: '图片已转换为 WebP，等待管理员收录。', tag: 'artwork-submission' });
-      onShowToast('插画已转换为 WebP 并投递，等待管理员收录 🎨');
+      notifyBrowser('插画已上架', { body: '图片已转换为 WebP，已直接发布到插画集。', tag: 'artwork-submission' });
+      onShowToast('插画已转换为 WebP 并成功上架 🎨');
     } catch (error) { onShowToast(error instanceof Error ? error.message : '插画投递失败'); }
     finally { setBusy(false); }
   };
