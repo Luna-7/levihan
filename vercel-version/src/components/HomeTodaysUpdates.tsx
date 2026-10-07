@@ -53,11 +53,14 @@ function byLine(author: string | undefined): string {
 
 export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, onPreloadTab, onShowToast }) => {
   const [items, setItems] = useState<UpdateItem[]>([]);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
     const load = () => {
+      setStatus('loading');
       const start = todayStart();
 
       const push = (list: UpdateItem[], it: UpdateItem) => {
@@ -120,18 +123,30 @@ export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, o
                   });
                   if (!cancelled) {
                     setItems(acc.sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt)));
+                    setStatus('ready');
                   }
                 })
                 .catch(() => {
-                  if (!cancelled) setItems(acc.sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt)));
+                  if (!cancelled) {
+                    const next = acc.sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt));
+                    setItems(next);
+                    setStatus(next.length ? 'ready' : 'error');
+                  }
                 });
             })
             .catch(() => {
-              if (!cancelled) setItems(acc.sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt)));
+              if (!cancelled) {
+                const next = acc.sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt));
+                setItems(next);
+                setStatus(next.length ? 'ready' : 'error');
+              }
             });
         })
         .catch(() => {
-          if (!cancelled) setItems([]);
+          if (!cancelled) {
+            setItems([]);
+            setStatus('error');
+          }
         });
     };
 
@@ -147,7 +162,7 @@ export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, o
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, []);
+  }, [reloadNonce]);
 
   const handleHover = useMemo(
     () => (it: UpdateItem) => {
@@ -176,7 +191,15 @@ export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, o
     [onNavigateTab]
   );
 
-  // 今天没有任何上新 → 整栏隐藏，保持首页干净
+  if (status === 'loading' && items.length === 0) {
+    return <section className="home-todays-updates w-full shrink-0 px-1" aria-live="polite"><p className="py-2 text-center font-retro-jp text-[11px] text-[#9A8B77]">今日上新加载中…</p></section>;
+  }
+
+  if (status === 'error' && items.length === 0) {
+    return <section className="home-todays-updates w-full shrink-0 px-1 text-center"><button type="button" onClick={() => setReloadNonce((value) => value + 1)} className="min-h-11 rounded-md px-3 py-2 font-retro-jp text-[11px] text-[#8F3426] underline underline-offset-4">今日上新读取失败，点击重试</button></section>;
+  }
+
+  // 今天没有任何上新，保持首页干净。
   if (items.length === 0) return null;
 
   return (

@@ -58,6 +58,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, 
   const speechTimerRef = useRef<number | null>(null);
   const walkRafRef = useRef<number | null>(null);
   const retractTimerRef = useRef<number | null>(null);
+  const preloadedTabsRef = useRef(new Set<NavigationTab>());
 
   // 小人当前横向位置（容器百分比；沿直线动画）
   const [heroX, setHeroX] = useState<number>(NODE_X[0]);
@@ -140,6 +141,8 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, 
   };
 
   const handlePreloadTab = (tab: NavigationTab) => {
+    if (preloadedTabsRef.current.has(tab)) return;
+    preloadedTabsRef.current.add(tab);
     if (onPreloadTab) {
       onPreloadTab(tab);
       return;
@@ -176,7 +179,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, 
           aria-label="行军进度条：点击切换到对应页面"
           title="点击进度条切换页面"
           onClick={handleProgressClick}
-          onMouseMove={(e) => {
+          onMouseEnter={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             const xPct = ((e.clientX - rect.left) / rect.width) * 100;
             let best = 0;
@@ -199,6 +202,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, 
             });
             handlePreloadTab(STAGES[best].id);
           }}
+          onFocus={() => handlePreloadTab(STAGES[(safeIndex + 1) % STAGES.length].id)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
@@ -280,7 +284,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, 
         {/* 导航栏本体：首页常驻显现；其他页面切换时短暂出现、切完缩回 */}
         <div
           className="overflow-hidden transition-[max-height,opacity] duration-300 ease-out"
-          style={{ maxHeight: navOpen ? 120 : 0, opacity: navOpen ? 1 : 0 }}
+          style={{ maxHeight: navOpen ? 120 : 0, opacity: navOpen ? 1 : 0, pointerEvents: navOpen ? 'auto' : 'none' }}
           aria-hidden={!navOpen}
         >
           <div className="relative bg-[#F6EDD7] border-2 border-[#C9B58C] rounded-2xl mx-1 sm:mx-2 h-[66px] sm:h-[70px] lg:h-[74px]">
@@ -296,6 +300,7 @@ export const AdventureBottomNav: React.FC<Props> = ({ activeTab, onNavigateTab, 
                       onMouseEnter={() => handlePreloadTab(s.id)}
                       onTouchStart={() => handlePreloadTab(s.id)}
                       onFocus={() => handlePreloadTab(s.id)}
+                      tabIndex={navOpen ? 0 : -1}
                       title={s.stageName}
                       aria-label={s.stageName}
                       className={`flex-1 flex items-center justify-center py-1 px-1 cursor-pointer rounded-lg transition-transform active:scale-90 min-h-[36px] ${

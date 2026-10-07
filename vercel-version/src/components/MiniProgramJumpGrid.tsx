@@ -17,7 +17,7 @@ export const MiniProgramJumpGrid: React.FC<Props> = React.memo(({
   const [showCinemaNotice, setShowCinemaNotice] = useState(false);
 
   return (
-    <div className="home-jump-grid w-full select-none relative z-20 px-1 sm:px-2 -mt-1">
+    <div className="home-jump-grid w-full select-none relative z-0 px-1 sm:px-2">
       {/* ====================================================
           首页 3 个复古羊皮纸勋章入口 (缩放更紧凑精致)
           1. 塔塔开 (街机训练)
@@ -48,6 +48,8 @@ export const MiniProgramJumpGrid: React.FC<Props> = React.memo(({
               src="/images/tatakaru-button.webp"
               alt="塔塔开"
               draggable={false}
+              width={384}
+              height={362}
               decoding="async"
               className="absolute inset-0 w-full h-full pointer-events-none select-none transition-transform duration-200 ease-out group-hover:scale-105 group-active:scale-110"
             />
@@ -70,6 +72,8 @@ export const MiniProgramJumpGrid: React.FC<Props> = React.memo(({
               src="/images/cinema-button.webp"
               alt="影视厅"
               draggable={false}
+              width={384}
+              height={365}
               decoding="async"
               className="absolute inset-0 w-full h-full pointer-events-none select-none transition-transform duration-200 ease-out group-hover:scale-105 group-active:scale-110"
             />
@@ -105,6 +109,8 @@ export const MiniProgramJumpGrid: React.FC<Props> = React.memo(({
               src="/images/giant-button.webp"
               alt="巨人资源"
               draggable={false}
+              width={384}
+              height={365}
               decoding="async"
               className="absolute inset-0 w-full h-full pointer-events-none select-none transition-transform duration-200 ease-out group-hover:scale-105 group-active:scale-110"
             />

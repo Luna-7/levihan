@@ -606,7 +606,7 @@
           <label>编辑图片 <span class="tag">100% 完整显示，滑动调整缩放</span></label>
           <div class="goods-crop-stage hide" id="goods-crop-stage"><img id="goods-preview" alt="周边图片编辑预览"></div>
           <label for="goods-scale">缩放 <span class="tag" id="goods-scale-value">100%</span></label>
-          <input type="range" id="goods-scale" min="60" max="130" step="5" value="100">
+          <input type="range" id="goods-scale" min="60" max="100" step="5" value="100">
         </div>
         <div class="f" style="justify-content:flex-end"><label style="align-items:center"><input type="checkbox" id="goods-visible" checked style="width:auto"> 主站显示</label></div>
       </div>
@@ -1624,10 +1624,10 @@ function renderGoods(){
   if (!goodsItems.length) { box.innerHTML = '<p class="muted">暂无周边素材。</p>'; return; }
   box.innerHTML = goodsItems.map(function(item){
     var editing = goodsEditingFile === item.file && goodsPending[0];
-    var scale = Math.min(1.3, Math.max(.6, Number(editing ? goodsPending[0].zoom * 100 : item.scale || 100) / 100));
+    var scale = Math.min(1, Math.max(.6, Number(editing ? goodsPending[0].zoom * 100 : item.scale || 100) / 100));
     var saveClass = goodsEditingDirty ? 'btn-sm btn-gold' : 'btn-sm';
     var inlineEditor = editing ? '<div class="goods-inline-editor" data-goods-file="' + esc(item.file) + '">' +
-      '<div class="inline-scale-row"><label for="goods-inline-scale-' + esc(item.file) + '">缩放</label><input type="range" id="goods-inline-scale-' + esc(item.file) + '" data-goods-inline-scale="' + esc(item.file) + '" min="60" max="130" step="5" value="' + Math.round(scale * 100) + '"><output data-goods-inline-value>' + Math.round(scale * 100) + '%</output></div>' +
+      '<div class="inline-scale-row"><label for="goods-inline-scale-' + esc(item.file) + '">缩放</label><input type="range" id="goods-inline-scale-' + esc(item.file) + '" data-goods-inline-scale="' + esc(item.file) + '" min="60" max="100" step="5" value="' + Math.round(scale * 100) + '"><output data-goods-inline-value>' + Math.round(scale * 100) + '%</output></div>' +
       '<label class="sw" style="margin-top:7px"><input type="checkbox" data-goods-inline-visible style="width:auto"' + (item.visible === false ? '' : ' checked') + '> 主站显示</label>' +
       '<div class="inline-actions"><button type="button" class="' + saveClass + '" data-goods-inline-save' + (goodsEditingDirty ? '' : ' disabled') + '>保存</button><button type="button" class="btn-sm" data-goods-inline-cancel>取消</button></div></div>' : '';
     return '<div class="notice-row goods-admin-card' + (editing ? ' is-editing' : '') + '"><div class="goods-admin-actions"><button class="btn-sm" data-goods-edit="' + esc(item.file) + '">编辑图片</button><button class="btn-sm btn-danger" data-goods-del="' + esc(item.file) + '">删除</button></div>' +
@@ -1722,7 +1722,7 @@ $('goods-list').addEventListener('click',function(e){
   var edit=e.target.closest('[data-goods-edit]'),del=e.target.closest('[data-goods-del]'),inlineSave=e.target.closest('[data-goods-inline-save]'),inlineCancel=e.target.closest('[data-goods-inline-cancel]');
   if(inlineSave){if(!goodsEditingDirty)return;var saveRow=inlineSave.closest('[data-goods-file]');$('goods-visible').checked=!!saveRow.querySelector('[data-goods-inline-visible]').checked;saveGoods();return;}
   if(inlineCancel){resetGoodsForm();renderGoods();return;}
-  if(edit){var item=goodsItems.find(function(x){return x.file===edit.getAttribute('data-goods-edit');});if(!item)return;resetGoodsForm();goodsEditingFile=item.file;goodsEditingBaseScale=Math.round(Number(item.scale||100));goodsEditingBaseVisible=item.visible!==false;$('goods-visible').checked=goodsEditingBaseVisible;loadGoodsCropSource(goodsUrl(item.file),item.file,'').then(function(source){source.zoom=Math.min(1.3,Math.max(.6,goodsEditingBaseScale/100));goodsPending=[source];goodsCropIndex=0;goodsEditingDirty=false;renderGoods();}).catch(function(err){goodsEditingFile='';show($('goods-msg'),'err','读取素材失败：'+(err.message||String(err)));});}
+  if(edit){var item=goodsItems.find(function(x){return x.file===edit.getAttribute('data-goods-edit');});if(!item)return;resetGoodsForm();goodsEditingFile=item.file;goodsEditingBaseScale=Math.min(100,Math.max(60,Math.round(Number(item.scale||100))));goodsEditingBaseVisible=item.visible!==false;$('goods-visible').checked=goodsEditingBaseVisible;loadGoodsCropSource(goodsUrl(item.file),item.file,'').then(function(source){source.zoom=Math.min(1,Math.max(.6,goodsEditingBaseScale/100));goodsPending=[source];goodsCropIndex=0;goodsEditingDirty=false;renderGoods();}).catch(function(err){goodsEditingFile='';show($('goods-msg'),'err','读取素材失败：'+(err.message||String(err)));});}
   else if(del){var file=del.getAttribute('data-goods-del');if(!confirm('确定删除这张周边素材及原图？'))return;api({action:'goodsDelete',file:file}).then(function(d){goodsItems=d.items||[];renderGoods();resetGoodsForm();}).catch(function(err){if(onAuthFail(err))return;show($('goods-msg'),'err',err.message||String(err));});}
 });
 $('goods-list').addEventListener('input',function(e){
@@ -2097,14 +2097,14 @@ async function loadBookImagesForEdit(b){
         file:file, originalFile:file,
         url:URL.createObjectURL(file), originalUrl:URL.createObjectURL(file),
         status:'idle', err:'', name:file.name,
-        edited:false, op:null, remote:true
+        edited:false, op:null, remote:true, remoteName:names[i]
       });
     }
     files = loaded;
     uploadConfig.pageFiles = names.slice();
     renderFiles();
     syncPages();
-    show($('main-msg'), 'ok', '✓ 已读取 ' + files.length + ' 张原图。点击每张图片上的「✎」编辑，完成后点击“上传并发布”覆盖原图。');
+    show($('main-msg'), 'ok', '✓ 已读取 ' + files.length + ' 张原图。编辑后点击“上传并发布”，只会重新上传新增或已修改的图片，未改动原图不会重复覆盖。');
     $('images-panel').scrollIntoView({ behavior:'smooth', block:'start' });
     return true;
   } catch (err) {
@@ -3112,6 +3112,11 @@ function outputPageName(i, pad, prefix, sourceName){
     : pageName(i, pad, prefix, sourceName);
 }
 
+function fileOutputName(f, i, pad, prefix, sourceName){
+  if (f && f.remoteName && /^[A-Za-z0-9_-]+\.(webp|jpg|jpeg|png|gif|avif)$/i.test(f.remoteName)) return f.remoteName;
+  return outputPageName(i, pad, prefix, sourceName);
+}
+
 /* 并发池 */
 function pool(items, limit, worker){
   var idx = 0, active = 0, failed = 0, done = 0;
@@ -3952,17 +3957,26 @@ function uploadAll(){
   var pad = form.pagePadDigits || (files.length > 99 ? 3 : 2);
   var quality = (parseInt($('opt-q').value, 10) || 85) / 100;
   var convert = $('opt-webp').checked;
+  var uploadIdx = [];
 
   hide($('main-msg'));
-  files.forEach(function(f){ f.status = 'idle'; f.err = ''; f.pct = 0; });
+  files.forEach(function(f, i){
+    // 编辑已收录作品时，只有新加入或实际编辑过的图片需要重新上传。
+    // 未改动的云端图片保留原文件名与地址，不再重复覆盖。
+    var needsUpload = !f.remote || !!f.edited;
+    f.status = needsUpload ? 'idle' : 'skip';
+    f.err = ''; f.pct = 0;
+    if (needsUpload) uploadIdx.push(i);
+  });
   renderFiles();
   setBusy(true);
-  updateProgress(0, files.length);
+  updateProgress(0, uploadIdx.length);
 
-  // 先把所有图片转码成待上传的 blob，避免并发转码占满内存
+  // 只把需要上传的图片转码成待上传的 blob，避免无改动图片重复处理。
   var prepared = [];
   var chain = Promise.resolve();
-  files.forEach(function(f, i){
+  uploadIdx.forEach(function(i){
+    var f = files[i];
     chain = chain.then(function(){
       f.status = 'busy'; f.pct = 0; updateFileNode(i);
       var p;
@@ -3992,9 +4006,8 @@ function uploadAll(){
   });
 
   chain.then(function(){
-    var okIdx = [];
-    files.forEach(function(f, i){ if (f.status !== 'err') okIdx.push(i); });
-    if (!okIdx.length) {
+    var okIdx = uploadIdx.filter(function(i){ return files[i].status !== 'err'; });
+    if (uploadIdx.length && !okIdx.length) {
       var firstError = files.map(function(f){ return f.err; }).filter(Boolean)[0];
       throw new Error('所有图片都处理失败：' + (firstError || '请检查文件格式'));
     }
@@ -4003,7 +4016,7 @@ function uploadAll(){
       var i = okIdx[k], f = files[i], p = prepared[i];
       f.status = 'busy'; updateFileNode(i);
       return api({
-        action:'upload', bookId: form.id, fileName: outputPageName(i, pad, prefix, p.name),
+        action:'upload', bookId: form.id, fileName: fileOutputName(f, i, pad, prefix, p.name),
         dataBase64: p.b64, contentType: p.type
       }).then(function(){
         f.status = 'done'; updateFileNode(i); return true;
@@ -4016,14 +4029,17 @@ function uploadAll(){
     if (failed.length) {
       var msg = '⚠ 有 ' + failed.length + ' 张上传失败，已停止写入归档。\n' +
         failed.slice(0, 5).map(function(f, i){ return '  · 第 ' + (files.indexOf(f) + 1) + ' 张（' + f.name + '）：' + f.err; }).join('\n') +
-        (failed.length > 5 ? '\n  …' : '') + '\n修好后点「上传并发布」会重传全部图片（同名覆盖）。';
+        (failed.length > 5 ? '\n  …' : '') + '\n修好后点「上传并发布」只会重试需要上传的图片。';
       throw new Error(msg);
     }
     // 全部成功 → 写入归档
     var book = Object.assign({}, form);
     book.pages = files.length || form.pages;
     book.bookFolder = form.bookFolder || form.id;
-    book.pageFiles = prepared.map(function(p, i){ return outputPageName(i, pad, prefix, p && p.name); });
+    book.pageFiles = files.map(function(f, i){
+      var p = prepared[i];
+      return fileOutputName(f, i, pad, prefix, p && p.name);
+    });
     book.coverFile = form.coverFile || book.pageFiles[0] || pageName(0, pad, prefix, prepared[0] && prepared[0].name);
     // 走这条路径说明「含有敏感元素」没勾选：内页已被替换成普通图片，
     // 必须显式把标记清成 false，否则站点会拿着旧的 secure 标记去解一批根本不在的密文。
@@ -4031,7 +4047,8 @@ function uploadAll(){
     return api({ action:'publish', book: book }).then(function(d){
       show($('main-msg'), 'ok',
         '✅ 发布成功：' + book.id + ' · ' + book.titleZh + '（共 ' + d.count + ' 本）\n' +
-        '图片已全部上传（' + files.length + ' 张），站点刷新即可看到。\n' +
+        (uploadIdx.length ? '已重新上传 ' + uploadIdx.length + ' 张图片，' + (files.length - uploadIdx.length) + ' 张未改动图片沿用原文件。\n' : '没有图片改动，未重新上传图片。\n') +
+        '站点刷新即可看到。\n' +
         '预览：' + CDN + '/' + (book.bookFolder || book.id) + '/' + (book.coverFile || 'image01.webp'));
       resetForm();
       loadBooks();

@@ -1,5 +1,6 @@
 import React, { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Dices } from 'lucide-react';
 import { cosService } from '../services/cosClient';
 import type { GoodsItem } from '../types';
 import type { DoujinBookItem, GroupNovel } from '../types/doujinArchive';
@@ -113,6 +114,15 @@ export const RandomLeviHanBite: React.FC<{
 
   useEffect(() => { if (!selected) setSelected(pick(pool) || null); }, [pool, selected]);
 
+  useEffect(() => {
+    if (!detailOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDetailOpen(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [detailOpen]);
+
   const goToTarget = () => {
     if (!selected) return;
     soundManager.playPageTurn();
@@ -130,10 +140,10 @@ export const RandomLeviHanBite: React.FC<{
       <CardPatternOverlay opacity={0.07} mode="multiply" />
       {pair[0] && <img src={cosService.getGoodsThumbUrl(pair[0].file, 240)} alt={pair[0].title || '随机人物'} className="home-quick-character absolute right-1 object-contain object-bottom" loading="lazy" decoding="async" />}
       <span className="relative z-10 flex h-full min-w-0 flex-col items-start justify-center text-left">
-        <span className="font-serif-title text-sm sm:text-base font-black text-[#1E4334]">🎲 嗑一口利韩</span>
+        <span className="flex items-center gap-1.5 font-serif-title text-sm sm:text-base font-black text-[#1E4334]"><Dices size={16} strokeWidth={2.5} aria-hidden="true" />嗑一口利韩</span>
         <span className="mt-0.5 flex items-center gap-1 text-[9px] text-[#8C6C47]">点击抽取今日份利韩 <b className="text-[10px]">›</b></span>
       </span>
     </button>
-    {detailOpen && selected && createPortal(<div className="fixed inset-0 z-[1600] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" onClick={() => setDetailOpen(false)}><div className="relative w-full max-w-md rounded-xl border-2 border-[#1E4334] bg-[#FFFDF6] p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}><CardPatternOverlay opacity={0.08} mode="multiply"/><div className="relative z-10"><div className="flex items-start justify-between gap-3"><div><span className="rounded bg-[#8F3426] px-2 py-1 text-[9px] font-bold text-white">{selected.label}</span><h3 className="mt-2 font-serif-title text-lg font-black text-[#1E4334]">{selected.title}</h3></div><button onClick={() => setDetailOpen(false)} className="text-lg text-[#8C6C47] cursor-pointer">✕</button></div><p className="mt-3 whitespace-pre-wrap rounded-md bg-[#F7F1E5] p-3 text-sm leading-7 text-[#3E342B]">{selected.detail}</p><p className="mt-2 text-[10px] text-[#9A8268]">来源：{selected.source}</p><div className="mt-4 flex gap-2"><button onClick={goToTarget} className="flex-1 rounded-md border-2 border-[#B7791F] bg-[#E5A93C] px-3 py-2 text-sm font-bold text-[#3E2C16] cursor-pointer">{selected.externalUrl?'打开来源网站':'前往对应区域'}</button><button onClick={reroll} className="rounded-md border-2 border-[#1E4334] bg-[#FFF9EC] px-3 py-2 text-sm font-bold text-[#1E4334] cursor-pointer">换一条</button></div></div></div></div>,document.body)}
+    {detailOpen && selected && createPortal(<div className="fixed inset-0 z-[1600] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" onClick={() => setDetailOpen(false)}><div role="dialog" aria-modal="true" aria-labelledby="home-bite-title" className="relative w-full max-w-md rounded-xl border-2 border-[#1E4334] bg-[#FFFDF6] p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}><CardPatternOverlay opacity={0.08} mode="multiply"/><div className="relative z-10"><div className="flex items-start justify-between gap-3"><div><span className="rounded bg-[#8F3426] px-2 py-1 text-[9px] font-bold text-white">{selected.label}</span><h3 id="home-bite-title" className="mt-2 font-serif-title text-lg font-black text-[#1E4334]">{selected.title}</h3></div><button type="button" onClick={() => setDetailOpen(false)} className="text-lg text-[#8C6C47] cursor-pointer" aria-label="关闭利韩琐事">✕</button></div><p className="mt-3 whitespace-pre-wrap rounded-md bg-[#F7F1E5] p-3 text-sm leading-7 text-[#3E342B]">{selected.detail}</p><p className="mt-2 text-[10px] text-[#9A8268]">来源：{selected.source}</p><div className="mt-4 flex gap-2"><button type="button" onClick={goToTarget} className="flex-1 rounded-md border-2 border-[#B7791F] bg-[#E5A93C] px-3 py-2 text-sm font-bold text-[#3E2C16] cursor-pointer">{selected.externalUrl?'打开来源网站':'前往对应区域'}</button><button type="button" onClick={reroll} className="rounded-md border-2 border-[#1E4334] bg-[#FFF9EC] px-3 py-2 text-sm font-bold text-[#1E4334] cursor-pointer">换一条</button></div></div></div></div>,document.body)}
   </section>;
 });

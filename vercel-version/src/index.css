@@ -148,8 +148,7 @@
   .home-random-bite {
     flex: 0 0 auto;
   }
-  /* 浏览器模式将两个首页快捷入口并排；主屏幕 PWA 改回上下两行，
-     为窄屏触控保留更大的单按钮点击区域。 */
+  /* 浏览器模式与 PWA 横屏使用并排入口；PWA 竖屏在下方显式调整。 */
   .home-quick-actions {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1356,8 +1355,8 @@ html.pwa-standalone .home-announcement-list > .announcement-board {
 }
 
 /* ============================================================
-   首页视口契约：手机竖屏固定比例；仅桌面与横屏平板允许整页滚动。
-   公告区域恒定只露出两条，更多公告在区域内部滚动。
+   首页视口契约：移动端允许整页滚动，公告按内容自然撑开。
+   固定底部导航只负责导航，不截断首页内容。
    ============================================================ */
 .home-announcement-list {
   max-height: 202px;
@@ -1387,14 +1386,15 @@ html.pwa-standalone .home-announcement-list > .announcement-board {
 
 @media (max-width: 767px) and (orientation: portrait) {
   #view-main {
-    overflow-y: hidden !important;
+    overflow-y: auto !important;
   }
 
   .home-fixed-page {
     width: 100%;
-    height: 100%;
-    min-height: 0 !important;
-    overflow: hidden;
+    height: auto !important;
+    min-height: 100% !important;
+    justify-content: flex-start !important;
+    overflow: visible !important;
   }
 
   .home-quick-actions,
@@ -1542,59 +1542,10 @@ html.pwa-standalone .home-announcement-list > .announcement-board {
     padding-top: calc(env(safe-area-inset-top, 0px) + 1.15rem) !important;
   }
 
-  /* PWA 不在导航面板下额外留一条视觉空带，面板直接贴屏幕底边。 */
+  /* PWA 导航贴屏幕底边，同时保留 Home Indicator 安全区。 */
   html.pwa-standalone .adventure-bottom-safe-area {
-    height: 0 !important;
-  }
-
-  /* PWA 高度充足：公告恢复网页同款信息密度与卡片比例，不使用 Chrome 的压缩行。 */
-  html.pwa-standalone .home-announcements {
-    flex: 0 0 174px;
-    min-height: 174px;
-    max-height: 174px !important;
-  }
-  html.pwa-standalone .home-fixed-page {
-    height: 100%;
-    min-height: 100%;
-  }
-  html.pwa-standalone .home-main-content {
-    flex: 1 1 auto;
+    height: env(safe-area-inset-bottom, 0px) !important;
     min-height: 0;
-  }
-  html.pwa-standalone .home-announcement-region,
-  html.pwa-standalone .home-announcement-list {
-    flex: 0 0 174px;
-    height: 174px;
-    max-height: 174px;
-  }
-  html.pwa-standalone .home-announcement-list > .announcement-board {
-    flex-basis: 83px;
-    min-height: 83px;
-    height: 83px;
-    padding: 11px 14px !important;
-    overflow: hidden;
-  }
-  html.pwa-standalone .home-announcement-list .announcement-board-content {
-    min-width: 0;
-    overflow: hidden;
-  }
-  html.pwa-standalone .home-announcement-list h4 {
-    max-width: 100%;
-    font-size: 13px !important;
-    line-height: 1.2 !important;
-  }
-  html.pwa-standalone .home-announcement-list p {
-    display: -webkit-box !important;
-    margin-top: 4px !important;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
-    font-size: 10px !important;
-    line-height: 1.35 !important;
-  }
-  html.pwa-standalone .home-announcement-list time,
-  html.pwa-standalone .home-announcement-list .announcement-arrow {
-    display: flex !important;
   }
 }
 
@@ -1730,5 +1681,153 @@ html.pwa-standalone .home-announcement-list > .announcement-board {
   html:not(.pwa-standalone) .short-screen-m-neg {
     margin-top: 0;
     margin-bottom: 0;
+  }
+}
+
+/* 首页公告与三个入口必须保持正常文档流。
+   公告是异步加载的，不能用负边距、视觉缩放或高层级来“塞”入口，
+   否则公告高度变化后入口会绘制到公告卡片上方。 */
+.home-main-content {
+  justify-content: flex-start !important;
+  gap: clamp(12px, 2.4dvh, 24px) !important;
+}
+
+.home-announcements {
+  position: static;
+  z-index: auto;
+  margin: 0 !important;
+}
+
+.home-announcement-region {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+.home-jump-section {
+  position: static;
+  z-index: auto;
+  margin-top: 0 !important;
+  padding-top: clamp(8px, 1.5dvh, 16px);
+}
+
+.home-jump-grid {
+  z-index: auto !important;
+  margin-top: 0 !important;
+}
+
+@media (max-width: 767px) {
+  .home-announcements,
+  html.pwa-standalone .home-announcements {
+    flex: 0 0 auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .home-announcement-region,
+  html.pwa-standalone .home-announcement-region,
+  .home-announcement-list,
+  html.pwa-standalone .home-announcement-list {
+    height: auto !important;
+    max-height: none !important;
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+  }
+
+  .home-main-content {
+    gap: 12px !important;
+  }
+
+  .home-jump-section {
+    padding-top: 8px;
+  }
+}
+
+/* 公告栏外观契约：保留纸张主题，降低边框重量并固定三段比例。 */
+.home-announcement-list > .announcement-board {
+  min-height: 58px !important;
+  padding: 9px 12px !important;
+  border: 1px solid #D8C59F;
+  border-radius: 0 13px 13px 0;
+  overflow: hidden !important;
+  box-shadow: 0 2px 8px rgba(82, 61, 38, .08), inset 0 1px 0 rgba(255, 255, 255, .75);
+}
+
+.announcement-board::before {
+  width: 4px;
+  border-radius: 0;
+}
+
+.home-announcement-list > .announcement-board {
+  gap: 8px !important;
+}
+
+.home-announcement-list .announcement-board-content {
+  gap: 8px !important;
+}
+
+.home-announcement-list .announcement-badge {
+  flex: 0 0 clamp(76px, 15vw, 88px);
+  width: clamp(76px, 15vw, 88px);
+  max-width: clamp(76px, 15vw, 88px);
+  min-width: 0;
+  min-height: 25px;
+  padding: 4px 7px !important;
+  overflow: hidden;
+}
+
+.home-announcement-list .announcement-badge span,
+.home-announcement-list h4,
+.home-announcement-list time {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-announcement-list .announcement-arrow {
+  width: 30px !important;
+  height: 30px !important;
+  flex: 0 0 30px;
+  margin-left: 0;
+}
+
+.home-announcement-list .announcement-arrow svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 380px) {
+  .home-announcement-list > .announcement-board {
+    min-height: 54px !important;
+    gap: 6px !important;
+    padding: 7px 9px !important;
+  }
+
+  .home-announcement-list .announcement-board-content {
+    gap: 6px !important;
+  }
+
+  .home-announcement-list .announcement-badge {
+    flex-basis: 76px;
+    width: 76px;
+    max-width: 76px;
+    padding: 4px 7px;
+    font-size: 10px;
+  }
+
+  .home-announcement-list .announcement-arrow {
+    width: 28px !important;
+    height: 28px !important;
+    flex-basis: 28px;
+  }
+
+  .home-announcement-list .announcement-arrow svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .home-announcement-list time {
+    display: none;
   }
 }

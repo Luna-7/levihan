@@ -182,7 +182,7 @@ const GoodsCard: React.FC<{
             decoding="async"
             draggable={false}
             className="w-full h-full object-contain block transition-transform duration-200"
-            style={{ transform: `scale(${Math.min(1.3, Math.max(0.6, Number(item.scale || 100) / 100))})` }}
+            style={{ transform: `scale(${Math.min(1, Math.max(0.6, Number(item.scale || 100) / 100))})` }}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-lg text-[#C4B7A6] font-pixel">

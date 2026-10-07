@@ -158,7 +158,7 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
     <div
       ref={pageRef}
       id="view-main"
-      className="relative w-full h-full select-none flex flex-col overflow-y-auto no-scrollbar overscroll-contain bg-[#FFFEEF]/80 md:bg-[#FFFEEF]/55 md:backdrop-blur-md"
+      className="relative w-full h-full select-none flex flex-col overflow-y-auto no-scrollbar overscroll-contain bg-[#FFFEEF]/80 md:bg-[#FFFEEF]/72"
     >
       <div className="home-fixed-page w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto flex min-h-full flex-col justify-between">
         {/* ====================================================
@@ -169,9 +169,14 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
           {/* header 横幅：宽度始终与导航栏对齐，高度按图片比例等比缩放 */}
           <img
             src="/images/header-home.webp"
+            srcSet="/images/header-home-640.webp 640w, /images/header-home-860.webp 860w, /images/header-home.webp 1242w"
+            sizes="(min-width: 1024px) 768px, 100vw"
             alt="LEVI × HANS WAREHOUSE 调查兵团特别驻地 · 情报与粮草整备"
             className="home-header-art w-full h-auto max-w-full block"
             referrerPolicy="no-referrer"
+            width={1242}
+            height={872}
+            decoding="async"
             fetchPriority="high"
           />
 
@@ -217,7 +222,7 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
         {/* ====================================================
             2. 主体内容区：按照参考图排版
            ==================================================== */}
-        <main className="home-main-content w-full mx-auto px-2.5 sm:px-4 lg:px-6 pt-1 clear-adventure-nav-home flex-1 min-h-0 flex flex-col justify-between gap-1.5 sm:gap-2">
+        <main className="home-main-content w-full mx-auto px-2.5 sm:px-4 lg:px-6 pt-1 clear-adventure-nav-home flex-1 min-h-0 flex flex-col justify-start gap-1.5 sm:gap-2">
           {/* ====================================================
               【上段】：首页最多 3 条公告卡片 (显现内容、时间、发布人)
              ==================================================== */}
@@ -244,8 +249,8 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
           {/* ====================================================
               【下段】：3 个大复古羊皮纸入口 (塔塔开 + 影视厅 + 巨人资源)
              ==================================================== */}
-          <section className="home-jump-section w-full shrink-0 short-screen-m-neg">
-            <div className="short-screen-scale">
+          <section className="home-jump-section w-full shrink-0">
+            <div>
               <MiniProgramJumpGrid
                 onOpenGameModal={openGameModal}
                 onOpenResourceModal={openResourceModal}

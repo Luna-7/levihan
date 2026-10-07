@@ -412,7 +412,7 @@ function normalizeGoodsItem(raw, fallbackFile) {
     ...(String(raw && raw.title || '').trim() ? { title: String(raw.title).trim().slice(0, 60) } : {}),
     ...(String(raw && raw.note || '').trim() ? { note: String(raw.note).trim().slice(0, 120) } : {}),
     order: Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0,
-    scale: Number.isFinite(scale) ? Math.min(130, Math.max(60, Math.round(scale))) : 100,
+    scale: Number.isFinite(scale) ? Math.min(100, Math.max(60, Math.round(scale))) : 100,
     visible: raw && raw.visible !== false,
     ...(Number.isFinite(width) && width > 0 ? { width: Math.floor(width) } : {}),
     ...(Number.isFinite(height) && height > 0 ? { height: Math.floor(height) } : {}) };

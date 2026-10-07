@@ -57,6 +57,8 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
 }) => {
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
+  const [announcementError, setAnnouncementError] = useState(false);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [showDetailModal, setShowDetailModal] = useState<AnnouncementItem | null>(null);
   const [expandedImage, setExpandedImage] = useState('');
   const announcementListRef = useRef<HTMLDivElement>(null);
@@ -75,7 +77,10 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
     let cancelled = false;
 
     const load = (silent: boolean) => {
-      if (!silent) setLoadingAnnouncements(true);
+      if (!silent) {
+        setLoadingAnnouncements(true);
+        setAnnouncementError(false);
+      }
       fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
@@ -109,9 +114,13 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
           }
           announcementBaseline.current = newestVersion || announcementBaseline.current;
           setAnnouncements(cloudItems);
+          setAnnouncementError(false);
         })
         .catch(() => {
-          if (!cancelled && !silent) setAnnouncements([]);
+          if (!cancelled) {
+            setAnnouncementError(true);
+            if (!silent) setAnnouncements([]);
+          }
         })
         .finally(() => {
           if (!cancelled) setLoadingAnnouncements(false);
@@ -136,7 +145,19 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, []);
+  }, [reloadNonce]);
+
+  useEffect(() => {
+    if (!showDetailModal && !showProposal && !expandedImage) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (expandedImage) setExpandedImage('');
+      else if (showProposal) setShowProposal(false);
+      else setShowDetailModal(null);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [expandedImage, showDetailModal, showProposal]);
 
   const enableNotifications = async () => {
     let permission = webPushPermission();
@@ -191,6 +212,11 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
     }
     if (/^https?:\/\//i.test(item.link)) window.open(item.link, '_blank', 'noopener,noreferrer');
     else window.location.assign(item.link);
+  };
+
+  const openAnnouncement = (item: AnnouncementItem) => {
+    soundManager.playWoodTap();
+    setShowDetailModal(item);
   };
 
   const submitProposal = async (event: React.FormEvent) => {
@@ -295,7 +321,17 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
 
         {!loadingAnnouncements && announcements.length === 0 && (
           <div className="py-5 text-center">
+            {announcementError ? (
+              <button
+                type="button"
+                onClick={() => setReloadNonce((value) => value + 1)}
+                className="min-h-11 rounded-md px-3 py-2 font-retro-jp text-[11px] text-[#8F3426] underline underline-offset-4"
+              >
+                公告读取失败，点击重试
+              </button>
+            ) : (
             <p className="font-retro-jp text-[11px] text-[#9A8B77]">暂无公告 ✦</p>
+            )}
           </div>
         )}
 
@@ -305,9 +341,14 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
           return (
             <div
               key={item.id}
-              onClick={() => {
-                soundManager.playWoodTap();
-                setShowDetailModal(item);
+              role="button"
+              tabIndex={0}
+              aria-label={`查看公告：${item.title}`}
+              onClick={() => openAnnouncement(item)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                openAnnouncement(item);
               }}
               onMouseEnter={() => handleCardHover(item)}
               onTouchStart={() => handleCardHover(item)}
@@ -379,6 +420,9 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
         >
           <div
             className="relative w-full max-w-md text-[#1E4334] drop-shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="home-announcement-title"
             onClick={(e) => e.stopPropagation()}
           >
             {/* 关闭按钮 */}
@@ -389,6 +433,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
                 setShowDetailModal(null);
               }}
               className="absolute top-4 right-3 z-30 w-7 h-7 bg-[#1E4334] text-[#F4EADB] rounded-full flex items-center justify-center text-xs font-bold hover:bg-[#2C5C46] cursor-pointer shadow-xs"
+              aria-label="关闭公告详情"
               title="收起卷轴"
             >
               ✕
@@ -402,7 +447,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
               <div className="relative flex items-center justify-between border-b-2 border-[#C5A059] pb-2 mb-2.5 pr-8">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xl">✨</span>
-                  <span className="font-serif-title font-bold text-sm sm:text-base text-[#1E4334] truncate">
+                  <span id="home-announcement-title" className="font-serif-title font-bold text-sm sm:text-base text-[#1E4334] truncate">
                     {showDetailModal.title}
                   </span>
                 </div>
@@ -527,6 +572,9 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
       {typeof document !== 'undefined' && showProposal && createPortal(
         <div
           className="fixed inset-0 z-[110] bg-black/55 flex items-center justify-center p-3 select-none"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-proposal-title"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               soundManager.playWoodTap();
@@ -540,7 +588,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
           >
             <div className="relative flex justify-between items-start">
               <div>
-                <h3 className="font-serif-title font-bold text-[#1E4334] text-base">
+                <h3 id="home-proposal-title" className="font-serif-title font-bold text-[#1E4334] text-base">
                   投递利韩企划 / 公告
                 </h3>
                 <p className="text-xs text-[#8C7A65] mt-0.5">
@@ -554,6 +602,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
                   setShowProposal(false);
                 }}
                 className="w-6 h-6 rounded-full bg-[#1E4334] text-[#F4EADB] flex items-center justify-center text-xs font-bold hover:bg-[#2C5C46] cursor-pointer"
+                aria-label="关闭企划投递"
               >
                 ✕
               </button>
