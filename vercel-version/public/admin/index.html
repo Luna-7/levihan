@@ -292,6 +292,9 @@
   #art-admin-files{grid-template-columns:repeat(auto-fill,minmax(92px,1fr));max-height:300px}
   #art-admin-files .file img{aspect-ratio:1/1;object-fit:contain}
   .artwork-admin-card{align-items:flex-start}
+  @media(max-width:760px){
+    .artwork-admin-form{grid-template-columns:1fr;grid-template-areas:'text' 'author' 'homepage' 'tags' 'upload'}
+  }
   .artwork-admin-card>img{width:110px;height:84px;object-fit:contain;border:1px solid var(--line);border-radius:5px;background:#EDE7D8;flex:none}
   .notice-row{display:flex;gap:10px;align-items:center;padding:9px;border:1.5px solid var(--rule);
               border-radius:8px;background:var(--card);margin-top:8px}
