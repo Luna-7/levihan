@@ -13,6 +13,11 @@ export interface COSConfigState {
 }
 
 const STORAGE_KEY = 'lh_cos_custom_config_v1';
+const GOODS_MANIFEST_URL = '/goods/manifest.json';
+const GOODS_THUMB_BASE = '/goods/thumbs';
+const GOODS_PREVIEW_BASE = '/goods/previews';
+const STATIC_ARCHIVE_URL = '/content/archive.json';
+const REMOTE_CACHE_TTL_MS = 5 * 60 * 1000;
 // 旧 Cloudflare R2 配置的本地存储键，迁移时清理
 const LEGACY_R2_STORAGE_KEY = 'lh_r2_custom_config_v1';
 
@@ -190,6 +195,13 @@ export class COSService {
 
   private cachedNovelList: GroupNovel[] | null = null;
   private novelFetchPromise: Promise<GroupNovel[]> | null = null;
+  private novelFetchedAt = 0;
+  private cachedArchive: DoujinBookItem[] | null = null;
+  private archiveFetchPromise: Promise<DoujinBookItem[]> | null = null;
+  private archiveFetchedAt = 0;
+  private cachedGoods: GoodsItem[] | null = null;
+  private goodsFetchPromise: Promise<GoodsItem[]> | null = null;
+  private goodsFetchedAt = 0;
 
   /**
    * 同步获取内存或本地持久化缓存的在线小说列表（用于首屏/切页瞬时直出，杜绝加载闪烁）
@@ -235,6 +247,10 @@ export class COSService {
     const cached = this.getCachedNovelList();
     if (!this.config.cdnBaseUrl) return cached;
 
+    if (!forceRefresh && cached.length > 0 && Date.now() - this.novelFetchedAt < REMOTE_CACHE_TTL_MS) {
+      return cached;
+    }
+
     // 非强制刷新且已有缓存：先秒回缓存，并在后台静默拉取更新
     if (!forceRefresh && cached.length > 0) {
       void this.fetchNovelListFromRemote();
@@ -249,11 +265,12 @@ export class COSService {
     this.novelFetchPromise = (async () => {
       try {
         requestDebug.recordJsonRequest();
-        const resp = await fetch(this.getObjectUrl('novels.json'), { mode: 'cors', cache: 'no-store' });
+        const resp = await fetch(this.getObjectUrl('novels.json'), { mode: 'cors', cache: 'default' });
         if (resp.ok) {
           const data = await resp.json();
           if (Array.isArray(data)) {
             this.cachedNovelList = data;
+            this.novelFetchedAt = Date.now();
             if (typeof window !== 'undefined') {
               try {
                 localStorage.setItem('lh_cached_novels_v1', JSON.stringify(data));
@@ -287,22 +304,47 @@ export class COSService {
       // 尚未配置新桶公开域名时，直接走本地兜底数据
       return DOUJIN_ARCHIVE_DATA;
     }
-    const remoteUrl = this.getObjectUrl('archive.json');
+    if (this.cachedArchive && Date.now() - this.archiveFetchedAt < REMOTE_CACHE_TTL_MS) {
+      return this.cachedArchive;
+    }
+    if (this.archiveFetchPromise) return this.archiveFetchPromise;
+
+    this.archiveFetchPromise = (async () => {
     try {
       requestDebug.recordJsonRequest();
-      // 归档发布后应立即反映排序与新书，避免浏览器沿用旧 archive.json。
-      const resp = await fetch(remoteUrl, { mode: 'cors', cache: 'no-store' });
+      const resp = await fetch(STATIC_ARCHIVE_URL, { cache: 'default' });
       if (resp.ok) {
         const data = await resp.json();
         if (Array.isArray(data) && data.length > 0) {
-          console.log('[COSService] Successfully fetched remote archive.json:', data.length, 'books');
+          console.log('[COSService] Loaded static archive.json:', data.length, 'books');
+          this.cachedArchive = data;
+          this.archiveFetchedAt = Date.now();
           return data;
         }
       }
     } catch (e) {
-      // 远端暂无 archive.json 时，优雅使用本地录入的本子数据
+      // 静态归档缺失时回退到 COS，保持旧部署可用。
+      try {
+        const resp = await fetch(this.getObjectUrl('archive.json'), { mode: 'cors', cache: 'default' });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (Array.isArray(data) && data.length > 0) {
+            this.cachedArchive = data;
+            this.archiveFetchedAt = Date.now();
+            return data;
+          }
+        }
+      } catch {
+        // 远端也不可用时使用本地兜底数据。
+      }
     }
-    return DOUJIN_ARCHIVE_DATA;
+    return this.cachedArchive || DOUJIN_ARCHIVE_DATA;
+    })();
+    try {
+      return await this.archiveFetchPromise;
+    } finally {
+      this.archiveFetchPromise = null;
+    }
   }
 
   /**
@@ -311,38 +353,47 @@ export class COSService {
    */
   public async loadGoodsList(): Promise<GoodsItem[]> {
     if (!this.config.cdnBaseUrl) return [];
+    if (this.cachedGoods && Date.now() - this.goodsFetchedAt < REMOTE_CACHE_TTL_MS) {
+      return this.cachedGoods;
+    }
+    if (this.goodsFetchPromise) return this.goodsFetchPromise;
+
+    this.goodsFetchPromise = (async () => {
     try {
       requestDebug.recordJsonRequest();
-      const resp = await fetch(this.getObjectUrl('goods/manifest.json'), {
-        mode: 'cors',
-        cache: 'no-store',
-      });
+      // 清单和缩略图随 Vercel 部署，列表页不再访问 COS。
+      const resp = await fetch(GOODS_MANIFEST_URL, { cache: 'default' });
       if (resp.ok) {
         const data = await resp.json();
         const list = Array.isArray(data) ? data : data?.items;
         if (Array.isArray(list)) {
-          return list.filter(
+          const result = list.filter(
             (it: Partial<GoodsItem> | null): it is GoodsItem =>
               Boolean(it && typeof it.file === 'string' && it.file && it.visible !== false),
           ).sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+          this.cachedGoods = result;
+          this.goodsFetchedAt = Date.now();
+          return result;
         }
       }
     } catch (e) {
       // 清单缺失时优雅降级为空橱窗
     }
-    return [];
+    return this.cachedGoods || [];
+    })();
+    try {
+      return await this.goodsFetchPromise;
+    } finally {
+      this.goodsFetchPromise = null;
+    }
   }
 
-  /** 周边原图直链（「下载」和「看原图」用它；桶已配 CORS + Content-Disposition: attachment） */
+  /** 私有 COS 原图地址，仅供服务端签名下载流程使用，前端不要直接渲染。 */
   public getGoodsOriginalUrl(file: string): string {
     return this.getObjectUrl(`goods/${file.replace(/^\//, '')}`);
   }
 
-  /**
-   * 周边展示图直链：**同一张原图由 COS 现场转码**，不需要额外存一份缩略图。
-   * `width <= 0` = 只转 WebP、不缩放 —— 原图本身比目标宽度还小时用它，
-   * 避免 COS 的 thumbnail 把小图**放大**（实测 115 KB 的图请求 1600px 会变成 297 KB）。
-   */
+  /** 兼容旧调用的 COS 图片处理地址；列表和灯箱已经使用预生成静态图。 */
   public getGoodsImageUrl(file: string, width: number, quality = 82): string {
     const ops =
       width > 0
@@ -353,12 +404,15 @@ export class COSService {
 
   /** 列表缩略图（420px，列表里每张只花几十 KB） */
   public getGoodsThumbUrl(file: string, width = 420): string {
-    return this.getGoodsImageUrl(file, width, 80);
+    // 列表缩略图已经随 Vercel 发布，避免每张卡片都回源 COS。
+    const stem = file.replace(/^\//, '').replace(/\.[^.]+$/, '');
+    return `${GOODS_THUMB_BASE}/${encodeURIComponent(stem)}.jpg`;
   }
 
   /** 灯箱预览（1600px，够看清细节但不是原图） */
   public getGoodsPreviewUrl(file: string, width = 1600): string {
-    return this.getGoodsImageUrl(file, width, 88);
+    const stem = file.replace(/^\//, '').replace(/\.[^.]+$/, '');
+    return `${GOODS_PREVIEW_BASE}/${encodeURIComponent(stem)}.jpg`;
   }
 }
 

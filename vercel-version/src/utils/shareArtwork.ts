@@ -17,7 +17,7 @@ const RESOURCE_PNG_FILES: string[] = [
  * 获取所有周边素材与巨人资源的候选 PNG / 高清图直链池
  */
 export const getAllSharePngCandidates = (): string[] => {
-  const cdnGoods = GOODS_PNG_FILES.map((file) => cosService.getGoodsOriginalUrl(file));
+  const cdnGoods = GOODS_PNG_FILES.map((file) => cosService.getGoodsPreviewUrl(file, 1600));
   return [...cdnGoods, ...RESOURCE_PNG_FILES];
 };
 
@@ -63,7 +63,7 @@ export const getRandomSharePng = (seed?: string | number, preferThumb: boolean =
  * 针对外部第三方平台（如微博、QQ 分享）获取绝对或可直链的原图 PNG
  */
 export const getExternalSharePng = (seed?: string | number): string => {
-  const goodsPool = GOODS_PNG_FILES.map((file) => cosService.getGoodsOriginalUrl(file));
+  const goodsPool = GOODS_PNG_FILES.map((file) => cosService.getGoodsPreviewUrl(file, 1600));
   const pool = [...goodsPool, '/images/rules-hange-tea.png'];
   const target = seed ? pool[simpleHash(String(seed)) % pool.length] : pool[Math.floor(Math.random() * pool.length)];
   if (target.startsWith('http://') || target.startsWith('https://')) {

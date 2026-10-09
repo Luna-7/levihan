@@ -176,6 +176,25 @@ export default defineConfig(() => {
             },
           },
           {
+            // 周边列表缩略图走 Vercel 同源静态文件，避免回源 COS。
+            urlPattern: /\/goods\/thumbs\/[^/?]+\.jpg$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'levihan-goods-thumbs',
+              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /\/goods\/(?:previews|originals)\/[^/?]+\.(?:jpg|png|webp|avif)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'levihan-goods-static',
+              expiration: { maxEntries: 180, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
             urlPattern: /\/daxigua\/.*/i,
             handler: 'CacheFirst',
             options: {

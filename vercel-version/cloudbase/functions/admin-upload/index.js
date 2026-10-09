@@ -60,6 +60,7 @@ const ARTWORK_LIKES_KEY = 'artwork-likes.json'; // 插画集点赞记录（[{id,
 const SUPPORTERS_KEY = 'supporters.json'; // 支持墙（[{id,name,kind,order,visible}]）
 const GOODS_KEY = 'goods/manifest.json';
 const GOODS_DIR = 'goods/';
+const GOODS_DOWNLOAD_FILE_RE = /^[A-Za-z0-9._-]+\.(?:png|jpe?g|webp|avif)$/i;
 const ANNOUNCEMENT_IMAGE_TYPES = Object.freeze({
   'image/webp': 'webp',
   'image/jpeg': 'jpg',
@@ -177,6 +178,21 @@ const multipartComplete = promisify(cos.multipartComplete.bind(cos));
 const multipartAbort = promisify(cos.multipartAbort.bind(cos));
 
 const adminPassword = () => process.env.ADMIN_PASSWORD || '';
+
+/** 仅为已登录用户签发短时周边原图地址；COS 桶本身不再公开读。 */
+function signGoodsDownload(file) {
+  const name = String(file || '').trim();
+  if (!GOODS_DOWNLOAD_FILE_RE.test(name)) throw httpError('非法周边文件名', 400);
+  const url = cos.getObjectUrl({
+    Bucket: BUCKET,
+    Region: REGION,
+    Key: `${GOODS_DIR}${name}`,
+    Method: 'GET',
+    Sign: true,
+    Expires: 60,
+  });
+  return { ok: true, url, expiresIn: 60 };
+}
 
 /** 时间安全比较，避免口令被逐字符试探 */
 function safeEqual(a, b) {
@@ -1562,6 +1578,7 @@ const USER_ACTIONS = new Set([
   'artworkDelete',
   'submitScore',
   'inboxReplyList', 'inboxReplyRead',
+  'goodsDownloadUrl',
 ]);
 // 匿名也可呈递；若请求带有效登录会话则顺带绑定账号，供管理员站内回信。
 const OPTIONAL_USER_ACTIONS = new Set(['submitContact', 'artworkLikeList']);
@@ -1771,7 +1788,7 @@ async function submitGameScore(uid, payload) {
   return { ok: true, merit, improved, best: improved ? merit : prev.merit };
 }
 
-async function handle(action, payload) {
+  async function handle(action, payload) {
   switch (action) {
     // 头号玩家排行榜：读榜公开，提分需登录（uid 走 authUid → app_users.id）
     case 'leaderboard': return readLeaderboard(payload.__uid);
@@ -1977,6 +1994,8 @@ async function handle(action, payload) {
       await writeAnnouncements(next);
       return { ok: true, id, items: next };
     }
+
+    case 'goodsDownloadUrl': return signGoodsDownload(payload.file);
 
     case 'goodsList': {
       const items = await readGoods();

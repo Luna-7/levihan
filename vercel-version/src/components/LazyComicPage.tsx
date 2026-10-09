@@ -62,7 +62,7 @@ export default function LazyComicPage({
         setInRange(false);
         setDisplayReady(false);
       }, 500);
-    }, { root: null, rootMargin: '300% 0px 300% 0px', threshold: 0 });
+      }, { root: null, rootMargin: '150% 0px 150% 0px', threshold: 0 });
     observer.observe(element);
     return () => {
       observer.disconnect();
@@ -86,7 +86,7 @@ export default function LazyComicPage({
       },
       {
         root: null,
-        rootMargin: '120% 0px 180% 0px', // 加载窗口：上方 120%，下方 180%
+        rootMargin: '60% 0px 90% 0px', // 只预加载相邻页面，避免一次拉取过多原图
         threshold: 0,
       },
     );

@@ -63,6 +63,8 @@ export interface GoodsItem {
   order?: number;
   /** 后台临时下架时为 false */
   visible?: boolean;
+  /** Vercel 同源静态缩略图；存在时列表展示不再请求 COS。 */
+  staticThumbUrl?: string;
 }
 
 export interface AuNovelStory {

@@ -6,6 +6,8 @@ import { soundManager } from '../utils/audio';
 import { imageLoadQueue } from '../utils/imageLoadQueue';
 import { requestDebug } from '../utils/requestDebug';
 import { CardPatternOverlay } from './CardPatternOverlay';
+import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
+import { getAccessToken } from '../utils/cloudbaseToken';
 
 interface Props {
   onShowToast: (msg: string) => void;
@@ -15,12 +17,10 @@ interface Props {
  * 「周边素材」—— 巨人资源里的周边图片区块。
  *
  * 设计要点（前三条为「不占内存 / 不拖慢加载」服务）：
- * 1. **图片不进仓库、不进构建产物**：原图放在 COS 的 goods/ 目录，清单是 goods/manifest.json。
- *    仓库里只有这份组件，所以 Workbox 预缓存（2 MiB 上限）和访客首屏都不受图片体积影响。
+ * 1. **周边资源随 Vercel 部署**：清单、缩略图、预览图和原图都走同源静态文件。
+ *    漫画正文仍保留在 COS；组件只在切到「周边素材」分类时才挂载。
  *    组件本身也只在切到「周边素材」分类时才挂载 —— 不进这个分类，零网络请求。
- * 2. **列表只加载缩略图**：同一张原图加 `?imageMogr2/thumbnail/420x/format/webp` 由 COS 现场生成；
- *    灯箱看大图用 1600px 预览，**只有点「下载」才取真正的原图**。
- *    ⚠️ 目标宽度一律不超过原图宽度：COS 的 thumbnail 参数会把小图**放大**（实测 115 KB → 297 KB）。
+ * 2. **列表只加载缩略图**：缩略图和 1600px 预览图预先生成，**只有点「下载」才取真正的原图**。
  * 3. **图片离开视口就卸载**：IntersectionObserver 管两件事——进视口才排队加载（并发 2，走 imageLoadQueue），
  *    出视口就把 <img> 从 DOM 摘掉（只留占位高度），长列表滚到底也不会把几十张图堆在内存里。
  *
@@ -32,7 +32,7 @@ interface Props {
  * 灯箱里已去掉「🔗 直链」按钮 —— 原图只通过「下载」这一条路径交付（同理，素材区不对外提供直链）。
  *
  * 下载走 fetch → blob → objectURL → <a download> → 立刻 revokeObjectURL（用完即释放）；
- * 桶本身带 CORS 与 Content-Disposition: attachment，所以取流失败时退回「新标签打开原图」也能直接保存。
+ * 静态原图与站点同源，取流失败时退回「新标签打开原图」也能直接保存。
  */
 
 /** 列表缩略图宽度上限（卡面约 160 CSS px，420 已是 2x 屏的清晰度） */
@@ -279,10 +279,19 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
   const titleOf = (it: GoodsItem, index: number) => it.title || `周边 ${index + 1}`;
 
   const handleDownload = async (item: GoodsItem) => {
-    const url = cosService.getGoodsOriginalUrl(item.file);
     setDownloading(item.file);
     try {
-      // COS 桶已配 CORS，可以直接取流；blob 用完立刻释放，不把原图留在内存里
+      const token = await getAccessToken();
+      if (!token) throw new Error('LOGIN_REQUIRED');
+      const signedResponse = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'goodsDownloadUrl', file: item.file }),
+      });
+      const signed = await signedResponse.json();
+      if (!signedResponse.ok || !signed?.url) throw new Error(signed?.error || 'signed URL unavailable');
+      const url = signed.url as string;
+      // 签名地址只存活 60 秒；取流后立即释放 objectURL。
       const resp = await fetch(url, { mode: 'cors' });
       if (!resp.ok) throw new Error(`download failed: ${resp.status}`);
       const blob = await resp.blob();
@@ -295,10 +304,12 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(objUrl), 2000);
       onShowToast('原图下载中，若没反应可长按图片保存 📥');
-    } catch {
-      // iOS Safari 对 download 属性支持不一、或跨域取流被拦：退回新标签打开原图
-      window.open(url, '_blank', 'noopener,noreferrer');
-      onShowToast('已在新标签打开原图，长按或右键即可保存 📥');
+    } catch (error) {
+      if (error instanceof Error && error.message === 'LOGIN_REQUIRED') {
+        onShowToast('请先登录后再下载原图');
+      } else {
+        onShowToast('原图下载失败，请稍后重试');
+      }
     } finally {
       setDownloading('');
     }
