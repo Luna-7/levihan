@@ -16,7 +16,6 @@ const STORAGE_KEY = 'lh_cos_custom_config_v1';
 const GOODS_MANIFEST_URL = '/goods/manifest.json';
 const GOODS_THUMB_BASE = '/goods/thumbs';
 const GOODS_PREVIEW_BASE = '/goods/previews';
-const STATIC_ARCHIVE_URL = '/content/archive.json';
 const REMOTE_CACHE_TTL_MS = 5 * 60 * 1000;
 // 旧 Cloudflare R2 配置的本地存储键，迁移时清理
 const LEGACY_R2_STORAGE_KEY = 'lh_r2_custom_config_v1';
@@ -295,9 +294,7 @@ export class COSService {
   }
 
   /**
-   * 动态加载远程归档数据：
-   * 1. 尝试从 COS 根目录读取 archive.json 或 books.json
-   * 2. 若无则从本地默认 Excel 统计数据加载
+   * 动态加载 COS 归档数据，失败时使用本地默认数据。
    */
   public async loadArchiveData(): Promise<DoujinBookItem[]> {
     if (!this.config.cdnBaseUrl) {
@@ -310,35 +307,22 @@ export class COSService {
     if (this.archiveFetchPromise) return this.archiveFetchPromise;
 
     this.archiveFetchPromise = (async () => {
-    try {
-      requestDebug.recordJsonRequest();
-      const resp = await fetch(STATIC_ARCHIVE_URL, { cache: 'default' });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (Array.isArray(data) && data.length > 0) {
-          console.log('[COSService] Loaded static archive.json:', data.length, 'books');
-          this.cachedArchive = data;
-          this.archiveFetchedAt = Date.now();
-          return data;
-        }
-      }
-    } catch (e) {
-      // 静态归档缺失时回退到 COS，保持旧部署可用。
       try {
+        requestDebug.recordJsonRequest();
         const resp = await fetch(this.getObjectUrl('archive.json'), { mode: 'cors', cache: 'default' });
         if (resp.ok) {
           const data = await resp.json();
           if (Array.isArray(data) && data.length > 0) {
+            console.log('[COSService] Loaded COS archive.json:', data.length, 'books');
             this.cachedArchive = data;
             this.archiveFetchedAt = Date.now();
             return data;
           }
         }
       } catch {
-        // 远端也不可用时使用本地兜底数据。
+        // COS 不可用时使用本地兜底数据。
       }
-    }
-    return this.cachedArchive || DOUJIN_ARCHIVE_DATA;
+      return this.cachedArchive || DOUJIN_ARCHIVE_DATA;
     })();
     try {
       return await this.archiveFetchPromise;
