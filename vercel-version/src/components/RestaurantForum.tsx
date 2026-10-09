@@ -910,8 +910,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     if (forumImages.length + files.length > 9) return onShowToast('一条帖子最多上传 9 张图片');
     setImageProcessing(true);
     try {
-      const converted: string[] = [];
-      for (const file of Array.from(files)) converted.push(await toForumWebp(file));
+      const converted = await Promise.all(Array.from(files).map((file) => toForumWebp(file)));
       setForumImages((current) => [...current, ...converted]);
     } catch (error) {
       onShowToast(error instanceof Error ? error.message : '图片转换失败');
@@ -995,25 +994,6 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
     onShowToast('羽毛笔已归还');
   };
 
-  const fetchLinkPreview = async (url: string): Promise<LinkShare | null> => {
-    const result = await api('linkPreview', { url });
-    const raw = result.preview as {
-      url?: string; platform?: string; tier?: 'A' | 'B' | 'C'; bvid?: string;
-      coverUrl?: string; title?: string; description?: string;
-    } | undefined;
-    if (!raw) return null;
-    return {
-      url: raw.url || url,
-      platform: raw.platform || 'web',
-      tier: raw.tier || 'C',
-      bvid: raw.bvid,
-      coverUrl: raw.coverUrl,
-      ogTitle: raw.title,
-      ogDesc: raw.description,
-      previewStatus: raw.coverUrl || raw.title || raw.description ? 'ready' : 'unavailable',
-    };
-  };
-
   const publish = async (event: React.FormEvent) => {
     event.preventDefault();
 
@@ -1024,7 +1004,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       return;
     }
 
-    // 采用初版流程：先抓取链接预览，再把封面与摘要随帖子一起持久化。
+    // 先发布链接，再由后台异步补抓预览，避免外站响应拖住发布按钮。
     if (composeCategory === 'links') {
       const authorName = nickname.trim() || '调查兵';
       const url = normalizeShareLink(linkUrl);
@@ -1033,11 +1013,7 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       }
       setPublishing(true);
       try {
-        let preview = linkPreview;
-        if (!preview) {
-          try { preview = await fetchLinkPreview(url); }
-          catch { /* 外站抓取失败时仍允许发布链接。 */ }
-        }
+        const preview = linkPreview;
         const imageUrls = await uploadForumImages(forumImages);
         const result = await api('forumPublish', {
           author: authorName,

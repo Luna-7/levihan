@@ -55,6 +55,7 @@ const AUTHORS_KEY = 'authors.json'; // 作者链接登记表（[{name,url,create
 const ANNOUNCEMENTS_KEY = 'announcements.json'; // 首页公告栏（公开读取、管理员写入）
 const ANNOUNCEMENT_DIR = 'announcements/';
 const PUSH_SUBSCRIPTIONS_KEY = 'push-subscriptions.json';
+const PUSH_SEND_TIMEOUT_MS = 2500;
 const ARTWORK_LIKES_KEY = 'artwork-likes.json'; // 插画集点赞记录（[{id, voters, likes}]）
 const SUPPORTERS_KEY = 'supporters.json'; // 支持墙（[{id,name,kind,order,visible}]）
 const GOODS_KEY = 'goods/manifest.json';
@@ -367,11 +368,19 @@ async function sendPushUpdate({ title, body, tag, url = '/', allowLong = false }
     const payload = JSON.stringify({ title, body: formatPushBody(body, allowLong), tag, url });
     const expired = new Set();
     await Promise.allSettled(subscriptions.map(async (subscription) => {
+      let timer;
       try {
-        await webpush.sendNotification(subscription, payload, { TTL: 86400 });
+        await Promise.race([
+          webpush.sendNotification(subscription, payload, { TTL: 86400 }),
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(Object.assign(new Error('push send timeout'), { code: 'PUSH_TIMEOUT' })), PUSH_SEND_TIMEOUT_MS);
+          }),
+        ]);
       } catch (err) {
         if (err && (err.statusCode === 404 || err.statusCode === 410)) expired.add(subscription.endpoint);
-        else console.error('[push] send failed', err && err.message);
+        else if (err && err.code !== 'PUSH_TIMEOUT') console.error('[push] send failed', err && err.message);
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     }));
     if (expired.size) await writePushSubscriptions(subscriptions.filter((item) => !expired.has(item.endpoint)));
@@ -1035,6 +1044,10 @@ function normalizeBook(raw) {
     coverFile: String(raw.coverFile || '').trim() || 'image01.webp',
   };
 
+  // 用户投稿记录归属，前台删除时由服务端再次校验，不能只依赖按钮隐藏。
+  const uid = String(raw.uid || '').trim();
+  if (uid) book.uid = uid;
+
   const text = String(raw.text || '').trim().slice(0, 2000);
   if (text) book.text = text;
 
@@ -1454,7 +1467,7 @@ async function publishArtworkDirect(payload) {
   const book = normalizeBook({
     id: `lh-${seq}`, titleZh: text || '同好插画集', text, titleJp: '', circle: author,
     authorUrl: homepage, category: '插画集', tags: ['同好投稿'], pages: files.length,
-    bookFolder: folder, coverFile: files[0], pageFiles: files, createdAt: now, updatedAt: now,
+    bookFolder: folder, coverFile: files[0], pageFiles: files, createdAt: now, updatedAt: now, uid,
   });
   books.push(book);
   await writeArchive(books);
@@ -1492,7 +1505,7 @@ async function reviewInbox(payload) {
       const now = new Date().toISOString();
       books.push(normalizeBook({ id:`lh-${seq}`, titleZh:item.title || item.text || '同好插画集', text:item.text,
         titleJp:'', circle:item.author, authorUrl:item.homepage, category:'插画集', tags:['同好投稿'], pages:item.files.length,
-        bookFolder:item.folder, coverFile:item.files[0], pageFiles:item.files, createdAt:now, updatedAt:now }));
+        bookFolder:item.folder, coverFile:item.files[0], pageFiles:item.files, createdAt:now, updatedAt:now, uid:item.userUid }));
       await writeArchive(books);
       await sendPushUpdate({
         title: '新图出锅',
@@ -1546,6 +1559,7 @@ const USER_ACTIONS = new Set([
   'novelDirectPublish', 'artworkDirectPublish', 'novelUpdate', 'novelCommentAdd',
   'novelBody',
   'artworkLike',
+  'artworkDelete',
   'submitScore',
   'inboxReplyList', 'inboxReplyRead',
 ]);
@@ -2325,6 +2339,28 @@ async function handle(action, payload) {
       return { ok: true, id, likes: Math.max(0, Number(record.likes) || 0), liked: give };
     }
 
+    case 'artworkDelete': {
+      const id = String(payload.id || '').trim();
+      if (!/^lh-[a-zA-Z0-9_-]+$/.test(id)) throw httpError('插画集参数无效', 400);
+      const uid = String(payload.__uid || '').trim();
+      const books = await readArchive();
+      const target = books.find((book) => book && book.id === id && book.category === '插画集');
+      if (!target) throw httpError('插画集不存在', 404);
+      if (!target.uid || target.uid !== uid) throw httpError('只能删除自己上传的插画集', 403);
+      const folder = String(target.bookFolder || id).replace(/^\/|\/$/g, '');
+      const keys = await listAllKeys(`${folder}/`);
+      let deletedObjects = 0;
+      for (let index = 0; index < keys.length; index += 1000) {
+        const chunk = keys.slice(index, index + 1000);
+        if (!chunk.length) continue;
+        await deleteMultipleObject({ Bucket: BUCKET, Region: REGION, Objects: chunk.map((Key) => ({ Key })) });
+        deletedObjects += chunk.length;
+      }
+      const next = books.filter((book) => book && book.id !== id);
+      await writeArchive(next);
+      return { ok: true, id, deletedObjects, books: next };
+    }
+
     case 'forumClaim': {
       const postId = String(payload.postId || '').trim();
       const claimedBy = String(payload.claimedBy || '').trim().slice(0, 40);
@@ -2570,6 +2606,7 @@ async function handle(action, payload) {
       const now = new Date().toISOString();
       if (replaced) {
         if (books[idx].createdAt) book.createdAt = books[idx].createdAt;
+        if (books[idx].uid && !book.uid) book.uid = books[idx].uid;
         books[idx] = book;
       } else {
         book.createdAt = now;

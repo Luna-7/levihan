@@ -48,7 +48,7 @@ async function callArtworkApi(payload: Record<string, unknown>, token?: string |
   const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
     method: 'POST', headers, body: JSON.stringify(payload),
   });
-  const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; items?: ArtworkLikeItem[]; likes?: number; liked?: boolean };
+  const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; items?: ArtworkLikeItem[]; likes?: number; liked?: boolean; books?: DoujinBookItem[] };
   if (!response.ok || !data.ok) throw new Error(data.error || '点赞操作失败，请稍后重试');
   return data;
 }
@@ -90,6 +90,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
   const [failedCovers, setFailedCovers] = useState<Set<string>>(new Set());
   const [artworkLikes, setArtworkLikes] = useState<Record<string, ArtworkLikeItem>>({});
   const [pendingArtworkLikes, setPendingArtworkLikes] = useState<Set<string>>(new Set());
+  const [pendingArtworkDeletes, setPendingArtworkDeletes] = useState<Set<string>>(new Set());
 
   // 当前打开分享卡片的本子（普通本与加密解析本共用）。
   const [shareCardBook, setShareCardBook] = useState<DoujinBookItem | null>(null);
@@ -263,6 +264,40 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       setArtworkLikes((current) => ({ ...current, [book.id]: previous }));
     } finally {
       setPendingArtworkLikes((current) => {
+        const next = new Set(current);
+        next.delete(book.id);
+        return next;
+      });
+    }
+  };
+
+  const handleArtworkDelete = async (book: DoujinBookItem) => {
+    if (pendingArtworkDeletes.has(book.id)) return;
+    if (!profile?.uid) {
+      onShowToast('请先登录账号再删除插画集');
+      useAppShellStore.getState().openLogin();
+      return;
+    }
+    if (book.uid !== profile.uid) {
+      onShowToast('只能删除自己上传的插画集');
+      return;
+    }
+    if (!window.confirm(`确定删除《${book.titleZh}》吗？图片也会一并删除，且无法恢复。`)) return;
+    const token = await getAccessToken();
+    if (!token) {
+      onShowToast('登录状态已失效，请重新登录');
+      useAppShellStore.getState().openLogin();
+      return;
+    }
+    setPendingArtworkDeletes((current) => new Set(current).add(book.id));
+    try {
+      const data = await callArtworkApi({ action: 'artworkDelete', id: book.id }, token);
+      setBooks(data.books || []);
+      onShowToast('插画集已删除');
+    } catch (error) {
+      onShowToast(error instanceof Error ? error.message : '删除失败，请稍后重试');
+    } finally {
+      setPendingArtworkDeletes((current) => {
         const next = new Set(current);
         next.delete(book.id);
         return next;
@@ -892,23 +927,41 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                 </div>
               </div>
 
-              {/* 底部信息：插画集提供可回退的点赞状态，点击卡片其它区域仍进入阅读器。 */}
-              <div className="pt-2.5 border-t border-dashed border-[#E0D5BE] flex items-center justify-between text-xs font-retro-jp text-[#8C7A68] whitespace-nowrap">
+              {/* 底部信息：点赞是插画集卡片的主要互动，删除只对上传者显示。 */}
+              <div className="pt-2.5 border-t border-dashed border-[#E0D5BE] flex items-center justify-between gap-2 text-xs font-retro-jp text-[#8C7A68]">
                 {isIllustrationCategory ? (
-                  <button
-                    type="button"
-                    aria-label={like.liked ? '取消点赞' : '点赞插画集'}
-                    aria-pressed={like.liked}
-                    disabled={pendingArtworkLikes.has(book.id)}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void handleArtworkLike(book);
-                    }}
-                    className={`inline-flex items-center gap-1 rounded-full px-2 py-1 transition-all active:scale-90 disabled:opacity-60 ${like.liked ? 'bg-[#FADBD8] text-[#C0392B]' : 'bg-[#F4EEDF] text-[#8C7A68] hover:bg-[#FADBD8] hover:text-[#C0392B]'}`}
-                  >
-                    <span aria-hidden="true">{like.liked ? '♥' : '♡'}</span>
-                    <span>{like.likes}</span>
-                  </button>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label={like.liked ? '取消点赞' : '点赞插画集'}
+                      aria-pressed={like.liked}
+                      aria-busy={pendingArtworkLikes.has(book.id)}
+                      disabled={pendingArtworkLikes.has(book.id)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleArtworkLike(book);
+                      }}
+                      className={`inline-flex min-h-11 items-center gap-2 rounded-sm border-2 px-3.5 font-bold transition-colors active:scale-95 disabled:cursor-wait disabled:opacity-60 ${like.liked ? 'border-[#C0392B] bg-[#FADBD8] text-[#A93226]' : 'border-[#B7791F] bg-[#FFF3CE] text-[#7A4E12] hover:bg-[#FADBD8] hover:text-[#A9321F]'}`}
+                    >
+                      <span aria-hidden="true" className="text-lg leading-none">{like.liked ? '♥' : '♡'}</span>
+                      <span>{like.liked ? '已赞' : '点赞'}</span>
+                      <span aria-label={`${like.likes} 个赞`} className="tabular-nums">{like.likes}</span>
+                    </button>
+                    {book.uid === profile?.uid && (
+                      <button
+                        type="button"
+                        aria-label={`删除《${book.titleZh}》`}
+                        disabled={pendingArtworkDeletes.has(book.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleArtworkDelete(book);
+                        }}
+                        className="min-h-11 px-2 text-[#A8321E] underline decoration-dotted underline-offset-2 hover:text-[#7A1F1F] disabled:opacity-60"
+                      >
+                        {pendingArtworkDeletes.has(book.id) ? '删除中' : '删除'}
+                      </button>
+                    )}
+                  </div>
                 ) : mode === 'main' && commentCount > 0 ? (
                   <span className="flex items-center gap-1 text-[#5B4636] font-medium">
                     <span>💬</span>

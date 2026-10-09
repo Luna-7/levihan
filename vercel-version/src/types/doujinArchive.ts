@@ -7,6 +7,7 @@ export interface DoujinBookItem {
   text?: string; // 插画集文本说明（可选）
   likes?: number; // 插画集点赞数
   liked?: boolean; // 当前登录用户是否已点赞
+  uid?: string; // 插画集上传者 uid，仅本人可删除
   circle: string; // 作者
   authorUrl?: string; // 作者主页外链（可选，如Pixiv等）
   createdAt?: string; // 归档加入时间（旧作品可能没有）
