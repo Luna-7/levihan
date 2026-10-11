@@ -388,9 +388,9 @@ export class COSService {
 
   /** 列表缩略图（420px，列表里每张只花几十 KB） */
   public getGoodsThumbUrl(file: string, width = 420): string {
-    // 列表缩略图已经随 Vercel 发布，避免每张卡片都回源 COS。
+    // 本地 WebP 缩略图保留 PNG 源图透明通道，避免 JPG 把透明区域拍成白底。
     const stem = file.replace(/^\//, '').replace(/\.[^.]+$/, '');
-    return `${GOODS_THUMB_BASE}/${encodeURIComponent(stem)}.jpg`;
+    return `${GOODS_THUMB_BASE}/${encodeURIComponent(stem)}.webp`;
   }
 
   /** 灯箱预览（1600px，够看清细节但不是原图） */
