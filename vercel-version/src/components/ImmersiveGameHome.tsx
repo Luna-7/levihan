@@ -15,7 +15,6 @@ const PotatoMarket = React.lazy(() => import('./PotatoMarket').then(m => ({ defa
 const ResourceHub = React.lazy(() => import('./ResourceHub').then(m => ({ default: m.ResourceHub })));
 import { soundManager } from '../utils/audio';
 import { GROUP_INFO } from '../data/initialData';
-import { UserEntry } from './UserEntry';
 import { UiSprite } from './UiSprite';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { useAppShellStore } from '../stores/appShellStore';
@@ -207,10 +206,6 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
               </button>
             </div>
 
-            {/* 右侧：登录按钮 */}
-            <div className="flex items-center shrink-0">
-              <UserEntry variant="pill" onShowToast={onShowToast} />
-            </div>
           </header>
         </div>
 

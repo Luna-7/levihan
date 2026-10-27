@@ -54,7 +54,8 @@ export default async function handler(request: IncomingMessage, response: Server
   const forwardedHost = String(request.headers['x-forwarded-host'] || request.headers.host || '');
   const forwardedProto = String(request.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
   const origin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : 'https://levihan.asia';
-  const target = `${origin}/?book=${encodeURIComponent(id)}`;
+  const shareUrl = `${origin}/book/${encodeURIComponent(id)}`;
+  const target = `${origin}/?book=${encodeURIComponent(id)}&open=1`;
   const title = book ? `《${String(book.titleZh || id)}》` : '利韩典藏';
   const description = book
     ? `作者：${String(book.circle || '未知')} · ${Number(book.pages) || 0} 页 · 利韩典藏`
@@ -63,7 +64,7 @@ export default async function handler(request: IncomingMessage, response: Server
 
   response.statusCode = 200;
   response.setHeader('Content-Type', 'text/html; charset=utf-8');
-  response.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
+  response.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
   response.setHeader('X-Robots-Tag', 'noindex, nofollow');
   response.end(`<!doctype html>
 <html lang="zh-CN">
@@ -77,12 +78,12 @@ export default async function handler(request: IncomingMessage, response: Server
   <meta property="og:title" content="${escapeHtml(title)}">
   <meta property="og:description" content="${escapeHtml(description)}">
   <meta property="og:image" content="${escapeHtml(image)}">
-  <meta property="og:url" content="${escapeHtml(target)}">
+<meta property="og:url" content="${escapeHtml(shareUrl)}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${escapeHtml(title)}">
   <meta name="twitter:description" content="${escapeHtml(description)}">
   <meta name="twitter:image" content="${escapeHtml(image)}">
-  <link rel="canonical" href="${escapeHtml(target)}">
+  <link rel="canonical" href="${escapeHtml(shareUrl)}">
   <meta http-equiv="refresh" content="0;url=${escapeHtml(target)}">
 </head>
 <body><p><a href="${escapeHtml(target)}">打开${escapeHtml(title)}</a></p></body>

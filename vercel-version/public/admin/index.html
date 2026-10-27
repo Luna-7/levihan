@@ -4,7 +4,7 @@
 <meta charset="utf-8" data-page-node-id="Y8DpNY2LxZD2mqG6YzTM9L">
 <meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="WJCacGGq8uacjSIYi7e77s">
 <meta name="robots" content="noindex,nofollow,noarchive" data-page-node-id="nzdVfmMXyOVAFFjrcvguFU">
-<title>利韩土豆仓 · 管理工作台</title>
+<title>利韩土豆仓管理工作台</title>
 <script>
   // 管理域名不应由主站 PWA 接管。清除历史遗留的 Service Worker 与 Cache Storage，
   // 防止旧主站的 navigateFallback 把管理台替换成过期首页。
@@ -488,7 +488,7 @@
     <div class="panel" data-page-node-id="4A4oZEMRDmXJAGBs9aIf1V">
       <div style="text-align:center;margin-bottom:16px" data-page-node-id="GOEaDQMCAzhEogbHePMoIY">
         <div class="px" style="font-size:15px;color:var(--green-2)" data-page-node-id="QQBC1SetpGYFYHQWsqcU9M">🥔</div>
-        <h1 style="margin-top:10px" data-page-node-id="FGK8PMfNVTPHHUuCbEiNDO">利韩土豆仓 · 管理工作台</h1>
+        <h1 style="margin-top:10px" data-page-node-id="FGK8PMfNVTPHHUuCbEiNDO">利韩土豆仓管理工作台</h1>
         <p class="muted" style="margin:6px 0 0" data-page-node-id="wbmBiCS98Prc6FCWEqoO4U">仅限管理员使用</p>
       </div>
       <div class="f" data-page-node-id="KPjnfjnOwk8aNbTsuv7eXS">
@@ -508,13 +508,7 @@
 
     <nav class="admin-tabs" aria-label="管理台功能切换">
       <button type="button" class="admin-tab active" data-admin-tab="manga">📚 漫画上传</button>
-      <button type="button" class="admin-tab" data-admin-tab="novel">📮 投递管理</button>
       <button type="button" class="admin-tab" data-admin-tab="announcement">📢 公告管理</button>
-      <button type="button" class="admin-tab" data-admin-tab="goods">🖼 周边素材</button>
-      <button type="button" class="admin-tab" data-admin-tab="support">🤝 支持</button>
-      <button type="button" class="admin-tab" data-admin-tab="inbox">📬 调查报告收件箱 <span id="inbox-badge" class="hide" style="display:inline-flex;min-width:19px;height:19px;padding:0 5px;align-items:center;justify-content:center;border-radius:10px;background:#C6452D;color:#fff;font-size:11px">0</span></button>
-      <button type="button" class="admin-tab" data-admin-tab="authors">📇 作者登记</button>
-      <button type="button" class="admin-tab" data-admin-tab="forum">🌳 餐厅论坛</button>
       <div class="admin-sidebar-footer">
         <button class="btn-sm" id="btn-logout">退出登录</button>
         <div class="muted" id="env-info">正在连接…</div>
@@ -533,7 +527,7 @@
     <div class="admin-page-head hide" data-admin-page="inbox"><h2>📬 调查报告收件箱</h2><div class="muted">接收并处理前台「调查报告呈递」提交的所有来信与报告。</div></div>
     <div class="panel hide" id="inbox-panel" data-admin-page="inbox">
       <div class="spread" style="margin-bottom:12px">
-        <h2 style="margin:0">📬 调查报告呈递 · 收件箱</h2>
+        <h2 style="margin:0">📬 调查报告呈递收件箱</h2>
         <button class="btn-sm" id="inbox-refresh">↻ 刷新收件箱</button>
       </div>
       <div class="muted" id="inbox-status">登录后点击刷新，接收前台「调查报告呈递」提交的来信与报告。</div>
@@ -546,7 +540,6 @@
         <h2 style="margin:0">📢 首页公告栏</h2>
         <button class="btn-sm" id="an-reload">↻ 刷新公告</button>
       </div>
-      <details open style="margin-bottom:16px"><summary>待审核企划</summary><div id="an-review"><p class="muted">暂无待审核企划</p></div></details>
       <div id="an-list"><p class="muted">登录后自动载入公告。</p></div>
       <div class="grid announcement-form" style="margin-top:16px">
         <div class="f an-field-tag">
@@ -893,7 +886,7 @@
           <div class="muted author-link-hint" id="author-link-hint" aria-live="polite"></div>
         </div>
         <div class="f span2" data-page-node-id="803zaFTDA1KllTCvk5I9C4">
-          <label for="f-tags" data-page-node-id="LYVSYwayIehtAETXJzxeTT">标签 <span class="req">*</span> <span class="tag" data-page-node-id="xF1zMWJ1zbFWiYR01tozGP">点 ▾ 选已有 · 输入 # 回车新建</span></label>
+          <label for="f-tags" data-page-node-id="LYVSYwayIehtAETXJzxeTT">标签 <span class="req">*</span> <span class="tag" data-page-node-id="xF1zMWJ1zbFWiYR01tozGP">点 ▾ 选已有，输入 # 回车新建</span></label>
           <div class="tagbox" id="tagbox">
             <div class="tagchips" id="tag-chips"></div>
             <input type="text" id="f-tags" class="taginput" autocomplete="off" placeholder="输入 #新标签 后回车" data-page-node-id="9AceTthj7UueDuzWf8puaJ">
@@ -974,7 +967,7 @@
            这同时兜住了"PDF 第一页其实是正文"的情况。 -->
       <div id="secure-cover-box" class="hide" style="margin-top:14px;border:1.5px dashed var(--line);border-radius:10px;padding:14px;background:var(--card)">
         <div class="spread" style="margin-bottom:10px">
-          <label style="margin:0;font-weight:700">🖼 敏感本封面 <span class="tag">自动生成 · 明文 · 前台卡片显示</span></label>
+          <label style="margin:0;font-weight:700">🖼 敏感本封面 <span class="tag">自动生成，明文，前台卡片显示</span></label>
           <button class="btn-sm" id="secure-cover-toggle" type="button" title="改页码 / 换一张图 / 裁切">⚙ 调整 ▾</button>
         </div>
 
@@ -1001,7 +994,7 @@
 
           <div id="secure-cover-drop" class="drop" style="padding:14px 10px">
             <div style="font-weight:700;color:var(--ink)">换一张图：拖到这里，或点击选择</div>
-            <div class="muted" style="margin-top:4px">jpg / png / webp · 建议竖版 2:3（选后可用 ✂ 裁切）· <b>该图公开可访问</b></div>
+            <div class="muted" style="margin-top:4px">jpg / png / webp，建议竖版 2:3（选后可用 ✂ 裁切）。<b>该图公开可访问</b></div>
             <input type="file" id="secure-cover-picker" accept="image/*" class="hide">
           </div>
 
@@ -1088,7 +1081,7 @@
         </div>
         <div class="f span2 nv-field-body" data-page-node-id="nvpanel00000000000000000035">
           <div class="row" style="justify-content:space-between">
-            <label for="nv-body" data-page-node-id="nvpanel00000000000000000036">正文 <span class="req">*</span> <span class="tag" data-page-node-id="nvpanel00000000000000000037">段落之间空一行，站点按空行分段 · 上限 50 万字</span></label>
+            <label for="nv-body" data-page-node-id="nvpanel00000000000000000036">正文 <span class="req">*</span> <span class="tag" data-page-node-id="nvpanel00000000000000000037">段落之间空一行，站点按空行分段，上限 50 万字</span></label>
             <button type="button" class="btn-sm" id="btn-nv-import-docx">📄 导入 Word / 文本</button>
           </div>
           <textarea id="nv-body" rows="18" placeholder="粘贴正文，或点上方「导入 Word / 文本」选择 .docx / .txt 自动转文本…" style="font-family:var(--font-code),var(--font-ui);min-height:320px" data-page-node-id="nvpanel00000000000000000038"></textarea>
@@ -1178,10 +1171,7 @@
   </div>
 </div>
 
-<!-- 工具箱依赖：jsPDF（加密 PDF）/ pdf.js（拆页 + 敏感本封面）/ JSZip（打包）。
-     全部本地化到 ./vendor/ —— 这几个库原本从第三方 CDN 现拉，实测 pdf.min.js 单文件
-     就要 2.7～3s、worker 文件约 1MB 更慢，手机网络下经常超过封面生成的等待窗口，
-     表现为「PDF 封面一直卡在生成中」。改为同源托管后走 CloudBase CDN，从根上消除。 -->
+<!-- 工具箱依赖：jsPDF（加密 PDF）、pdf.js（拆页与封面）、JSZip（打包），从同源静态资源加载。 -->
 <script src="./vendor/jspdf.umd.min.js"></script>
 <script src="./vendor/pdf.min.js"></script>
 <script src="./vendor/jszip.min.js"></script>
@@ -1189,15 +1179,20 @@
 <script src="./vendor/mammoth.browser.min.js"></script>
 <script src="./pixiv-artists.js"></script>
 <script src="./tools.js"></script>
-<!-- cos-js-sdk-v5：浏览器直传 COS 用。加载失败不影响页面，secure-upload.js 会自动降级为中转上传 -->
+<!-- cos-js-sdk-v5：漫画文件直传 COS 所需；加载失败时上传会提示错误。 -->
 <script src="./vendor/cos-js-sdk-v5.min.js"></script>
 <script src="./secure-upload.js"></script>
 <script>
 'use strict';
 /* ============ 配置 ============ */
-var FN_URL  = 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/admin-upload';
+var FN_URL  = location.origin === 'https://admin.levihan.asia'
+  ? 'https://levihan.asia/api/admin-content'
+  : '/api/admin-content';
 var CDN     = 'https://levihan-1325571558.cos-website.ap-nanjing.myqcloud.com';
-// 后台统一入口：admin.levihan.asia（2026-09-21 起；旧 CloudBase 托管域名访问量配额耗尽已弃用）
+var COS_BUCKET = 'levihan-1325571558';
+var COS_REGION = 'ap-nanjing';
+var IMAGE_EXTENSIONS = { 'image/webp':'webp', 'image/jpeg':'jpg', 'image/png':'png', 'image/gif':'gif', 'image/avif':'avif' };
+// 管理台统一入口：admin.levihan.asia
 var SITE    = 'https://admin.levihan.asia';
 var TOKEN_KEY = 'levihan-admin-token';
 var LOCAL_PREVIEW = location.protocol === 'file:';
@@ -1212,9 +1207,12 @@ var files = [];          // { file, url, status, err, name }
 var envMax = MAX_FILE;
 var announcements = [];
 var anEditingId = '';
-var anImageBase64 = '';
+var anImageBlob = null;
 var anImageContentType = 'image/webp';
 var anExistingImage = '';
+var anImagePreviewUrl = '';
+var cosClients = Object.create(null);
+var cosCredentials = Object.create(null);
 var supporters = [];
 var supporterEditingId = '';
 var goodsItems = [];
@@ -1343,7 +1341,7 @@ function suggestNovelAuthorUrl(){
 }
 var activeAdminPage = 'manga';
 function switchAdminPage(page, updateHash){
-  var allowed = ['manga','novel','announcement','goods','support','inbox','authors','forum','toolkit'];
+  var allowed = ['manga','announcement','toolkit'];
   if (allowed.indexOf(page) < 0) page = 'manga';
   // 文件工具箱已并入「漫画上传」页的功能区下拉，#admin-toolkit 仍可直达
   var sub = 'upload';
@@ -1438,30 +1436,14 @@ function enterMain(){
   $('view-main').classList.remove('hide');
   if (LOCAL_PREVIEW) {
     $('btn-logout').classList.add('hide');
-    $('env-info').textContent = '👀 本地预览模式 · 正在读取公开归档与图片状态；上传和发布需在正式站点登录。';
+    $('env-info').textContent = '本地预览模式：上传与公告维护请在正式站点登录。';
     loadBooks();
-    $('nv-list').innerHTML = '<p class="muted">本地预览不加载云端小说列表。</p>';
-    $('author-list').innerHTML = '<p class="muted">本地预览不加载云端登记表。</p>';
-    $('support-list').innerHTML = '<p class="muted">本地预览不加载云端支持墙。</p>';
-    $('inbox-contacts').innerHTML = '<p class="muted">本地预览不加载云端收件箱。</p>';
-    loadGoods();
-    $('btn-nv-save').disabled = true;
     $('btn-reload').disabled = false;
-    $('btn-nv-reload').disabled = true;
-    $('author-add').disabled = true;
-    $('author-export').disabled = true;
-    $('support-save').disabled = true;
   } else {
     refreshEnv();
     loadAnnouncements();
-    loadGoods();
-    loadSupporters();
     loadBooks();
-    loadNovels();
     loadAuthorLib();
-    loadInbox();
-    loadRecsAdmin();
-    loadForumAdmin();
   }
   syncButtons();   // 初始态：没填 ID → 两个按钮都灰；填了 ID → 「仅更新信息」可用
 }
@@ -1474,7 +1456,7 @@ function renderAnnouncements(){
     return '<div class="notice-row">' +
       (item.image ? '<img src="' + esc(item.image) + '" alt="">' : '') +
       '<div class="info"><div><span class="chip">' + esc(item.tag) + '</span> <b>' + esc(item.title) + '</b></div>' +
-      '<div class="muted">' + esc(item.time || '未填写时间') + ' · ' + esc(item.author) + (item.link ? ' · 已设置跳转' : '') + '</div></div>' +
+      '<div class="muted">' + esc(item.time || '未填写时间') + '，' + esc(item.author) + (item.link ? '，已设置跳转' : '') + '</div></div>' +
       '<button class="btn-sm" data-an-edit="' + esc(item.id) + '">编辑</button>' +
       '<button class="btn-sm btn-danger" data-an-del="' + esc(item.id) + '">删除</button></div>';
   }).join('');
@@ -1485,7 +1467,9 @@ function loadAnnouncements(){
     .catch(function(err){ if (onAuthFail(err)) return; $('an-list').innerHTML = '<p class="muted">读取失败：' + esc(err.message || err) + '</p>'; });
 }
 function resetAnnouncementForm(){
-  anEditingId = ''; anImageBase64 = ''; anImageContentType = 'image/webp'; anExistingImage = '';
+  anEditingId = ''; anImageBlob = null; anImageContentType = 'image/webp'; anExistingImage = '';
+  if (anImagePreviewUrl) URL.revokeObjectURL(anImagePreviewUrl);
+  anImagePreviewUrl = '';
   ['an-tag','an-title','an-time','an-author','an-link','an-description','an-image'].forEach(function(id){ $(id).value = ''; });
   $('an-image-preview').src = ''; $('an-image-preview').classList.add('hide');
   $('an-image-remove').classList.add('hide'); $('an-image-state').textContent = '未设置图片';
@@ -1494,14 +1478,6 @@ function resetAnnouncementForm(){
 function supportedAnnouncementImageType(type){
   type = String(type || '').toLowerCase().split(';')[0];
   return /^image\/(?:webp|jpeg|png|gif|avif)$/.test(type) ? type : '';
-}
-function imageDataUrl(blob){
-  return new Promise(function(resolve, reject){
-    var reader = new FileReader();
-    reader.onload = function(){ resolve(String(reader.result || '')); };
-    reader.onerror = function(){ reject(new Error('图片读取失败。')); };
-    reader.readAsDataURL(blob);
-  });
 }
 function imageTypeFromUrl(url){
   var match = String(url || '').split('?')[0].match(/\.(webp|jpe?g|png|gif|avif)$/i);
@@ -1513,19 +1489,12 @@ function convertAnnouncementImage(file){
   if (!file || !originalType) return Promise.reject(new Error('请选择 JPG、PNG、GIF、WebP 或 AVIF 图片。'));
   return new Promise(function(resolve, reject){
     var img = new Image(); var url = URL.createObjectURL(file);
-    function resolveOriginal(){
-      imageDataUrl(file).then(function(dataUrl){ resolve({ dataUrl:dataUrl, mime:originalType, fallback:true }); }).catch(reject);
-    }
-    function resolveJpeg(canvas){
-      try {
-        var jpeg = canvas.toDataURL('image/jpeg', .86);
-        if (jpeg.indexOf('data:image/jpeg,') === 0) { resolve({ dataUrl:jpeg, mime:'image/jpeg', fallback:true }); return; }
-      } catch(e) { /* fall through to original */ }
-      resolveOriginal();
+    function finish(blob, mime, fallback){
+      URL.revokeObjectURL(url);
+      resolve({ blob:blob, mime:mime, fallback:fallback });
     }
     img.onload = function(){
       try {
-        // 不裁切、不强制比例；仅限制超大图的长边，避免浏览器画布和接口请求过大。
         var maxEdge = 2400, scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
         var width = Math.max(1, Math.round(img.naturalWidth * scale));
         var height = Math.max(1, Math.round(img.naturalHeight * scale));
@@ -1533,20 +1502,18 @@ function convertAnnouncementImage(file){
         var ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('当前浏览器无法处理图片。');
         ctx.drawImage(img, 0, 0, width, height);
-        URL.revokeObjectURL(url);
-        function finishWebp(data){
-          if (data && data.indexOf('data:image/webp,') === 0) { resolve({ dataUrl:data, mime:'image/webp', fallback:false }); return true; }
-          // 老浏览器通常会把不支持的 WebP 请求静默输出为 PNG；此时保留原图，避免错误标记内容类型。
-          if (file.size <= MAX_FILE) { resolveOriginal(); return true; }
-          resolveJpeg(canvas); return true;
-        }
         if (typeof canvas.toBlob === 'function') {
           canvas.toBlob(function(blob){
-            if (blob && blob.type === 'image/webp') { imageDataUrl(blob).then(function(data){ finishWebp(data); }).catch(reject); return; }
-            finishWebp('');
+            if (blob && blob.type === 'image/webp') { finish(blob, 'image/webp', false); return; }
+            if (file.size <= MAX_FILE) { finish(file, originalType, true); return; }
+            canvas.toBlob(function(jpeg){
+              if (jpeg && jpeg.type === 'image/jpeg') finish(jpeg, 'image/jpeg', true);
+              else reject(new Error('图片转换失败。'));
+            }, 'image/jpeg', .86);
           }, 'image/webp', .86);
         } else {
-          finishWebp(canvas.toDataURL('image/webp', .86));
+          if (file.size <= MAX_FILE) finish(file, originalType, true);
+          else reject(new Error('当前浏览器无法压缩图片，请换用支持 WebP 的浏览器。'));
         }
       } catch(e) { URL.revokeObjectURL(url); reject(e); }
     };
@@ -1558,24 +1525,34 @@ function setAnnouncementImage(file){
   if (!file) return;
   show($('an-msg'),'info','正在转换为 WebP…');
   convertAnnouncementImage(file).then(function(result){
-    anImageBase64 = result.dataUrl.split(',')[1] || ''; anImageContentType = result.mime;
-    anExistingImage = ''; $('an-image-preview').src = result.dataUrl;
+    if (result.blob.size > MAX_FILE) throw new Error('图片转换后仍超过 ' + fmtSize(MAX_FILE) + '。');
+    anImageBlob = result.blob; anImageContentType = result.mime;
+    anExistingImage = '';
+    if (anImagePreviewUrl) URL.revokeObjectURL(anImagePreviewUrl);
+    anImagePreviewUrl = URL.createObjectURL(result.blob);
+    $('an-image-preview').src = anImagePreviewUrl;
     $('an-image-preview').alt = '公告图片预览'; $('an-image-preview').classList.remove('hide'); $('an-image-remove').classList.remove('hide');
     $('an-image-state').textContent = result.fallback ? '已保留原图格式' : '已转换为 WebP';
     if (result.fallback) show($('an-msg'),'ok','当前浏览器不支持 WebP，已保留原图格式继续上传。'); else hide($('an-msg'));
   }).catch(function(err){ show($('an-msg'),'err',err.message || String(err)); });
 }
 function clearAnnouncementImage(){
-  anImageBase64 = ''; anImageContentType = 'image/webp'; anExistingImage = '';
+  anImageBlob = null; anImageContentType = 'image/webp'; anExistingImage = '';
+  if (anImagePreviewUrl) URL.revokeObjectURL(anImagePreviewUrl);
+  anImagePreviewUrl = '';
   $('an-image').value = ''; $('an-image-preview').src = ''; $('an-image-preview').classList.add('hide');
   $('an-image-remove').classList.add('hide'); $('an-image-state').textContent = '未设置图片';
 }
 function saveAnnouncement(){
-  var item = { id: anEditingId || undefined, tag:$('an-tag').value.trim(), title:$('an-title').value.trim(),
+  var item = { id: anEditingId || ('notice-' + Date.now()), tag:$('an-tag').value.trim(), title:$('an-title').value.trim(),
     time:$('an-time').value, author:$('an-author').value.trim(), link:$('an-link').value.trim(), description:$('an-description').value.trim(), image:anExistingImage };
   if (!item.tag || !item.title || !item.author) { show($('an-msg'),'err','请填写标签、标题和发布人。'); return; }
   var btn = $('an-save'); btn.disabled = true; hide($('an-msg'));
-  api({ action:'announcementSave', item:item, imageBase64:anImageBase64, imageContentType:anImageContentType }).then(function(d){
+  var imageKey = 'announcements/' + item.id + '.' + (IMAGE_EXTENSIONS[anImageContentType] || 'webp');
+  var upload = anImageBlob
+    ? uploadToCos('announcements/', imageKey, anImageBlob, anImageContentType).then(function(){ item.image = CDN + '/' + imageKey + '?v=' + Date.now(); })
+    : Promise.resolve();
+  upload.then(function(){ return api({ action:'announcementSave', item:item }); }).then(function(d){
     announcements = d.items || []; renderAnnouncements(); resetAnnouncementForm();
     show($('an-msg'),'ok','✓ 公告已保存，主站公告栏会自动读取。');
   }).catch(function(err){ if (onAuthFail(err)) return; show($('an-msg'),'err',err.message || String(err)); })
@@ -1605,12 +1582,14 @@ $('announcement-panel').addEventListener('paste', function(e){
 });
 $('an-save').addEventListener('click', saveAnnouncement);
 $('an-clear').addEventListener('click', resetAnnouncementForm);
-$('an-reload').addEventListener('click', function(){ loadAnnouncements(); loadInbox(); });
+$('an-reload').addEventListener('click', loadAnnouncements);
 $('an-list').addEventListener('click', function(e){
   var edit = e.target.closest('[data-an-edit]'), del = e.target.closest('[data-an-del]');
   if (edit) {
     var item = announcements.find(function(x){ return x.id === edit.getAttribute('data-an-edit'); }); if (!item) return;
-    anEditingId = item.id; anExistingImage = item.image || ''; anImageBase64 = ''; anImageContentType = imageTypeFromUrl(item.image);
+    anEditingId = item.id; anExistingImage = item.image || ''; anImageBlob = null; anImageContentType = imageTypeFromUrl(item.image);
+    if (anImagePreviewUrl) URL.revokeObjectURL(anImagePreviewUrl);
+    anImagePreviewUrl = '';
     $('an-tag').value=item.tag||''; $('an-title').value=item.title||''; $('an-time').value=item.time||'';
     $('an-author').value=item.author||''; $('an-link').value=item.link||''; $('an-description').value=item.description||'';
     $('an-image-preview').src=item.image||''; $('an-image-preview').classList.toggle('hide',!item.image);
@@ -1772,8 +1751,8 @@ function renderSupporters(){
     var symbol = SUPPORT_SYMBOLS[item.kind] || '✦';
     return '<div class="notice-row">' +
       '<div class="info"><b>' + symbol + ' ' + esc(item.name) + '</b>' +
-      '<div class="muted">' + esc(SUPPORT_LABELS[item.kind] || '支持') + ' · 排序 ' + Number(item.order || 0) +
-      (item.visible === false ? ' · 已隐藏' : ' · 前台展示') + '</div></div>' +
+      '<div class="muted">' + esc(SUPPORT_LABELS[item.kind] || '支持') + '，排序 ' + Number(item.order || 0) +
+      (item.visible === false ? '，已隐藏' : '，前台展示') + '</div></div>' +
       '<button class="btn-sm" data-support-edit="' + esc(item.id) + '">编辑</button>' +
       '<button class="btn-sm btn-danger" data-support-del="' + esc(item.id) + '">删除</button></div>';
   }).join('');
@@ -1834,10 +1813,51 @@ $('support-list').addEventListener('click', function(e){
 
 function refreshEnv(){
   api({ action:'status' }).then(function(d){
+    if (!d.configured) throw new Error('Vercel 环境变量未配置。');
     envMax = d.maxFileBytes || MAX_FILE;
-    $('env-info').textContent = '✓ 已连接 · 存储桶 ' + d.bucket + '（' + d.region + '）· 单张上限 ' + fmtSize(envMax);
+    $('env-info').textContent = '✓ Vercel 管理接口可用，COS 配置 ' + d.bucket + '（' + d.region + '），单张上限 ' + fmtSize(envMax);
   }).catch(function(err){
     $('env-info').textContent = '⚠ 无法连接上传服务：' + (err.message || err);
+  });
+}
+
+function getCosCredential(prefix){
+  var cached = cosCredentials[prefix];
+  if (cached && cached.expiredTime - Math.floor(Date.now()/1000) > 60) return Promise.resolve(cached);
+  return api({ action:'cosCredential', prefix:prefix }).then(function(data){
+    var raw = data.credentials || data;
+    var credential = {
+      tmpSecretId:raw.tmpSecretId || raw.TmpSecretId,
+      tmpSecretKey:raw.tmpSecretKey || raw.TmpSecretKey,
+      sessionToken:raw.sessionToken || raw.SessionToken || raw.Token,
+      startTime:raw.startTime || raw.StartTime || Math.floor(Date.now()/1000),
+      expiredTime:raw.expiredTime || raw.ExpiredTime
+    };
+    if (!credential.tmpSecretId || !credential.tmpSecretKey || !credential.sessionToken || !credential.expiredTime) throw new Error('COS 临时凭证不完整。');
+    cosCredentials[prefix] = credential;
+    return credential;
+  });
+}
+function getCosClient(prefix){
+  if (cosClients[prefix]) return cosClients[prefix];
+  if (typeof window.COS !== 'function') throw new Error('COS 上传组件未加载，请刷新页面后重试。');
+  cosClients[prefix] = new window.COS({ getAuthorization:function(options, callback){
+    getCosCredential(prefix).then(function(credential){
+      callback({ TmpSecretId:credential.tmpSecretId, TmpSecretKey:credential.tmpSecretKey,
+        XCosSecurityToken:credential.sessionToken, StartTime:credential.startTime, ExpiredTime:credential.expiredTime });
+    }).catch(function(error){ callback(error); });
+  }});
+  return cosClients[prefix];
+}
+function uploadToCos(prefix, key, body, contentType, onProgress){
+  if (!key || key.indexOf(prefix) !== 0 || key.indexOf('..') >= 0) return Promise.reject(new Error('COS 上传路径无效。'));
+  var client;
+  try { client = getCosClient(prefix); } catch(error) { return Promise.reject(error); }
+  return new Promise(function(resolve, reject){
+    client.putObject({ Bucket:COS_BUCKET, Region:COS_REGION, Key:key, Body:body,
+      ContentType:contentType || 'application/octet-stream', CacheControl:'public, max-age=31536000',
+      onProgress:function(info){ if (typeof onProgress === 'function') onProgress(info); }
+    }, function(error, data){ if (error) reject(error); else resolve(data); });
   });
 }
 
@@ -1885,13 +1905,12 @@ function loadBooks(){
           '<span class="t">' + esc(b.titleZh) + '</span>' +
           (b.secure ? '<span class="tag" style="background:#7A1F1F;color:#F6E7C1;border-color:#7A1F1F">🔒 含有敏感元素</span>' : '') +
           '</div>' +
-          '<div class="muted">' + esc(b.circle || '—') + ' · ' + (b.pages || 0) + ' 页' +
-            (b.tags && b.tags.length ? ' · ' + b.tags.map(esc).join(' / ') : '') + '</div>' +
+          '<div class="muted">' + esc(b.circle || '—') + '，' + (b.pages || 0) + ' 页' +
+            (b.tags && b.tags.length ? '，' + b.tags.map(esc).join(' / ') : '') + '</div>' +
           '<span class="bk-image-status" data-bk-cover-status>图片连接中…</span>' +
         '</div>' +
         '<button class="btn-sm" data-edit="' + esc(b.id) + '">编辑信息</button>' +
         '<button class="btn-sm" data-edit-images="' + esc(b.id) + '">编辑图片</button>' +
-        '<button class="btn-sm btn-danger" data-del="' + esc(b.id) + '">删除</button>' +
       '</div>';
     }).join('');
     bindBookImageStatus(box);
@@ -1920,8 +1939,8 @@ function renderArtAdminList(){
   box.innerHTML = items.map(function(b){
     var cover = CDN + '/' + (b.bookFolder || b.id) + '/' + (b.coverFile || 'image01.webp');
     return '<div class="notice-row artwork-admin-card"><img src="' + esc(cover) + '" alt="" loading="lazy" onerror="this.style.opacity=.25">' +
-      '<div class="info"><b>作者：' + esc(b.circle || '未填写创作者') + '</b><div>' + esc(b.text || b.titleZh || '暂无文本') + '</div><div class="muted">标签：' + esc((b.tags || []).join(' / ') || '暂无') + ' · ' + (b.pages || 0) + ' 张' +
-      (b.authorUrl ? ' · 已设置主页' : '') + '</div><div class="muted">' + esc(b.id) + '</div></div>' +
+      '<div class="info"><b>作者：' + esc(b.circle || '未填写创作者') + '</b><div>' + esc(b.text || b.titleZh || '暂无文本') + '</div><div class="muted">标签：' + esc((b.tags || []).join(' / ') || '暂无') + '，' + (b.pages || 0) + ' 张' +
+      (b.authorUrl ? '，已设置主页' : '') + '</div><div class="muted">' + esc(b.id) + '</div></div>' +
       '<button class="btn-sm" data-art-admin-edit="' + esc(b.id) + '">编辑</button>' +
       '<button class="btn-sm btn-danger" data-art-admin-del="' + esc(b.id) + '">删除</button></div>';
   }).join('');
@@ -2195,7 +2214,7 @@ function novelAuthorLink(n){
 
 /** 单张小说卡：结构与配色照前台 NovelModule 的小说卡走
     （徽章行 / 标题 / 作者-字数-更新字段块 / #标签 / ⚠预警 / 作者说 / 底栏）。
-    只有「ID 角标」和底栏的「编辑·删除」是后台独有的，前台没有这两样。 */
+    只有「ID 角标」和底栏的「编辑、删除」是后台独有的，前台没有这两样。 */
 function novelCardHTML(n){
   var h = '<div class="nv-card' + (n.id === nvEditingId ? ' editing' : '') + '">';
   h += '<div class="nv-top">' +
@@ -3014,7 +3033,7 @@ function renderFiles(){
   refreshAutoCover();   // 列表变了 → 自动封面预览跟着变（非敏感模式 / 源未变时内部直接返回）
   var box = $('files');
   if (!files.length) { box.innerHTML = ''; $('files-count').textContent = '未选择'; syncButtons(); return; }
-  $('files-count').textContent = files.length + ' 张 · 合计 ' + fmtSize(files.reduce(function(s,f){ return s + f.file.size; }, 0));
+  $('files-count').textContent = files.length + ' 张，合计 ' + fmtSize(files.reduce(function(s,f){ return s + f.file.size; }, 0));
   box.innerHTML = files.map(function(f, i){
     var badge = f.status === 'done' ? '✓' : f.status === 'busy' ? (f.pct || 0) + '%' : f.status === 'err' ? '✗' :
                 f.status === 'skip' ? '—' : (i + 1);
@@ -3192,7 +3211,7 @@ function renderReviewItems(items, container, label){
     var detail=item.body||item.description||item.reason||'';
     var previews=Array.isArray(item.files)&&item.folder?'<div class="row" style="gap:6px;margin-top:8px;overflow-x:auto">'+item.files.slice(0,8).map(function(name){return '<img src="'+esc(CDN+'/'+item.folder+'/'+name)+'" alt="投稿预览" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--rule)">';}).join('')+'</div>':'';
     var approveLabel = item.type === 'announcement' ? '审核通过并显示' : '通过并收录';
-    return '<div class="notice-row" data-inbox-id="'+esc(item._id)+'"><div class="info"><b>'+esc(kind+' · '+(item.title||'未命名'))+'</b><div class="muted">提交人：'+esc(item.author||'匿名')+(item.email?' · '+esc(item.email):'')+(item.homepage?' · '+esc(item.homepage):'')+'</div>'+previews+(detail?'<details><summary>查看内容</summary><pre style="white-space:pre-wrap">'+esc(detail)+'</pre></details>':'')+'</div><button class="btn-sm btn-gold" data-review="approve">'+approveLabel+'</button><button class="btn-sm btn-danger" data-review="reject">拒绝</button></div>';
+    return '<div class="notice-row" data-inbox-id="'+esc(item._id)+'"><div class="info"><b>'+esc(kind+'，'+(item.title||'未命名'))+'</b><div class="muted">提交人：'+esc(item.author||'匿名')+(item.email?'，'+esc(item.email):'')+(item.homepage?'，'+esc(item.homepage):'')+'</div>'+previews+(detail?'<details><summary>查看内容</summary><pre style="white-space:pre-wrap">'+esc(detail)+'</pre></details>':'')+'</div><button class="btn-sm btn-gold" data-review="approve">'+approveLabel+'</button><button class="btn-sm btn-danger" data-review="reject">拒绝</button></div>';
   }).join('');
 }
 function renderInboxReports(items, container){
@@ -3281,7 +3300,7 @@ function loadRecsAdmin(){
   api({action:'recs'}).then(function(res){adminRecs=res.items||[];renderRecsAdmin();}).catch(function(){});
 }
 function renderRecsAdmin(){
-  $('rec-admin-list').innerHTML=adminRecs.length?adminRecs.map(function(r,i){return '<div class="notice-row"><div class="info"><b>'+esc(r.title)+'</b><div class="muted">'+esc(r.type)+' · '+esc(r.url)+'</div></div><button class="btn-sm btn-danger" data-rec-del="'+i+'">删除</button></div>';}).join(''):'<p class="muted">暂无站外推荐</p>';
+  $('rec-admin-list').innerHTML=adminRecs.length?adminRecs.map(function(r,i){return '<div class="notice-row"><div class="info"><b>'+esc(r.title)+'</b><div class="muted">'+esc(r.type)+'，'+esc(r.url)+'</div></div><button class="btn-sm btn-danger" data-rec-del="'+i+'">删除</button></div>';}).join(''):'<p class="muted">暂无站外推荐</p>';
 }
 $('rec-admin-list').addEventListener('click',function(e){var b=e.target.closest('[data-rec-del]');if(!b)return;var i=Number(b.getAttribute('data-rec-del'));if(!confirm('删除这条站外推荐？'))return;adminRecs.splice(i,1);api({action:'recs',items:adminRecs}).then(function(res){adminRecs=res.items||adminRecs;renderRecsAdmin();});});
 document.querySelectorAll('[data-novel-admin-kind]').forEach(function(btn){btn.addEventListener('click',function(){var k=btn.getAttribute('data-novel-admin-kind');$('nv-novel-actions').classList.toggle('hide',k!=='novels');$('art-admin-actions').classList.toggle('hide',k!=='artwork');$('nv-novel-content').classList.toggle('hide',k!=='novels');$('rec-admin').classList.toggle('hide',k!=='recs');$('nv-artwork-panel').classList.toggle('hide',k!=='artwork');document.querySelectorAll('[data-novel-admin-kind]').forEach(function(x){x.classList.toggle('btn-primary',x===btn);});if(k==='artwork')renderArtAdminList();});});
@@ -3309,7 +3328,7 @@ $('art-admin-list').addEventListener('click',function(e){
 
 var forumPosts=[];
 function loadForumAdmin(){if(LOCAL_PREVIEW)return;api({action:'forumList'}).then(function(res){forumPosts=res.posts||[];renderForumAdmin();}).catch(function(err){show($('forum-msg'),'err',err.message||String(err));});}
-function renderForumAdmin(){var box=$('forum-admin-list');if(!forumPosts.length){box.innerHTML='<p class="muted">暂无论坛帖子</p>';return;}box.innerHTML=forumPosts.map(function(p){return '<details class="panel" style="margin:8px 0;padding:12px"><summary>'+esc(p.title)+' · '+esc(p.author)+'</summary><p style="white-space:pre-wrap">'+esc(p.body||'（仅图片）')+'</p>'+(p.image?'<img src="'+esc(p.image)+'" style="max-width:260px;max-height:180px;object-fit:contain">':'')+'<div class="row"><button class="btn-sm btn-danger" data-forum-post-del="'+esc(p.id)+'">删除整帖</button></div><div style="margin-top:10px">'+(p.comments||[]).map(function(c){return '<div class="notice-row"><div class="info"><b>'+esc(c.author)+'</b><div>'+esc(c.body)+'</div></div><button class="btn-sm btn-danger" data-forum-comment-del="'+esc(c.id)+'" data-post-id="'+esc(p.id)+'">删除言论</button></div>';}).join('')+'</div></details>';}).join('');}
+function renderForumAdmin(){var box=$('forum-admin-list');if(!forumPosts.length){box.innerHTML='<p class="muted">暂无论坛帖子</p>';return;}box.innerHTML=forumPosts.map(function(p){return '<details class="panel" style="margin:8px 0;padding:12px"><summary>'+esc(p.title)+'，'+esc(p.author)+'</summary><p style="white-space:pre-wrap">'+esc(p.body||'（仅图片）')+'</p>'+(p.image?'<img src="'+esc(p.image)+'" style="max-width:260px;max-height:180px;object-fit:contain">':'')+'<div class="row"><button class="btn-sm btn-danger" data-forum-post-del="'+esc(p.id)+'">删除整帖</button></div><div style="margin-top:10px">'+(p.comments||[]).map(function(c){return '<div class="notice-row"><div class="info"><b>'+esc(c.author)+'</b><div>'+esc(c.body)+'</div></div><button class="btn-sm btn-danger" data-forum-comment-del="'+esc(c.id)+'" data-post-id="'+esc(p.id)+'">删除言论</button></div>';}).join('')+'</div></details>';}).join('');}
 $('forum-reload').onclick=loadForumAdmin;
 $('forum-admin-list').addEventListener('click',function(e){var post=e.target.closest('[data-forum-post-del]'),comment=e.target.closest('[data-forum-comment-del]');if(post){if(!confirm('删除整篇帖子及其评论？'))return;api({action:'forumDelete',id:post.getAttribute('data-forum-post-del')}).then(function(res){forumPosts=res.posts||[];renderForumAdmin();});}else if(comment){if(!confirm('删除这条言论？'))return;api({action:'forumCommentDelete',postId:comment.getAttribute('data-post-id'),commentId:comment.getAttribute('data-forum-comment-del')}).then(function(res){forumPosts=res.posts||[];renderForumAdmin();});}});
 
@@ -3844,13 +3863,9 @@ async function uploadSecureCover(bookId){
       if (blob.size > envMax) throw new Error('封面转码后仍超过 ' + fmtSize(envMax));
       var name = secureCoverName(r.name || file.name);
       var ext = name.split('.').pop();
-      return toBase64(blob).then(function(b64){
-        return api({
-          action:'upload', bookId:bookId, fileName:name,
-          dataBase64:b64,
-          contentType: blob.type || ('image/' + (ext === 'jpg' ? 'jpeg' : ext))
-        });
-      }).then(function(){
+      var folder = uploadConfig.bookFolder || bookId;
+      return uploadToCos(folder + '/', folder + '/' + name, blob,
+        blob.type || ('image/' + (ext === 'jpg' ? 'jpeg' : ext))).then(function(){
         cur.uploadedName = name;
         if (isAuto && autoCover) autoCover.uploadedName = name;
         renderSecureCover();
@@ -3940,7 +3955,7 @@ function handleSecureUpload(){
             secure: true
           }) }).then(function(d){
             show($('main-msg'), 'ok',
-              '🔒 加密上传并发布成功：' + form.id + ' · ' + form.titleZh + '（归档共 ' + d.count + ' 本）\n' +
+              '🔒 加密上传并发布成功：' + form.id + '，' + form.titleZh + '（归档共 ' + d.count + ' 本）\n' +
               '密文 Key：' + result.key + '\n' +
               vaultLadderNote(result) +
               (form.coverFile ? '封面：' + form.coverFile : '封面：未上传（卡片显示隔离占位图）') + '\n' +
@@ -4027,10 +4042,8 @@ function uploadAll(){
       }
       return p.then(function(r){
         if (r.blob.size > envMax) throw new Error('转换后仍超过 ' + fmtSize(envMax));
-        return toBase64(r.blob).then(function(b64){
-          prepared[i] = { b64:b64, size:r.blob.size, type:r.blob.type || 'image/webp', name:r.name || f.name };
-          f.preparedSize = r.blob.size;
-        });
+        prepared[i] = { blob:r.blob, size:r.blob.size, type:r.blob.type || 'image/webp', name:r.name || f.name };
+        f.preparedSize = r.blob.size;
       }).catch(function(err){
         f.status = 'err'; f.err = err.message || String(err); updateFileNode(i);
       });
@@ -4047,9 +4060,11 @@ function uploadAll(){
     return pool(okIdx, 3, function(k){
       var i = okIdx[k], f = files[i], p = prepared[i];
       f.status = 'busy'; updateFileNode(i);
-      return api({
-        action:'upload', bookId: form.id, fileName: fileOutputName(f, i, pad, prefix, p.name),
-        dataBase64: p.b64, contentType: p.type
+      var folder = form.bookFolder || form.id;
+      var fileName = fileOutputName(f, i, pad, prefix, p.name);
+      return uploadToCos(folder + '/', folder + '/' + fileName, p.blob, p.type, function(info){
+        f.pct = Math.round(Math.max(0, Math.min(1, info && info.percent || 0)) * 100);
+        updateFileNode(i);
       }).then(function(){
         f.status = 'done'; updateFileNode(i); return true;
       }).catch(function(err){
@@ -4060,7 +4075,7 @@ function uploadAll(){
     var failed = files.filter(function(f){ return f.status === 'err'; });
     if (failed.length) {
       var msg = '⚠ 有 ' + failed.length + ' 张上传失败，已停止写入归档。\n' +
-        failed.slice(0, 5).map(function(f, i){ return '  · 第 ' + (files.indexOf(f) + 1) + ' 张（' + f.name + '）：' + f.err; }).join('\n') +
+        failed.slice(0, 5).map(function(f, i){ return '  第 ' + (files.indexOf(f) + 1) + ' 张（' + f.name + '）：' + f.err; }).join('\n') +
         (failed.length > 5 ? '\n  …' : '') + '\n修好后点「上传并发布」只会重试需要上传的图片。';
       throw new Error(msg);
     }
@@ -4078,7 +4093,7 @@ function uploadAll(){
     book.secure = false;
     return api({ action:'publish', book: book }).then(function(d){
       show($('main-msg'), 'ok',
-        '✅ 发布成功：' + book.id + ' · ' + book.titleZh + '（共 ' + d.count + ' 本）\n' +
+        '✅ 发布成功：' + book.id + '，' + book.titleZh + '（共 ' + d.count + ' 本）\n' +
         (uploadIdx.length ? '已重新上传 ' + uploadIdx.length + ' 张图片，' + (files.length - uploadIdx.length) + ' 张未改动图片沿用原文件。\n' : '没有图片改动，未重新上传图片。\n') +
         '站点刷新即可看到。\n' +
         '预览：' + CDN + '/' + (book.bookFolder || book.id) + '/' + (book.coverFile || 'image01.webp'));
@@ -4149,8 +4164,8 @@ function renderLightbox(){
   var f = files[lbIdx];
   if (!f) { closeLightbox(); return; }
   $('lb-img').src = f.url;
-  $('lb-info').textContent = '第 ' + (lbIdx + 1) + ' / ' + files.length + ' 张 · ' + f.name +
-    ' · ' + fmtSize(f.file.size) + (lbIdx === 0 ? ' · 封面' : '');
+  $('lb-info').textContent = '第 ' + (lbIdx + 1) + ' / ' + files.length + ' 张，' + f.name +
+    '，' + fmtSize(f.file.size) + (lbIdx === 0 ? '，封面' : '');
   $('lb-prev').disabled = files.length < 2;
   $('lb-next').disabled = files.length < 2;
   $('lb-edit').disabled = (f.status === 'busy' || f.status === 'done');
@@ -4911,7 +4926,7 @@ function updateTagHint(){
   if (tagErr) { h.textContent = '⚠ ' + tagErr; h.style.color = 'var(--danger)'; return; }
   h.style.color = '';
   h.textContent = selTags.length
-    ? '已选 ' + selTags.length + ' 个 · 标签上的 × 只从本子移除；下拉里的 × 才是删标签库'
+    ? '已选 ' + selTags.length + ' 个，标签上的 × 只从本子移除；下拉里的 × 才是删标签库'
     : '点右侧 ▾ 选择已有标签，或输入 #标签名 后回车新建';
 }
 
@@ -5308,7 +5323,7 @@ $('bk-list').addEventListener('click', function(e){
 });
 
 /* ============ 启动 ============ */
-var initialAdminPage = (location.hash.match(/^#admin-(manga|novel|announcement|goods|support|inbox|authors|forum)$/) || [])[1] || 'manga';
+var initialAdminPage = (location.hash.match(/^#admin-(manga|announcement|toolkit)$/) || [])[1] || 'manga';
 switchAdminPage(initialAdminPage, false);
 if (LOCAL_PREVIEW || token) enterMain();
 else { $('view-login').classList.remove('hide'); }

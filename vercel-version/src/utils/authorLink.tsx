@@ -1,4 +1,5 @@
 import React from 'react';
+import { ArrowUpRight } from 'lucide-react';
 import { PIXIV_ARTISTS_DATA } from '../data/initialData';
 
 // 构建 Pixiv 画师映射表（标准化小写与别名索引）
@@ -74,26 +75,25 @@ interface RenderAuthorOptions {
   customUrl?: string;
   defaultColorClass?: string;
   orangeColorClass?: string;
+  showLinkArrow?: boolean;
 }
 
 /**
  * 漫画本作者外链渲染组件：
- * - 不做修饰，纯净文本链接
+ * - 默认保持纯文本样式，可选在有外链的作者名后显示跳转箭头
  * - 点击文本直接新标签页跳转
  * - 有外链的作者名换成橙色 (text-[#D35400] / orange)
  * - 没有外链的作者名保持原样
  */
-export const AuthorWithLink: React.FC<{
-  author?: string;
-  customUrl?: string;
-  defaultColorClass?: string;
-  orangeColorClass?: string;
-}> = ({
+export const AuthorWithLink: React.FC<RenderAuthorOptions & { author?: string }> = ({
   author,
   customUrl,
   defaultColorClass = 'text-[#3E342B]',
   orangeColorClass = 'text-[#D35400]',
+  showLinkArrow = false,
 }) => {
+  const linkArrow = showLinkArrow ? <ArrowUpRight size={12} aria-hidden="true" /> : null;
+
   if (!author || author.trim() === '' || author.trim() === '未知') {
     return <span className={defaultColorClass}>{author || '未知'}</span>;
   }
@@ -106,10 +106,11 @@ export const AuthorWithLink: React.FC<{
         target="_blank"
         rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}
-        className={`${orangeColorClass} hover:underline cursor-pointer`}
+        className={`inline-flex items-baseline gap-0.5 ${orangeColorClass} hover:underline cursor-pointer`}
         title={`访问 ${author} 的 Pixiv / 主页外链`}
       >
         {author}
+        {linkArrow}
       </a>
     );
   }
@@ -123,10 +124,11 @@ export const AuthorWithLink: React.FC<{
         target="_blank"
         rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}
-        className={`${orangeColorClass} hover:underline cursor-pointer`}
+        className={`inline-flex items-baseline gap-0.5 ${orangeColorClass} hover:underline cursor-pointer`}
         title={`访问 ${author} 的 Pixiv 主页`}
       >
         {author}
+        {linkArrow}
       </a>
     );
   }
@@ -150,10 +152,11 @@ export const AuthorWithLink: React.FC<{
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className={`${orangeColorClass} hover:underline cursor-pointer`}
+                className={`inline-flex items-baseline gap-0.5 ${orangeColorClass} hover:underline cursor-pointer`}
                 title={`访问 ${pTrimmed} 的 Pixiv 主页`}
               >
                 {part}
+                {linkArrow}
               </a>
             );
           }

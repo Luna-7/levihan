@@ -38,15 +38,19 @@ export async function enableWebPush(): Promise<WebPushState> {
   if (permission !== 'granted') return permission;
 
   const registration = await navigator.serviceWorker.ready;
-  const subscription = await registration.pushManager.subscribe({
+  const subscription = await registration.pushManager.getSubscription() || await registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: decodeKey(PUBLIC_KEY),
   });
-  const response = await fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
+  const request = {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-    body: JSON.stringify({ action: 'pushSubscribe', subscription: subscription.toJSON() }),
-  });
-  if (!response.ok) throw new Error('推送订阅保存失败');
+    body: JSON.stringify({ action: 'pushSubscribe', subscription: subscription.toJSON(), category: 'comicUpdates' }),
+  } satisfies RequestInit;
+  const response = import.meta.env.DEV
+    ? await fetchBackend(ADMIN_UPLOAD_ENDPOINT, request)
+    : await fetch('/api/admin-content', request);
+  const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: string };
+  if (!response.ok || data.ok !== true) throw new Error(data.error || '推送订阅保存失败');
   return 'granted';
 }

@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar, Megaphone, FileText, AlertCircle, ArrowRight, Bell, BellOff } from 'lucide-react';
+import { Calendar, Megaphone, FileText, AlertCircle, ArrowRight } from 'lucide-react';
 import { soundManager } from '../utils/audio';
 import { submitToInbox } from '../utils/submissionInbox';
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
+import { cosService } from '../services/cosClient';
 import { useAppShellStore } from '../stores/appShellStore';
 import { useAuthStore } from '../stores/authStore';
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { scheduleNonCriticalTask } from '../utils/scheduleNonCriticalTask';
-import { browserNotificationPermission, requestBrowserNotifications, notifyBrowser, formatNotificationBody } from '../utils/browserNotifications';
-import { enableWebPush, webPushPermission } from '../utils/webPush';
 
 /** 与后台 announcementSave 的字段契约保持一致（id/tag/title/author/time/link/description/image/updatedAt） */
 export interface AnnouncementItem {
@@ -67,8 +66,6 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
   const [proposalBusy, setProposalBusy] = useState(false);
   const [proposalImage, setProposalImage] = useState<File | null>(null);
   const [proposalPreview, setProposalPreview] = useState('');
-  const [notificationPermission, setNotificationPermission] = useState(browserNotificationPermission());
-  const announcementBaseline = useRef<string | null>(null);
   const profile = useAuthStore((state) => state.profile);
   const submissionRequest = useAppShellStore((state) => state.submissionRequest);
   const clearSubmissionRequest = useAppShellStore((state) => state.clearSubmissionRequest);
@@ -81,16 +78,11 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
         setLoadingAnnouncements(true);
         setAnnouncementError(false);
       }
-      fetchBackend(ADMIN_UPLOAD_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-        body: JSON.stringify({ action: 'announcementList' }),
-      })
+      fetch(cosService.getObjectUrl('announcements.json'), { cache: 'no-cache' })
         .then((res) => (res.ok ? res.json() : Promise.reject(new Error('公告读取失败'))))
-        .then((data: { items?: Array<Partial<AnnouncementItem>> }) => {
+        .then((data: Array<Partial<AnnouncementItem>>) => {
           if (cancelled) return;
-          // 完全以管理台数据为准：后台为空则首页也为空，不回落到任何内置假数据
-          const cloudItems: AnnouncementItem[] = (Array.isArray(data.items) ? data.items : [])
+          const cloudItems: AnnouncementItem[] = (Array.isArray(data) ? data : [])
             .filter((item) => item && item.id && item.title)
             .map((item) => ({
               id: String(item.id),
@@ -103,16 +95,6 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
               image: item.image ? String(item.image) : '',
               updatedAt: item.updatedAt ? String(item.updatedAt) : '',
             }));
-          const newest = cloudItems[0];
-          const newestVersion = newest ? `${newest.id}:${newest.updatedAt || newest.time || ''}` : '';
-          if (announcementBaseline.current && newest && newestVersion !== announcementBaseline.current) {
-      notifyBrowser('有新公告啦', {
-              body: formatNotificationBody(newest.description || newest.title || '有新的公告', true),
-              tag: `announcement-${newest.id}`,
-              dedupeKey: `announcement-${newest.id}`,
-            });
-          }
-          announcementBaseline.current = newestVersion || announcementBaseline.current;
           setAnnouncements(cloudItems);
           setAnnouncementError(false);
         })
@@ -131,7 +113,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
     const cancelInitialLoad = scheduleNonCriticalTask(() => load(false), 0, 0);
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') load(true);
-    }, 120_000);
+    }, 600_000);
 
     // 切回页面时立即静默刷新，保证看到最新公告
     const onVisibilityChange = () => {
@@ -158,20 +140,6 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [expandedImage, showDetailModal, showProposal]);
-
-  const enableNotifications = async () => {
-    let permission = webPushPermission();
-    try {
-      if (permission !== 'unsupported') permission = await enableWebPush();
-      else permission = await requestBrowserNotifications();
-    } catch {
-      permission = await requestBrowserNotifications();
-    }
-    setNotificationPermission(permission);
-    if (permission === 'granted') onShowToast('新消息通知已开启：论坛和公告栏有更新时会提醒你');
-    else if (permission === 'denied') onShowToast('通知权限已关闭，请在浏览器设置中重新允许');
-    else if (permission === 'unsupported') onShowToast('当前浏览器不支持系统通知');
-  };
 
   const openProposal = () => {
     soundManager.playWoodTap();
@@ -306,18 +274,6 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
           的原始比例，窄屏恰好等于自然高度、宽屏会被撑到接近原比例，
           避免底图在宽屏上被压扁。上限 204px 防止桌面端卡片过高。
          ==================================================== */}
-      <div className="flex items-center justify-end max-w-md sm:max-w-2xl lg:max-w-3xl mx-auto w-full mb-1">
-        <button
-          type="button"
-          onClick={() => void enableNotifications()}
-          disabled={notificationPermission === 'unsupported'}
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 py-1 text-[11px] text-[#6F5A45] hover:bg-[#E9DFC7] disabled:opacity-55 disabled:cursor-not-allowed"
-          title={notificationPermission === 'granted' ? '已开启新消息通知' : '开启论坛和公告栏新消息通知'}
-        >
-          {notificationPermission === 'granted' ? <Bell size={13} /> : <BellOff size={13} />}
-          {notificationPermission === 'granted' ? '通知已开启' : '开启新消息通知'}
-        </button>
-      </div>
       <div
         ref={announcementListRef}
         className="home-announcement-list w-full flex flex-col gap-2 sm:gap-2.5 max-w-md sm:max-w-2xl lg:max-w-3xl mx-auto no-scrollbar"

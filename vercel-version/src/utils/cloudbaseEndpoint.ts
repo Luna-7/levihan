@@ -12,7 +12,7 @@
  * 服务端转发不带 Origin，因此不受白名单限制，且对任意端口 / 局域网 IP 都成立。
  * 生产构建时 import.meta.env.DEV 为 false，仍直连真实域名，行为不变。
  */
-const CLOUDBASE_ORIGIN = 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com';
+const CLOUDBASE_ORIGIN = (import.meta.env.VITE_CLOUDBASE_ORIGIN || 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com').replace(/\/$/, '');
 
 /** 本地开发的代理前缀，需与 vite.config.ts 的 server.proxy 键保持一致 */
 const DEV_PROXY_PREFIX = '/__cf';

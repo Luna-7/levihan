@@ -1,13 +1,38 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Huiwen-mincho";
+  src: url("/fonts/huiwen-mincho.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --font-serif: 'Songti SC', 'STSong', 'Noto Serif CJK SC', serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-huiwen: "Huiwen-mincho", var(--font-sans);
 }
 
 @layer base {
   :root {
+    --gray-11: #687076;
+    --amber-2: #FEFBE9;
+    --amber-3: #FFF7C2;
+    --amber-4: #FFEFAD;
+    --amber-8: #E2A336;
+    --amber-12: #4F3422;
+    --violet-3: #F4F0FE;
+    --violet-4: #EBE4FF;
+    --violet-8: #8470FF;
+    --violet-11: #6E56CF;
+    --green-2: #F4FBF6;
+    --green-3: #E6F6EB;
+    --green-4: #D6F1DF;
+    --green-8: #5BB98B;
+    --green-12: #193B2D;
+    --red-9: #E5484D;
     --bg-parchment: #FBF7EC;
     --bg-card: #FFFBF0;
     --ink-dark: #22372B;
@@ -70,6 +95,66 @@
   html.comic-site #root {
     overflow: visible;
     height: auto;
+  }
+
+  .comic-announcement-character {
+    display: flex;
+    align-self: stretch;
+    flex: 0 0 5.25rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.125rem;
+  }
+
+  .comic-announcement-character img {
+    width: 3.5rem;
+    height: 3.5rem;
+    object-fit: contain;
+    object-position: center;
+  }
+
+  .comic-announcement-character-tag {
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--green-12);
+    font-size: 10px;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .comic-announcement-title {
+    font-family: var(--font-huiwen);
+  }
+
+  .comic-announcement-character-tag-dark-violet,
+  .comic-announcement-character-tag-dark-green {
+    max-width: 100%;
+    padding: 0.2rem 0.4rem;
+    border-radius: 2px;
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .comic-announcement-character-tag-dark-violet {
+    background: var(--violet-11);
+  }
+
+  .comic-announcement-character-tag-dark-green {
+    background: var(--green-12);
+  }
+
+  .comic-manga-card {
+    contain-intrinsic-size: 460px;
+  }
+
+  @media (min-width: 640px) {
+    .comic-manga-card {
+      contain-intrinsic-size: 720px;
+    }
   }
 
   /* WebKit 会为每个 backdrop-filter 建立额外合成层。移动端改用已有的高不透明
@@ -388,6 +473,21 @@
 
 .font-retro-jp {
   font-family: var(--font-sans);
+}
+
+html.comic-site #doujinshi-archive-root .comic-announcement-title,
+html.comic-site #doujinshi-archive-root :is(
+  [class~="text-xs"],
+  [class~="text-sm"],
+  [class*="text-[8px]"],
+  [class*="text-[9px]"],
+  [class*="text-[10px]"],
+  [class*="text-[11px]"],
+  [class*="text-[11.5px]"],
+  [class*="text-[12px]"],
+  [class*="text-[13px]"]
+) {
+  font-family: var(--font-huiwen);
 }
 
 .font-vt {
@@ -1874,5 +1974,38 @@ html.pwa-standalone .home-announcement-list > .announcement-board {
 
   .home-announcement-list time {
     display: none;
+  }
+}
+
+/* Loading sequence supplied by the user from Uiverse.io by doniaskima. */
+.secure-comic-loader {
+  width: fit-content;
+  height: 1.2em;
+  overflow: hidden;
+  color: var(--green-12);
+  font-family: monospace;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2em;
+  white-space: pre;
+}
+
+.secure-comic-loader::before {
+  content: "Loading...\A⌰oading...\A⌰⍜ading...\A⌰⍜⏃ding...\A⌰⍜⏃⎅ing...\A⌰⍜⏃⎅⟟ng...\A⌰⍜⏃⎅⟟⋏g...\A⌰⍜⏃⎅⟟⋏☌...\A⌰⍜⏃⎅⟟⋏☌⟒..\A⌰⍜⏃⎅⟟⋏☌⟒⏁.\A⌰⍜⏃⎅⟟⋏☌⟒⏁⋔";
+  display: inline-block;
+  white-space: pre;
+  animation: secure-comic-loading 1s steps(11) infinite alternate;
+}
+
+@keyframes secure-comic-loading {
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .secure-comic-loader::before {
+    content: "Loading...";
+    animation: none;
   }
 }

@@ -36,7 +36,7 @@ const LOCAL_ORIGIN =
 const FALLBACK_ORIGIN = 'https://levihan.asia';
 const isAllowedOrigin = (origin) => ALLOWED_ORIGINS.has(origin) || LOCAL_ORIGIN.test(origin);
 
-const ENV_ID = process.env.TCB_ENV || 'levihan-tudou-d0g7jivue1ccc4a35';
+const ENV_ID = process.env.TCB_ENV;
 
 const NICKNAME_MIN = 2;
 const NICKNAME_MAX = 20;
@@ -106,6 +106,7 @@ const firstRow = (value) => (Array.isArray(value) ? value[0] : value);
 function initDb() {
   const accessKey = String(process.env.CLOUDBASE_APIKEY || '').trim();
   if (!accessKey || accessKey.startsWith('{{env.')) throw new Error('CLOUDBASE_APIKEY 未配置');
+  if (!ENV_ID) throw new Error('TCB_ENV 未配置');
   return tcb.init({ env: ENV_ID, accessKey }).rdb({ database: 'public' });
 }
 

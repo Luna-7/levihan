@@ -5,6 +5,7 @@ import { getAccessToken } from '../utils/cloudbaseToken';
 import { useAuthStore } from '../stores/authStore';
 import { useAppShellStore } from '../stores/appShellStore';
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
+import { cosService } from '../services/cosClient';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { normalizeShareLink } from '../utils/forumFormat';
 import { Upload, Link as LinkIcon, DollarSign, User as UserIcon, AlertTriangle, Search, PlusCircle, X, ShieldAlert, CheckCircle2, Plus, Trash2, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
@@ -95,12 +96,13 @@ export const PotatoMarket: React.FC<Props> = ({ onShowToast }) => {
       setItems(INITIAL_MARKET_ITEMS);
     }
 
-    // 1.5 从后端拉取市集商品，覆盖本地 mock
-    void api('marketList')
-      .then((result) => {
-        if (Array.isArray(result.items) && result.items.length > 0) {
-          setItems(result.items);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(result.items));
+    // 商品索引保存在 COS；空数组也必须覆盖旧缓存，避免显示已下架商品。
+    void fetch(cosService.getObjectUrl('potato-market.json'), { cache: 'no-cache' })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('市集读取失败')))
+      .then((items: MarketItem[]) => {
+        if (Array.isArray(items)) {
+          setItems(items);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
         }
       })
       .catch(() => undefined);

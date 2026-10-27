@@ -1,0 +1,11 @@
+汇文明朝体（Huiwen-mincho）
+
+作者：特里王
+本项目使用原始 OTF 文件，未修改或转换字体文件。
+
+作者公开的授权说明允许免费显示、嵌入电子文档及设备，并允许自由转发；字体文件不得单独作为商品出售。
+
+授权来源：
+https://github.com/cntrump/imitation_typeface_fonts
+作者网站：
+https://huozi.cool/

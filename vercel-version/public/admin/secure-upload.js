@@ -4,7 +4,7 @@
  * ----------------------------------------------------------------------------
  * 落点：vercel-version/public/admin/index.html（管理台上传台）
  * 依赖：jspdf（页面已从 CDN 引入，用于图片合并 PDF）
- *       cos-js-sdk-v5（需新增，用于浏览器直传 COS；缺失时自动降级为中转上传）
+ *       cos-js-sdk-v5（用于浏览器直传 COS）
  *
  * 流水线四步（与产品需求一一对应）：
  *   ① 交互：勾选「含有敏感元素」→ 走本模块；未勾选 → 走原有 uploadAll()
@@ -54,7 +54,7 @@
      * Key 是否带时间戳。
      *   true  → comic_vault/1758252800000_secure.txt（需求原文示例；每次上传产生新对象，旧对象成孤儿）
      *   false → comic_vault/lh-123_secure.txt（同名覆盖，幂等重传；且阅读端可仅凭 bookId 反推 Key，
-     *           无需改动 archive 表结构 —— 现有云函数 normalizeBook() 是字段白名单，透传不了 vaultKey）
+     *           无需改动 archive 表结构，因为归档接口目前只保存白名单字段）
      * 默认取 false 就是这个原因；需要按需求原文行为时置 true 即可。
      */
     VERSIONED_KEY: false,
@@ -120,12 +120,12 @@
      * 仅在注入了 renderPdfPages 渲染器、且直通档超目标时启用。
      */
     PDF_LADDER: [
-      { id: 'pdf-side2000', maxSide: 2000, quality: 0.85, label: 'PDF 逐页重渲染 · 长边 ≤ 2000px' },
-      { id: 'pdf-side1400', maxSide: 1400, quality: 0.8,  label: 'PDF 逐页重渲染 · 长边 ≤ 1400px' },
+      { id: 'pdf-side2000', maxSide: 2000, quality: 0.85, label: 'PDF 逐页重渲染，长边 ≤ 2000px' },
+      { id: 'pdf-side1400', maxSide: 1400, quality: 0.8,  label: 'PDF 逐页重渲染，长边 ≤ 1400px' },
     ],
     /**
      * 分片上传的单个分片大小（按密文文本字节计）。
-     * 必须 ≤ 云函数 MAX_BYTES(4MB)，否则分片本身会被 413 挡回来。
+     * 分片保持在 4MB 以内，避免单次请求体过大。
      */
     VAULT_PART_BYTES: 4 * 1024 * 1024,
 
@@ -154,11 +154,11 @@
     JPEG_QUALITY: 0.9,
     /**
      * 上传通道：
-     *   'auto'  → 优先 cos-js-sdk-v5 浏览器直传；凭证接口不可用时降级为中转上传
-     *   'sdk'   → 强制浏览器直传（需要云函数提供 action:'cosCredential'）
-     *   'proxy' → 强制走云函数中转（需要云函数提供 action:'vaultUpload'）
+     *   'auto'  → 优先浏览器直传；凭证接口不可用时尝试服务端中转
+     *   'sdk'   → 强制浏览器直传（需要 Vercel Function 提供 action:'cosCredential'）
+     *   'proxy' → 强制走服务端中转（需要额外配置 vaultUpload 接口）
      */
-    UPLOAD_MODE: 'auto',
+    UPLOAD_MODE: 'sdk',
     /** COS 桶信息（与管理台 / doujinArchiveData.ts 保持一致） */
     COS: {
       Bucket: 'levihan-1325571558',
@@ -172,7 +172,7 @@
 
   /** 运行时注入项（由页面在启动时调用 configure 填入） */
   var runtime = {
-    /** 云函数 HTTP 访问地址；留空则读取 window.LEVIHAN_FN_URL */
+    /** Vercel Function HTTP 访问地址；留空则读取 window.LEVIHAN_FN_URL */
     apiEndpoint: '',
     /** 返回管理员 token 的函数（中转上传需要） */
     getToken: function () { return ''; },
@@ -200,7 +200,7 @@
    * 1. 基础设施：运行时注入、断言、字节 / Base64 互转
    * ======================================================================== */
 
-  /** 注入页面上下文（避免本模块硬编码云函数地址与 token 变量名） */
+  /** 注入页面上下文（避免本模块硬编码接口地址与 token 变量名） */
   function configure(options) {
     options = options || {};
     if (options.apiEndpoint) runtime.apiEndpoint = String(options.apiEndpoint);
@@ -1063,7 +1063,7 @@
     return CONFIG.COS.CdnBase.replace(/\/+$/, '') + '/' + String(key).replace(/^\/+/, '');
   }
 
-  /** 读管理台注入的云函数地址 */
+  /** 读管理台注入的 Vercel Function 地址 */
   function apiEndpoint() {
     return runtime.apiEndpoint || (root && root.LEVIHAN_FN_URL) || '';
   }
@@ -1074,7 +1074,7 @@
    */
   async function postApi(payload) {
     var endpoint = apiEndpoint();
-    if (!endpoint) throw new Error('未配置云函数地址（请调用 LeVihanVault.configure({ apiEndpoint }) 或用 window.LEVIHAN_FN_URL 声明）。');
+    if (!endpoint) throw new Error('未配置 Vercel Function 地址（请调用 LeVihanVault.configure({ apiEndpoint })）。');
     var body = Object.assign({}, payload);
     var token = runtime.getToken();
     if (token && body.action !== 'login') body.token = token;
@@ -1134,7 +1134,7 @@
 
   /* ---------------------- 通道 A：cos-js-sdk-v5 浏览器直传 ---------------------- */
 
-  /** 有缓存的临时凭证且未接近过期就直接复用，避免每次上传都打一次云函数 */
+  /** 有缓存的临时凭证且未接近过期就直接复用，避免每次上传都请求 Vercel Function */
   function credentialUsable(cred) {
     if (!cred || !cred.tmpSecretId || !cred.tmpSecretKey) return false;
     if (!cred.expiredTime) return true;
@@ -1143,7 +1143,7 @@
 
   /**
    * 取 COS 临时凭证（TmpSecretId / TmpSecretKey / SessionToken）。
-   * 期望云函数新增一个 action:'cosCredential' 分支，返回范围收敛到 comic_vault/ 前缀的最小权限凭证。
+   * Vercel Function 的 action:'cosCredential' 分支返回限制在 comic_vault/ 前缀的临时凭证。
    * 也支持页面直接注入 window.LEVIHAN_COS_CREDENTIAL（内网 / 自用场景）。
    */
   async function fetchCosCredential() {
@@ -1163,7 +1163,7 @@
       startTime: raw.startTime || raw.StartTime || Math.floor(Date.now() / 1000),
       expiredTime: raw.expiredTime || raw.ExpiredTime,
     };
-    if (!credentialUsable(cred)) throw new Error('云函数返回的 COS 临时凭证不完整。');
+    if (!credentialUsable(cred)) throw new Error('Vercel Function 返回的 COS 临时凭证不完整。');
     cachedCredential = cred;
     return cred;
   }
@@ -1244,12 +1244,12 @@
     });
   }
 
-  /* ---------------------- 通道 B：云函数中转（无需 SDK / 无凭证时的降级） ---------------------- */
+  /* ---------------------- 通道 B：服务端中转，当前 Vercel 管理台不启用 ---------------------- */
 
   /**
    * 分片大小的安全取值。
    * 下界 1MB 是 COS 对"非末片"的硬要求（低于它 CompleteMultipartUpload 会失败）；
-   * 上界 4MB 是云函数 MAX_BYTES 的单次上限 —— 取更大会被 413 挡回来。
+   * 单次请求分片不超过 4MB，避免请求体过大。
    */
   function vaultPartSize() {
     var want = Number(CONFIG.VAULT_PART_BYTES) || 4 * 1024 * 1024;
@@ -1257,7 +1257,7 @@
   }
 
   /**
-   * 通道 B · 单次上传：把密文文本交给云函数，由云函数用自身凭证 putObject。
+   * 通道 B：单次上传，把密文文本交给服务端，由服务端使用凭证 putObject。
    * 走 action:'vaultUpload'（只放开 comic_vault/ 前缀 + 只收 *_secure.txt）。
    *
    * 字段名是 dataText 而非 dataBase64：这个值**本身就是**密文（已是 Base64 文本），
@@ -1265,14 +1265,14 @@
    * ContentType 由服务端强制，客户端传了也不作数，故不传。
    */
   async function uploadCipherViaProxy(base64, key, onProgress) {
-    if (onProgress) onProgress({ stage: 'upload', ratio: 0.1, text: '经云函数中转上传…' });
+    if (onProgress) onProgress({ stage: 'upload', ratio: 0.1, text: '经服务端中转上传…' });
     var res = await postApiRetry({ action: 'vaultUpload', key: key, dataText: base64 });
     if (onProgress) onProgress({ stage: 'upload', ratio: 1, text: '中转上传完成' });
     return { key: res.key || key, url: keyToPublicUrl(res.key || key), etag: res.etag, channel: 'proxy' };
   }
 
   /**
-   * 通道 B · 分片上传：突破单请求 body 6MB 的上限。
+   * 通道 B：分片上传，突破单请求 body 6MB 的上限。
    *
    * 切分方式：密文本身已是 Base64 **文本**，所以直接按文本下标切子串即可，
    * 各片原样拼接就是完整密文 —— 客户端与服务端都不需要任何重组逻辑。
@@ -1293,7 +1293,7 @@
     onP({ stage: 'upload', ratio: 0, text: '密文 ' + fmtSize(text.length) + '，准备分 ' + total + ' 片上传…' });
     var init = await postApi({ action: 'vaultInit', key: key });
     var uploadId = init && init.uploadId;
-    if (!uploadId) throw fail('upload', '云函数未返回 UploadId，分片初始化失败。');
+    if (!uploadId) throw fail('upload', '服务端未返回 UploadId，分片初始化失败。');
 
     var parts = [];
     try {
@@ -1419,7 +1419,7 @@
     onProgress({
       stage: 'read',
       ratio: 1,
-      text: 'PDF 就绪：' + fmtSize(pdfBytes.length) + origin + '　·　' + describeLadder(ladder),
+      text: 'PDF 就绪：' + fmtSize(pdfBytes.length) + origin + '　' + describeLadder(ladder),
     });
 
     /* ---- 步骤 3：强拦截 + 加密 + Base64 重包装 ---- */

@@ -17,7 +17,7 @@ export function BookShareModal({ book, onClose, onShowToast }: Props) {
   const [coverFailed, setCoverFailed] = useState(false);
   const [generating, setGenerating] = useState(true);
   const canShowCover = (!book.secure || Boolean(book.coverFile)) && !coverFailed;
-  const shareUrl = `${window.location.origin}/api/comic-share?id=${encodeURIComponent(book.id)}`;
+  const shareUrl = `${window.location.origin}/book/${encodeURIComponent(book.id)}`;
 
   useEffect(() => {
     if (!imageReady || !posterRef.current) return;
@@ -111,10 +111,6 @@ export function BookShareModal({ book, onClose, onShowToast }: Props) {
                   ))}
                 </div>
               </div>
-            </div>
-            <div className="px-3 py-1.5 border-t border-dashed border-[#D5C9AF] flex justify-between text-[9px] text-[#8C7A68]">
-              <span>{window.location.host}</span>
-              <span>{book.id}</span>
             </div>
           </div>
         </div>

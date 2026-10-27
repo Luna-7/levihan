@@ -1,5 +1,4 @@
 {
-  "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm install --include=optional --package-lock=false",
   "framework": "vite",
@@ -43,6 +42,10 @@
       "has": [{ "type": "host", "value": "levihan.asia" }],
       "dest": "https://admin.levihan.asia/admin/index.html",
       "statusCode": 308
+    },
+    {
+      "src": "^/book/(lh-[0-9]{1,6})/?$",
+      "dest": "/api/comic-share?id=$1"
     },
     { "src": "^/comics/?$", "dest": "/?tab=resources", "statusCode": 308 },
     {

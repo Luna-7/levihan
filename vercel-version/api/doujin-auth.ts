@@ -49,7 +49,8 @@ export default async function handler(request: AuthRequest, response: ServerResp
     return;
   }
   try {
-    const result = await fetch('https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/auth', {
+    const origin = (process.env.CLOUDBASE_ORIGIN || 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com').replace(/\/$/, '');
+    const result = await fetch(`${origin}/auth`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ action: 'me' }),

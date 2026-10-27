@@ -3,3 +3,7 @@ node_modules/
 .DS_Store
 *.log
 .vercel
+backup-local/
+.env*
+!.env.example
+dist/

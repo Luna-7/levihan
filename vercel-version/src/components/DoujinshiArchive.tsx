@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowUpRight, Bell, Calendar, Heart, X } from 'lucide-react';
 import {
   DOUJIN_ARCHIVE_DATA,
 } from '../data/doujinArchiveData';
 import { DoujinBookItem, GroupNovel } from '../types/doujinArchive';
+import type { GoodsItem } from '../types';
 import { soundManager } from '../utils/audio';
 import { cosService } from '../services/cosClient';
 import { NovelModule } from './NovelModule';
@@ -28,6 +31,8 @@ import { scheduleNonCriticalTask } from '../utils/scheduleNonCriticalTask';
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { useAuthStore } from '../stores/authStore';
+import { webPushPermission, enableWebPush } from '../utils/webPush';
+import { TeaPartyInteractiveZipline } from './TeaPartyInteractiveZipline';
 
 interface Props {
   onShowToast: (msg: string) => void;
@@ -41,6 +46,24 @@ interface Props {
 }
 
 type ArtworkLikeItem = { id: string; likes: number; liked: boolean };
+type ComicAnnouncement = {
+  id: string;
+  title: string;
+  tag: string;
+  author: string;
+  time?: string;
+  description?: string;
+  image?: string;
+  link?: string;
+};
+
+const COMIC_ANNOUNCEMENT_HANGE_LINES = [
+  '很好喝的茶呢～',
+  '细则读完啦？真乖。',
+  '茶要凉了，快去逛展吧',
+  '展品都很可爱的哦',
+  '下次再来陪我喝茶呀',
+];
 
 async function callArtworkApi(payload: Record<string, unknown>, token?: string | null) {
   const headers: Record<string, string> = { 'Content-Type': 'text/plain;charset=UTF-8' };
@@ -58,6 +81,17 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
   // 归档数据状态（优先加载远端 COS archive.json，兜底使用本地 Excel 录入数据）
   const [books, setBooks] = useState<DoujinBookItem[]>(DOUJIN_ARCHIVE_DATA);
   const [isLoadingArchive, setIsLoadingArchive] = useState<boolean>(false);
+  const [comicAnnouncements, setComicAnnouncements] = useState<ComicAnnouncement[]>([]);
+  const [comicAnnouncementGoods, setComicAnnouncementGoods] = useState<GoodsItem[]>([]);
+  const [comicAnnouncementPairStart, setComicAnnouncementPairStart] = useState(0);
+  const [comicAnnouncementState, setComicAnnouncementState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [comicAnnouncementReload, setComicAnnouncementReload] = useState(0);
+  const [selectedComicAnnouncement, setSelectedComicAnnouncement] = useState<ComicAnnouncement | null>(null);
+  const [expandedComicAnnouncementImage, setExpandedComicAnnouncementImage] = useState('');
+  const comicAnnouncementHangeLine = useMemo(
+    () => COMIC_ANNOUNCEMENT_HANGE_LINES[Math.floor(Math.random() * COMIC_ANNOUNCEMENT_HANGE_LINES.length)],
+    [selectedComicAnnouncement]
+  );
   const [, setCommentVersion] = useState<number>(0);
 
   // 搜索与多维筛选
@@ -78,6 +112,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
 
   // 当前正在无缝长图阅读的书籍
   const [readingBook, setReadingBook] = useState<DoujinBookItem | null>(null);
+  const [notificationPermission, setNotificationPermission] = useState(webPushPermission);
+  const [isEnablingNotifications, setIsEnablingNotifications] = useState(false);
   const archiveScrollYRef = useRef(0);
   // 加密归档本子：走独立的伪装阅读器，普通长图画廊状态完全不受影响
   const [secureBook, setSecureBook] = useState<DoujinBookItem | null>(null);
@@ -95,6 +131,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
   // 当前打开分享卡片的本子（普通本与加密解析本共用）。
   const [shareCardBook, setShareCardBook] = useState<DoujinBookItem | null>(null);
   const deepLinkHandledRef = useRef(false);
+  const autoOpenedSharedBookRef = useRef(false);
+  const [sharedBookId, setSharedBookId] = useState('');
+  const shouldAutoOpenSharedBook = new URLSearchParams(window.location.search).get('open') === '1';
   const [linkedBookId, setLinkedBookId] = useState('');
   const [visibleBookCount, setVisibleBookCount] = useState(PAGE_SIZE);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -144,7 +183,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       const linkedBook = archiveBooks.find((book) => book.id === bookId);
       if (!linkedBook) return;
       deepLinkHandledRef.current = true;
-      setLinkedBookId(linkedBook.id);
+      if (shouldAutoOpenSharedBook) setSharedBookId(linkedBook.id);
+      else setLinkedBookId(linkedBook.id);
     });
     cosService.loadNovelList().then((data) => {
       setNovels(data);
@@ -153,6 +193,61 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       setIsNovelsLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    if (mode !== 'comic') return undefined;
+    let alive = true;
+    setComicAnnouncementState('loading');
+    fetch(cosService.getObjectUrl('announcements.json'), { cache: 'no-cache' })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('公告读取失败')))
+      .then((data: unknown) => {
+        if (!alive) return;
+        const items = Array.isArray(data) ? data : [];
+        setComicAnnouncements(items
+          .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object' && item.id && item.title))
+          .slice(0, 2)
+          .map((item) => ({
+            id: String(item.id),
+            title: String(item.title),
+            tag: item.tag ? String(item.tag) : '公告',
+            author: item.author ? String(item.author) : '',
+            time: item.time ? String(item.time) : '',
+            description: item.description ? String(item.description) : '',
+            image: item.image ? String(item.image) : '',
+            link: item.link ? String(item.link) : '',
+          })));
+        setComicAnnouncementState('ready');
+      })
+      .catch(() => {
+        if (alive) setComicAnnouncementState('error');
+      });
+    return () => { alive = false; };
+  }, [mode, comicAnnouncementReload]);
+
+  useEffect(() => {
+    if (mode !== 'comic') return undefined;
+    let alive = true;
+    void cosService.loadGoodsList()
+      .then((items) => {
+        if (!alive) return;
+        setComicAnnouncementGoods(items);
+        const pairCount = Math.max(1, Math.floor(items.length / 2));
+        setComicAnnouncementPairStart(Math.floor(Math.random() * pairCount) * 2);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [mode]);
+
+  useEffect(() => {
+    if (!selectedComicAnnouncement && !expandedComicAnnouncementImage) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (expandedComicAnnouncementImage) setExpandedComicAnnouncementImage('');
+      else setSelectedComicAnnouncement(null);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [expandedComicAnnouncementImage, selectedComicAnnouncement]);
 
   useEffect(() => {
     let alive = true;
@@ -360,6 +455,32 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     setDetectedPages(null);
   };
 
+  useEffect(() => {
+    if (mode !== 'comic' || !sharedBookId || isLoadingArchive || autoOpenedSharedBookRef.current) return;
+    const book = books.find((item) => item.id === sharedBookId);
+    if (!book) return;
+    autoOpenedSharedBookRef.current = true;
+    void handleOpenBookReader(book);
+  }, [books, isLoadingArchive, mode, sharedBookId]);
+
+  const handleEnableNotifications = async () => {
+    if (isEnablingNotifications) return;
+    setIsEnablingNotifications(true);
+    try {
+      const permission = await enableWebPush();
+      setNotificationPermission(permission);
+      if (permission === 'granted') onShowToast('新漫画上架或公告更新时会提醒你');
+      else if (permission === 'denied') onShowToast('通知权限已关闭，请在浏览器设置中重新允许');
+      else if (permission === 'unsupported') onShowToast('当前浏览器不支持消息推送');
+      else onShowToast('尚未完成通知授权');
+    } catch {
+      setNotificationPermission(webPushPermission());
+      onShowToast('消息通知暂时无法开启，请稍后重试');
+    } finally {
+      setIsEnablingNotifications(false);
+    }
+  };
+
   // 在新阅读器 DOM 提交后再瞬时定位。旧实现会先让列表平滑滚动，再替换成高度完全
   // 不同的漫画 DOM，iOS Safari 上会显示一帧空白或明显跳闪。
   useLayoutEffect(() => {
@@ -483,7 +604,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
         fallback={
           // 冷灰色，和维护页同一套视觉：加载解码器时也不露馅
           <div className="flex flex-col items-center justify-center w-full h-full bg-[#F2F3F5] gap-2">
-            <div className="font-mono text-xs text-[#5F6368] tracking-widest">SECURE NODE GATEWAY</div>
             <div className="font-mono text-[11px] text-[#9AA0A6]">正在加载安全解析节点…</div>
           </div>
         }
@@ -549,11 +669,30 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                 {readingBook.titleZh}
               </h2>
               <p className="text-xs font-retro-jp text-[#7A6958] truncate mt-0.5">
-                作者：<AuthorWithLink author={readingBook.circle} customUrl={readingBook.authorUrl} defaultColorClass="text-[#7A6958]" orangeColorClass="text-[#D35400]" /> · 共 {totalPages} 页
+                作者：<AuthorWithLink author={readingBook.circle} customUrl={readingBook.authorUrl} defaultColorClass="text-[#7A6958]" orangeColorClass="text-[#D35400]" />，共 {totalPages} 页
+                <span className="ml-2">编号：{readingBook.id}</span>
                 {isDetectingPages ? '（动态校准中...）' : ''}
               </p>
             </div>
           </div>
+          {((readingBook.category || '漫画本') === '漫画本') && (
+            <button
+              type="button"
+              onClick={() => void handleEnableNotifications()}
+              disabled={notificationPermission === 'unsupported' || isEnablingNotifications}
+              aria-label={notificationPermission === 'granted' ? '更新通知已开启' : '开启更新通知'}
+              aria-busy={isEnablingNotifications}
+              title={notificationPermission === 'granted' ? '已订阅漫画更新提醒' : '漫画本有新内容时提醒你'}
+              className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 sm:px-3 text-xs font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                notificationPermission === 'granted'
+                  ? 'bg-[var(--green-2)] text-[var(--green-12)] hover:bg-[var(--green-3)] focus-visible:outline-[var(--green-8)]'
+                  : 'bg-[var(--amber-2)] text-[var(--amber-12)] hover:bg-[var(--amber-3)] focus-visible:outline-[var(--amber-8)]'
+              }`}
+            >
+              <Bell size={16} aria-hidden="true" fill={notificationPermission === 'granted' ? 'currentColor' : 'none'} />
+              <span>{notificationPermission === 'granted' ? '更新通知已开启' : '开启更新通知'}</span>
+            </button>
+          )}
         </div>
 
         {/* 无缝长图展示区 */}
@@ -588,6 +727,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
   }
 
   const isIllustrationCategory = selectedCategory === '插画集';
+  const isComicMasonry = isMangaVisible && selectedCategory === '漫画本';
+  const isMasonryCategory = isIllustrationCategory || isComicMasonry;
 
   // ==========================================
   // 📚 典藏本列表主视图 (coverFile 映射为 腾讯云 COS CDN 链接)
@@ -601,8 +742,201 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
           onShowToast={onShowToast}
         />
       )}
+      {mode === 'comic' && selectedComicAnnouncement && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/60 p-3"
+          onClick={() => {
+            soundManager.playWoodTap();
+            setSelectedComicAnnouncement(null);
+          }}
+        >
+          <div
+            className="relative w-full max-w-md text-[#1E4334] drop-shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="comic-announcement-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                soundManager.playWoodTap();
+                setSelectedComicAnnouncement(null);
+              }}
+              className="absolute right-3 top-4 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-[#1E4334] text-xs font-bold text-[#F4EADB] shadow-xs hover:bg-[#2C5C46] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-12)]"
+              aria-label="关闭公告详情"
+            >
+              ✕
+            </button>
+            <div className="rules-scroll-rod z-20 w-full" aria-hidden="true" />
+            <div className="rules-scroll-paper relative z-10 mx-3 max-h-[70dvh] overflow-y-auto px-4 pb-5 pt-4 sm:px-5">
+              <div className="relative mb-2.5 flex min-w-0 items-center justify-between gap-2 border-b-2 border-[#C5A059] pb-2 pr-8">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="text-xl" aria-hidden="true">✨</span>
+                  <h2 id="comic-announcement-title" className="truncate font-serif-title text-sm font-bold text-[#1E4334] sm:text-base">
+                    {selectedComicAnnouncement.title}
+                  </h2>
+                </div>
+                <span className="shrink-0 rounded-md bg-[#1E4334] px-2 py-0.5 text-[10px] font-bold text-[#F9E79F] shadow-2xs">
+                  {selectedComicAnnouncement.tag}
+                </span>
+              </div>
+              {(selectedComicAnnouncement.time || selectedComicAnnouncement.author) && (
+                <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#DECDB3] bg-[#FAF3E3] p-2 text-[11px] text-[#6B5138]">
+                  {selectedComicAnnouncement.time && (
+                    <div className="flex items-center gap-1">
+                      <Calendar size={12} className="shrink-0 text-[#8C6226]" aria-hidden="true" />
+                      <time>{selectedComicAnnouncement.time}</time>
+                    </div>
+                  )}
+                  {selectedComicAnnouncement.author && <span>✍️ {selectedComicAnnouncement.author}</span>}
+                </div>
+              )}
+              {selectedComicAnnouncement.image && (
+                <button
+                  type="button"
+                  className="group relative mb-3 block w-full cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-12)]"
+                  onClick={() => setExpandedComicAnnouncementImage(selectedComicAnnouncement.image || '')}
+                  aria-label="放大查看公告图片"
+                >
+                  <img src={selectedComicAnnouncement.image} alt={selectedComicAnnouncement.title} className="aspect-video w-full rounded-lg border border-[#D5C19A] object-cover shadow-xs" />
+                  <span className="absolute bottom-2 right-2 rounded-full bg-black/65 px-2 py-1 text-[10px] font-bold text-white opacity-90">点击放大</span>
+                </button>
+              )}
+              {selectedComicAnnouncement.description && (
+                <p className="whitespace-pre-wrap rounded-lg border border-[#E5DAC4] bg-[#FAF6ED] p-2.5 text-xs font-medium leading-relaxed text-[#4A4036] sm:text-sm">
+                  {selectedComicAnnouncement.description}
+                </p>
+              )}
+              <figure className="rules-scroll-hange relative mt-4 flex flex-wrap items-center justify-center gap-3 border-t border-dashed border-[#C5A059] pt-3">
+                <img src="/images/rules-hange-tea.png" alt="端着茶杯的韩吉" className="pixel-art w-20 shrink-0 cursor-pointer transition-transform active:scale-90 sm:w-24" onClick={() => onShowToast('☕ 韩吉：快去逛逛吧！')} />
+                <div className="relative max-w-[9.5rem] rounded-xl border-2 border-[#1E4334] bg-[#FAF6ED] px-3 py-1.5 font-retro-jp text-[11px] leading-snug text-[#1E4334] shadow-xs">
+                  {comicAnnouncementHangeLine}
+                  <span className="absolute -left-[7px] top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b-2 border-l-2 border-[#1E4334] bg-[#FAF6ED]" aria-hidden="true" />
+                </div>
+                {selectedComicAnnouncement.link && (
+                  <a href={selectedComicAnnouncement.link} target="_blank" rel="noreferrer" onClick={() => soundManager.playWoodTap()} className="flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#C5A059] bg-[#1E4334] px-4 py-1.5 text-xs font-bold text-[#F9E79F] shadow-md transition-colors hover:bg-[#2C5C46] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-12)]">
+                    前往链接 ➜
+                  </a>
+                )}
+              </figure>
+            </div>
+            <div className="rules-scroll-rod rules-scroll-rod-bottom z-20 w-full" aria-hidden="true" />
+          </div>
+        </div>,
+        document.body
+      )}
+      {mode === 'comic' && expandedComicAnnouncementImage && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[1300] flex cursor-zoom-out items-center justify-center bg-black/90 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="公告图片预览" onClick={() => setExpandedComicAnnouncementImage('')}>
+          <button type="button" className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-white/50 bg-black/70 text-lg text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" onClick={() => setExpandedComicAnnouncementImage('')} aria-label="关闭图片预览">✕</button>
+          <img src={expandedComicAnnouncementImage} alt={selectedComicAnnouncement?.title || '公告图片'} className="max-h-[calc(100dvh-32px)] max-w-full object-contain shadow-2xl" onClick={(event) => event.stopPropagation()} />
+        </div>,
+        document.body
+      )}
+      {mode === 'comic' && (
+        <>
+          <TeaPartyInteractiveZipline onShowToast={onShowToast} />
+          <div className="flex min-h-11 items-center justify-between gap-3 px-2">
+            <a
+              href="https://levihan.asia/"
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap px-1 text-xs font-semibold text-[var(--green-12)] transition-opacity hover:opacity-75 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--amber-8)]"
+            >
+              <Heart size={14} className="text-[var(--violet-11)]" fill="currentColor" aria-hidden="true" />
+              <span>levihan.asia</span>
+              <ArrowUpRight size={13} className="text-[var(--gray-11)]" aria-hidden="true" />
+            </a>
+            <button
+              type="button"
+              onClick={() => void handleEnableNotifications()}
+              disabled={isEnablingNotifications || notificationPermission === 'unsupported'}
+              aria-busy={isEnablingNotifications}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-1 text-xs font-semibold transition-opacity hover:opacity-75 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--amber-8)] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <Bell size={14} className="text-[var(--green-12)]" aria-hidden="true" fill={notificationPermission === 'granted' ? 'currentColor' : 'none'} />
+              <span className="text-[var(--gray-11)]">
+                {isEnablingNotifications
+                  ? '正在开启…'
+                  : notificationPermission === 'granted'
+                    ? '更新通知已开启'
+                    : notificationPermission === 'denied'
+                      ? '通知权限已关闭'
+                      : notificationPermission === 'unsupported'
+                        ? '当前浏览器不支持通知'
+                        : '开启更新通知'}
+              </span>
+            </button>
+          </div>
+          <section
+            aria-labelledby="comic-announcements-heading"
+            className="space-y-1.5 rounded-sm border-[1.5px] border-[var(--amber-8)] bg-[var(--amber-2)] p-2 sm:p-2.5"
+          >
+            <h2 id="comic-announcements-heading" className="flex items-center justify-center gap-2 text-sm font-bold text-[var(--amber-12)] sm:text-base">
+              <Heart size={16} className="text-[var(--violet-11)]" fill="currentColor" strokeWidth={1.5} aria-hidden="true" />
+              <span>公告栏</span>
+              <Heart size={16} className="text-[var(--green-8)]" fill="currentColor" strokeWidth={1.5} aria-hidden="true" />
+            </h2>
+            {comicAnnouncementState === 'loading' && (
+              <p className="py-1 text-xs text-[var(--amber-12)]" role="status">公告加载中…</p>
+            )}
+            {comicAnnouncementState === 'error' && (
+              <button
+                type="button"
+                onClick={() => setComicAnnouncementReload((value) => value + 1)}
+                className="min-h-11 rounded-sm px-2 text-xs text-[var(--amber-12)] underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--green-12)]"
+              >
+                公告暂时无法加载，点击重试
+              </button>
+            )}
+            {comicAnnouncementState === 'ready' && comicAnnouncements.length === 0 && (
+              <p className="py-1 text-xs text-[var(--amber-12)]">暂无公告</p>
+            )}
+            {comicAnnouncementState === 'ready' && comicAnnouncements.length > 0 && (
+              <ul className="grid gap-1.5">
+                {comicAnnouncements.slice(0, 2).map((item, index) => {
+                  const character = comicAnnouncementGoods.length >= 2
+                    ? comicAnnouncementGoods[(comicAnnouncementPairStart + index) % comicAnnouncementGoods.length]
+                    : undefined;
+                  const specialTag = /利韩企划|网站维护|企划|维护/.test(item.tag);
+                  return <li
+                    key={item.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      soundManager.playWoodTap();
+                      setSelectedComicAnnouncement(item);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        soundManager.playWoodTap();
+                        setSelectedComicAnnouncement(item);
+                      }
+                    }}
+                    className={`flex min-h-24 min-w-0 cursor-pointer items-stretch gap-2 rounded-sm border-[0.5px] py-1.5 pl-1 pr-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--green-12)] ${index === 0 ? 'border-[var(--violet-8)] bg-[var(--violet-3)] hover:bg-[var(--violet-4)]' : 'border-[var(--green-8)] bg-[var(--green-3)] hover:bg-[var(--green-4)]'}`}
+                  >
+                    <span className="comic-announcement-character">
+                      {character && <img src={cosService.getGoodsThumbUrl(character.file, 240)} alt="" loading="lazy" decoding="async" />}
+                      <span className={`comic-announcement-character-tag ${specialTag ? index === 0 ? 'comic-announcement-character-tag-dark-violet' : 'comic-announcement-character-tag-dark-green' : ''}`}>{item.tag}</span>
+                    </span>
+                    <div className="min-w-0 flex-1 self-center">
+                      <div className="flex min-w-0 items-baseline justify-between gap-2">
+                        <h3 className={`comic-announcement-title min-w-0 truncate text-base font-semibold ${index === 0 ? 'text-[var(--violet-11)]' : 'text-[var(--green-12)]'}`}>{item.title}</h3>
+                        {item.time && <time className="shrink-0 text-xs text-[var(--amber-12)]">{item.time}</time>}
+                      </div>
+                      {item.description && (
+                        <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-[var(--amber-12)]">{item.description}</p>
+                      )}
+                    </div>
+                  </li>;
+                })}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
       {/* 典藏公约红线轻量提示 */}
-      <div className="py-1 px-2.5 bg-[#FBF0EE] border-l-3 border-[#C0392B] rounded-r-xs font-retro-jp text-[11px] text-[#1E4334] flex items-center shadow-2xs">
+      <div className={`py-1 px-2.5 rounded-r-xs font-retro-jp text-xs flex items-center ${isMangaVisible ? 'bg-[var(--red-9)] text-white' : 'bg-[#FBF0EE] text-[#1E4334] border-l-3 border-[#C0392B] shadow-2xs'}`}>
         <div>
           <span className="font-bold">⚠️ 公约：</span>
           本专区由利韩同好自发分享。<b>严禁倒卖商用、严禁转传闲鱼微店</b>，请共同守护创作者的心血。
@@ -610,35 +944,41 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       </div>
 
       {/* 筛选与搜索栏 */}
-      <div className="bg-[#FFFEEF] border border-[#D5C9AF] rounded-sm p-2 sm:p-2.5 space-y-1.5 shadow-xs">
+      <div className={`bg-[#FFFEEF] rounded-sm p-2 sm:p-2.5 space-y-2 ${isMangaVisible ? '' : 'border-[0.5px] border-[#D5C9AF]'}`}>
         {/* 分类栏与标签 (多行跟随设备动态切换) */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 text-xs font-retro-jp">
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="text-[11px] font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">分类:</span>
-            {allCategories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => {
-                  soundManager.playBlip();
-                  setSelectedCategory(cat);
-                  setSelectedTag('全部');
-                  setSelectedAuthor('全部');
-                }}
-                className={`px-2.5 py-1 rounded-xs border transition-all cursor-pointer text-xs shrink-0 whitespace-nowrap select-none active:scale-95 ${
-                  selectedCategory === cat
-                    ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-xs'
-                    : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5] active:bg-[#EAE2CE]'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
+          {!isMangaVisible && (
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-xs font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">分类:</span>
+              {allCategories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => {
+                    soundManager.playBlip();
+                    setSelectedCategory(cat);
+                    setSelectedTag('全部');
+                    setSelectedAuthor('全部');
+                  }}
+                  className={`px-2.5 py-1 rounded-xs ${isMangaVisible ? 'border-0' : 'border'} transition-all cursor-pointer text-xs shrink-0 whitespace-nowrap select-none active:scale-95 ${
+                    selectedCategory === cat
+                      ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-xs'
+                      : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5] active:bg-[#EAE2CE]'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* 标签行：漫画本的标签与小说本不通用，小说本模块有自己的题材筛选，此处隐藏 */}
           {(selectedCategory === '插画集' || selectedCategory === '漫画本') && (
-            <div className="flex flex-wrap items-center gap-1 pt-1 sm:pt-0 sm:border-l sm:border-dashed sm:border-[#D5C9AF] sm:pl-2">
-              <span className="text-[11px] font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">标签:</span>
+            <div className={`flex ${isMangaVisible ? 'flex-col gap-1' : 'flex-wrap items-center gap-1 pt-1 sm:pt-0 sm:border-l sm:border-dashed sm:border-[#D5C9AF] sm:pl-2'}`}>
+              {isMangaVisible ? (
+                <span className="shrink-0 whitespace-nowrap text-sm font-pixel text-[#8C7A68]">标签:</span>
+              ) : (
+                <span className="text-xs font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">标签:</span>
+              )}
               <div className="flex flex-wrap items-center gap-1">
                 {allTags.map((tag) => (
                   <button
@@ -647,7 +987,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                       soundManager.playBlip();
                       setSelectedTag(tag);
                     }}
-                    className={`px-2 py-0.5 rounded-xs border text-xs font-retro-jp transition-all cursor-pointer whitespace-nowrap shrink-0 select-none active:scale-95 ${
+                    className={`px-2 py-0.5 rounded-xs ${isMangaVisible ? 'border-0' : 'border'} text-xs font-retro-jp transition-all cursor-pointer whitespace-nowrap shrink-0 select-none active:scale-95 ${
                       selectedTag === tag
                         ? 'bg-[#B7791F] text-[#FFFEEF] border-[#B7791F] font-bold shadow-2xs'
                         : 'bg-[#FAF5E8] text-[#7A6958] border-[#E0D5BE] hover:bg-white active:bg-[#EAE2CE]'
@@ -661,80 +1001,60 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
           )}
         </div>
 
-        {/* 搜索框 */}
+        {/* 检索、作者与排序共享一行；窄屏按空间换行。 */}
         {(selectedCategory === '插画集' || selectedCategory === '漫画本') && (
-        <div className="flex items-center gap-1.5 pt-1 border-t border-dashed border-[#E0D5BE]">
-          <input
-            type="text"
-            placeholder="快速检索标题、作者、汉化、嵌字或标签..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="px-2 py-1 text-xs font-retro-jp bg-[#FAF5E8] border border-[#BFA985] rounded-xs w-full focus:outline-none focus:border-[#1E4334]"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="text-xs text-[#8C7A68] hover:text-[#1E4334] px-1 cursor-pointer whitespace-nowrap shrink-0"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-        )}
-
-        {/* 作者筛选：仅漫画本显示，主题同款下拉框，动态汇总 circle 去重（作品数降序） */}
-        {selectedCategory === '漫画本' && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-dashed border-[#E0D5BE]">
-            <span className="text-[11px] font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">作者:</span>
-            <select
-              value={selectedAuthor}
-              onChange={(e) => {
-                soundManager.playBlip();
-                setSelectedAuthor(e.target.value);
-              }}
-              className="w-auto min-w-[120px] max-w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2 py-1.5 text-xs outline-hidden cursor-pointer font-retro-jp text-[#3B2818]"
-            >
-              {allAuthors.map((author) => (
-                <option key={author} value={author}>
-                  {author}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* 排序：漫画本/插画集卡片网格通用；小说本使用自己的模块，此处隐藏 */}
-        {(selectedCategory === '插画集' || selectedCategory === '漫画本') && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-dashed border-[#E0D5BE]">
-            <span className="text-[11px] font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">排序:</span>
-            <div className="flex flex-wrap items-center gap-1">
-              <button
-                onClick={() => {
-                  soundManager.playBlip();
-                  setSortBy('pages');
-                }}
-                className={`px-2 py-0.5 rounded-xs border text-xs font-retro-jp transition-all cursor-pointer whitespace-nowrap shrink-0 select-none active:scale-95 ${
-                  sortBy === 'pages'
-                    ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-2xs'
-                    : 'bg-[#FAF5E8] text-[#7A6958] border-[#E0D5BE] hover:bg-white active:bg-[#EAE2CE]'
-                }`}
-              >
-                页数多→少
-              </button>
-              <button
-                onClick={() => {
-                  soundManager.playBlip();
-                  setSortBy('new');
-                }}
-                className={`px-2 py-0.5 rounded-xs border text-xs font-retro-jp transition-all cursor-pointer whitespace-nowrap shrink-0 select-none active:scale-95 ${
-                  sortBy === 'new'
-                    ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-2xs'
-                    : 'bg-[#FAF5E8] text-[#7A6958] border-[#E0D5BE] hover:bg-white active:bg-[#EAE2CE]'
-                }`}
-              >
-                从新到旧
-              </button>
+          <div className={`grid ${isMangaVisible ? 'grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]' : 'grid-cols-1'} gap-2 pt-2 ${isMangaVisible ? '' : 'border-t border-dashed border-[#E0D5BE]'} ${selectedCategory === '漫画本' ? 'sm:grid-cols-[minmax(0,1fr)_minmax(148px,0.7fr)_minmax(160px,0.75fr)]' : 'sm:grid-cols-[minmax(0,1fr)_minmax(160px,0.75fr)]'}`}>
+            <div className="relative min-w-0">
+              <input
+                type="text"
+                aria-label={selectedCategory === '漫画本' ? '检索漫画' : '检索插画集'}
+                placeholder="快速检索标题、作者、汉化、嵌字或标签..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={`min-h-11 w-full rounded-sm ${isMangaVisible ? 'border-0' : 'border-[0.5px] border-[var(--amber-12)]'} bg-[var(--amber-2)] px-2 text-xs text-[var(--amber-12)] placeholder:text-[var(--amber-12)] ${selectedCategory === '漫画本' ? 'focus:placeholder:text-transparent' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--green-12)] ${searchQuery ? 'pr-11' : ''}`}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="清除检索"
+                  className="absolute right-0.5 top-1/2 grid min-h-10 min-w-10 -translate-y-1/2 place-items-center rounded-sm text-[var(--amber-12)] hover:bg-[var(--amber-3)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--green-12)]"
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              )}
             </div>
+
+            {selectedCategory === '漫画本' && (
+              <label className="flex min-h-11 min-w-0 items-center gap-2 text-xs text-[var(--amber-12)]">
+                <span className="flex min-h-11 shrink-0 items-center">作者</span>
+                <select
+                  value={selectedAuthor}
+                  onChange={(e) => {
+                    soundManager.playBlip();
+                    setSelectedAuthor(e.target.value);
+                  }}
+                  className={`min-h-11 min-w-0 w-full rounded-sm ${isMangaVisible ? 'border-0' : 'border-[0.5px] border-[var(--amber-12)]'} bg-[var(--amber-2)] px-2 text-xs text-[var(--amber-12)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--green-12)]`}
+                >
+                  {allAuthors.map((author) => <option key={author} value={author}>{author}</option>)}
+                </select>
+              </label>
+            )}
+
+            <label className={`flex min-h-11 min-w-0 items-center gap-2 text-xs text-[var(--amber-12)] ${isMangaVisible ? 'col-span-full sm:col-span-1' : ''}`}>
+              <span className="flex min-h-11 shrink-0 items-center">排序</span>
+              <select
+                value={sortBy}
+                onChange={(e) => {
+                  soundManager.playBlip();
+                  setSortBy(e.target.value as 'pages' | 'new');
+                }}
+                className={`min-h-11 min-w-0 w-full rounded-sm ${isMangaVisible ? 'border-0' : 'border-[0.5px] border-[var(--amber-12)]'} bg-[var(--amber-2)] px-2 text-xs text-[var(--amber-12)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--green-12)]`}
+              >
+                <option value="new">从新到旧</option>
+                <option value="pages">页数多到少</option>
+              </select>
+            </label>
           </div>
         )}
       </div>
@@ -753,10 +1073,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       {/* 插画集使用双列瀑布流；漫画站仍保持规整网格。 */}
       {selectedCategory !== '小说本' && (selectedCategory !== '漫画本' || isMangaVisible) && (
         <>
-        <div className={isIllustrationCategory ? 'columns-1 sm:columns-2 gap-3.5 sm:gap-4.5 w-full' : 'grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4.5 w-full items-stretch'}>
+        <div className={isIllustrationCategory ? 'columns-1 sm:columns-2 gap-3.5 sm:gap-4.5 w-full' : isComicMasonry ? 'columns-2 gap-2.5 sm:gap-3.5 w-full' : 'grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4.5 w-full items-stretch'}>
         {visibleBooks.map((book) => {
           // 通过 COS 逻辑层动态生成封面 CDN 地址
           const coverUrl = cosService.getCoverUrl(book);
+          const isMangaBook = (book.category || '漫画本') === '漫画本';
           const commentCount = getCommentCountByBookId(book.id);
           const like = artworkLikes[book.id] || { id: book.id, likes: book.likes || 0, liked: Boolean(book.liked) };
 
@@ -765,33 +1086,37 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
               id={`book-card-${book.id}`}
               key={book.id}
               onClick={() => handleOpenBookReader(book)}
-              className={`${isIllustrationCategory ? 'mb-3.5 sm:mb-4.5 break-inside-avoid' : ''} bg-[#FFFEEF] border-2 rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full ${isIllustrationCategory ? '' : 'h-full'} ${linkedBookId === book.id ? 'border-[#E5A93C] ring-4 ring-[#E5A93C]/35 shadow-xl animate-pulse' : 'border-[#D5C9AF] hover:border-[#1E4334]'}`}
-              style={{ contentVisibility: 'auto', containIntrinsicSize: '720px' }}
+              className={`${isComicMasonry ? 'comic-manga-card' : ''} ${isMasonryCategory ? 'mb-2.5 sm:mb-4 break-inside-avoid' : ''} bg-[#FFFEEF] ${isMangaVisible ? 'border-0' : 'border-2'} rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full ${isMasonryCategory ? '' : 'h-full'} ${linkedBookId === book.id ? 'border-[#E5A93C] ring-4 ring-[#E5A93C]/35 shadow-xl animate-pulse' : isMangaVisible ? '' : 'border-[#D5C9AF] hover:border-[#1E4334]'}`}
+              style={{ contentVisibility: 'auto', containIntrinsicSize: isComicMasonry ? undefined : '720px' }}
               title={isIllustrationCategory ? '点击打开插画集' : '点击直接打开查看无缝长图'}
             >
               <div className="space-y-2">
-                {/* 顶部标题与分类徽章 */}
+                {/* 漫画本敏感标记放在标题前，插画集继续显示分类标记。 */}
                 <div className="flex items-start justify-between gap-1.5">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-pixel text-[10px] sm:text-xs px-2 py-0.5 bg-[#1E4334] text-[#F9E79F] rounded-xs font-bold whitespace-nowrap">
-                        {isIllustrationCategory ? '插画集' : (book.category || '漫画本')}
-                      </span>
-                      {book.secure && (
+                    {!isMangaBook && (
+                      <div className="mb-1 flex items-center gap-1.5 flex-wrap">
+                        <span className="font-pixel text-[10px] sm:text-xs px-2 py-0.5 bg-[#1E4334] text-[#F9E79F] rounded-xs font-bold whitespace-nowrap">
+                          插画集
+                        </span>
+                        {book.pages && (
+                          <span className="text-xs font-retro-jp text-[#8C7A68] whitespace-nowrap">
+                            {book.pages}P
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {book.secure && (
+                      <div className="mb-1">
                         <span
                           className="font-pixel text-[10px] px-2 py-0.5 bg-[#7A1F1F] text-[#F6E7C1] rounded-xs font-bold whitespace-nowrap"
                           title="该作品为加密归档，需输入社群安全校验码才能解析"
                         >
                           🔒 含有敏感元素
                         </span>
-                      )}
-                      {book.pages && (
-                        <span className="text-xs font-retro-jp text-[#8C7A68] whitespace-nowrap">
-                          {book.pages}P
-                        </span>
-                      )}
-                    </div>
-                    {book.category !== '插画集' && <h3 className="font-pixel text-sm sm:text-base font-bold text-[#1E3A2B] group-hover:text-[#B7791F] mt-1 break-words leading-snug transition-colors">
+                      </div>
+                    )}
+                    {book.category !== '插画集' && <h3 className="font-pixel text-sm sm:text-base font-bold text-[#1E3A2B] group-hover:text-[#B7791F] break-words leading-snug transition-colors">
                       {book.titleZh}
                     </h3>}
                     {book.category !== '插画集' && book.titleJp && (
@@ -808,14 +1133,14 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                       event.stopPropagation();
                       handleShareBook(book);
                     }}
-                    className="shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-full border border-[#B7791F] bg-[#FFF8E8] text-[#9A6519] text-base leading-none shadow-xs active:scale-90"
+                    className={`shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-full ${isMangaVisible ? 'border-0' : 'border border-[#B7791F]'} bg-[#FFF8E8] text-[#9A6519] text-base leading-none shadow-xs active:scale-90`}
                   >
                     ↗
                   </button>
                 </div>
 
                 {/* 封面图片展示区：插画集与漫画本共用 COS 映射，点击卡片进入长图阅读。 */}
-                <div className="relative w-full aspect-[2/3] bg-[#FAF5E8] border border-[#E0D5BE] rounded-xs overflow-hidden group-hover:border-[#1E4334] flex items-center justify-center transition-colors">
+                <div className={`relative w-full aspect-[2/3] bg-[#FAF5E8] ${isMangaVisible ? 'border-0' : 'border border-[#E0D5BE] group-hover:border-[#1E4334]'} rounded-xs overflow-hidden flex items-center justify-center transition-colors`}>
                   {book.secure ? (
                     // 敏感本：内页在 COS 上只有密文，读不到任何图片。
                     // 但后台可以「单独上传一张封面」——它不参与加密，落在 {目录}/cover.<ext>，
@@ -864,7 +1189,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
 
                 {/* 内容预警：后台勾选并填写后展示，未填写时整块不渲染 */}
                 {book.warning && (
-                  <div className="flex items-start gap-1.5 bg-[#FDF0E3] border border-[#E8B04B] rounded-xs px-2.5 py-1.5">
+                  <div className={`flex items-start gap-1.5 bg-[#FDF0E3] ${isMangaVisible ? 'border-0' : 'border border-[#E8B04B]'} rounded-xs px-2.5 py-1.5`}>
                     <span className="shrink-0 text-xs leading-none mt-px">⚠</span>
                     <span className="text-xs font-retro-jp text-[#8A5A12] break-words leading-snug">
                       {book.warning}
@@ -873,11 +1198,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                 )}
 
                 {/* 字段区：插画集只展示作者、文本；漫画本保留来源、汉化、嵌字 */}
-                <div className="bg-[#FAF5E8] border border-[#EBE3D0] rounded-xs p-2.5 space-y-1.5 text-xs sm:text-[13px] font-retro-jp">
+                <div className={`bg-[#FAF5E8] ${isMangaVisible ? 'border-0' : 'border border-[#EBE3D0]'} rounded-xs p-2.5 space-y-1.5 text-xs sm:text-[13px] font-retro-jp`}>
                   <div className="flex items-start gap-1">
                     <span className="font-bold text-[#8C6B38] shrink-0 w-11 text-right">作者:</span>
                     <span className="font-bold flex-1 break-words">
-                      <AuthorWithLink author={book.circle} customUrl={book.authorUrl} defaultColorClass="text-[#3E342B]" orangeColorClass="text-[#D35400]" />
+                      <AuthorWithLink author={book.circle} customUrl={book.authorUrl} defaultColorClass="text-[#3E342B]" orangeColorClass="text-[#D35400]" showLinkArrow={isMangaBook} />
                     </span>
                   </div>
 

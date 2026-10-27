@@ -50,27 +50,23 @@ export const ComicGate: React.FC<{ children: React.ReactNode }> = ({ children })
 
   return (
     <main
-      className="min-h-[100dvh] w-full bg-[#fff] text-[#202124] flex flex-col items-center justify-center px-6 select-none"
-      style={{ fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }}
+      className="min-h-[100dvh] w-full bg-white px-2 py-2 text-[#111]"
+      style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
     >
-      <div className="max-w-md w-full text-center">
-        <div className="text-[120px] leading-none font-light text-[#202124] tracking-tight">403</div>
-        <button
-          type="button"
-          onClick={handleSecretClick}
-          className="mt-2 inline-block cursor-default select-none touch-manipulation focus:outline-none"
-          style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
-          aria-label="Forbidden"
-        >
-          <span className="text-lg text-[#202124]">Forbidden</span>
-        </button>
-        <div className="mt-4 text-sm text-[#5f6368] leading-relaxed">
-          <p>You don't have permission to access this resource.</p>
-          <p className="mt-1">Additionally, a 403 Forbidden error was encountered while trying to use an ErrorDocument to handle the request.</p>
-        </div>
-        <div className="mt-8 pt-6 border-t border-[#e8eaed] text-xs text-[#9aa0a6]">
-          Apache Server at {typeof window !== 'undefined' ? window.location.host : 'localhost'} Port 443
-        </div>
+      <div className="w-full">
+        <h1 className="my-[0.67em] text-[2em] leading-normal font-bold">
+          403{' '}
+          <button
+            type="button"
+            onClick={handleSecretClick}
+            className="cursor-default appearance-none border-0 bg-transparent p-0 font-inherit text-inherit touch-manipulation focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#555]"
+            aria-label="Forbidden error heading"
+          >
+            Forbidden
+          </button>
+        </h1>
+        <hr className="border-0 border-t border-[#999]" />
+        <address className="my-4 text-[13px] not-italic text-[#333]">nginx</address>
       </div>
     </main>
   );

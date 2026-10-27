@@ -153,7 +153,7 @@ export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, o
     const cancelInitialLoad = scheduleNonCriticalTask(load, 0, 2);
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') load();
-    }, 120_000);
+    }, 600_000);
     const onVis = () => { if (document.visibilityState === 'visible') load(); };
     document.addEventListener('visibilitychange', onVis);
     return () => {

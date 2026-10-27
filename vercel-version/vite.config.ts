@@ -6,6 +6,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const cloudbaseOrigin = (process.env.VITE_CLOUDBASE_ORIGIN || 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com').replace(/\/$/, '');
+
 const localDoujinAuth = (expectedPassword?: string): Plugin => {
   const middleware = (request: IncomingMessage, response: ServerResponse, next: () => void) => {
     if (request.url !== '/api/doujin-auth') {
@@ -52,7 +54,7 @@ const localDoujinAuth = (expectedPassword?: string): Plugin => {
       }
       void (async () => {
         try {
-          const authResponse = await fetch('https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com/auth', {
+          const authResponse = await fetch(`${cloudbaseOrigin}/auth`, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=UTF-8', Authorization: `Bearer ${token}` },
             body: JSON.stringify({ action: 'me' }),
@@ -279,7 +281,7 @@ export default defineConfig(() => {
     // 前端地址收敛在 src/utils/cloudbaseEndpoint.ts，两处前缀必须一致。
     proxy: {
       '/__cf': {
-        target: 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com',
+        target: cloudbaseOrigin,
         changeOrigin: true,
         secure: false,
         timeout: 15000,
@@ -295,7 +297,7 @@ export default defineConfig(() => {
         },
       },
       '/admin-upload': {
-        target: 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com',
+        target: cloudbaseOrigin,
         changeOrigin: true,
         secure: false,
         timeout: 15000,
@@ -310,7 +312,7 @@ export default defineConfig(() => {
         },
       },
       '/auth': {
-        target: 'https://levihan-tudou-d0g7jivue1ccc4a35.service.tcloudbase.com',
+        target: cloudbaseOrigin,
         changeOrigin: true,
         secure: false,
         timeout: 15000,

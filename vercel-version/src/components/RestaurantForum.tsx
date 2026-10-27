@@ -20,7 +20,6 @@ import { TeaPartyShareModal, ShareTargetData } from './TeaPartyShareModal';
 import { LinkShare, LinkShareCard, LinkShareModal, canEmbedLink, platformForLink, platformLabel } from './LinkShareCard';
 import { fmtTime, normalizeShareLink } from '../utils/forumFormat';
 import { toForumWebp } from '../utils/forumImage';
-import { formatNotificationBody, notifyBrowser } from '../utils/browserNotifications';
 export { fmtTime, normalizeShareLink } from '../utils/forumFormat';
 
 export type PostCategory = 'chat' | 'relay' | 'roleplay' | 'market' | 'links';
@@ -348,6 +347,8 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   const profile = useAuthStore((state) => state.profile);
   const currentUid = profile?.uid || null;
   const openLogin = useAppShellStore((state) => state.openLogin);
+  const forumOperationsDisabled = true;
+  const showClosedMessage = () => onShowToast('功能暂时关闭');
 
   // Market states (土豆市集)
   const [marketItems, setMarketItems] = useState<MarketItem[]>(() => {
@@ -656,28 +657,9 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   useEffect(() => {
     // 本地缓存只作首屏占位，账号切换后立即清除旧账号的点赞选中态。
     setPosts((current) => current.map((post) => ({ ...post, potatoGiven: false })));
-    const refreshForum = (initial: boolean) => api('forumList')
+    const refreshForum = () => api('forumList')
       .then((result) => {
         if (Array.isArray(result.posts) && result.posts.length > 0) {
-          if (!initial) {
-            const known = new Set(postsRef.current.map((post) => post.id));
-            result.posts.filter((post: ForumPost) => !known.has(post.id) && post.uid !== currentUid).slice(0, 3).forEach((post: ForumPost) => {
-              notifyBrowser(post.category === 'links' ? '吃一口安利' : post.category === 'relay' ? '文章接龙' : post.category === 'roleplay' ? '角色语C' : '来唠两句', {
-                body: formatNotificationBody(post.title || post.body || '论坛有新的帖子'),
-                tag: `forum-${post.id}`,
-                dedupeKey: `forum-${post.id}`,
-              });
-            });
-            const knownComments = new Set(postsRef.current.flatMap((post) => (post.comments || []).map((comment) => comment.id)));
-            result.posts.flatMap((post: ForumPost) => (post.comments || []).map((comment) => ({ post, comment })))
-              .filter(({ comment }) => !knownComments.has(comment.id) && comment.uid !== currentUid).slice(0, 3).forEach(({ post, comment }) => {
-                notifyBrowser(post.category === 'relay' ? '文章接龙' : post.category === 'roleplay' ? '角色语C' : post.category === 'links' ? '吃一口安利' : '有人接话', {
-                  body: formatNotificationBody(comment.body),
-                  tag: `forum-comment-${comment.id}`,
-                  dedupeKey: `forum-comment-${comment.id}`,
-                });
-              });
-          }
           persist(result.posts);
           result.posts.forEach((post: ForumPost) => {
             if (post.uid === currentUid && post.category === 'links' && (
@@ -689,10 +671,14 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       })
       .catch(() => undefined);
 
-    void refreshForum(true);
+    void refreshForum();
     const timer = window.setInterval(() => {
-      void refreshForum(false);
-    }, 120_000);
+      if (document.visibilityState === 'visible') void refreshForum();
+    }, 600_000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refreshForum();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     void api('marketList')
       .then((result) => {
@@ -703,7 +689,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
       })
       .catch(() => undefined);
 
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [currentUid]);
 
   const persist = (next: ForumPost[]) => {
@@ -768,6 +757,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   };
 
   const handleDeleteMarketItem = async (id: string) => {
+    if (forumOperationsDisabled) {
+      showClosedMessage();
+      return;
+    }
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再下架商品');
@@ -790,6 +783,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   };
 
   const handleDeletePost = async (postId: string) => {
+    if (forumOperationsDisabled) {
+      showClosedMessage();
+      return;
+    }
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再删除帖子');
@@ -807,6 +804,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
   // 编辑故事接龙（仅自己发布的帖子；目前后端仅开放 relay 分类）
   const openRelayEdit = (post: ForumPost) => {
+    if (forumOperationsDisabled) {
+      showClosedMessage();
+      return;
+    }
     soundManager.playWoodTap();
     setRelayEditTitle(post.title || '');
     setRelayEditPrompt(post.prompt || '');
@@ -815,6 +816,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   };
 
   const handleSaveRelayEdit = async () => {
+    if (forumOperationsDisabled) {
+      showClosedMessage();
+      return;
+    }
     if (!editingRelay) return;
     const token = await getAccessToken();
     if (!token) {
@@ -850,12 +855,20 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
   // 编辑接龙的某一棒（第 2 棒起）：只能改自己写的那几棒，改完整本重编译
   const openStickEdit = (post: ForumPost, comment: ForumComment, step: number) => {
+    if (forumOperationsDisabled) {
+      showClosedMessage();
+      return;
+    }
     soundManager.playWoodTap();
     setStickEditBody(comment.body || '');
     setEditingStick({ postId: post.id, commentId: comment.id, step });
   };
 
   const handleSaveStickEdit = async () => {
+    if (forumOperationsDisabled) {
+      showClosedMessage();
+      return;
+    }
     if (!editingStick) return;
     const token = await getAccessToken();
     if (!token) {
@@ -889,6 +902,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   };
 
   const handleDeleteComment = async (postId: string, commentId: string) => {
+    if (forumOperationsDisabled) {
+      showClosedMessage();
+      return;
+    }
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再删除评论');
@@ -949,6 +966,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   };
 
   const handleClaimQuill = async (postId: string) => {
+    if (forumOperationsDisabled) {
+      showClosedMessage();
+      return;
+    }
     const token = await getAccessToken();
     if (!token) {
       onShowToast('请先登录账号后再认领接龙');
@@ -984,6 +1005,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   };
 
   const handleReleaseQuill = (postId: string) => {
+    if (forumOperationsDisabled) {
+      showClosedMessage();
+      return;
+    }
     const targetPost = posts.find((p) => p.id === postId);
     if (!targetPost) return;
 
@@ -996,6 +1021,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
 
   const publish = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (forumOperationsDisabled) {
+      showClosedMessage();
+      return;
+    }
 
     const token = await getAccessToken();
     if (!token) {
@@ -1297,6 +1326,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   };
 
   const givePotato = async (id: string) => {
+    if (forumOperationsDisabled) {
+      showClosedMessage();
+      return;
+    }
     if (pendingPotatoes.current.has(id)) return;
     const token = await getAccessToken();
     if (!token) {
@@ -1338,6 +1371,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
   };
 
   const addComment = async (postId: string) => {
+    if (forumOperationsDisabled) {
+      showClosedMessage();
+      return;
+    }
     const text = (commentDrafts[postId] || '').trim();
     if (!text) return;
     const targetPost = posts.find((p) => p.id === postId);
@@ -1605,6 +1642,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
             <button
               type="button"
               onClick={() => {
+                if (forumOperationsDisabled) {
+                  showClosedMessage();
+                  return;
+                }
                 soundManager.playActionClick();
                 setComposeCategory('chat');
                 // 每次打开都清掉上一次的安利墙残留（链接 / 识别结果 / 标题），避免串味
@@ -1668,6 +1709,10 @@ export const RestaurantForum: React.FC<Props> = ({ onShowToast, initialCategory 
                 <button
                   type="button"
                   onClick={() => {
+                    if (forumOperationsDisabled) {
+                      showClosedMessage();
+                      return;
+                    }
                     soundManager.playActionClick();
                     setComposeCategory('market');
                     setShowMarketComposer(true);

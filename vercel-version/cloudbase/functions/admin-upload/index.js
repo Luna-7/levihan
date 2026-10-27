@@ -49,6 +49,7 @@ const webpush = require('web-push');
 
 const BUCKET = process.env.COS_BUCKET || 'levihan-1325571558';
 const REGION = process.env.COS_REGION || 'ap-nanjing';
+const ENV_ID = process.env.TCB_ENV;
 const ARCHIVE_KEY = 'archive.json';
 const TAGS_KEY = 'tags.json';   // 全站标签库（string[]），供上传台下拉选择
 const AUTHORS_KEY = 'authors.json'; // 作者链接登记表（[{name,url,createdAt,updatedAt}]），上传台自动补全 + 可导出 Excel
@@ -373,13 +374,15 @@ function formatPushBody(body, allowLong = false) {
   return `${compact}${text.length > clipped.length && !compact.endsWith('…') ? '…' : ''}`.trim();
 }
 
-async function sendPushUpdate({ title, body, tag, url = '/', allowLong = false }) {
+async function sendPushUpdate({ title, body, tag, url = '/', allowLong = false, category = 'comicUpdates' }) {
   try {
     if (!configureWebPush()) {
       console.warn('[push] VAPID keys are not configured; skip background notification');
       return;
     }
-    const subscriptions = await readPushSubscriptions();
+    const subscriptions = (await readPushSubscriptions()).filter((item) =>
+      Array.isArray(item && item.categories) ? item.categories.includes(category) : category === 'comicUpdates',
+    );
     if (!subscriptions.length) return;
     const payload = JSON.stringify({ title, body: formatPushBody(body, allowLong), tag, url });
     const expired = new Set();
@@ -1320,7 +1323,8 @@ function inboxDb() {
   const tcb = require('@cloudbase/node-sdk');
   const accessKey = process.env.CLOUDBASE_APIKEY;
   if (!accessKey) throw httpError('云端收件箱尚未配置服务端数据库凭证', 503);
-  return tcb.init({ env: 'levihan-tudou-d0g7jivue1ccc4a35', accessKey }).rdb({ database: 'public' });
+  if (!ENV_ID) throw httpError('云端收件箱尚未配置环境 ID', 503);
+  return tcb.init({ env: ENV_ID, accessKey }).rdb({ database: 'public' });
 }
 
 /**
@@ -1334,7 +1338,8 @@ async function authUid(bearer) {
   if (!token) return null;
   try {
     const tcb = require('@cloudbase/node-sdk');
-    const app = tcb.init({ env: 'levihan-tudou-d0g7jivue1ccc4a35', accessKey: process.env.CLOUDBASE_APIKEY });
+    if (!ENV_ID) return null;
+    const app = tcb.init({ env: ENV_ID, accessKey: process.env.CLOUDBASE_APIKEY });
     const db = app.rdb({ database: 'public' });
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const session = await db.from('user_sessions').select('user_id,expires_at,revoked_at').eq('token_hash', tokenHash).limit(1);
@@ -1917,8 +1922,11 @@ async function submitGameScore(uid, payload) {
       if (!validPushSubscription(subscription)) throw httpError('推送订阅格式无效', 400);
       const subscriptions = await readPushSubscriptions();
       const now = new Date().toISOString();
+      const category = payload.category === 'announcements' ? 'announcements' : 'comicUpdates';
+      const existing = subscriptions.find((item) => item && item.endpoint === subscription.endpoint);
+      const categories = Array.from(new Set([...(Array.isArray(existing && existing.categories) ? existing.categories : []), category]));
       const next = subscriptions.filter((item) => item && item.endpoint !== subscription.endpoint);
-      next.push({ endpoint: subscription.endpoint, keys: subscription.keys, createdAt: now, updatedAt: now });
+      next.push({ endpoint: subscription.endpoint, keys: subscription.keys, categories, createdAt: now, updatedAt: now });
       await writePushSubscriptions(next.slice(-1000));
       return { ok: true };
     }
@@ -1978,7 +1986,6 @@ async function submitGameScore(uid, payload) {
       if (index >= 0) items[index] = next;
       else items.unshift({ ...next, createdAt: now });
       await writeAnnouncements(items.slice(0, 30));
-      await sendPushUpdate({ title: '有新公告啦', body: String(next.description || next.title || '有新的公告'), tag: `announcement-${next.id}`, allowLong: true });
       return { ok: true, item: next, items };
     }
 
