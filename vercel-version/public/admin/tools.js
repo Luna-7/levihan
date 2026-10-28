@@ -384,7 +384,7 @@
     needLib('pdfjs');
     if (pdfDocCache.has(file)) return pdfDocCache.get(file);
     var pr = readAsArrayBuffer(file).then(function (data) {
-      return pdfjsLib.getDocument({ data: data }).promise;
+      return pdfjsLib.getDocument({ data: data, isEvalSupported: false }).promise;
     });
     pdfDocCache.set(file, pr);
     return pr;
@@ -636,7 +636,7 @@
       needLib('pdfjs');
       needLib('jszip');
       var data = await readAsArrayBuffer(file);
-      var pdf = await pdfjsLib.getDocument({ data: data }).promise;
+      var pdf = await pdfjsLib.getDocument({ data: data, isEvalSupported: false }).promise;
       var zip = new JSZip();
 
       for (var p = 1; p <= pdf.numPages; p++) {
@@ -753,7 +753,7 @@
 
       if (isPdf) {
         needLib('pdfjs');
-        var pdf = await pdfjsLib.getDocument({ data: await readAsArrayBuffer(files[0]) }).promise;
+        var pdf = await pdfjsLib.getDocument({ data: await readAsArrayBuffer(files[0]), isEvalSupported: false }).promise;
         for (var p = 1; p <= pdf.numPages; p++) {
           setBar('tk-lineart-bar', 'tk-lineart-bar-text', p, pdf.numPages, '页');
           var page = await pdf.getPage(p);

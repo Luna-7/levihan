@@ -1186,7 +1186,7 @@
 'use strict';
 /* ============ 配置 ============ */
 var FN_URL  = location.origin === 'https://admin.levihan.asia'
-  ? 'https://levihan.asia/api/admin-content'
+  ? 'https://www.levihan.asia/api/admin-content'
   : '/api/admin-content';
 var CDN     = 'https://levihan-1325571558.cos-website.ap-nanjing.myqcloud.com';
 var COS_BUCKET = 'levihan-1325571558';
@@ -2507,14 +2507,14 @@ function getPdfDocument(file){
  * "Cannot perform Construct on a detached ArrayBuffer"。
  */
 function openPdfWithPassword(buf, file, knownPw){
-  var params = { data: new Uint8Array(buf.slice(0)) };
+  var params = { data: new Uint8Array(buf.slice(0)), isEvalSupported: false };
   if (knownPw) params.password = knownPw;
   return pdfjsLib.getDocument(params).promise.catch(function(err){
     var isPw = err && (err.name === 'PasswordException' || /password/i.test(err && err.message || ''));
     if (!isPw) throw err;
     // 工具箱产物固定口令 levihan：先静默试一次，命中就零弹窗直开（页数/封面/上传全程不打扰）
     if (!knownPw) {
-      return pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)), password: PDF_KNOWN_INNER_PW }).promise
+      return pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)), password: PDF_KNOWN_INNER_PW, isEvalSupported: false }).promise
         .then(function(doc){ pdfPwCache.set(file, PDF_KNOWN_INNER_PW); return doc; })
         .catch(function(){ return promptForPdfPassword(buf, file); });
     }
@@ -2527,7 +2527,7 @@ function promptForPdfPassword(buf, file){
   var pw = window.prompt('「' + name + '」是一份带密码的 PDF，请输入打开密码：');
   if (pw == null) throw new Error('已取消：' + name + ' 需要密码才能打开。');
   if (pw === '') throw new Error(name + ' 的密码不能为空，已中止。');
-  return pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)), password: pw }).promise
+  return pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)), password: pw, isEvalSupported: false }).promise
     .then(function(doc){ pdfPwCache.set(file, pw); return doc; })
     .catch(function(err2){
       var stillPw = err2 && (err2.name === 'PasswordException' || /password/i.test(err2 && err2.message || ''));

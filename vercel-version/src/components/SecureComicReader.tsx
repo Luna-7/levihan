@@ -429,7 +429,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
 
         // ③ 解内层 PDF 标准口令：同一个密码直接透传
         setWorkingStage('解析页面中…');
-        const task = pdfjsLib.getDocument({ data: pdfBytes, password });
+        const task = pdfjsLib.getDocument({ data: pdfBytes, password, isEvalSupported: false });
         const loaded = await task.promise;
         const parsedAt = performance.now();
         console.info('[漫画解析耗时]', {
