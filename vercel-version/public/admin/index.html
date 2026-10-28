@@ -3198,10 +3198,7 @@ function loadInbox(){
     $('inbox-status').textContent = inboxItems.length ? '🔔 ' + inboxItems.length + ' 条新来信待处理' : '暂无未处理调查报告与来信';
     $('inbox-status').style.color = inboxItems.length ? '#B63A2B' : '';
     $('inbox-status').style.fontWeight = inboxItems.length ? '700' : '';
-    $('inbox-badge').textContent = String(inboxItems.length);
-    $('inbox-badge').classList.toggle('hide', inboxItems.length === 0);
     renderInboxReports(inboxItems, $('inbox-contacts'));
-    renderReviewItems(items.filter(function(item){ return item.type === 'announcement'; }), $('an-review'), '企划');
   }).catch(function(err){ $('inbox-status').textContent = '读取失败：' + (err.message || String(err)); });
 }
 function renderReviewItems(items, container, label){
@@ -3288,12 +3285,6 @@ $('inbox-panel').addEventListener('click', function(event){
   if (!card) return;
   reviewInbox(card.getAttribute('data-inbox-id'), button.getAttribute('data-review'));
 });
-['an-review'].forEach(function(id){ $(id).addEventListener('click',function(event){
-  var button=event.target.closest('[data-review]'); if(!button)return;
-  var card=button.closest('[data-inbox-id]'); if(!card)return;
-  reviewInbox(card.getAttribute('data-inbox-id'),button.getAttribute('data-review'));
-}); });
-
 var adminRecs=[];
 function loadRecsAdmin(){
   if(LOCAL_PREVIEW)return;
