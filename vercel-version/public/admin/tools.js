@@ -93,7 +93,7 @@
       el.textContent = files.length === 1 ? files[0].name : '已选择 ' + files.length + ' 个文件（按文件名排序）';
       el.classList.add('has');
     } else {
-      el.textContent = '未选择任何文件';
+      el.textContent = '';
       el.classList.remove('has');
     }
   }
@@ -102,7 +102,7 @@
     var files = Array.prototype.slice.call($(inputId).files || []);
     var el = $(labelId);
     if (!files.length) {
-      el.textContent = '未选择任何文件';
+      el.textContent = '';
       el.classList.remove('has');
       return;
     }
@@ -574,7 +574,7 @@
    * ============================================================ */
   async function encryptPdfOnly() {
     var file = $('tk-encryptPdfFile').files[0];
-    var password = val('tk-encryptPassword') || CONFIG.pdfPassword;
+    var password = CONFIG.pdfPassword;
     if (!file) { msg('tk-encrypt-msg', 'err', '请先选择 PDF 文件。'); return; }
 
     setBusy('tk-encryptPdf', true, '加密中…');
@@ -586,26 +586,20 @@
       needLib('pdfjs');
       var pdf = await getPdfDoc(file);
       setBar('tk-encrypt-bar', 'tk-encrypt-bar-text', 0, pdf.numPages, '页');
-      var oldPassword = CONFIG.pdfPassword;
-      CONFIG.pdfPassword = password;
       var doc = null;
       var done = 0;
-      try {
-        await eachPageCanvas([file], [], function (canvas) {
-          if (!doc) {
-            doc = createEncryptedPdf(canvas);
-            addCanvasToPdf(doc, canvas, true);
-          } else {
-            addCanvasToPdf(doc, canvas, false);
-          }
-          canvas.width = 0;
-          canvas.height = 0;
-          done += 1;
-          setBar('tk-encrypt-bar', 'tk-encrypt-bar-text', done, pdf.numPages, '页');
-        });
-      } finally {
-        CONFIG.pdfPassword = oldPassword;
-      }
+      await eachPageCanvas([file], [], function (canvas) {
+        if (!doc) {
+          doc = createEncryptedPdf(canvas);
+          addCanvasToPdf(doc, canvas, true);
+        } else {
+          addCanvasToPdf(doc, canvas, false);
+        }
+        canvas.width = 0;
+        canvas.height = 0;
+        done += 1;
+        setBar('tk-encrypt-bar', 'tk-encrypt-bar-text', done, pdf.numPages, '页');
+      });
       var stem = cleanName(file.name.replace(/\.pdf$/i, '')) || 'PDF';
       var outputName = stem + '_加密.pdf';
       downloadBlob(doc.output('blob'), outputName);

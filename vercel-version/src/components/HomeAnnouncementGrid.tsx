@@ -57,7 +57,6 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
   const [announcementError, setAnnouncementError] = useState(false);
-  const [reloadNonce, setReloadNonce] = useState(0);
   const [showDetailModal, setShowDetailModal] = useState<AnnouncementItem | null>(null);
   const [expandedImage, setExpandedImage] = useState('');
   const announcementListRef = useRef<HTMLDivElement>(null);
@@ -127,7 +126,7 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [reloadNonce]);
+  }, []);
 
   useEffect(() => {
     if (!showDetailModal && !showProposal && !expandedImage) return;
@@ -283,19 +282,9 @@ export const HomeAnnouncementGrid: React.FC<Props> = React.memo(({
           <div className="py-5 text-center font-retro-jp text-[11px] text-[#9A8B77]">公告加载中…</div>
         )}
 
-        {!loadingAnnouncements && announcements.length === 0 && (
+        {!loadingAnnouncements && !announcementError && announcements.length === 0 && (
           <div className="py-5 text-center">
-            {announcementError ? (
-              <button
-                type="button"
-                onClick={() => setReloadNonce((value) => value + 1)}
-                className="min-h-11 rounded-md px-3 py-2 font-retro-jp text-[11px] text-[#8F3426] underline underline-offset-4"
-              >
-                公告读取失败，点击重试
-              </button>
-            ) : (
             <p className="font-retro-jp text-[11px] text-[#9A8B77]">暂无公告 ✦</p>
-            )}
           </div>
         )}
 

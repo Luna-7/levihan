@@ -54,7 +54,6 @@ function byLine(author: string | undefined): string {
 export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, onPreloadTab, onShowToast }) => {
   const [items, setItems] = useState<UpdateItem[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,7 +161,7 @@ export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, o
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [reloadNonce]);
+  }, []);
 
   const handleHover = useMemo(
     () => (it: UpdateItem) => {
@@ -192,11 +191,11 @@ export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, o
   );
 
   if (status === 'loading' && items.length === 0) {
-    return <section className="home-todays-updates w-full shrink-0 px-1" aria-live="polite"><p className="py-2 text-center font-retro-jp text-[11px] text-[#9A8B77]">今日上新加载中…</p></section>;
+    return null;
   }
 
   if (status === 'error' && items.length === 0) {
-    return <section className="home-todays-updates w-full shrink-0 px-1 text-center"><button type="button" onClick={() => setReloadNonce((value) => value + 1)} className="min-h-11 rounded-md px-3 py-2 font-retro-jp text-[11px] text-[#8F3426] underline underline-offset-4">今日上新读取失败，点击重试</button></section>;
+    return null;
   }
 
   // 今天没有任何上新，保持首页干净。

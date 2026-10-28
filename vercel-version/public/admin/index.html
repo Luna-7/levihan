@@ -50,7 +50,7 @@
   .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
   .spread{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
   /* ---- form ---- */
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px;align-items:start}
   .f{display:flex;flex-direction:column;gap:5px;min-width:0}
   .f.span2{grid-column:span 2}
   label{font-size:12px;font-weight:700;color:var(--ink);display:flex;gap:5px;align-items:baseline}
@@ -59,6 +59,7 @@
   input[type=text],input[type=password],input[type=number],input[type=url],input[type=date],select,textarea{
     width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;background:#fff;
     color:var(--ink);font-family:inherit;font-size:13.5px;outline:none;transition:border-color .15s}
+  .f>input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),.f>select,.f>textarea{width:100%;min-width:0}
   input:focus,select:focus,textarea:focus{border-color:var(--green-2);box-shadow:0 0 0 3px rgba(30,67,52,.08)}
   input:disabled{background:#F2EDE2;color:var(--ink-3)}
   textarea{resize:vertical;min-height:38px}
@@ -69,6 +70,7 @@
   [data-admin-page] .grid > .f > .row > input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),
   [data-admin-page] .grid > .f > .row > button{height:40px;min-height:40px;box-sizing:border-box}
   [data-admin-page] .grid > .f > textarea{box-sizing:border-box}
+  @media(max-width:760px){.grid:not(.announcement-form):not(.novel-admin-form):not(.artwork-admin-form)>.f.span2{grid-column:1/-1}}
   /* ---- buttons ---- */
   button{font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border-radius:6px;
          padding:8px 14px;border:1.5px solid var(--green-2);background:var(--paper);color:var(--green-2);
@@ -83,13 +85,11 @@
   .btn-sm{padding:5px 10px;font-size:12px}
   .btn-danger{border-color:var(--danger);color:var(--danger)}
   .btn-danger:hover:not(:disabled){background:#FBEDEA}
-  .mode-switch{margin:16px 0 18px;padding:10px 14px;background:var(--paper);border:1.5px solid var(--green-2);
-               border-radius:8px;box-shadow:2px 2px 0 rgba(30,67,52,.12)}
-  .mode-switch select{width:min(260px,100%)}
   .admin-tabs{display:flex;gap:7px;overflow-x:auto;margin:16px 0 18px;
               padding:8px;background:rgba(251,247,236,.96);backdrop-filter:blur(10px);border:2px solid var(--green-2);
               border-radius:12px;box-shadow:3px 3px 0 rgba(30,67,52,.14);scrollbar-width:thin}
   .admin-tab{flex:1 0 auto;min-width:122px;border-color:transparent;background:transparent;color:var(--ink-3);white-space:nowrap}
+  .admin-tab:disabled{color:var(--ink-3);opacity:.55;cursor:not-allowed;background:transparent}
   .admin-tab:hover:not(:disabled){background:#F1EADA;color:var(--green-2)}
   .admin-tab.active{background:var(--green-2);color:var(--paper);border-color:var(--green-2);box-shadow:0 3px 8px rgba(30,67,52,.2)}
   .admin-page-head{margin:0 0 12px;padding:12px 15px;border-left:4px solid var(--gold);background:#FFF9EC;border-radius:0 8px 8px 0}
@@ -111,8 +111,6 @@
     #view-main > .admin-page-head + .panel{padding-top:0}
     #view-main > .panel{padding:18px 0;background:transparent;border:0;border-radius:0;box-shadow:none}
     #view-main > .panel + .panel{margin-top:22px}
-    #view-main > .mode-switch{margin:0 0 10px;padding:8px 0;background:transparent;border:0;border-bottom:1px solid var(--line);
-      border-radius:0;box-shadow:none}
   }
   @media(max-width:860px){
     .admin-sidebar-footer{display:none}
@@ -124,16 +122,6 @@
   .admin-sidebar-footer #btn-logout{width:100%;text-align:left}
   .admin-sidebar-footer #env-info{line-height:1.55}
   @media(max-width:860px){.admin-sidebar-footer{display:none}}
-  /* ---- 漫画上传页功能区左右切换 ---- */
-  .sub-switch{display:inline-flex;align-items:center;border:1.5px solid var(--green-2);border-radius:8px;
-              background:#FFFCF4;overflow:hidden;box-shadow:2px 2px 0 rgba(30,67,52,.12)}
-  .sub-arrow{border:0;background:transparent;color:var(--green-2);font-size:17px;line-height:1;
-             padding:8px 13px;cursor:pointer;font-weight:900}
-  .sub-arrow:hover:not(:disabled){background:#F1EADA}
-  .sub-arrow:active:not(:disabled){transform:translateY(1px)}
-  .sub-name{min-width:132px;text-align:center;font-weight:700;color:var(--ink);font-size:13px;
-            padding:8px 12px;border-left:1.5px solid var(--rule);border-right:1.5px solid var(--rule);
-            white-space:nowrap}
   .author-link-hint{min-height:18px;margin-top:3px}
   #bk-list{max-height:min(48vh,430px);overflow-y:auto;overscroll-behavior:contain;padding:2px 8px 2px 2px;
            scrollbar-width:thin;scrollbar-color:var(--green-2) #EFE8D6}
@@ -141,9 +129,9 @@
   #bk-list::-webkit-scrollbar-track{background:#EFE8D6;border-radius:6px}
   #bk-list::-webkit-scrollbar-thumb{background:var(--green-2);border-radius:6px;border:2.5px solid #EFE8D6}
   /* ---- drop zone ---- */
-  .drop{border:2px dashed var(--line);border-radius:10px;background:var(--card);padding:26px 16px;text-align:center;
-        cursor:pointer;transition:.15s}
-  .drop:hover,.drop.over{border-color:var(--green-2);background:#F5F0E2}
+  .drop{border:.5px dashed var(--line);border-radius:8px;background:var(--paper);padding:26px 16px;text-align:center;
+        cursor:pointer;transition:border-color .2s ease-out,background-color .2s ease-out}
+  .drop:hover,.drop.over{border-color:var(--green-2);background:var(--card)}
   .drop.over{border-style:solid}
   /* ---- file list ---- */
   .files{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:12px;
@@ -243,9 +231,9 @@
                   border-radius:8px;background:#EEE7D7;display:block;margin-top:8px}
   .image-actions{display:flex;align-items:center;gap:8px;min-height:32px;margin-top:8px}
   .image-actions .muted{font-size:12px}
-  .image-drop{display:flex;align-items:center;justify-content:center;min-height:112px;padding:16px;border:2px dashed var(--line);
-              border-radius:8px;background:var(--card);color:var(--ink-3);text-align:center;cursor:pointer;transition:.15s}
-  .image-drop:hover,.image-drop.over,.image-drop:focus-within{border-color:var(--green-2);background:#F5F0E2;color:var(--green-2)}
+  .image-drop{display:flex;align-items:center;justify-content:center;min-height:112px;padding:16px;border:.5px dashed var(--line);
+              border-radius:8px;background:var(--paper);color:var(--ink-3);text-align:center;cursor:pointer;transition:border-color .2s ease-out,background-color .2s ease-out}
+  .image-drop:hover,.image-drop.over,.image-drop:focus-within{border-color:var(--green-2);background:var(--card);color:var(--green-2)}
   .image-drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
   .image-drop strong{display:block;color:var(--green-2);font-size:13px}
   .image-drop kbd{display:inline-block;margin:0 2px;padding:1px 5px;border:1px solid var(--line);border-radius:4px;background:#fff;font-family:var(--font-code),var(--font-ui);font-size:11px}
@@ -454,13 +442,24 @@
   .tool-page{display:none}
   .tool-page.active{display:block}
   .tool-page h2{margin-top:0}
+  .tk-metadata-grid>.tk-credits-row{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
   .tool-bar-text{min-height:18px;margin-top:6px;font-family:var(--font-code),var(--font-ui);font-size:13px;color:var(--ink-3);letter-spacing:.4px}
   .tool-out{background:#FFF9EC!important;cursor:default;font-family:var(--font-code),var(--font-ui);font-size:14px}
   .tool-preview{display:block;max-width:100%;max-height:340px;margin-top:12px;border:1.5px solid var(--line);
                 border-radius:6px;background:#fff}
   .tool-file-name{min-height:17px;margin-top:4px;font-size:12px;color:var(--ink-3);
                   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tool-file-name:empty{display:none}
   .tool-file-name.has{color:var(--green-2);font-weight:700}
+  .custum-file-upload{position:relative;min-height:112px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    border:.5px dashed var(--line);border-radius:8px;background:var(--paper);color:var(--ink-2);cursor:pointer;text-align:center;transition:border-color .2s ease-out,background-color .2s ease-out}
+  .custum-file-upload:hover,.custum-file-upload:focus-within{border-color:var(--green-2);background:var(--card)}
+  .custum-file-upload .icon{display:flex;align-items:center;justify-content:center;color:var(--green-2)}
+  .custum-file-upload .icon svg{width:30px;height:30px;fill:currentColor}
+  .custum-file-upload .text{font-size:14px;font-weight:700}
+  .custum-file-upload .subtext{font-size:12px;color:var(--ink-3)}
+  .custum-file-upload input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+  [data-admin-page] .grid > .f > label.custum-file-upload:first-child{height:auto;min-height:112px;line-height:normal;align-items:center;overflow:visible}
   input[type=color]{width:64px;height:34px;padding:2px;border:1.5px solid var(--line);border-radius:6px;
                     background:#fff;cursor:pointer}
   /* ---- 工具箱 / 通用同色系确认弹窗（替代浏览器原生 confirm） ---- */
@@ -508,31 +507,18 @@
 
     <nav class="admin-tabs" aria-label="管理台功能切换">
       <button type="button" class="admin-tab active" data-admin-tab="manga">📚 漫画上传</button>
+      <button type="button" class="admin-tab" data-admin-tab="toolkit">🧰 文件处理</button>
       <button type="button" class="admin-tab" data-admin-tab="announcement">📢 公告管理</button>
+      <button type="button" class="admin-tab" data-admin-tab="support">☕ 支持信息</button>
+      <button type="button" class="admin-tab" disabled>🖼 周边素材</button>
+      <button type="button" class="admin-tab" disabled>📇 作者登记</button>
+      <button type="button" class="admin-tab" disabled>🌳 论坛管理</button>
+      <button type="button" class="admin-tab" disabled>✍️ 小说与插画</button>
       <div class="admin-sidebar-footer">
         <button class="btn-sm" id="btn-logout">退出登录</button>
         <div class="muted" id="env-info">正在连接…</div>
       </div>
     </nav>
-
-    <div class="row mode-switch" data-admin-page="manga" aria-label="功能区与作品分类选择">
-      <label>当前功能 <span class="req">*</span></label>
-      <div class="sub-switch" role="group" aria-label="功能区左右切换">
-        <button type="button" class="sub-arrow" id="f-sub-prev" aria-label="上一个功能">‹</button>
-        <span class="sub-name" id="f-sub-name">📚 漫画上传</span>
-        <button type="button" class="sub-arrow" id="f-sub-next" aria-label="下一个功能">›</button>
-      </div>
-      <span class="row" data-sub="upload" style="gap:8px"></span>
-    </div>
-    <div class="admin-page-head hide" data-admin-page="inbox"><h2>📬 调查报告收件箱</h2><div class="muted">接收并处理前台「调查报告呈递」提交的所有来信与报告。</div></div>
-    <div class="panel hide" id="inbox-panel" data-admin-page="inbox">
-      <div class="spread" style="margin-bottom:12px">
-        <h2 style="margin:0">📬 调查报告呈递收件箱</h2>
-        <button class="btn-sm" id="inbox-refresh">↻ 刷新收件箱</button>
-      </div>
-      <div class="muted" id="inbox-status">登录后点击刷新，接收前台「调查报告呈递」提交的来信与报告。</div>
-      <div id="inbox-contacts" style="margin-top:14px"></div>
-    </div>
 
     <div class="admin-page-head hide" data-admin-page="announcement"><h2>📢 公告管理</h2><div class="muted">维护首页公告卡片、图片与跳转入口。</div></div>
     <div class="panel hide" id="announcement-panel" data-admin-page="announcement">
@@ -671,11 +657,7 @@
     <div class="admin-page-head hide" data-admin-page="forum"><h2>🌳 餐厅论坛收录区</h2><div class="muted">展开帖子后可删除整帖或单条言论。</div></div>
     <div class="panel hide" id="forum-panel" data-admin-page="forum"><div class="spread"><h2>论坛帖子</h2><button class="btn-sm" id="forum-reload">↻ 刷新</button></div><div id="forum-admin-list"><p class="muted">加载中…</p></div><div class="msg" id="forum-msg"></div></div>
 
-    <!-- ================= 文件工具箱 ================= -->
-    <div class="admin-page-head hide" data-admin-page="manga" data-sub="toolkit">
-      <h2>🧰 文件工具箱</h2>
-      <div class="muted">群内资源处理：图片/文件转加密 PDF、PDF 单独加密、PDF 拆图、加长白条、线条变色、文件名生成。全部在浏览器本地运算，不会上传到服务器。</div>
-    </div>
+    <!-- ================= 文件处理 ================= -->
     <div class="panel hide" id="toolkit-panel" data-admin-page="manga" data-sub="toolkit">
       <div class="tool-tabs" id="tk-tabs" role="tablist" aria-label="工具切换">
         <button type="button" class="tool-tab active" data-tool="pdf" role="tab">🖼 图片/文件转加密 PDF</button>
@@ -689,15 +671,17 @@
       <!-- ① 图片转加密 PDF -->
       <div class="tool-page active" data-tool-page="pdf" role="tabpanel">
         <h2><span class="n">1</span> 图片 / 文件转加密 PDF</h2>
-        <div class="grid">
+        <div class="grid tk-metadata-grid">
           <div class="f"><label for="tk-workTitle">作品名</label><input type="text" id="tk-workTitle" placeholder="必填，用于文件名"></div>
           <div class="f"><label for="tk-author">原作者</label><input type="text" id="tk-author" placeholder="作者 / 社团"></div>
           <div class="f"><label for="tk-source">来源</label>
             <select id="tk-source"><option value="Web">Web</option><option value="群友分享实体本">群友分享实体本</option></select>
           </div>
           <div class="f hide" id="tk-friendWrap"><label for="tk-friendName">分享群友名称</label><input type="text" id="tk-friendName" placeholder="群友昵称"></div>
-          <div class="f"><label for="tk-translator">汉化</label><input type="text" id="tk-translator" placeholder="汉化组 / 译者"></div>
-          <div class="f"><label for="tk-typesetter">嵌字</label><input type="text" id="tk-typesetter" placeholder="嵌字"></div>
+          <div class="tk-credits-row">
+            <div class="f"><label for="tk-translator">汉化</label><input type="text" id="tk-translator" placeholder="汉化组 / 译者"></div>
+            <div class="f"><label for="tk-typesetter">嵌字</label><input type="text" id="tk-typesetter" placeholder="嵌字"></div>
+          </div>
         </div>
         <div class="sw" style="margin-top:14px">
           <input type="checkbox" id="tk-hasWarning"><label for="tk-hasWarning" style="font-weight:400">首页插入预警页（白底红字）</label>
@@ -710,9 +694,12 @@
           <input type="checkbox" id="tk-hasWatermark" checked><label for="tk-hasWatermark" style="font-weight:400">页面右下角添加防盗水印（标注来源/汉化/土豆群内部声明）</label>
         </div>
         <div class="f" style="margin-top:14px">
-          <label for="tk-imageFiles">上传图片 / PDF <span class="tag">可多选，按文件名自然排序</span></label>
-          <input type="file" id="tk-imageFiles" accept="image/*,.pdf,application/pdf" multiple>
-          <div class="tool-file-name" id="tk-imageFilesName">未选择任何文件</div>
+          <label class="custum-file-upload" for="tk-imageFiles">
+            <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 1a1 1 0 0 0-.707.293l-6 6A1 1 0 0 0 3 8v12a3 3 0 0 0 3 3h1a1 1 0 1 0 0-2H6a1 1 0 0 1-1-1V9h5a1 1 0 0 0 1-1V3h7a1 1 0 0 1 1 1v5a1 1 0 1 0 2 0V4a3 3 0 0 0-3-3zm-1 6H6.414L9 4.414zm7.5 4a4.5 4.5 0 0 0-4.485 4.122A4.002 4.002 0 0 0 13 23h7a4 4 0 0 0 .985-7.878A4.5 4.5 0 0 0 16.5 11m0 2a2.5 2.5 0 0 1 2.5 2.5V17h1a2 2 0 1 1 0 4h-7a2 2 0 1 1 0-4h1v-1.5a2.5 2.5 0 0 1 2.5-2.5"/></svg></span>
+            <span class="text">点击选择图片或 PDF</span><span class="subtext">支持多选</span>
+            <input type="file" id="tk-imageFiles" accept="image/*,.pdf,application/pdf" multiple>
+          </label>
+          <div class="tool-file-name" id="tk-imageFilesName"></div>
         </div>
         <div class="row" style="margin-top:14px">
           <button class="btn-gold" id="tk-makePdf">生成加密 PDF</button>
@@ -720,7 +707,6 @@
         <div class="bar"><i id="tk-pdf-bar"></i></div>
         <div class="tool-bar-text" id="tk-pdf-bar-text"></div>
         <div class="msg" id="tk-pdf-msg"></div>
-        <div class="note">生成物统一加口令 <b>levihan</b>。勾选水印时在每页右下角标注来源声明；不勾选则仅添加密码与标准化文件名。PDF 会先按页渲染成图再合并加密；一次选到多个 PDF（或图片与 PDF 混选）时，会先询问「合并为一份」还是「分别导出」。</div>
       </div>
 
       <!-- ② PDF 单独加密 -->
@@ -728,13 +714,12 @@
         <h2><span class="n">2</span> PDF 加密</h2>
         <div class="grid">
           <div class="f span2">
-            <label for="tk-encryptPdfFile">上传 PDF <span class="tag">单文件，本地处理，不会上传服务器</span></label>
-            <input type="file" id="tk-encryptPdfFile" accept=".pdf,application/pdf">
-            <div class="tool-file-name" id="tk-encryptPdfFileName">未选择任何文件</div>
-          </div>
-          <div class="f">
-            <label for="tk-encryptPassword">打开密码</label>
-            <input type="text" id="tk-encryptPassword" value="levihan" autocomplete="off" spellcheck="false">
+            <label class="custum-file-upload" for="tk-encryptPdfFile">
+              <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 1a1 1 0 0 0-.707.293l-6 6A1 1 0 0 0 3 8v12a3 3 0 0 0 3 3h1a1 1 0 1 0 0-2H6a1 1 0 0 1-1-1V9h5a1 1 0 0 0 1-1V3h7a1 1 0 0 1 1 1v5a1 1 0 1 0 2 0V4a3 3 0 0 0-3-3zm-1 6H6.414L9 4.414zm7.5 4a4.5 4.5 0 0 0-4.485 4.122A4.002 4.002 0 0 0 13 23h7a4 4 0 0 0 .985-7.878A4.5 4.5 0 0 0 16.5 11m0 2a2.5 2.5 0 0 1 2.5 2.5V17h1a2 2 0 1 1 0 4h-7a2 2 0 1 1 0-4h1v-1.5a2.5 2.5 0 0 1 2.5-2.5"/></svg></span>
+              <span class="text">点击选择 PDF</span><span class="subtext">单个文件</span>
+              <input type="file" id="tk-encryptPdfFile" accept=".pdf,application/pdf">
+            </label>
+            <div class="tool-file-name" id="tk-encryptPdfFileName"></div>
           </div>
         </div>
         <div class="row" style="margin-top:14px">
@@ -750,9 +735,12 @@
       <div class="tool-page" data-tool-page="split" role="tabpanel">
         <h2><span class="n">3</span> PDF 转图片</h2>
         <div class="f">
-          <label for="tk-pdfFile">上传 PDF <span class="tag">单文件，本地按页拆图</span></label>
-          <input type="file" id="tk-pdfFile" accept=".pdf,application/pdf">
-          <div class="tool-file-name" id="tk-pdfFileName">未选择任何文件</div>
+          <label class="custum-file-upload" for="tk-pdfFile">
+            <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 1a1 1 0 0 0-.707.293l-6 6A1 1 0 0 0 3 8v12a3 3 0 0 0 3 3h1a1 1 0 1 0 0-2H6a1 1 0 0 1-1-1V9h5a1 1 0 0 0 1-1V3h7a1 1 0 0 1 1 1v5a1 1 0 1 0 2 0V4a3 3 0 0 0-3-3zm-1 6H6.414L9 4.414zm7.5 4a4.5 4.5 0 0 0-4.485 4.122A4.002 4.002 0 0 0 13 23h7a4 4 0 0 0 .985-7.878A4.5 4.5 0 0 0 16.5 11m0 2a2.5 2.5 0 0 1 2.5 2.5V17h1a2 2 0 1 1 0 4h-7a2 2 0 1 1 0-4h1v-1.5a2.5 2.5 0 0 1 2.5-2.5"/></svg></span>
+            <span class="text">点击选择 PDF</span><span class="subtext">单个文件</span>
+            <input type="file" id="tk-pdfFile" accept=".pdf,application/pdf">
+          </label>
+          <div class="tool-file-name" id="tk-pdfFileName"></div>
         </div>
         <div class="row" style="margin-top:14px">
           <button class="btn-gold" id="tk-splitPdf">导出 JPG ZIP</button>
@@ -760,16 +748,18 @@
         <div class="bar"><i id="tk-split-bar"></i></div>
         <div class="tool-bar-text" id="tk-split-bar-text"></div>
         <div class="msg" id="tk-split-msg"></div>
-        <div class="note">使用 pdf.js 逐页渲染（2 倍清晰度），按页码打包为 ZIP 下载。</div>
       </div>
 
       <!-- ③ 加长白条 -->
       <div class="tool-page" data-tool-page="strip" role="tabpanel">
         <h2><span class="n">3</span> 加长白条</h2>
         <div class="f">
-          <label for="tk-stripFiles">上传图片 <span class="tag">可多选</span></label>
-          <input type="file" id="tk-stripFiles" accept="image/*" multiple>
-          <div class="tool-file-name" id="tk-stripFilesName">未选择任何文件</div>
+          <label class="custum-file-upload" for="tk-stripFiles">
+            <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 1a1 1 0 0 0-.707.293l-6 6A1 1 0 0 0 3 8v12a3 3 0 0 0 3 3h1a1 1 0 1 0 0-2H6a1 1 0 0 1-1-1V9h5a1 1 0 0 0 1-1V3h7a1 1 0 0 1 1 1v5a1 1 0 1 0 2 0V4a3 3 0 0 0-3-3zm-1 6H6.414L9 4.414zm7.5 4a4.5 4.5 0 0 0-4.485 4.122A4.002 4.002 0 0 0 13 23h7a4 4 0 0 0 .985-7.878A4.5 4.5 0 0 0 16.5 11m0 2a2.5 2.5 0 0 1 2.5 2.5V17h1a2 2 0 1 1 0 4h-7a2 2 0 1 1 0-4h1v-1.5a2.5 2.5 0 0 1 2.5-2.5"/></svg></span>
+            <span class="text">点击选择图片</span><span class="subtext">支持多选</span>
+            <input type="file" id="tk-stripFiles" accept="image/*" multiple>
+          </label>
+          <div class="tool-file-name" id="tk-stripFilesName"></div>
         </div>
         <div class="grid" style="margin-top:12px">
           <div class="f"><label for="tk-stripExport">导出方式</label>
@@ -796,9 +786,12 @@
       <div class="tool-page" data-tool-page="recolor" role="tabpanel">
         <h2><span class="n">4</span> 线条智能变色</h2>
         <div class="f">
-          <label for="tk-lineartFiles">上传图片 / PDF <span class="tag">PDF 仅支持单文件</span></label>
-          <input type="file" id="tk-lineartFiles" accept="image/*,.pdf,application/pdf" multiple>
-          <div class="tool-file-name" id="tk-lineartFilesName">未选择任何文件</div>
+          <label class="custum-file-upload" for="tk-lineartFiles">
+            <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 1a1 1 0 0 0-.707.293l-6 6A1 1 0 0 0 3 8v12a3 3 0 0 0 3 3h1a1 1 0 1 0 0-2H6a1 1 0 0 1-1-1V9h5a1 1 0 0 0 1-1V3h7a1 1 0 0 1 1 1v5a1 1 0 1 0 2 0V4a3 3 0 0 0-3-3zm-1 6H6.414L9 4.414zm7.5 4a4.5 4.5 0 0 0-4.485 4.122A4.002 4.002 0 0 0 13 23h7a4 4 0 0 0 .985-7.878A4.5 4.5 0 0 0 16.5 11m0 2a2.5 2.5 0 0 1 2.5 2.5V17h1a2 2 0 1 1 0 4h-7a2 2 0 1 1 0-4h1v-1.5a2.5 2.5 0 0 1 2.5-2.5"/></svg></span>
+            <span class="text">点击选择图片或 PDF</span><span class="subtext">PDF 仅支持单文件</span>
+            <input type="file" id="tk-lineartFiles" accept="image/*,.pdf,application/pdf" multiple>
+          </label>
+          <div class="tool-file-name" id="tk-lineartFilesName"></div>
         </div>
         <div class="grid" style="margin-top:12px">
           <div class="f"><label for="tk-lineartColor">目标颜色</label>
@@ -896,7 +889,7 @@
           <div class="muted" id="tag-hint" style="margin-top:3px"></div>
         </div>
         <div class="f" data-page-node-id="oNxIGhtp2rvHD7td7SZvA6">
-          <label for="f-source" data-page-node-id="djzFvJiUhAhAtNLEdGs4fg">来源 <span class="req">*</span> <span class="tag" data-page-node-id="0H3IKMbb5CWCekvOgb2dgX">填写来源</span></label>
+          <label for="f-source" data-page-node-id="djzFvJiUhAhAtNLEdGs4fg">来源 <span class="req">*</span></label>
           <input type="text" id="f-source" placeholder="例如：web" data-page-node-id="qMiwwtnSMwApwoD63kldG3">
         </div>
         <div class="f" data-page-node-id="51XEJGvbO1XiQRGwCvFJkB">
@@ -904,17 +897,17 @@
           <input type="text" id="f-translator" placeholder="例如：LG" data-page-node-id="8Gm9MhyqDozL0OKYNK5oZ2">
         </div>
         <div class="f" data-page-node-id="5JCbtfXEyUNVpMMPO6y81x">
-          <label for="f-typesetter" data-page-node-id="fHQa3ymiM89i1cbzpFM10T">嵌字 <span class="req">*</span> <span class="tag" data-page-node-id="YyTvJg8sQs24pEGdMi0G0Y">填写嵌字</span></label>
+          <label for="f-typesetter" data-page-node-id="fHQa3ymiM89i1cbzpFM10T">嵌字 <span class="req">*</span></label>
           <input type="text" id="f-typesetter" placeholder="例如：LG" data-page-node-id="22LjbwEwI7jtzjPIKit2HY">
         </div>
         <div class="f" data-page-node-id="bvh0txU0PuywAXJnAkUmMu">
           <label for="f-pages" data-page-node-id="dltegDArjhCdJYAnk26Bff">总页数 <span class="req" data-page-node-id="5Oy8FWiQ1pRayLMqQfKVkb">*</span></label>
-          <input type="number" id="f-pages" min="1" step="1" placeholder="选择图片后自动填写" data-page-node-id="QLDBtbNNfgFzjSKvFl7V0V">
+          <input type="number" id="f-pages" min="1" step="1" placeholder="选择图片或 PDF 后自动填写" data-page-node-id="QLDBtbNNfgFzjSKvFl7V0V">
         </div>
         <div class="f span2" data-page-node-id="DwKTXrirAfM9kE6LHfyKXp">
           <label style="align-items:center" data-page-node-id="bPRLkJAcE2gMUxWmeZWUr1">
             <input type="checkbox" id="f-warn-on" style="width:auto" data-page-node-id="aTJLJNchPgfNnVy8S6vxoO">
-            ⚠ 内容预警 <span class="tag" data-page-node-id="MNT2ghqCxjKchgm3mZI4gb">勾选后填写，站点卡片会显示</span>
+            ⚠ 内容预警
           </label>
           <div id="f-warn-box" class="hide" style="margin-top:2px" data-page-node-id="wpOsneEqL11cr1zNzktHDo">
             <textarea id="f-warning" rows="2" maxlength="100"></textarea>
@@ -956,7 +949,6 @@
       <div class="row" style="margin-top:10px;gap:14px">
         <label class="sw"><input type="checkbox" id="opt-secure"> 🔒 含有敏感元素（深度加密后上传）</label>
       </div>
-      <p class="muted" id="secure-hint" style="margin:8px 0 0">未勾选时按普通图片流程上传（每张一个文件，站点可直接预览）。</p>
 
       <!-- 敏感本专用封面：明文、不参与加密。
            密文里没有可读图片，前台卡片要有封面只能另存一张公开图，
@@ -1006,14 +998,13 @@
       </div>
 
       <div class="bar" data-page-node-id="VvdQqc8yBeeWXA4cAnWY50"><i id="bar" data-page-node-id="oemAFl6e3eDGCC3a9Auc2V"></i></div>
-      <div class="muted" id="prog-text" style="margin-top:6px" data-page-node-id="AHCbZGJUiTaBXHJhPYEasS">待上传</div>
+      <div class="muted" id="prog-text" style="margin-top:6px" data-page-node-id="AHCbZGJUiTaBXHJhPYEasS"></div>
 
       <div class="row" style="margin-top:16px" data-page-node-id="g90rKHCafPxExIQ8hgllaI">
         <button class="btn-gold" id="btn-upload" disabled style="flex:1" data-page-node-id="8nVjq92qXJfVIXPF4VgkCn">🚀 上传并发布</button>
         <button class="btn-primary" id="btn-publish-only" disabled data-page-node-id="rB60slVbyMMBhhUm6B0cf9">仅更新信息</button>
       </div>
       <div class="msg" id="main-msg" data-page-node-id="Lbm99caKSIPfmicFGAs8jq"></div>
-      <p class="muted" style="margin-top:10px" data-page-node-id="01H5C0IL4bWY24eaSpxX4g">「仅更新信息」不传图片，适合只改标题 / 标签 / 页数。单张图片上限 4MB。</p>
     </div>
 
     <!-- 小说与插画投递管理 -->
@@ -1069,7 +1060,7 @@
         <div class="f span2 nv-field-warning" data-page-node-id="nvpanel00000000000000000025">
           <label style="align-items:center" data-page-node-id="nvpanel00000000000000000026">
             <input type="checkbox" id="nv-warn-on" style="width:auto" data-page-node-id="nvpanel00000000000000000027">
-            ⚠ 内容预警 <span class="tag" data-page-node-id="nvpanel00000000000000000028">勾选后填写，站点卡片会显示</span>
+            ⚠ 内容预警
           </label>
           <div id="nv-warn-box" class="hide" style="margin-top:2px" data-page-node-id="nvpanel00000000000000000029">
             <textarea id="nv-warning" rows="2" maxlength="100" data-page-node-id="nvpanel00000000000000000030"></textarea>
@@ -1239,6 +1230,28 @@ function fmtSize(n){
 function naturalSort(a, b){
   return String(a).localeCompare(String(b), 'zh-Hans-CN', { numeric:true, sensitivity:'base' });
 }
+function fetchPublicArray(name, label, optional){
+  return fetch(CDN + '/' + encodeURIComponent(name) + '?admin-read=' + Date.now(), {cache:'no-store'})
+    .then(function(res){
+      if (optional && res.status === 404) return [];
+      if (!res.ok) throw new Error(label + '读取失败（HTTP ' + res.status + '）');
+      return res.json();
+    })
+    .then(function(data){ return Array.isArray(data) ? data : []; });
+}
+function loadPublicCatalog(){
+  return Promise.all([
+    fetchPublicArray('archive.json', '公开归档', false),
+    fetchPublicArray('tags.json', '标签库', true).catch(function(){ return []; })
+  ]).then(function(data){
+    var localBooks = data[0], usedTags = [];
+    var addTag = function(tag){var value=String(tag == null ? '' : tag).trim();if(value && usedTags.indexOf(value)<0)usedTags.push(value);};
+    data[1].forEach(addTag);
+    localBooks.forEach(function(book){(book && Array.isArray(book.tags) ? book.tags : []).forEach(addTag);});
+    usedTags.sort(function(a,b){return a.localeCompare(b,'zh-Hans-CN');});
+    return {books:localBooks,tagLib:usedTags};
+  });
+}
 function esc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
@@ -1341,20 +1354,21 @@ function suggestNovelAuthorUrl(){
 }
 var activeAdminPage = 'manga';
 function switchAdminPage(page, updateHash){
-  var allowed = ['manga','announcement','toolkit'];
+  var allowed = ['manga','announcement','support','toolkit'];
   if (allowed.indexOf(page) < 0) page = 'manga';
-  // 文件工具箱已并入「漫画上传」页的功能区下拉，#admin-toolkit 仍可直达
+  // 文件处理通过侧边栏入口打开，但仍复用漫画页的数据上下文。
   var sub = 'upload';
   var isManga = true;
   if (page === 'toolkit') { page = 'manga'; sub = 'toolkit'; }
-  else if (page === 'manga') { sub = mangaSub; }   // 回漫画页 = 回到上次那个功能区
+  else if (page === 'manga') { sub = 'upload'; }
   else { isManga = false; }                        // 别的页没有功能区，别去动 mangaSub
   activeAdminPage = page;
   document.querySelectorAll('[data-admin-page]').forEach(function(el){
     el.classList.toggle('hide', el.getAttribute('data-admin-page') !== page);
   });
+  var activeNavPage = sub === 'toolkit' ? 'toolkit' : page;
   document.querySelectorAll('[data-admin-tab]').forEach(function(tab){
-    var on = tab.getAttribute('data-admin-tab') === page;
+    var on = tab.getAttribute('data-admin-tab') === activeNavPage;
     tab.classList.toggle('active', on); tab.setAttribute('aria-selected', on ? 'true' : 'false');
   });
   // 只有漫画页才有功能区；离开漫画页必须把带 data-sub 的面板整批收起，
@@ -1363,6 +1377,7 @@ function switchAdminPage(page, updateHash){
     setMangaSub(sub, false);
   }
   else hideAllSubPanels();
+  if (page === 'support') loadSupporters();
   if (updateHash !== false) history.replaceState(null, '', '#admin-' + (sub === 'toolkit' ? 'toolkit' : page));
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -1372,10 +1387,8 @@ function hideAllSubPanels(){
   document.querySelectorAll('[data-sub]').forEach(function(el){ el.classList.add('hide'); });
 }
 
-/* ===== 漫画上传页内的功能区左右切换：upload（漫画上传）⇄ toolkit（文件工具箱） ===== */
+/* ===== 漫画上传与文件处理的侧边栏子页 ===== */
 var mangaSub = 'upload';
-var MANGA_SUBS = ['upload', 'toolkit'];
-var MANGA_SUB_NAMES = { upload: '📚 漫画上传', toolkit: '🧰 文件工具箱' };
 function setMangaSub(sub, updateHash){
   mangaSub = sub === 'toolkit' ? 'toolkit' : 'upload';
   document.querySelectorAll('[data-sub]').forEach(function(el){
@@ -1385,19 +1398,8 @@ function setMangaSub(sub, updateHash){
     if (page && page !== activeAdminPage) { el.classList.add('hide'); return; }
     el.classList.toggle('hide', el.getAttribute('data-sub') !== mangaSub);
   });
-  var nameEl = $('f-sub-name');
-  if (nameEl) nameEl.textContent = MANGA_SUB_NAMES[mangaSub];
   if (updateHash !== false) history.replaceState(null, '', '#admin-' + (mangaSub === 'toolkit' ? 'toolkit' : 'manga'));
 }
-(function(){
-  function step(delta){
-    var idx = MANGA_SUBS.indexOf(mangaSub);
-    idx = (idx + delta + MANGA_SUBS.length) % MANGA_SUBS.length;
-    setMangaSub(MANGA_SUBS[idx]);
-  }
-  if ($('f-sub-prev')) $('f-sub-prev').addEventListener('click', function(){ step(-1); });
-  if ($('f-sub-next')) $('f-sub-next').addEventListener('click', function(){ step(1); });
-})();
 document.querySelector('.admin-tabs').addEventListener('click', function(e){
   var tab = e.target.closest('[data-admin-tab]');
   if (tab) switchAdminPage(tab.getAttribute('data-admin-tab'));
@@ -1436,16 +1438,16 @@ function enterMain(){
   $('view-main').classList.remove('hide');
   if (LOCAL_PREVIEW) {
     $('btn-logout').classList.add('hide');
-    $('env-info').textContent = '本地预览模式：上传与公告维护请在正式站点登录。';
+    $('env-info').textContent = '';
     loadBooks();
     $('btn-reload').disabled = false;
   } else {
     refreshEnv();
-    loadAnnouncements();
     loadBooks();
-    loadAuthorLib();
+    loadAnnouncements();
+    loadSupporters();
   }
-  syncButtons();   // 初始态：没填 ID → 两个按钮都灰；填了 ID → 「仅更新信息」可用
+  syncButtons();
 }
 
 /* ============ 首页公告栏 ============ */
@@ -1463,7 +1465,7 @@ function renderAnnouncements(){
 }
 function loadAnnouncements(){
   $('an-list').innerHTML = '<p class="muted">加载中…</p>';
-  api({ action:'announcementList' }).then(function(d){ announcements = d.items || []; renderAnnouncements(); })
+  fetchPublicArray('announcements.json', '公告', true).then(function(items){ announcements = items; renderAnnouncements(); })
     .catch(function(err){ if (onAuthFail(err)) return; $('an-list').innerHTML = '<p class="muted">读取失败：' + esc(err.message || err) + '</p>'; });
 }
 function resetAnnouncementForm(){
@@ -1759,8 +1761,12 @@ function renderSupporters(){
 }
 function loadSupporters(){
   $('support-list').innerHTML = '<p class="muted">加载中…</p>';
-  api({ action:'supporterList' }).then(function(d){ supporters = d.items || []; renderSupporters(); })
+  fetchPublicArray('supporters.json', '支持信息', true).then(function(items){ supporters = items; renderSupporters(); })
     .catch(function(err){ if (onAuthFail(err)) return; $('support-list').innerHTML = '<p class="muted">读取失败：' + esc(err.message || err) + '</p>'; });
+}
+function saveSupporterList(items){
+  var body = new Blob([JSON.stringify(items, null, 2)], {type:'application/json'});
+  return uploadToCos('supporters.json', 'supporters.json', body, 'application/json', null, 'no-cache, max-age=0');
 }
 function resetSupporterForm(){
   supporterEditingId = '';
@@ -1781,8 +1787,16 @@ function saveSupporter(){
   };
   if (!item.name) { show($('support-msg'), 'err', '请填写支持者昵称。'); return; }
   var btn = $('support-save'); btn.disabled = true; hide($('support-msg'));
-  api({ action:'supporterSave', item:item }).then(function(d){
-    supporters = d.items || []; renderSupporters(); resetSupporterForm();
+  var now = new Date().toISOString();
+  item.id = item.id || ('support-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8));
+  item.name = item.name.slice(0,40);
+  item.kind = SUPPORT_LABELS[item.kind] ? item.kind : 'donation';
+  item.order = Number.isFinite(item.order) ? Math.max(0, Math.floor(item.order)) : 0;
+  item.visible = item.visible !== false;
+  var next = supporters.filter(function(entry){return entry.id !== item.id;});
+  next.push(item); next.sort(function(a,b){return Number(a.order||0)-Number(b.order||0);});
+  saveSupporterList(next).then(function(){
+    supporters = next; renderSupporters(); resetSupporterForm();
     show($('support-msg'), 'ok', '✓ 已保存，前台支持墙会自动读取。');
   }).catch(function(err){ if (onAuthFail(err)) return; show($('support-msg'), 'err', err.message || String(err)); })
     .then(function(){ btn.disabled = false; });
@@ -1805,20 +1819,17 @@ $('support-list').addEventListener('click', function(e){
   } else if (del) {
     var id = del.getAttribute('data-support-del');
     if (!confirm('确定从支持墙删除这个名字？')) return;
-    api({ action:'supporterDelete', id:id }).then(function(d){
-      supporters = d.items || []; renderSupporters(); resetSupporterForm();
+    var next = supporters.filter(function(item){return item.id !== id;});
+    saveSupporterList(next).then(function(){
+      supporters = next; renderSupporters(); resetSupporterForm();
     }).catch(function(err){ if (onAuthFail(err)) return; show($('support-msg'), 'err', err.message || String(err)); });
   }
 });
 
 function refreshEnv(){
   api({ action:'status' }).then(function(d){
-    if (!d.configured) throw new Error('Vercel 环境变量未配置。');
     envMax = d.maxFileBytes || MAX_FILE;
-    $('env-info').textContent = '✓ Vercel 管理接口可用，COS 配置 ' + d.bucket + '（' + d.region + '），单张上限 ' + fmtSize(envMax);
-  }).catch(function(err){
-    $('env-info').textContent = '⚠ 无法连接上传服务：' + (err.message || err);
-  });
+  }).catch(function(){});
 }
 
 function getCosCredential(prefix){
@@ -1849,13 +1860,13 @@ function getCosClient(prefix){
   }});
   return cosClients[prefix];
 }
-function uploadToCos(prefix, key, body, contentType, onProgress){
+function uploadToCos(prefix, key, body, contentType, onProgress, cacheControl){
   if (!key || key.indexOf(prefix) !== 0 || key.indexOf('..') >= 0) return Promise.reject(new Error('COS 上传路径无效。'));
   var client;
   try { client = getCosClient(prefix); } catch(error) { return Promise.reject(error); }
   return new Promise(function(resolve, reject){
     client.putObject({ Bucket:COS_BUCKET, Region:COS_REGION, Key:key, Body:body,
-      ContentType:contentType || 'application/octet-stream', CacheControl:'public, max-age=31536000',
+      ContentType:contentType || 'application/octet-stream', CacheControl:cacheControl || 'public, max-age=31536000',
       onProgress:function(info){ if (typeof onProgress === 'function') onProgress(info); }
     }, function(error, data){ if (error) reject(error); else resolve(data); });
   });
@@ -1864,27 +1875,7 @@ function uploadToCos(prefix, key, body, contentType, onProgress){
 function loadBooks(){
   var box = $('bk-list');
   box.innerHTML = '<p class="muted">加载中…</p>';
-  var request = LOCAL_PREVIEW
-    ? Promise.all([
-        fetch(CDN + '/archive.json?admin-preview=' + Date.now(), {cache:'no-store'}).then(function(res){
-          if(!res.ok) throw new Error('公开归档读取失败（HTTP ' + res.status + '）');
-          return res.json();
-        }),
-        fetch(CDN + '/tags.json?admin-preview=' + Date.now(), {cache:'no-store'}).then(function(res){
-          if(!res.ok) return [];
-          return res.json();
-        }).catch(function(){ return []; })
-      ]).then(function(data){
-        var archive = data[0], rawTags = data[1];
-        var localBooks = Array.isArray(archive) ? archive : (archive && Array.isArray(archive.books) ? archive.books : []);
-        var usedTags = [];
-        var addTag = function(tag){var value=String(tag == null ? '' : tag).trim();if(value && usedTags.indexOf(value)<0)usedTags.push(value);};
-        (Array.isArray(rawTags) ? rawTags : (rawTags && Array.isArray(rawTags.tags) ? rawTags.tags : [])).forEach(addTag);
-        localBooks.forEach(function(book){(book && Array.isArray(book.tags) ? book.tags : []).forEach(addTag);});
-        usedTags.sort(function(a,b){return a.localeCompare(b,'zh-Hans-CN');});
-        return {books:localBooks,tagLib:usedTags};
-      })
-    : api({ action:'catalog' });
+  var request = loadPublicCatalog();
   request.then(function(d){
     books = (d.books || []).slice().sort(function(a,b){
       var ta = Date.parse(a.updatedAt || a.createdAt || '') || 0;
@@ -1907,10 +1898,10 @@ function loadBooks(){
           '</div>' +
           '<div class="muted">' + esc(b.circle || '—') + '，' + (b.pages || 0) + ' 页' +
             (b.tags && b.tags.length ? '，' + b.tags.map(esc).join(' / ') : '') + '</div>' +
-          '<span class="bk-image-status" data-bk-cover-status>图片连接中…</span>' +
+          '<span class="bk-image-status" data-bk-cover-status></span>' +
         '</div>' +
         '<button class="btn-sm" data-edit="' + esc(b.id) + '">编辑信息</button>' +
-        '<button class="btn-sm" data-edit-images="' + esc(b.id) + '">编辑图片</button>' +
+        (b.secure ? '' : '<button class="btn-sm" data-edit-images="' + esc(b.id) + '">编辑图片</button>') +
       '</div>';
     }).join('');
     bindBookImageStatus(box);
@@ -1924,10 +1915,9 @@ function bindBookImageStatus(box){
   Array.prototype.forEach.call(box.querySelectorAll('[data-bk-cover]'), function(img){
     var status = img.parentNode && img.parentNode.querySelector('[data-bk-cover-status]');
     if(!status)return;
-    function mark(text, cls){status.textContent=text;status.className='bk-image-status '+cls;}
-    img.onload=function(){mark('✓ 图片已连通','ok');};
+    function mark(text, cls){status.textContent=text;status.className='bk-image-status '+cls;status.style.display=cls==='err'?'inline-flex':'none';}
     img.onerror=function(){img.style.opacity='.25';mark('✕ 图片未找到','err');};
-    if(img.complete){if(img.naturalWidth>0)mark('✓ 图片已连通','ok');else img.onerror();}
+    if(img.complete && img.naturalWidth===0) img.onerror();
   });
 }
 
@@ -2987,7 +2977,7 @@ function clearFiles(){
   files = [];
   renderFiles();
   $('bar').style.width = '0%';
-  $('prog-text').textContent = '待上传';
+  $('prog-text').textContent = '';
   syncButtons();
 }
 
@@ -3014,6 +3004,7 @@ function probePdfPages(rec){
     if (i < 0) return;
     var badge = $('files').querySelector('[data-i="' + i + '"] .pg');
     if (badge) badge.textContent = '共 ' + rec.pages + ' 页';
+    if (isSecureMode()) syncPages();
     // 这本正好是封面来源时，把「⚙ 调整」里的「页 / 共 N 页」也提前填好
     if (rec === files[0] && $('secure-cover-page-max') && $('secure-cover-page-row') &&
         !$('secure-cover-page-row').classList.contains('hide')) {
@@ -3073,7 +3064,11 @@ function moveFile(i, d){
 }
 
 function syncPages(){
-  if (files.length) $('f-pages').value = files.length;
+  if (files.length) {
+    $('f-pages').value = isSecureMode()
+      ? files.reduce(function(total, f){ return total + (isPdfFile(f.file) ? (f.pages || 1) : 1); }, 0)
+      : files.length;
+  }
   if (secureCover) renderSecureCover();   // 封面「入库地址」跟着 ID 变
   syncButtons();
 }
@@ -3188,103 +3183,6 @@ function updateProgress(done, total){
   $('prog-text').textContent = '已处理 ' + done + ' / ' + total + ' 张（' + pct + '%）';
 }
 
-/* ============ 调查报告收件箱 ============ */
-function loadInbox(){
-  if (LOCAL_PREVIEW) return;
-  $('inbox-status').textContent = '正在读取收件箱…';
-  api({ action:'inboxList' }).then(function(res){
-    var items = Array.isArray(res.items) ? res.items : [];
-    var inboxItems = items.filter(function(item){ return item.type !== 'announcement'; });
-    $('inbox-status').textContent = inboxItems.length ? '🔔 ' + inboxItems.length + ' 条新来信待处理' : '暂无未处理调查报告与来信';
-    $('inbox-status').style.color = inboxItems.length ? '#B63A2B' : '';
-    $('inbox-status').style.fontWeight = inboxItems.length ? '700' : '';
-    renderInboxReports(inboxItems, $('inbox-contacts'));
-  }).catch(function(err){ $('inbox-status').textContent = '读取失败：' + (err.message || String(err)); });
-}
-function renderReviewItems(items, container, label){
-  if (!items.length) { container.innerHTML='<p class="muted">暂无待审核' + label + '</p>'; return; }
-  container.innerHTML=items.map(function(item){
-    var kind=item.type==='announcement'?'企划公告':item.type==='artwork'?'同人插画/短漫':'同人文';
-    var detail=item.body||item.description||item.reason||'';
-    var previews=Array.isArray(item.files)&&item.folder?'<div class="row" style="gap:6px;margin-top:8px;overflow-x:auto">'+item.files.slice(0,8).map(function(name){return '<img src="'+esc(CDN+'/'+item.folder+'/'+name)+'" alt="投稿预览" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--rule)">';}).join('')+'</div>':'';
-    var approveLabel = item.type === 'announcement' ? '审核通过并显示' : '通过并收录';
-    return '<div class="notice-row" data-inbox-id="'+esc(item._id)+'"><div class="info"><b>'+esc(kind+'，'+(item.title||'未命名'))+'</b><div class="muted">提交人：'+esc(item.author||'匿名')+(item.email?'，'+esc(item.email):'')+(item.homepage?'，'+esc(item.homepage):'')+'</div>'+previews+(detail?'<details><summary>查看内容</summary><pre style="white-space:pre-wrap">'+esc(detail)+'</pre></details>':'')+'</div><button class="btn-sm btn-gold" data-review="approve">'+approveLabel+'</button><button class="btn-sm btn-danger" data-review="reject">拒绝</button></div>';
-  }).join('');
-}
-function renderInboxReports(items, container){
-  if (!items.length) { container.innerHTML = '<p class="muted">暂无未处理调查报告与来信</p>'; return; }
-  var kindNames = {
-    'feedback': '📋 战术研讨',
-    'translate-release': '🌐 汉化发布',
-    'novel': '✍️ 同人小说',
-    'art-comic': '🎨 同人插画短漫',
-    'recommend': '⭐ 安利推荐',
-    'translate-request': '📖 汉化请求',
-    'contact': '✉️ 调查报告来信'
-  };
-  container.innerHTML = items.map(function(item){
-    var k = item.kind || item.type || 'contact';
-    var kindBadge = kindNames[k] || item.kindLabel || (k === 'novel' ? '✍️ 同人小说' : '📋 调查报告');
-    var title = item.title || item.name || (item.category ? item.category + ' 呈递' : '调查兵来信');
-
-    var metaParts = [];
-    if (item.category) metaParts.push('<b>分类：</b>' + esc(item.category));
-    if (item.name) metaParts.push('<b>呈递人：</b>' + esc(item.name));
-    if (item.author) metaParts.push('<b>作者：</b>' + esc(item.author));
-    if (item.email) metaParts.push('<b>邮箱：</b>' + esc(item.email));
-    if (item.source) metaParts.push('<b>来源：</b>' + esc(item.source));
-    if (item.translator) metaParts.push('<b>汉化：</b>' + esc(item.translator));
-    if (item.typesetter) metaParts.push('<b>嵌字：</b>' + esc(item.typesetter));
-    if (item.link) metaParts.push('<b>链接：</b><a href="' + esc(item.link) + '" target="_blank" rel="noopener" style="color:var(--green-2);text-decoration:underline">' + esc(item.link) + '</a>');
-    if (item.homepage) metaParts.push('<b>主页：</b><a href="' + esc(item.homepage) + '" target="_blank" rel="noopener" style="color:var(--green-2);text-decoration:underline">' + esc(item.homepage) + '</a>');
-    if (item.files) metaParts.push('<b>附件：</b>' + esc(item.files));
-    if (item.notes) metaParts.push('<b>备注：</b>' + esc(item.notes));
-
-    var detail = item.content || item.body || '';
-    if (item.reason) detail = (detail ? detail + '\n\n' : '') + '【理由/说明】\n' + item.reason;
-
-    var replyBox = item.userUid ? '<div style="margin-top:10px;padding-top:10px;border-top:1.5px dashed var(--rule)"><label style="font-size:12px;font-weight:700;color:var(--green-2)">✏️ 管理员回信</label><textarea data-inbox-reply rows="3" maxlength="3000" placeholder="输入给该账号的回信内容…" style="margin-top:6px;width:100%"></textarea><button class="btn-sm btn-gold" data-reply-send style="margin-top:7px">✉ 发送回信</button></div>' : '<div class="muted" style="margin-top:9px">该来信未绑定登录账号，仅能通过预留邮箱联系。</div>';
-    var actions = '<button class="btn-sm btn-gold" data-review="approve">✓ 标记已处理</button>' +
-      '<button class="btn-sm btn-danger" data-review="reject">✕ 忽略</button>';
-    return '<div class="panel" style="margin:10px 0;padding:14px;background:#FFFDF6;border:1.5px solid var(--green-2);border-radius:8px" data-inbox-id="' + esc(item._id) + '">' +
-      '<div class="spread" style="margin-bottom:6px">' +
-        '<div><span class="tag" style="background:var(--green-2);color:#F9E79F;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-right:6px">' + esc(kindBadge) + '</span>' +
-        '<b style="font-size:14px;color:var(--green-2)">' + esc(title) + '</b></div>' +
-        '<span class="muted" style="font-size:12px">' + esc(item.createdAt || '') + '</span>' +
-      '</div>' +
-      (metaParts.length ? '<div style="font-size:12px;line-height:1.8;color:var(--ink-2);margin:6px 0">' + metaParts.join(' ｜ ') + '</div>' : '') +
-      '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--green-2);font-weight:700">查看详情内容</summary>' +
-        '<pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;background:rgba(30,67,52,.04);padding:10px;border-radius:6px;margin-top:6px;font-size:12px">' + esc(detail || '（无附加文本）') + '</pre>' +
-      '</details>' + replyBox +
-      '<div class="row" style="margin-top:10px;gap:8px">' + actions + '</div></div>';
-  }).join('');
-}
-function reviewInbox(id, decision){
-  var msg = decision === 'approve' ? '确认标记此条报告为「已处理」？' : '确认忽略此条报告？';
-  if (!confirm(msg)) return;
-  $('inbox-status').textContent = '正在处理…';
-  api({ action:'inboxReview', id:id, decision:decision }).then(function(){ loadInbox(); })
-    .catch(function(err){ $('inbox-status').textContent = '处理失败：' + (err.message || String(err)); });
-}
-$('inbox-refresh').onclick = loadInbox;
-$('inbox-panel').addEventListener('click', function(event){
-  var replyButton = event.target.closest('[data-reply-send]');
-  if (replyButton) {
-    var replyCard = replyButton.closest('[data-inbox-id]');
-    var input = replyCard && replyCard.querySelector('[data-inbox-reply]');
-    var reply = input ? input.value.trim() : '';
-    if (!reply) { alert('请先填写回信内容。'); return; }
-    replyButton.disabled = true; replyButton.textContent = '发送中…';
-    api({ action:'inboxReply', id:replyCard.getAttribute('data-inbox-id'), reply:reply }).then(function(){ loadInbox(); })
-      .catch(function(err){ if(onAuthFail(err))return; alert(err.message||String(err)); replyButton.disabled=false; replyButton.textContent='✉ 发送回信'; });
-    return;
-  }
-  var button = event.target.closest('[data-review]');
-  if (!button) return;
-  var card = button.closest('[data-inbox-id]');
-  if (!card) return;
-  reviewInbox(card.getAttribute('data-inbox-id'), button.getAttribute('data-review'));
-});
 var adminRecs=[];
 function loadRecsAdmin(){
   if(LOCAL_PREVIEW)return;
@@ -3765,12 +3663,6 @@ function isSecureMode(){ return !!($('opt-secure') && $('opt-secure').checked); 
 function refreshSecureUI(){
   var on = isSecureMode();
 
-  if ($('secure-hint')) {
-    $('secure-hint').textContent = on
-      ? '🔒 已开启深度加密：图片先在本地按文件名顺序合并成 PDF，再用 AES-256-CBC 加密、Base64 伪装成 .txt 后上传；COS 上无法直接预览。'
-      : '未勾选时按普通图片流程上传（每张一个文件，站点可直接预览）。';
-  }
-
   var btn = $('btn-upload');
   if (btn) btn.textContent = on ? '🔒 加密上传并发布' : '🚀 上传并发布';
 
@@ -3921,24 +3813,9 @@ function handleSecureUpload(){
       return LeVihanVault.handleComicUpload(sources, { bookId: form.id, onProgress: secureProgress });
     })
     .then(function(result){
-      // 密文已经落在 COS 上。归档记录写不写、由管理员当场决定。
       // 阅读端 SecureComicReader 已上线：前台点开 secure 本子 → 403 伪装页 →
       // 输校验码（levihan）→ 内存解密渲染，不走这条链路的话卡片不会出现在粮仓。
-      var coverLine = form.coverFile
-        ? '封面：' + form.coverFile + '（公开可读，前台卡片用它）\n'
-        : '⚠ 未上传封面：站点卡片只会显示「资源隔离」占位图。\n';
-      var writeArchive = confirm(
-        '✅ 深度加密文件已上传\n' +
-        'Key：' + result.key + '\n' +
-        coverLine +
-        '体积：PDF ' + fmtSize(result.bytes.source) + ' → 密文 ' + fmtSize(result.bytes.cipher) +
-        '（通道 ' + result.channel + '，耗时 ' + (result.elapsedMs / 1000).toFixed(1) + 's）\n\n' +
-        '是否同时写入归档记录？\n' +
-        '建议写入：写入后粮仓出现 🔒 卡片，读者点开输入校验码即可解密阅读。'
-      );
-
-      var after = writeArchive
-        ? api({ action:'publish', book: Object.assign({}, form, {
+      return api({ action:'publish', book: Object.assign({}, form, {
             // 图片合并时用实际张数；直接传 PDF 时 pageCount 为 null，沿用管理员填的「总页数」
             pages: result.pageCount || form.pages,
             bookFolder: form.bookFolder || form.id,
@@ -3955,19 +3832,7 @@ function handleSecureUpload(){
             resetForm();
             loadBooks();
             loadAuthorLib();
-          })
-        : Promise.resolve().then(function(){
-            show($('main-msg'), 'ok',
-              '🔒 密文已上传，未写入归档。\n密文 Key：' + result.key + '\n' +
-              vaultLadderNote(result) +
-              (form.coverFile ? '封面：' + form.coverFile : '') + '\n（这条 Key 请自行留存）'
-            );
           });
-
-      return after.then(function(){
-        // 无论是否入库，都把完整结果留一份在控制台，便于排查与手工复核
-        console.log('[LeVihanVault] 加密上传结果', result);
-      });
     })
     .catch(function(err){
       if (onAuthFail(err)) return;
@@ -4916,9 +4781,7 @@ function updateTagHint(){
   var h = $('tag-hint');
   if (tagErr) { h.textContent = '⚠ ' + tagErr; h.style.color = 'var(--danger)'; return; }
   h.style.color = '';
-  h.textContent = selTags.length
-    ? '已选 ' + selTags.length + ' 个，标签上的 × 只从本子移除；下拉里的 × 才是删标签库'
-    : '点右侧 ▾ 选择已有标签，或输入 #标签名 后回车新建';
+  h.textContent = '';
 }
 
 function renderTagUI(){
@@ -5314,7 +5177,7 @@ $('bk-list').addEventListener('click', function(e){
 });
 
 /* ============ 启动 ============ */
-var initialAdminPage = (location.hash.match(/^#admin-(manga|announcement|toolkit)$/) || [])[1] || 'manga';
+var initialAdminPage = (location.hash.match(/^#admin-(manga|announcement|support|toolkit)$/) || [])[1] || 'manga';
 switchAdminPage(initialAdminPage, false);
 if (LOCAL_PREVIEW || token) enterMain();
 else { $('view-login').classList.remove('hide'); }

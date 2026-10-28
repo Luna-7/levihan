@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { soundManager } from '../utils/audio';
-import { loadUnreadInboxReplies, markInboxReplyRead, submitToInbox, type InboxReply } from '../utils/submissionInbox';
+import { submitToInbox } from '../utils/submissionInbox';
 import { cosService } from '../services/cosClient';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { useAuthStore } from '../stores/authStore';
@@ -29,19 +28,17 @@ const SUPPORT_SYMBOLS: Record<SupportKind, { symbol: string; label: string }> = 
   donation: { symbol: '☕', label: '捐赠' },
 };
 
+const COMMUNITY_GROUPS = [
+  { label: '一群', number: '300466343' },
+  { label: '二群', number: '335027044' },
+  { label: '三群', number: '651190642' },
+  { label: '四群', number: '966036859' },
+  { label: '汉化组', number: '979246377' },
+];
+
 export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
   const [supporters, setSupporters] = useState<SupporterItem[]>([]);
   const profile = useAuthStore((state) => state.profile);
-  const authInitialized = useAuthStore((state) => state.initialized);
-  const [inboxReplies, setInboxReplies] = useState<InboxReply[]>([]);
-  const [activeReply, setActiveReply] = useState<InboxReply | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!authInitialized || !profile) { setInboxReplies([]); setActiveReply(null); return; }
-    loadUnreadInboxReplies().then((items) => { if (!cancelled) setInboxReplies(items); }).catch(() => { if (!cancelled) setInboxReplies([]); });
-    return () => { cancelled = true; };
-  }, [authInitialized, profile?.uid]);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,9 +65,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
   // Main Tab: 'feedback' (战术研讨) | 'share' (作品分享)
   const [mainTab, setMainTab] = useState<'feedback' | 'share'>('feedback');
 
-  // Report Modal State
-  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
-
   // Share Submodule: 'self' (投递自作) | 'recommend' (安利推荐) | 'translate' (汉化请求)
   const [shareSub, setShareSub] = useState<'self' | 'recommend' | 'translate'>('self');
 
@@ -79,16 +73,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
 
   // Loading animation overlay state for retro transition
   const [isLoading, setIsLoading] = useState<boolean>(false);
-
-  // Custom Order Modal State
-  const [isCustomModalOpen, setIsCustomModalOpen] = useState<boolean>(false);
-
-  // Form States - Feedback
-  const [feedbackCategory, setFeedbackCategory] = useState<string>('🎮 玩法手感');
-  const [feedbackName, setFeedbackName] = useState<string>('');
-  const [feedbackEmail, setFeedbackEmail] = useState<string>('');
-  const [feedbackContent, setFeedbackContent] = useState<string>('');
-  const [feedbackParentId, setFeedbackParentId] = useState<string>('');
 
   // Form States - Translate Release
   const [trBookName, setTrBookName] = useState<string>('');
@@ -124,11 +108,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
   const [transTitle, setTransTitle] = useState<string>('');
   const [transSource, setTransSource] = useState<string>('');
   const [transReason, setTransReason] = useState<string>('');
-
-  // Form States - Custom Order
-  const [coName, setCoName] = useState<string>('');
-  const [coContact, setCoContact] = useState<string>('');
-  const [coDesc, setCoDesc] = useState<string>('');
 
   // Drag-over states
   const [isTrDragOver, setIsTrDragOver] = useState(false);
@@ -171,6 +150,11 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
     } catch {
       return false;
     }
+  };
+
+  const copyCommunityGroup = async (label: string, number: string) => {
+    const copied = await copyToClipboard(number);
+    onShowToast(copied ? `${label}群号已复制` : '复制失败，请手动记录群号');
   };
 
   const isValidEmail = (email: string) => {
@@ -227,66 +211,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
     }));
     setter((prev) => [...prev, ...newItems]);
     onShowToast(`已添加 ${newItems.length} 个本地文件 📁`);
-  };
-
-  // 1. 呈递战术研讨
-  const handleSubmitFeedback = async () => {
-    if (feedbackEmail && !isValidEmail(feedbackEmail)) {
-      onShowToast('请填写有效的邮箱地址 ⚠️');
-      return;
-    }
-    if (!feedbackContent.trim()) {
-      onShowToast('请填写战术研讨详情 ⚠️');
-      return;
-    }
-
-    const dateStr = new Date().toLocaleString('zh-CN', { hour12: false });
-    const reportText = [
-      `【利韩土豆仓 · 战术研讨呈递函】`,
-      `类别: ${feedbackCategory}`,
-      `发件士兵: ${feedbackName.trim() || '匿名调查兵'}`,
-      `联络邮箱: ${feedbackEmail.trim() || '未预留'}`,
-      `提交时间: ${dateStr}`,
-      `----------------------------------------`,
-      `详细内容:\n${feedbackContent.trim()}`,
-      `----------------------------------------`,
-    ].join('\n');
-
-    const sent = await sendToInbox('feedback', {
-      category: feedbackCategory,
-      name: feedbackName,
-      email: feedbackEmail,
-      content: feedbackContent,
-      parentId: feedbackParentId,
-    });
-    if (sent) {
-      onShowToast('调查报告已呈递至收件箱！📬');
-      setFeedbackContent('');
-      setFeedbackParentId('');
-      setIsReportModalOpen(false);
-      return;
-    }
-
-    const copied = await copyToClipboard(reportText);
-    if (copied) {
-      onShowToast('联络通道繁忙，报告已复制到剪贴板 📋');
-    } else {
-      onShowToast('联络通道繁忙，请稍后重试 ⚠️');
-    }
-    setFeedbackContent('');
-    setIsReportModalOpen(false);
-  };
-
-  const closeReply = async (reply: InboxReply, continueQuestion = false) => {
-    setInboxReplies((items) => items.filter((item) => item.id !== reply.id));
-    setActiveReply(null);
-    void markInboxReplyRead(reply.id).catch(() => onShowToast('回信状态同步失败，请稍后重试'));
-    if (continueQuestion) {
-      setFeedbackCategory('💬 随便聊聊');
-      setFeedbackContent(`关于管理员回信（${reply.subject || '调查报告'}）：\n`);
-      setFeedbackParentId(reply.id);
-      setIsReportModalOpen(true);
-    }
   };
 
   // 2. 呈递汉化发布
@@ -502,62 +426,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
     setTransReason('');
   };
 
-  // 7. 提交商业定制
-  const handleSubmitCustomOrder = async () => {
-    if (!coContact.trim() || !isValidEmail(coContact.trim())) {
-      onShowToast('请填写有效的邮箱联系方式 ⚠️');
-      return;
-    }
-    if (!coDesc.trim()) {
-      onShowToast('请简要描述需求与期望周期 ⚠️');
-      return;
-    }
-
-    const dateStr = new Date().toLocaleString('zh-CN', { hour12: false });
-    const orderText = [
-      `【商业定制沟通 · 需求函】`,
-      `委托人: ${coName.trim() || '某同好委托人'}`,
-      `邮箱: ${coContact.trim()}`,
-      `提交时间: ${dateStr}`,
-      `----------------------------------------`,
-      `需求与周期构想:\n${coDesc.trim()}`,
-      `----------------------------------------`,
-    ].join('\n');
-
-    // 直接邮件送达站长邮箱（不进收件箱/管理后台）
-    const sent = await (async () => {
-      try {
-        await submitToInbox('submitCustomOrderEmail', {
-          name: coName,
-          email: coContact,
-          content: coDesc,
-        });
-        return true;
-      } catch {
-        return false;
-      }
-    })();
-    if (sent) {
-      onShowToast('定制需求已发送到站长邮箱！📬');
-      setTimeout(() => {
-        setIsCustomModalOpen(false);
-        setCoDesc('');
-      }, 1000);
-      return;
-    }
-
-    const copied = await copyToClipboard(orderText);
-    if (copied) {
-      onShowToast('联络通道繁忙，需求已复制到剪贴板 📋');
-    } else {
-      onShowToast('联络通道繁忙，请稍后重试 ⚠️');
-    }
-    setTimeout(() => {
-      setIsCustomModalOpen(false);
-      setCoDesc('');
-    }, 1000);
-  };
-
   return (
     <div className="w-full max-w-4xl mx-auto flex flex-col justify-between gap-3 sm:gap-4 font-retro-jp text-[#203429] pb-4">
       {/* ====================================================
@@ -605,15 +473,15 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
            ==================================================== */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 shrink-0">
           {/* 卡片 A：致谢同好 (Supporters Card)；框体向下延伸，底部两侧立绘致意 */}
-          <div className="p-3.5 border-2 border-dashed border-[#8C6C47]/40 rounded-xl bg-[#FAF3E3]/50 backdrop-blur-xs relative overflow-hidden flex flex-col justify-between min-h-[190px]">
+          <div className="p-3.5 border-2 border-dashed border-[#8C6C47]/40 rounded-xl bg-[#FAF3E3]/50 backdrop-blur-xs relative overflow-hidden flex flex-col justify-between min-h-[300px]">
             <CardPatternOverlay opacity={0.05} mode="multiply" />
             <h3 className="font-serif-title text-sm font-black text-[#1E4334] mb-1 flex items-center gap-2 relative z-10">
               <span>🤝</span>
               <span>感谢以下同好对网站的支持</span>
             </h3>
-            <div className="flex-1 flex items-center justify-center px-16 py-2 relative z-10">
+            <div className="flex-1 flex items-center justify-center px-3 py-2 -translate-y-3 relative z-10">
               {supporters.length ? (
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 w-full max-w-[230px]">
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 w-full">
                   {supporters.map((supporter) => {
                     const meta = SUPPORT_SYMBOLS[supporter.kind];
                     return (
@@ -622,7 +490,7 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                         className="min-w-0 flex items-center justify-center gap-1 rounded border border-[#CDBA91]/75 bg-[#FFF9EC]/80 px-1.5 py-1 text-[10px] font-bold text-[#1E4334] shadow-[0_1px_2px_rgba(140,108,71,0.12)]"
                       >
                         <span title={meta.label} aria-label={meta.label} className="shrink-0">{meta.symbol}</span>
-                        <span className="truncate">{supporter.name}</span>
+                        <span className="whitespace-nowrap">{supporter.name}</span>
                       </div>
                     );
                   })}
@@ -631,16 +499,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
                 <span className="text-[#8C6C47]/50 text-[10px] italic">(名单整理中...)</span>
               )}
             </div>
-            <a
-              href="https://afdian.com/a/laogongtudou?tab=feed&utm_source=copylink&utm_medium=link"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="relative z-20 self-center mb-1 inline-flex items-center justify-center gap-1.5 rounded-lg border-2 border-[#1E4334] bg-[#1E4334] px-4 py-2 font-pixel text-[11px] font-bold tracking-wide text-[#F9E79F] shadow-[3px_3px_0_rgba(140,108,71,0.35)] transition-all hover:bg-[#285A46] active:translate-y-0.5 active:shadow-[1px_1px_0_rgba(140,108,71,0.35)]"
-              aria-label="前往爱发电给服务器喂红茶"
-            >
-              <span aria-hidden="true">☕</span>
-              <span>给服务器喂红茶</span>
-            </a>
             {/* 立绘：韩吉（左下）与利威尔（右下） */}
             <img
               src="/images/supporter-hange-angel.webp"
@@ -658,40 +516,30 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
             />
           </div>
 
-          {/* 卡片 B：呈递调查报告 + 紧随其后的管理员回信 */}
-          <div className="flex flex-col gap-2">
-            <button
-            type="button"
-            onClick={() => setIsReportModalOpen(true)}
-            className="group p-3.5 border-2 border-[#1E4334] rounded-xl bg-[#FAF3E3]/90 relative overflow-hidden flex flex-col justify-between text-left transition-all hover:border-[#11281E] hover:bg-[#F3EAD5] active:scale-[0.98] shadow-[0_2px_8px_rgba(30,67,52,0.12)] cursor-pointer min-h-[105px]"
-          >
-            <CardPatternOverlay opacity={0.08} mode="multiply" />
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-pixel text-[9px] text-[#1E4334] font-bold tracking-widest bg-[#1E4334]/10 px-2 py-0.5 rounded-full">
-                  CODE: 04:D1S
-                </span>
-                <span className="text-sm">📨</span>
-              </div>
-              <h3 className="font-serif-title text-sm font-black text-[#1E4334]">
-                呈递调查报告
-              </h3>
+          <div className="p-3.5 border-2 border-dashed border-[#8C6C47]/40 rounded-xl bg-[#FAF3E3]/50 backdrop-blur-xs relative overflow-hidden flex flex-col min-h-[240px]">
+            <CardPatternOverlay opacity={0.05} mode="multiply" />
+            <h3 className="font-serif-title text-sm font-black text-[#1E4334] mb-1 flex items-center gap-2 relative z-10">
+              <span>💬</span>
+              <span>同好联络群</span>
+            </h3>
+            <div className="grid grid-cols-1 gap-2 flex-1 content-center relative z-10">
+              {COMMUNITY_GROUPS.map((group) => (
+                <button
+                  key={group.label}
+                  type="button"
+                  onClick={() => copyCommunityGroup(group.label, group.number)}
+                  aria-label={`复制${group.label}群号 ${group.number}`}
+                  className="min-h-10 rounded border border-[#CDBA91]/75 bg-[#FFF9EC]/80 px-2 py-1 text-left text-[11px] font-bold text-[#1E4334] transition-colors hover:bg-[#F1E5CB] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1E4334]"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <span>{group.label}</span>
+                    <span className="font-mono tracking-wide">{group.number}</span>
+                  </span>
+                </button>
+              ))}
             </div>
-            <p className="text-[10px] text-[#5C4A3A] mt-1 italic opacity-75 group-hover:opacity-100">
-              点此填写战术研讨建议或异常排查报告...
-            </p>
-            </button>
-            {inboxReplies.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setActiveReply(inboxReplies[0])}
-                className="relative w-full inline-flex items-center justify-center gap-2 rounded-lg border-2 border-[#B7791F] bg-[#F3C45E] px-4 py-2 text-[#3E2C16] font-pixel text-[11px] font-bold shadow-[3px_3px_0_rgba(140,108,71,.32)] animate-pulse hover:bg-[#F7D47C] cursor-pointer"
-              >
-                <span>💌</span><span>管理员回信</span>
-                <span className="absolute -right-2 -top-2 min-w-5 h-5 px-1 rounded-full bg-[#C6452D] text-white text-[10px] flex items-center justify-center border border-[#FFF6DD]">{inboxReplies.length}</span>
-              </button>
-            )}
           </div>
+
         </div>
 
         {/* 联络子模块切换 (如果未来有更多子模块) */}
@@ -704,138 +552,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
               ← 返回主要联络界面
             </button>
           </div>
-        )}
-
-        {/* ======================= MODULE 1: 弹窗模式的战术研讨 ======================= */}
-        {activeReply && createPortal(
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="relative w-full max-w-md overflow-hidden rounded-xl border-2 border-[#1E4334] bg-[#FFFDF6] p-5 shadow-[0_18px_50px_rgba(0,0,0,.38)]">
-              <CardPatternOverlay opacity={0.07} mode="multiply" />
-              <div className="relative z-10">
-                <div className="mb-3 flex items-center gap-2 border-b border-dashed border-[#CDBA91] pb-3">
-                  <span className="text-2xl">✉️</span>
-                  <div><h3 className="font-serif-title text-lg font-black text-[#1E4334]">来自管理员的回信</h3><p className="text-[10px] text-[#8C7A68]">关于：{activeReply.subject || '调查报告'}</p></div>
-                </div>
-                <p className="min-h-24 whitespace-pre-wrap rounded-md bg-[#F7F1E5] p-3 text-sm leading-7 text-[#3E342B]">{activeReply.body}</p>
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => closeReply(activeReply)} className="rounded-md border-2 border-[#B7791F] bg-[#F3C45E] px-3 py-2 text-sm font-bold text-[#3E2C16] hover:bg-[#F7D47C] cursor-pointer">我知道了</button>
-                  <button type="button" onClick={() => closeReply(activeReply, true)} className="rounded-md border-2 border-[#1E4334] bg-[#FFF9EC] px-3 py-2 text-sm font-bold text-[#1E4334] hover:bg-[#F1E8D4] cursor-pointer">继续提问</button>
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-        {isReportModalOpen && createPortal(
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="w-full max-w-md bg-[#FFFDF6] border-2 border-[#1E4334] rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.35)] flex flex-col relative overflow-hidden animate-in fade-in zoom-in duration-200">
-              <CardPatternOverlay opacity={0.08} mode="multiply" />
-
-              {/* 弹窗头部 */}
-              <div className="relative bg-[#1E4334] p-3.5 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">📋</span>
-                  <span className="font-serif-title text-sm font-black text-[#F9E79F] tracking-widest">
-                    战术研讨 · 调查报告呈递 (04:D1S)
-                  </span>
-                </div>
-                <button 
-                  onClick={() => setIsReportModalOpen(false)}
-                  className="w-6 h-6 flex items-center justify-center bg-[#F9E79F] text-[#1E4334] rounded-full hover:bg-white transition-colors cursor-pointer text-xs font-bold"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* 弹窗主体 */}
-              <div className="p-4 space-y-3 overflow-y-auto max-h-[70vh] no-scrollbar">
-                {/* 类别 Chips */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-[#1E4334] block">报告分类</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['🎮 玩法手感', '💡 新功能与彩蛋', '🐛 异常排查', '📦 素材提供', '🤝 网站助手', '💬 随便聊聊'].map((cat) => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => {
-                          soundManager.playBlip();
-                          setFeedbackCategory(cat);
-                        }}
-                        className={`px-2.5 py-1 text-[10px] cursor-pointer transition-all shadow-[1px_1px_0px_#261307] border border-[#8C6C47]/30 rounded-xs ${
-                          feedbackCategory === cat
-                            ? 'bg-[#1E4334] text-[#F9E79F] font-bold border-[#1E4334]'
-                            : 'bg-[#F8F1DE] text-[#5C4A3A] hover:bg-[#F1E5CB]'
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 士兵代号 / 称呼 与 联络邮箱 */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label htmlFor="fb-name" className="text-[11px] font-bold text-[#1E4334] block">
-                      士兵代号 / 称呼
-                    </label>
-                    <input
-                      id="fb-name"
-                      type="text"
-                      value={feedbackName}
-                      onChange={(e) => setFeedbackName(e.target.value)}
-                      maxLength={30}
-                      placeholder="特务班同好"
-                      className="w-full bg-white/50 border-2 border-[#1E4334]/20 focus:border-[#1E4334] px-2.5 py-1.5 text-xs text-[#203429] outline-none rounded-sm transition-all"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label htmlFor="fb-email" className="text-[11px] font-bold text-[#1E4334] block">
-                      联络邮箱
-                    </label>
-                    <input
-                      id="fb-email"
-                      type="email"
-                      value={feedbackEmail}
-                      onChange={(e) => setFeedbackEmail(e.target.value)}
-                      maxLength={80}
-                      placeholder="接收回函 (可选)"
-                      className="w-full bg-white/50 border-2 border-[#1E4334]/20 focus:border-[#1E4334] px-2.5 py-1.5 text-xs text-[#203429] outline-none rounded-sm transition-all"
-                    />
-                  </div>
-                </div>
-
-                {/* 战术研讨详情 */}
-                <div className="space-y-1 flex-1 flex flex-col min-h-0">
-                  <label htmlFor="fb-content" className="text-[11px] font-bold text-[#1E4334] block shrink-0">
-                    详细内容说明
-                  </label>
-                  <textarea
-                    id="fb-content"
-                    value={feedbackContent}
-                    onChange={(e) => setFeedbackContent(e.target.value)}
-                    placeholder="请详细描述您的建议、遇到的问题、或者想分享的同好感想..."
-                    rows={4}
-                    className="w-full flex-1 min-h-[120px] bg-white/50 border-2 border-[#1E4334]/20 focus:border-[#1E4334] p-2.5 text-xs text-[#203429] outline-none resize-none rounded-sm transition-all"
-                  />
-                </div>
-              </div>
-
-              {/* 弹窗底部 */}
-              <div className="p-4 bg-[#1E4334]/5 border-t border-[#1E4334]/10">
-                <button
-                  type="button"
-                  onClick={handleSubmitFeedback}
-                  className="w-full py-2.5 px-4 bg-gradient-to-b from-[#1E4334] to-[#153025] hover:from-[#245340] hover:to-[#1a3d2f] text-[#F9E79F] font-bold text-sm cursor-pointer transition-all active:scale-[0.98] shadow-[2px_2px_0px_#153025] flex items-center justify-center gap-2 border border-[#153025] rounded-sm"
-                >
-                  <span>✉️</span>
-                  <span>呈递调查报告</span>
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
         )}
 
         {/* 原本的模块内容 (仅在 mainTab === 'share' 时显示，因为 feedback 现在是 Modal) */}
@@ -1335,127 +1051,6 @@ export const DispatchHub: React.FC<Props> = ({ onShowToast }) => {
         )}
       </div>
 
-      {/* ====================================================
-          卡片 2：联系制作者 / 工坊商业与同好定制卡片 (Craftsman Workshop Card) - 兵长茶会/巨树餐厅同款边框
-         ==================================================== */}
-      <div className="relative bg-[#FAF3E3]/85 backdrop-blur-xs p-3.5 sm:p-4 overflow-hidden border-2 border-[#1E4334] rounded-2xl shadow-[0_4px_16px_rgba(30,67,52,0.18)] flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-        <CardPatternOverlay opacity={0.06} mode="multiply" />
-        <div className="relative z-10 flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-[#1E4334] text-[#F9E79F] flex items-center justify-center shrink-0 shadow-xs text-xs">
-            🛠️
-          </div>
-          <div className="min-w-0">
-            <div className="text-xs font-bold text-[#1E4334] flex items-center gap-1.5 flex-wrap">
-              <span className="px-2.5 py-0.5 border border-dashed border-[#1E4334]/50 text-[#1E4334] font-medium text-xs rounded-full inline-block bg-[#FAF4E4]/70">
-                独立开发与同好定制
-              </span>
-              <span className="px-1.5 py-0.2 bg-[#1E4334]/10 text-[#1E4334] text-[10px] rounded-xs font-mono border border-dashed border-[#1E4334]/30">
-                COMMISSION
-              </span>
-            </div>
-            <p className="text-[11px] text-[#5C4A3A] truncate mt-0.5">
-              承接各类同人主页、个人站点、网页小游戏与互动功能定制
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            soundManager.playCoin();
-            setIsCustomModalOpen(true);
-          }}
-          className="relative z-10 w-full sm:w-auto px-4 py-1.5 bg-[#1E4334] hover:bg-[#255642] text-[#F9E79F] border border-[#153025] text-xs font-bold cursor-pointer transition-all shadow-[0_2px_6px_rgba(30,67,52,0.25)] flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap rounded-full active:scale-95"
-        >
-          <span>💬</span>
-          <span>联系制作者</span>
-          <span>→</span>
-        </button>
-      </div>
-
-      {/* 商业定制沟通弹窗 */}
-      {typeof document !== 'undefined' && isCustomModalOpen && createPortal(
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsCustomModalOpen(false);
-          }}
-          className="fixed inset-0 z-50 bg-[#15231B]/60 backdrop-blur-xs flex items-center justify-center p-3"
-        >
-          <div className="relative w-full max-w-[440px] bg-[#FFFDF6] border-2 border-[#1E4334] rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.35)] overflow-hidden select-none animate-fadeIn">
-            <CardPatternOverlay opacity={0.08} mode="multiply" />
-            <div className="relative bg-[#1E4334] text-[#F9E79F] px-4 py-2.5 flex items-center justify-between">
-              <div className="font-bold text-xs flex items-center gap-1.5">
-                <span>🛠️</span>
-                <span>商业定制沟通</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCustomModalOpen(false)}
-                className="font-pixel text-[10px] text-[#F9E79F] hover:bg-[#8B2515] hover:text-white w-5 h-5 rounded-full flex items-center justify-center border border-[#F9E79F]/40 cursor-pointer"
-                aria-label="关闭"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-3.5 space-y-2.5">
-              <div className="space-y-1">
-                <label htmlFor="co-name" className="text-xs font-bold text-[#203429] block">
-                  委托人称呼
-                </label>
-                <input
-                  id="co-name"
-                  type="text"
-                  value={coName}
-                  onChange={(e) => setCoName(e.target.value)}
-                  maxLength={30}
-                  placeholder="例如：同好策划人"
-                  className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2 py-1 text-xs outline-hidden"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label htmlFor="co-contact" className="text-xs font-bold text-[#203429] block">
-                  邮箱联系方式 <span className="text-[#A8321E]">*</span>
-                </label>
-                <input
-                  id="co-contact"
-                  type="email"
-                  value={coContact}
-                  onChange={(e) => setCoContact(e.target.value)}
-                  maxLength={80}
-                  placeholder="your-email@example.com"
-                  className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] px-2 py-1 text-xs outline-hidden"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label htmlFor="co-desc" className="text-xs font-bold text-[#203429] block">
-                  初步需求简述与期望周期 <span className="text-[#A8321E]">*</span>
-                </label>
-                <textarea
-                  id="co-desc"
-                  value={coDesc}
-                  onChange={(e) => setCoDesc(e.target.value)}
-                  placeholder="请简要描述您的项目构思、核心功能、期望交付周期或预算范围..."
-                  rows={3}
-                  className="w-full bg-[#F8F1DE] focus:ring-1 focus:ring-[#1E4334] p-2 text-xs outline-hidden resize-y"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleSubmitCustomOrder}
-                className="w-full py-2 bg-gradient-to-b from-[#2D5844] to-[#1E4334] hover:from-[#376C54] hover:to-[#255240] text-[#F9E79F]   font-bold text-xs cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 shadow-[2px_2px_0px_#153025] flex items-center justify-center gap-1.5"
-              >
-                <span>✉️</span>
-                <span>发送需求</span>
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 };

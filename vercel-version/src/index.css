@@ -1889,6 +1889,25 @@ html.pwa-standalone .home-announcement-list > .announcement-board {
   }
 }
 
+@media (max-width: 767px) and (orientation: portrait) {
+  .home-quick-actions {
+    gap: 10px !important;
+    margin-top: 8px !important;
+  }
+
+  .home-main-content {
+    gap: 14px !important;
+  }
+
+  .home-jump-section {
+    padding-top: 12px !important;
+  }
+
+  .home-jump-art {
+    width: clamp(76px, 11.5dvh, 102px) !important;
+  }
+}
+
 /* 公告栏外观契约：保留纸张主题，降低边框重量并固定三段比例。 */
 .home-announcement-list > .announcement-board {
   min-height: 58px !important;

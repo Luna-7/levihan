@@ -10,7 +10,7 @@ import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint'
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { formatNotificationBody, notifyBrowser } from '../utils/browserNotifications';
 
-type Mode = 'menu' | 'art';
+type Mode = 'menu' | 'art' | 'group';
 
 type ArtworkImage = { file: File; preview: string };
 
@@ -87,30 +87,18 @@ export const HomeQuickSubmission: React.FC<{ onShowToast: (message: string) => v
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [busy, open]);
 
-  const requireLogin = (next: Mode) => {
+  const openGroupInfo = () => {
     soundManager.playWoodTap();
-    if (!profile?.uid) {
-      onShowToast('请先登录账号再投递');
-      useAppShellStore.getState().openLogin();
-      setOpen(false);
-      return;
-    }
-    setMode(next);
+    setMode('group');
   };
 
-  const openOriginalNovelSubmission = () => {
-    soundManager.playWoodTap();
-    if (!profile?.uid) {
-      onShowToast('请先登录账号再投递');
-      useAppShellStore.getState().openLogin();
-      setOpen(false);
-      return;
+  const copyGroupNumber = async () => {
+    try {
+      await navigator.clipboard.writeText('979246377');
+      onShowToast('群号已复制');
+    } catch {
+      onShowToast('复制失败，请手动复制群号');
     }
-    const shell = useAppShellStore.getState();
-    shell.requestSubmission('novel');
-    shell.openNovelCategory();
-    shell.navigate('resources');
-    setOpen(false);
   };
 
   const submitArt = async (event: React.FormEvent) => {
@@ -199,8 +187,9 @@ export const HomeQuickSubmission: React.FC<{ onShowToast: (message: string) => v
         </span>
       </button>
     </section>
-    {open && typeof document !== 'undefined' && createPortal(<div className="fixed inset-0 z-[1600] flex items-center justify-center bg-black/65 p-3 backdrop-blur-sm" onClick={() => !busy && setOpen(false)}><div role="dialog" aria-modal="true" aria-labelledby="home-submission-title" className="relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-xl border-2 border-[#1E4334] bg-[#FFFDF6] p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}><CardPatternOverlay opacity={0.08} mode="multiply"/><div className="relative z-10"><div className="relative flex min-h-[60px] items-center"><div className="max-w-[calc(100%-68px)]"><h3 id="home-submission-title" className="flex items-center gap-2 font-serif-title text-lg font-black text-[#1E4334]"><Send size={18} strokeWidth={2.5} aria-hidden="true" />{mode === 'menu' ? '一键投递' : '投递画'}</h3>{mode !== 'menu' && <p className="mt-1 text-[10px] text-[#8C7A68]">创作者：{profile?.nickname || '请先登录'}</p>}</div><img src="/images/home-submission-character.png" alt="韩吉像素插画" className="absolute right-7 top-1/2 h-[56px] w-[46px] -translate-y-1/2 object-contain" style={{ transform: 'translateY(-50%) scaleX(-1)' }} /><button type="button" disabled={busy} onClick={() => setOpen(false)} className="absolute right-0 top-0 z-10 text-lg text-[#8C6C47] cursor-pointer" aria-label="关闭">✕</button></div>
-      {mode === 'menu' && <div className="mt-4 grid gap-2"><button type="button" onClick={openOriginalNovelSubmission} className="rounded-lg bg-[#1E4334] px-4 py-3 text-left text-[#FFF6D8] cursor-pointer"><b className="block text-sm">✍️ 投递文</b><span className="text-[10px] opacity-80">打开原版表单，可上传文件、添加预警并加密正文</span></button><button type="button" onClick={() => { if (!profile?.uid) { onShowToast('请先登录账号再投递'); useAppShellStore.getState().openLogin(); setOpen(false); return; } useAppShellStore.getState().requestSubmission('announcement'); setOpen(false); }} className="rounded-lg bg-[#8F3426] px-4 py-3 text-left text-white cursor-pointer"><b className="block text-sm">📜 投递利韩企划 / 公告</b><span className="text-[10px] opacity-80">即时填写企划与公告</span></button><button type="button" onClick={() => requireLogin('art')} className="rounded-lg bg-[#B7791F] px-4 py-3 text-left text-[#FFF9EC] cursor-pointer"><b className="block text-sm">🎨 投递画</b><span className="text-[10px] opacity-80">图片自动转换为 WebP</span></button></div>}
+    {open && typeof document !== 'undefined' && createPortal(<div className="fixed inset-0 z-[1600] flex items-center justify-center bg-black/65 p-3 backdrop-blur-sm" onClick={() => !busy && setOpen(false)}><div role="dialog" aria-modal="true" aria-labelledby={mode === 'group' ? 'group-welcome-title' : 'home-submission-title'} className="relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-xl border-2 border-[#1E4334] bg-[#FFFDF6] p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}><CardPatternOverlay opacity={0.08} mode="multiply"/><div className="relative z-10"><div className={mode === 'group' ? 'relative' : 'relative flex min-h-[60px] items-end'}>{mode !== 'group' && <div className="flex min-w-0 items-end gap-3 pr-12"><h3 id="home-submission-title" className="flex items-center gap-2 font-serif-title text-lg font-black text-[#1E4334]"><Send size={18} strokeWidth={2.5} aria-hidden="true" />{mode === 'menu' ? '一键投递' : '投递画'}</h3><img src="/images/home-submission-character.png" alt="韩吉像素插画" className="h-[56px] w-[46px] shrink-0 object-contain" style={{ transform: 'scaleX(-1)' }} /></div>}{mode === 'art' && <p className="absolute bottom-0 left-0 translate-y-full pt-1 text-[10px] text-[#8C7A68]">创作者：{profile?.nickname || '请先登录'}</p>}<button type="button" disabled={busy} onClick={() => setOpen(false)} className="absolute right-0 top-0 z-10 text-lg text-[#8C6C47] cursor-pointer" aria-label="关闭">✕</button></div>
+      {mode === 'menu' && <div className="mt-4 grid gap-2"><button type="button" onClick={openGroupInfo} className="rounded-lg bg-[#1E4334] px-4 py-3 text-left text-[#FFF6D8] cursor-pointer"><b className="block text-sm">✍️ 投递文</b><span className="text-[10px] opacity-80">打开原版表单，可上传文件、添加预警并加密正文</span></button><button type="button" onClick={openGroupInfo} className="rounded-lg bg-[#8F3426] px-4 py-3 text-left text-white cursor-pointer"><b className="block text-sm">📜 投递利韩企划 / 公告</b><span className="text-[10px] opacity-80">即时填写企划与公告</span></button><button type="button" onClick={openGroupInfo} className="rounded-lg bg-[#B7791F] px-4 py-3 text-left text-[#FFF9EC] cursor-pointer"><b className="block text-sm">🎨 投递画</b><span className="text-[10px] opacity-80">图片自动转换为 WebP</span></button></div>}
+      {mode === 'group' && <div className="relative top-3 flex min-h-32 items-center justify-center gap-8"><div className="shrink-0 text-center"><h4 id="group-welcome-title" className="font-serif-title text-lg font-black text-[#1E4334]">欢迎加群了解</h4><p className="mt-2 text-sm font-bold text-[#5B4636]">网站经营&汉化群</p><button type="button" onClick={copyGroupNumber} className="mx-auto mt-1 block cursor-pointer font-mono text-lg font-bold tracking-wider text-[#1E4334] underline-offset-4 hover:underline" aria-label="点击复制群号 979246377">979246377</button></div><img src="/images/home-submission-character.png" alt="韩吉像素插画" className="h-28 w-20 shrink-0 object-contain" style={{ transform: 'scaleX(-1)' }} /></div>}
       {mode === 'art' && <form onSubmit={submitArt} className="mt-4 space-y-3">
         <label className="block text-xs font-bold">文本（选填）<textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={2000} placeholder="可以写作品说明、角色或配图文字" className={field} /></label>
         <label className="block text-xs font-bold">创作者<input value={profile?.nickname || ''} readOnly className={`${field} bg-[#EEE8D8]`} /></label>
@@ -236,6 +225,6 @@ export const HomeQuickSubmission: React.FC<{ onShowToast: (message: string) => v
           <div className="mt-3 flex gap-2"><button type="button" onClick={() => setCrop(null)} className="flex-1 rounded-md border border-[#BFA985] px-3 py-2 text-sm font-bold text-[#5B4636]">取消</button><button type="button" onClick={() => void applyCrop()} className="flex-1 rounded-md bg-[#1E4334] px-3 py-2 text-sm font-bold text-[#FFF6D8]">应用裁剪</button></div>
         </div>
       </div>}
-      {mode !== 'menu' && !busy && <button type="button" onClick={()=>setMode('menu')} className="mt-3 text-xs font-bold text-[#6B5138] cursor-pointer">← 返回投递类型</button>}</div></div></div>, document.body)}
+      {mode === 'art' && !busy && <button type="button" onClick={()=>setMode('menu')} className="mt-3 text-xs font-bold text-[#6B5138] cursor-pointer">← 返回投递类型</button>}</div></div></div>, document.body)}
   </>;
 });

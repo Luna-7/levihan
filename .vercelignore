@@ -1,0 +1,11 @@
+.env*
+**/.env
+node_modules/
+**/node_modules/
+.git/
+.workbuddy/
+backup-local/
+像素首页-可调用版/
+vercel-version/dist/
+vercel-version/cloudbase/
+vercel-version/goods-src/

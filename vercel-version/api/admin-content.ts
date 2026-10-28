@@ -406,7 +406,7 @@ async function getFederationToken(prefix: string) {
 }
 
 async function validateCosPrefix(prefix: string) {
-  if (prefix === 'announcements/' || prefix === 'comic_vault/') return;
+  if (prefix === 'announcements/' || prefix === 'comic_vault/' || prefix === 'supporters.json') return;
   if (!/^[A-Za-z0-9_-]{1,64}\/$/.test(prefix)) throw fail('上传目录无效。');
   const folder = prefix.slice(0, -1);
   if (/^lh-\d{1,4}$/.test(folder)) return;
@@ -448,9 +448,10 @@ export default async function handler(request: AdminRequest, response: ServerRes
     return;
   }
 
+  let action = '';
   try {
     const payload = await readPayload(request);
-    const action = String(payload.action || '').trim();
+    action = String(payload.action || '').trim();
     if (!action) throw fail('缺少操作类型。');
     if (!PUBLIC_ACTIONS.has(action) && !verifyToken(payload.token || request.headers['x-admin-token'])) {
       throw fail('未授权或登录已过期，请重新登录。', 401);
@@ -620,6 +621,15 @@ export default async function handler(request: AdminRequest, response: ServerRes
     }
   } catch (error: any) {
     const status = Number(error?.status || error?.$metadata?.httpStatusCode) || 500;
+    if (status >= 500) {
+      console.error('[admin-content]', JSON.stringify({
+        action,
+        name: String(error?.name || ''),
+        code: String(error?.Code || error?.code || ''),
+        status,
+        cause: String(error?.cause?.name || ''),
+      }));
+    }
     sendJson(response, status, { ok: false, error: error?.message || '管理请求失败', status });
   }
 }
