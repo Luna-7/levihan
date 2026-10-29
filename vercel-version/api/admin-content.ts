@@ -1,12 +1,15 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createRequire } from 'node:module';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { sts } from 'tencentcloud-sdk-nodejs-sts';
 
 const require = createRequire(import.meta.url);
 const webpush = require('web-push') as {
@@ -178,12 +181,18 @@ function formatPushBody(raw: unknown, allowLong = false) {
 
 async function sendPushUpdate(options: { title: string; body: unknown; tag: string; url?: string; allowLong?: boolean; category?: 'comicUpdates' | 'announcements' }) {
   try {
-    if (!configureWebPush()) return;
+    if (!configureWebPush()) {
+      console.warn('[push] VAPID keys are not configured');
+      return;
+    }
     const category = options.category || 'comicUpdates';
     const subscriptions = (await readJsonArray(PUSH_SUBSCRIPTIONS_KEY)).filter((item: any) =>
       Array.isArray(item?.categories) ? item.categories.includes(category) : category === 'comicUpdates',
     );
-    if (!subscriptions.length) return;
+    if (!subscriptions.length) {
+      console.warn(`[push] no subscribers for ${category}`);
+      return;
+    }
     const payload = JSON.stringify({
       title: options.title,
       body: formatPushBody(options.body, options.allowLong),
@@ -191,6 +200,7 @@ async function sendPushUpdate(options: { title: string; body: unknown; tag: stri
       url: options.url || '/',
     });
     const expired = new Set<string>();
+    const failures = new Map<string, number>();
     await Promise.allSettled(subscriptions.map(async (subscription) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -201,11 +211,14 @@ async function sendPushUpdate(options: { title: string; body: unknown; tag: stri
           }),
         ]);
       } catch (error: any) {
+        const code = String(error?.statusCode || error?.code || 'unknown');
+        failures.set(code, (failures.get(code) || 0) + 1);
         if (error?.statusCode === 404 || error?.statusCode === 410) expired.add(String(subscription?.endpoint || ''));
       } finally {
         if (timer) clearTimeout(timer);
       }
     }));
+    if (failures.size) console.warn('[push] delivery failures', Object.fromEntries(failures));
     if (expired.size) {
       await writeJson(PUSH_SUBSCRIPTIONS_KEY, subscriptions.filter((item) => !expired.has(String(item?.endpoint || ''))));
     }
@@ -336,18 +349,12 @@ async function upsertAuthor(name: string, url: string) {
   await writeJson('authors.json', authors);
 }
 
-function hmac(key: Buffer | string, value: string) {
-  return createHmac('sha256', key).update(value, 'utf8').digest();
-}
-
-function sha256(value: string) {
-  return createHash('sha256').update(value, 'utf8').digest('hex');
-}
-
 async function getFederationToken(prefix: string) {
   const secretId = String(process.env.COS_SECRET_ID || '').trim();
   const secretKey = String(process.env.COS_SECRET_KEY || '').trim();
   if (!secretId || !secretKey || !APP_ID) throw fail('Vercel 尚未配置 COS 临时凭证服务', 503);
+  if (!BUCKET.endsWith(`-${APP_ID}`)) throw fail('COS 桶名与 APP ID 不匹配', 503);
+  const shortBucket = BUCKET.slice(0, -APP_ID.length - 1);
   const actions = [
     'name/cos:PutObject', 'name/cos:PostObject',
     'name/cos:InitiateMultipartUpload', 'name/cos:UploadPart',
@@ -359,42 +366,29 @@ async function getFederationToken(prefix: string) {
     statement: [{
       effect: 'allow',
       action: actions,
-      resource: [`qcs::cos:${REGION}:uid/${APP_ID}:prefix//${APP_ID}/${BUCKET}/${prefix}*`],
+      resource: [`qcs::cos:${REGION}:uid/${APP_ID}:prefix//${APP_ID}/${shortBucket}/${prefix}*`],
     }],
   };
-  const body = JSON.stringify({ Name: 'LevihanAdmin', DurationSeconds: 1800, Policy: JSON.stringify(policy) });
-  const host = 'sts.tencentcloudapi.com';
   const timestamp = Math.floor(Date.now() / 1000);
-  const date = new Date(timestamp * 1000).toISOString().slice(0, 10);
-  const action = 'GetFederationToken';
-  const canonicalHeaders = `content-type:application/json; charset=utf-8\nhost:${host}\nx-tc-action:${action.toLowerCase()}\n`;
-  const signedHeaders = 'content-type;host;x-tc-action';
-  const canonicalRequest = `POST\n/\n\n${canonicalHeaders}\n${signedHeaders}\n${sha256(body)}`;
-  const scope = `${date}/sts/tc3_request`;
-  const stringToSign = `TC3-HMAC-SHA256\n${timestamp}\n${scope}\n${sha256(canonicalRequest)}`;
-  const secretDate = hmac(`TC3${secretKey}`, date);
-  const secretService = hmac(secretDate, 'sts');
-  const secretSigning = hmac(secretService, 'tc3_request');
-  const signature = createHmac('sha256', secretSigning).update(stringToSign, 'utf8').digest('hex');
-  const authorization = `TC3-HMAC-SHA256 Credential=${secretId}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-  const result = await fetch(`https://${host}/`, {
-    method: 'POST',
-    headers: {
-      Authorization: authorization,
-      'Content-Type': 'application/json; charset=utf-8',
-      Host: host,
-      'X-TC-Action': action,
-      'X-TC-Timestamp': String(timestamp),
-      'X-TC-Version': '2018-08-13',
-      'X-TC-Region': REGION,
-    },
-    body,
+  const client = new sts.v20180813.Client({
+    credential: { secretId, secretKey },
+    region: REGION,
+    profile: { httpProfile: { endpoint: 'sts.tencentcloudapi.com', reqTimeout: 10 } },
   });
-  const payload: any = await result.json().catch(() => ({}));
-  const response = payload?.Response;
-  if (!result.ok || response?.Error || !response?.Credentials) {
-    const message = response?.Error?.Message || '腾讯云未能签发 COS 临时凭证';
-    throw fail(message, 502);
+  let response;
+  try {
+    response = await client.GetFederationToken({
+      Name: 'LevihanAdmin',
+      DurationSeconds: 1800,
+      Policy: encodeURIComponent(JSON.stringify(policy)),
+    });
+  } catch (error: any) {
+    throw Object.assign(fail(error?.message || '腾讯云未能签发 COS 临时凭证', 502), {
+      code: error?.code || error?.Code || 'STS_REQUEST_FAILED',
+    });
+  }
+  if (!response.Credentials?.TmpSecretId || !response.Credentials.TmpSecretKey || !response.Credentials.Token) {
+    throw Object.assign(fail('腾讯云返回的临时凭证不完整', 502), { code: 'STS_INVALID_RESPONSE' });
   }
   return {
     tmpSecretId: response.Credentials.TmpSecretId,
@@ -457,6 +451,19 @@ export default async function handler(request: AdminRequest, response: ServerRes
       throw fail('未授权或登录已过期，请重新登录。', 401);
     }
 
+    if (String(request.headers.host || '').split(':')[0] === 'tudou.levihan.asia' &&
+        (action === 'pushSubscribe' || action === 'pushUnsubscribe')) {
+      const upstream = await fetch('https://www.levihan.asia/api/admin-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10000),
+      });
+      const result = await upstream.json().catch(() => ({ ok: false, error: '通知服务响应无效。' }));
+      sendJson(response, upstream.status, result);
+      return;
+    }
+
     if (action === 'status') {
       sendJson(response, 200, {
         ok: true,
@@ -476,6 +483,7 @@ export default async function handler(request: AdminRequest, response: ServerRes
     }
 
     if (action === 'pushSubscribe') {
+      if (!configureWebPush()) throw fail('通知服务尚未配置。', 503);
       const subscription = payload.subscription;
       if (!validPushSubscription(subscription)) throw fail('推送订阅格式无效。');
       const subscriptions = await readJsonArray(PUSH_SUBSCRIPTIONS_KEY);
@@ -538,8 +546,39 @@ export default async function handler(request: AdminRequest, response: ServerRes
         sendJson(response, 200, { ok: true, credentials: await getFederationToken(prefix) });
         return;
       }
+      case 'vaultUploadUrl': {
+        const key = String(payload.key || '');
+        if (!/^comic_vault\/[A-Za-z0-9_-]{1,40}_secure\.txt$/.test(key)) {
+          throw fail('加密文件路径无效。');
+        }
+        const contentType = 'text/plain; charset=utf-8';
+        const url = await getSignedUrl(
+          getCosClient(),
+          new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: contentType }),
+          { expiresIn: 600, signableHeaders: new Set(['content-type']) },
+        );
+        sendJson(response, 200, { ok: true, url, contentType });
+        return;
+      }
+      case 'secureCoverUploadUrl': {
+        const key = String(payload.key || '');
+        if (!/^[A-Za-z0-9_-]{1,64}\/cover\.(?:webp|jpg|png|gif|avif)$/.test(key)) {
+          throw fail('封面路径无效。');
+        }
+        const { mime, ext } = mimeForImage(payload.contentType);
+        if (!key.endsWith(`.${ext}`)) throw fail('封面格式与文件名不符。');
+        const url = await getSignedUrl(
+          getCosClient(),
+          new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: mime }),
+          { expiresIn: 600, signableHeaders: new Set(['content-type']) },
+        );
+        sendJson(response, 200, { ok: true, url, contentType: mime });
+        return;
+      }
       case 'publish': {
         const book = normalizeBook(payload.book || {});
+        let stage = 'readArchive';
+        try {
         const books = await readJsonArray('archive.json');
         const index = books.findIndex((entry) => entry && entry.id === book.id);
         const now = new Date().toISOString();
@@ -555,17 +594,63 @@ export default async function handler(request: AdminRequest, response: ServerRes
           books.push(book);
         }
         book.updatedAt = now;
+        stage = 'writeArchive';
         await writeJson('archive.json', books);
+        stage = 'readTags';
         const tags = normalizeTags([...(await readJsonArray('tags.json')), ...book.tags]);
+        stage = 'writeTags';
         await writeJson('tags.json', tags);
+        stage = 'upsertAuthor';
         await upsertAuthor(String(book.circle || ''), String(book.authorUrl || ''));
-        await sendPushUpdate({
-          title: index >= 0 ? '新图又出锅' : '新图出锅',
-          body: String(book.titleZh || '漫画本有新的内容').slice(0, 120),
-          tag: `artwork-${book.id}`,
-          url: '/?tab=resources',
-        });
+        if (index < 0) {
+          stage = 'sendPush';
+          await sendPushUpdate({
+            title: '新鲜出炉',
+            body: `《${String(book.titleZh || '漫画本').slice(0, 100)}》${book.circle ? ` ${String(book.circle).slice(0, 100)}` : ''}`,
+            tag: `artwork-${book.id}`,
+            url: '/?tab=resources',
+          });
+        }
         sendJson(response, 200, { ok: true, replaced: index >= 0, count: books.length, books });
+        return;
+        } catch (error: any) {
+          console.error('[publish-stage]', { stage, code: error?.code || error?.name || 'unknown' });
+          throw error;
+        }
+      }
+      case 'remove': {
+        const id = String(payload.id || '').trim();
+        if (!/^lh-\d{1,4}$/.test(id)) throw fail('作品 ID 无效。');
+        const books = await readJsonArray('archive.json');
+        const target = books.find((book) => book && book.id === id);
+        if (!target) throw fail('归档中找不到该作品。', 404);
+        const folder = String(target.bookFolder || id).trim();
+        if (!/^[A-Za-z0-9_-]{1,64}$/.test(folder)) throw fail('作品目录无效。');
+        if (books.some((book) => book && book.id !== id && String(book.bookFolder || book.id) === folder)) {
+          throw fail('该目录还被其他作品使用，无法删除文件。', 409);
+        }
+        let deletedObjects = 0;
+        if (payload.deleteFiles !== false) {
+          const keys: string[] = [];
+          let continuationToken: string | undefined;
+          do {
+            const listed = await getCosClient().send(new ListObjectsV2Command({
+              Bucket: BUCKET, Prefix: `${folder}/`, ContinuationToken: continuationToken,
+            }));
+            keys.push(...(listed.Contents || []).flatMap((item) => item.Key ? [item.Key] : []));
+            continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+          } while (continuationToken);
+          if (target.secure) keys.push(`comic_vault/${id}_secure.txt`);
+          for (let index = 0; index < keys.length; index += 10) {
+            await Promise.all(keys.slice(index, index + 10).map(async (key) => {
+              await getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+              deletedObjects++;
+            }));
+          }
+        }
+        const next = books.filter((book) => book && book.id !== id);
+        await writeJson('archive.json', next);
+        sendJson(response, 200, { ok: true, id, deletedObjects, count: next.length, books: next });
         return;
       }
       case 'announcementList': {

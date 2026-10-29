@@ -32,6 +32,7 @@ export default defineConfig(() => {
           'icons/icon-maskable-512x512.png',
         ],
         workbox: {
+          importScripts: ['/push-sw.js'],
           // 漫画站只预缓存应用壳（comic.html 兜底）；封面与正文图片走运行时缓存。
           globPatterns: ['comic.html', 'assets/**/*.{js,css}'],
           // 加密阅读器（pdfjs-dist）必须联网取密文，离线预缓存没有意义。

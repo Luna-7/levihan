@@ -172,6 +172,34 @@ const KEY = 'comic_vault/lh-123_secure.txt';
 /** > 4MB，强制走分片；9MB 恰好切 3 片（4MB + 4MB + 1MB） */
 const CIPHER = 'A'.repeat(9 * 1024 * 1024);
 
+test('限时签名上传只向管理接口请求链接，密文直接 PUT 到 COS', async () => {
+  const previousFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, init });
+    if (calls.length === 1) return {
+      ok: true, status: 200,
+      json: async () => ({ ok: true, url: 'https://cos.example.test/signed-object', contentType: 'text/plain; charset=utf-8' }),
+    };
+    return { ok: true, status: 200, headers: { get: () => 'etag' } };
+  };
+  vault.configure({ UPLOAD_MODE: 'signed-url', apiEndpoint: 'https://fn.example.test/admin-upload', getToken: () => 'tk-test' });
+  const blob = vault.wrapBase64AsTextBlob('aGVsbG8=');
+  try {
+    const result = await vault.uploadCipher('aGVsbG8=', blob, KEY);
+    assert.equal(result.channel, 'signed-url');
+    assert.equal(JSON.parse(calls[0].init.body).action, 'vaultUploadUrl');
+    assert.equal(JSON.parse(calls[0].init.body).token, 'tk-test');
+    assert.equal(calls[1].url, 'https://cos.example.test/signed-object');
+    assert.equal(calls[1].init.method, 'PUT');
+    assert.equal(calls[1].init.body, blob);
+    assert.equal(calls[1].init.headers['Content-Type'], 'text/plain; charset=utf-8');
+  } finally {
+    globalThis.fetch = previousFetch;
+    vault.configure({ UPLOAD_MODE: 'auto' });
+  }
+});
+
 test.beforeEach(() => {
   requests = [];
   responder = null;
@@ -393,15 +421,52 @@ test('直传进度按 0~1 比例换算：ratio 直通、文案显示真实百分
 
 test('getAuthorization 必须是回调风格：SDK 1.8.x 会忽略返回的 Promise', () => {
   // 回归：曾写成 `return fetchCosCredential().then(...)` —— SDK 只把内部回调作为第二个
-  // 参数传入并等待它被调用，返回值被完全忽略。putObject 因此无限挂起（鉴权失败的
-  // rejection 无人接住，不报错、不降级），界面表现为进度永远停在「直传 COS：0%」。
+  // 参数传入并等待它被调用，返回值被完全忽略。凭证先在 putObject 外预取，
+  // 确保接口错误不会被 SDK 的必填字段校验覆盖。
   const body = clientSrc.slice(clientSrc.indexOf('function getCosInstance'), clientSrc.indexOf('function putCipherToCos'));
   assert.match(body, /getAuthorization: function \(options, callback\)/,
     'getAuthorization 必须接收 (options, callback)，返回 Promise 会被 SDK 忽略');
   assert.match(body, /callback\(\{[\s\S]*?TmpSecretId/,
     '凭证必须通过 callback 交还 SDK，而不是 return');
-  assert.match(body, /\.catch\(function \(err\) \{\s*callback\(err\);\s*\}\)/,
-    '鉴权失败必须 callback(err)，否则请求挂死且永远触发不了中转降级');
+  assert.match(body, /\.catch\(function \(err\) \{[\s\S]*?cosAuthorizationError = err;[\s\S]*?callback\(\{\}\);[\s\S]*?\}\)/,
+    'COS SDK 不支持 callback(error)，失败时需保留原始错误并返回空凭证触发回调');
+  const uploadBody = clientSrc.slice(clientSrc.indexOf('function putCipherToCos'), clientSrc.indexOf('/* ---------------------- 通道 B'));
+  assert.match(uploadBody, /return fetchCosCredential\(\)\.then\(function \(\) \{\s*return new Promise/,
+    '首次凭证请求应在进入 COS SDK 前完成，保留 STS/API 原始错误');
+});
+
+test('COS 凭证接口报错时必须保留接口原始错误，不能变成缺少 TmpSecretId', async () => {
+  // 独立模块实例，避免前一个 SDK 成功用例缓存的临时凭证使本用例跳过接口请求。
+  vm.runInThisContext(clientSrc, { filename: CLIENT_PATH + ':credential-error' });
+  const errorVault = globalThis.LeVihanVault;
+  class FakeCOS {
+    constructor(options) { this.options = options; }
+    putObject(params, cb) {
+      this.options.getAuthorization({}, (auth) => {
+        if (!auth || !auth.TmpSecretId) {
+          cb(new Error('getAuthorization callback params missing "TmpSecretId"'));
+          return;
+        }
+        cb(null, { ETag: 'ETAG' });
+      });
+    }
+  }
+  globalThis.COS = FakeCOS;
+  errorVault.configure({
+    UPLOAD_MODE: 'sdk',
+    apiEndpoint: 'https://fn.example.test/admin-content',
+    getToken: () => 'tk-test',
+  });
+  responder = () => ({ ok: false, status: 503, error: 'Vercel 尚未配置 COS 临时凭证服务' });
+  try {
+    await assert.rejects(
+      () => errorVault.uploadCipher('aGVsbG8=', errorVault.wrapBase64AsTextBlob('aGVsbG8='), KEY),
+      /Vercel 尚未配置 COS 临时凭证服务/
+    );
+  } finally {
+    delete globalThis.COS;
+    errorVault.configure({ UPLOAD_MODE: 'auto' });
+  }
 });
 
 /* ==========================================================================

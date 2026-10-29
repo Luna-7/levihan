@@ -1204,6 +1204,7 @@ var anExistingImage = '';
 var anImagePreviewUrl = '';
 var cosClients = Object.create(null);
 var cosCredentials = Object.create(null);
+var cosCredentialErrors = Object.create(null);
 var supporters = [];
 var supporterEditingId = '';
 var goodsItems = [];
@@ -1259,14 +1260,15 @@ function esc(s){
 }
 
 /* ============ 接口调用（text/plain 规避预检） ============ */
-function api(payload){
+function api(payload, options){
   if (LOCAL_PREVIEW) return Promise.reject(new Error('本地文件仅预览界面，不连接云端上传服务。'));
   var body = Object.assign({}, payload);
   if (token && body.action !== 'login' && body.action !== 'status') body.token = token;
   return fetch(FN_URL, {
     method:'POST',
     headers:{ 'Content-Type':'text/plain;charset=UTF-8' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: options && options.signal
   }).then(function(res){
     return res.json().catch(function(){ return {}; }).then(function(data){
       if (data && data.ok === false) {
@@ -1827,9 +1829,14 @@ $('support-list').addEventListener('click', function(e){
 });
 
 function refreshEnv(){
-  api({ action:'status' }).then(function(d){
+  var controller = new AbortController();
+  var timeout = setTimeout(function(){ controller.abort(); }, 8000);
+  api({ action:'status' }, { signal:controller.signal }).then(function(d){
     envMax = d.maxFileBytes || MAX_FILE;
-  }).catch(function(){});
+    $('env-info').textContent = '管理接口已连接';
+  }).catch(function(){
+    $('env-info').textContent = '管理接口连接失败，请刷新重试';
+  }).then(function(){ clearTimeout(timeout); });
 }
 
 function getCosCredential(prefix){
@@ -1854,9 +1861,13 @@ function getCosClient(prefix){
   if (typeof window.COS !== 'function') throw new Error('COS 上传组件未加载，请刷新页面后重试。');
   cosClients[prefix] = new window.COS({ getAuthorization:function(options, callback){
     getCosCredential(prefix).then(function(credential){
+      cosCredentialErrors[prefix] = null;
       callback({ TmpSecretId:credential.tmpSecretId, TmpSecretKey:credential.tmpSecretKey,
         XCosSecurityToken:credential.sessionToken, StartTime:credential.startTime, ExpiredTime:credential.expiredTime });
-    }).catch(function(error){ callback(error); });
+    }).catch(function(error){
+      cosCredentialErrors[prefix] = error;
+      callback({});
+    });
   }});
   return cosClients[prefix];
 }
@@ -1864,11 +1875,17 @@ function uploadToCos(prefix, key, body, contentType, onProgress, cacheControl){
   if (!key || key.indexOf(prefix) !== 0 || key.indexOf('..') >= 0) return Promise.reject(new Error('COS 上传路径无效。'));
   var client;
   try { client = getCosClient(prefix); } catch(error) { return Promise.reject(error); }
-  return new Promise(function(resolve, reject){
-    client.putObject({ Bucket:COS_BUCKET, Region:COS_REGION, Key:key, Body:body,
-      ContentType:contentType || 'application/octet-stream', CacheControl:cacheControl || 'public, max-age=31536000',
-      onProgress:function(info){ if (typeof onProgress === 'function') onProgress(info); }
-    }, function(error, data){ if (error) reject(error); else resolve(data); });
+  return getCosCredential(prefix).then(function(){
+    return new Promise(function(resolve, reject){
+      client.putObject({ Bucket:COS_BUCKET, Region:COS_REGION, Key:key, Body:body,
+        ContentType:contentType || 'application/octet-stream', CacheControl:cacheControl || 'public, max-age=31536000',
+        onProgress:function(info){ if (typeof onProgress === 'function') onProgress(info); }
+      }, function(error, data){
+        var authError = cosCredentialErrors[prefix];
+        cosCredentialErrors[prefix] = null;
+        if (error) reject(authError || error); else resolve(data);
+      });
+    });
   });
 }
 
@@ -1902,6 +1919,7 @@ function loadBooks(){
         '</div>' +
         '<button class="btn-sm" data-edit="' + esc(b.id) + '">编辑信息</button>' +
         (b.secure ? '' : '<button class="btn-sm" data-edit-images="' + esc(b.id) + '">编辑图片</button>') +
+        '<button class="btn-sm btn-danger" data-del="' + esc(b.id) + '">删除</button>' +
       '</div>';
     }).join('');
     bindBookImageStatus(box);
@@ -2033,7 +2051,8 @@ function readForm(){
     bookFolder: uploadConfig.bookFolder,
     pagePrefix: uploadConfig.pagePrefix,
     pagePadDigits: uploadConfig.pagePadDigits,
-    coverFile: uploadConfig.coverFile,
+    coverFile: uploadConfig.coverFile || (isSecureMode() && activeCover() && activeCover().uploadedName) || '',
+    secure: isSecureMode(),
     warning: $('f-warn-on').checked ? $('f-warning').value.trim() : ''
   };
 }
@@ -2053,6 +2072,7 @@ function fillForm(b){
   $('f-translator').value = b.translator || '';
   $('f-typesetter').value = b.typesetter || '';
   $('f-pages').value = b.pages || '';
+  $('opt-secure').checked = !!b.secure;
   uploadConfig = {
     bookFolder: b.bookFolder && b.bookFolder !== b.id ? b.bookFolder : '',
     pagePrefix: b.pagePrefix || '',
@@ -2064,6 +2084,7 @@ function fillForm(b){
   $('f-warning').value = b.warning || '';
   syncWarn();
   syncButtons();
+  refreshSecureUI();
   $('mode-hint').textContent = '（正在编辑 ' + b.id + '）';
 }
 
@@ -2155,6 +2176,7 @@ function resetForm(){
   ['f-id','f-titleZh','f-titleJp','f-circle','f-authorUrl','f-tags','f-source',
    'f-translator','f-typesetter','f-pages'].forEach(function(k){ $(k).value = ''; });
   uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'', pageFiles:[] };
+  $('opt-secure').checked = false;
   lastSuggestedAuthorUrl = '';
   $('author-link-hint').textContent = '';
   $('mode-hint').textContent = '（新建）';
@@ -2167,6 +2189,7 @@ function resetForm(){
   clearFiles();
   // 表单重置也把待传封面丢掉：不清的话下一次上传会带着上一本的封面
   clearSecureCover(true);
+  refreshSecureUI();
 }
 
 /* ============ 在线小说（D 面板） ============ */
@@ -3308,26 +3331,6 @@ if (window.LeVihanVault) {
   });
 }
 
-/* 把压缩阶梯的结果讲成人话。
-   自动降画质是可以的，**静默**降画质不行 —— 管理员必须一眼看出画质有没有被动、动到了哪一档。 */
-function vaultLadderNote(result){
-  var lad = result && result.ladder;
-  if (!lad) return '';
-  var out = '压缩档：' + (lad.chosenLabel || '无损直通') +
-            '（产出 ' + fmtSize(lad.outputBytes) + '，目标 ' + fmtSize(lad.targetBytes) + '）' +
-            (lad.degraded ? '　⚠️ 已降画质' : '　（无损）');
-  if (!lad.withinTarget) {
-    out += '\n注意：已压至最低档仍超目标，已按分片上传' +
-           (result.parts ? '（' + result.parts + ' 片）' : '');
-  }
-  var skipped = (lad.attempts || []).filter(function(a){ return a.skipped; });
-  if (skipped.length) {
-    out += '\n跳过：' + skipped.map(function(a){ return a.label + '（' + a.skipped + '）'; }).join('；');
-  }
-  // 末尾补换行，调用点就能无脑拼接：没有阶梯信息时返回空串，也就不会多出一个空行
-  return out ? out + '\n' : '';
-}
-
 /* ============ 敏感本封面（单独一张，不参与加密） ============ */
 /* 为什么单独传：内页被合进 PDF 再整体加密，密文里没有任何可读图片，
    前台卡片要有封面就只能另存一张公开图 —— 它走普通 upload 通道，
@@ -3711,7 +3714,7 @@ function secureProgress(info){
 }
 
 /**
- * 敏感本封面的上传。走的是普通 upload 通道（明文图片），不是 COS 直传、也不进加密流水线。
+ * 敏感本封面的上传。封面保持明文图片，走限时签名链接直传 COS。
  * 能转 WebP 就转（卡片首屏图，越小越好），浏览器不支持时原样上传。
  *
  * 封面来源：手动指定优先；没有手选时**自动生成**（图片取第一张、PDF 取指定页）。
@@ -3747,8 +3750,12 @@ async function uploadSecureCover(bookId){
       var name = secureCoverName(r.name || file.name);
       var ext = name.split('.').pop();
       var folder = uploadConfig.bookFolder || bookId;
-      return uploadToCos(folder + '/', folder + '/' + name, blob,
-        blob.type || ('image/' + (ext === 'jpg' ? 'jpeg' : ext))).then(function(){
+      var key = folder + '/' + name;
+      var contentType = blob.type || ('image/' + (ext === 'jpg' ? 'jpeg' : ext));
+      return api({ action:'secureCoverUploadUrl', key:key, contentType:contentType }).then(function(signed){
+        return fetch(signed.url, { method:'PUT', headers:{ 'Content-Type':signed.contentType }, body:blob });
+      }).then(function(response){
+        if (!response.ok) throw new Error('封面上传失败（HTTP ' + response.status + '）');
         cur.uploadedName = name;
         if (isAuto && autoCover) autoCover.uploadedName = name;
         renderSecureCover();
@@ -3822,13 +3829,7 @@ function handleSecureUpload(){
             // 站点据此把本子导向 403 伪装阅读器；键存在页面才会显示「🔒 含有敏感元素」
             secure: true
           }) }).then(function(d){
-            show($('main-msg'), 'ok',
-              '🔒 加密上传并发布成功：' + form.id + '，' + form.titleZh + '（归档共 ' + d.count + ' 本）\n' +
-              '密文 Key：' + result.key + '\n' +
-              vaultLadderNote(result) +
-              (form.coverFile ? '封面：' + form.coverFile : '封面：未上传（卡片显示隔离占位图）') + '\n' +
-              '阅读端：粮仓点开这本 → 输入校验码即可解密阅读。'
-            );
+            show($('main-msg'), 'ok', '上传成功');
             resetForm();
             loadBooks();
             loadAuthorLib();
@@ -4826,7 +4827,7 @@ function saveTagLib(){
     renderTagUI();
   }).catch(function(err){
     if (onAuthFail(err)) return;
-    tagErr = '标签库保存失败：' + (err.message || err) + '（本子仍可正常发布）';
+    tagErr = '标签库保存失败：' + (err.message || err) + '。发布也可能失败，请重试。';
     renderTagUI();
   });
 }
@@ -5163,11 +5164,11 @@ $('bk-list').addEventListener('click', function(e){
   if (dl) {
     var id = dl.getAttribute('data-del');
     var target = books.filter(function(x){ return x.id === id; })[0] || {};
-    if (!confirm('⚠ 删除 ' + id + '（' + (target.titleZh || '') + '）\n\n将同时删除归档记录与 COS 上的全部图片文件，且不可恢复。\n确定删除吗？')) return;
+    if (!confirm('删除《' + (target.titleZh || id) + '》及其已上传文件？此操作不可恢复。')) return;
     setBusy(true);
     hide($('main-msg'));
     api({ action:'remove', id:id, deleteFiles:true }).then(function(d){
-      show($('main-msg'), 'ok', '🗑 已删除 ' + id + '，连带清理 ' + (d.deletedObjects || 0) + ' 个图片文件。');
+      show($('main-msg'), 'ok', '删除成功');
       loadBooks();
     }).catch(function(err){
       if (onAuthFail(err)) return;

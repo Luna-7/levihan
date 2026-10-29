@@ -113,7 +113,15 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
   // 当前正在无缝长图阅读的书籍
   const [readingBook, setReadingBook] = useState<DoujinBookItem | null>(null);
   const [notificationPermission, setNotificationPermission] = useState(webPushPermission);
+  const [pushRegistered, setPushRegistered] = useState(false);
   const [isEnablingNotifications, setIsEnablingNotifications] = useState(false);
+  useEffect(() => {
+    if (mode !== 'comic' || webPushPermission() !== 'granted') return;
+    void enableWebPush().then((permission) => {
+      setNotificationPermission(permission);
+      setPushRegistered(permission === 'granted');
+    }).catch(() => setPushRegistered(false));
+  }, [mode]);
   const archiveScrollYRef = useRef(0);
   // 加密归档本子：走独立的伪装阅读器，普通长图画廊状态完全不受影响
   const [secureBook, setSecureBook] = useState<DoujinBookItem | null>(null);
@@ -469,12 +477,14 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     try {
       const permission = await enableWebPush();
       setNotificationPermission(permission);
+      setPushRegistered(permission === 'granted');
       if (permission === 'granted') onShowToast('新漫画上架或公告更新时会提醒你');
       else if (permission === 'denied') onShowToast('通知权限已关闭，请在浏览器设置中重新允许');
       else if (permission === 'unsupported') onShowToast('当前浏览器不支持消息推送');
       else onShowToast('尚未完成通知授权');
     } catch {
       setNotificationPermission(webPushPermission());
+      setPushRegistered(false);
       onShowToast('消息通知暂时无法开启，请稍后重试');
     } finally {
       setIsEnablingNotifications(false);
@@ -680,17 +690,17 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
               type="button"
               onClick={() => void handleEnableNotifications()}
               disabled={notificationPermission === 'unsupported' || isEnablingNotifications}
-              aria-label={notificationPermission === 'granted' ? '更新通知已开启' : '开启更新通知'}
+              aria-label={pushRegistered ? '更新通知已开启' : '开启更新通知'}
               aria-busy={isEnablingNotifications}
-              title={notificationPermission === 'granted' ? '已订阅漫画更新提醒' : '漫画本有新内容时提醒你'}
+              title={pushRegistered ? '已订阅漫画更新提醒' : '漫画本有新内容时提醒你'}
               className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 sm:px-3 text-xs font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                notificationPermission === 'granted'
+                pushRegistered
                   ? 'bg-[var(--green-2)] text-[var(--green-12)] hover:bg-[var(--green-3)] focus-visible:outline-[var(--green-8)]'
                   : 'bg-[var(--amber-2)] text-[var(--amber-12)] hover:bg-[var(--amber-3)] focus-visible:outline-[var(--amber-8)]'
               }`}
             >
-              <Bell size={16} aria-hidden="true" fill={notificationPermission === 'granted' ? 'currentColor' : 'none'} />
-              <span>{notificationPermission === 'granted' ? '更新通知已开启' : '开启更新通知'}</span>
+              <Bell size={16} aria-hidden="true" fill={pushRegistered ? 'currentColor' : 'none'} />
+              <span>{pushRegistered ? '更新通知已开启' : '开启更新通知'}</span>
             </button>
           )}
         </div>
@@ -852,11 +862,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
               aria-busy={isEnablingNotifications}
               className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-1 text-xs font-semibold transition-opacity hover:opacity-75 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--amber-8)] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              <Bell size={14} className="text-[var(--green-12)]" aria-hidden="true" fill={notificationPermission === 'granted' ? 'currentColor' : 'none'} />
+              <Bell size={14} className="text-[var(--green-12)]" aria-hidden="true" fill={pushRegistered ? 'currentColor' : 'none'} />
               <span className="text-[var(--gray-11)]">
                 {isEnablingNotifications
                   ? '正在开启…'
-                  : notificationPermission === 'granted'
+                  : pushRegistered
                     ? '更新通知已开启'
                     : notificationPermission === 'denied'
                       ? '通知权限已关闭'

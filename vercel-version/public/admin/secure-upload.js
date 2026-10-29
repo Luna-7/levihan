@@ -156,9 +156,10 @@
      * 上传通道：
      *   'auto'  → 优先浏览器直传；凭证接口不可用时尝试服务端中转
      *   'sdk'   → 强制浏览器直传（需要 Vercel Function 提供 action:'cosCredential'）
+     *   'signed-url' → 服务端签发指定对象的限时上传链接，浏览器直传
      *   'proxy' → 强制走服务端中转（需要额外配置 vaultUpload 接口）
      */
-    UPLOAD_MODE: 'sdk',
+    UPLOAD_MODE: 'signed-url',
     /** COS 桶信息（与管理台 / doujinArchiveData.ts 保持一致） */
     COS: {
       Bucket: 'levihan-1325571558',
@@ -195,6 +196,7 @@
 
   var cosInstance = null;      // cos-js-sdk-v5 实例（懒加载，凭证自动续期）
   var cachedCredential = null; // 最近一次拿到的临时凭证
+  var cosAuthorizationError = null;
 
   /* ==========================================================================
    * 1. 基础设施：运行时注入、断言、字节 / Base64 互转
@@ -1182,12 +1184,12 @@
     cosInstance = new COS({
       // cos-js-sdk-v5 的 getAuthorization 是**回调风格**：SDK 只把内部回调作为第二个
       // 参数传入并等待它被调用，返回值（包括 Promise）会被完全忽略 ——
-      // 返回 Promise 的话 SDK 永远等不到凭证，putObject 无限挂起；鉴权失败的
-      // rejection 也没人接，变成 unhandled rejection，不报错、不降级，
-      // 界面上就是进度永远停在「直传 COS：0%」。结果与错误都必须走 callback。
+      // 返回 Promise 的话 SDK 永远等不到凭证，putObject 无限挂起。错误要在
+      // putObject 外预取时抛出；这里的回调只接受凭证对象。
       getAuthorization: function (options, callback) {
         fetchCosCredential()
           .then(function (cred) {
+            cosAuthorizationError = null;
             callback({
               TmpSecretId: cred.tmpSecretId,
               TmpSecretKey: cred.tmpSecretKey,
@@ -1197,7 +1199,10 @@
             });
           })
           .catch(function (err) {
-            callback(err);
+            // COS SDK callback 只接受凭证对象，不支持 callback(error)。把 Error 传进去
+            // 会被 SDK 当作凭证校验，覆盖成 "missing TmpSecretId"。
+            cosAuthorizationError = err;
+            callback({});
           });
       },
     });
@@ -1211,37 +1216,61 @@
    */
   function putCipherToCos(blob, key, onProgress) {
     var cos = getCosInstance();
-    return new Promise(function (resolve, reject) {
-      cos.putObject(
-        {
-          Bucket: CONFIG.COS.Bucket,
-          Region: CONFIG.COS.Region,
-          Key: key,                                  // ← Key 改造：comic_vault/xxx_secure.txt
-          Body: blob,                                // ← Body 改造：text/plain 密文 Blob
-          ContentType: CONFIG.CIPHER_CONTENT_TYPE,   // 伪装成纯文本，便于 CDN/浏览器直接当文本处理
-          CacheControl: CONFIG.CacheControl,
-          onProgress: function (info) {
-            if (typeof onProgress === 'function') {
-              // cos-js-sdk-v5 的 info.percent 是 0~1 比例（源码：Math.floor(loaded/total*100)/100），
-              // 不是 0~100 的百分数。直接当百分数用会导致：进度条全程停在 0%，
-              // 文案先是「上传中」（percent=0 为假值），之后永远显示 0%/1%。
-              var ratio = info && typeof info.percent === 'number'
-                ? Math.max(0, Math.min(1, info.percent))
-                : 0;
-              onProgress({
-                stage: 'upload',
-                ratio: ratio,
-                text: '直传 COS：' + Math.round(ratio * 100) + '%',
-              });
-            }
+    // 先在 SDK 调用之外取凭证，使 401 / STS / 配置错误直接返回原始接口消息。
+    // SDK 的 getAuthorization 回调只支持返回凭证对象，不能作为错误通道。
+    return fetchCosCredential().then(function () {
+      return new Promise(function (resolve, reject) {
+        cos.putObject(
+          {
+            Bucket: CONFIG.COS.Bucket,
+            Region: CONFIG.COS.Region,
+            Key: key,                                  // ← Key 改造：comic_vault/xxx_secure.txt
+            Body: blob,                                // ← Body 改造：text/plain 密文 Blob
+            ContentType: CONFIG.CIPHER_CONTENT_TYPE,   // 伪装成纯文本，便于 CDN/浏览器直接当文本处理
+            CacheControl: CONFIG.CacheControl,
+            onProgress: function (info) {
+              if (typeof onProgress === 'function') {
+                // cos-js-sdk-v5 的 info.percent 是 0~1 比例（源码：Math.floor(loaded/total*100)/100），
+                // 不是 0~100 的百分数。直接当百分数用会导致：进度条全程停在 0%，
+                // 文案先是「上传中」（percent=0 为假值），之后永远显示 0%/1%。
+                var ratio = info && typeof info.percent === 'number'
+                  ? Math.max(0, Math.min(1, info.percent))
+                  : 0;
+                onProgress({
+                  stage: 'upload',
+                  ratio: ratio,
+                  text: '直传 COS：' + Math.round(ratio * 100) + '%',
+                });
+              }
+            },
           },
-        },
-        function (err, data) {
-          if (err) { reject(err); return; }
-          resolve({ key: key, url: keyToPublicUrl(key), etag: data && data.ETag, channel: 'sdk' });
-        }
-      );
+          function (err, data) {
+            if (err) { reject(cosAuthorizationError || err); cosAuthorizationError = null; return; }
+            resolve({ key: key, url: keyToPublicUrl(key), etag: data && data.ETag, channel: 'sdk' });
+          }
+        );
+      });
     });
+  }
+
+  async function putCipherWithSignedUrl(blob, key, onProgress) {
+    var signed = await postApi({ action: 'vaultUploadUrl', key: key });
+    if (!signed || !signed.url || !signed.contentType) {
+      throw fail('upload', '服务端未返回完整的上传链接。');
+    }
+    if (onProgress) onProgress({ stage: 'upload', ratio: 0, text: '开始直传 COS…' });
+    var response = await fetch(signed.url, {
+      method: 'PUT',
+      headers: { 'Content-Type': signed.contentType },
+      body: blob,
+    });
+    if (!response.ok) {
+      var errorText = await response.text().catch(function () { return ''; });
+      var code = (errorText.match(/<Code>([^<]+)<\/Code>/) || [])[1];
+      throw fail('upload', 'COS 上传失败（HTTP ' + response.status + (code ? '，' + code : '') + '）。');
+    }
+    if (onProgress) onProgress({ stage: 'upload', ratio: 1, text: '直传 COS 完成' });
+    return { key: key, url: keyToPublicUrl(key), etag: response.headers.get('etag'), channel: 'signed-url' };
   }
 
   /* ---------------------- 通道 B：服务端中转，当前 Vercel 管理台不启用 ---------------------- */
@@ -1362,6 +1391,7 @@
   /** 依 UPLOAD_MODE 选择通道；auto 模式下 SDK 不可用 / 凭证接口缺失会自动降级 */
   async function uploadCipher(base64, blob, key, onProgress) {
     var mode = CONFIG.UPLOAD_MODE;
+    if (mode === 'signed-url') return putCipherWithSignedUrl(blob, key, onProgress);
     var canUseSdk = mode !== 'proxy' && root && typeof root.COS === 'function';
     if (canUseSdk) {
       try {

@@ -30,6 +30,13 @@ function decodeKey(value: string) {
   return Uint8Array.from(raw, (char) => char.charCodeAt(0));
 }
 
+function sameApplicationServerKey(subscription: PushSubscription, key: Uint8Array) {
+  const current = subscription.options.applicationServerKey;
+  if (!current) return false;
+  const bytes = new Uint8Array(current);
+  return bytes.length === key.length && bytes.every((byte, index) => byte === key[index]);
+}
+
 export async function enableWebPush(): Promise<WebPushState> {
   if (!webPushSupported()) return 'unsupported';
   const permission = Notification.permission === 'granted'
@@ -38,9 +45,15 @@ export async function enableWebPush(): Promise<WebPushState> {
   if (permission !== 'granted') return permission;
 
   const registration = await navigator.serviceWorker.ready;
-  const subscription = await registration.pushManager.getSubscription() || await registration.pushManager.subscribe({
+  const applicationServerKey = decodeKey(PUBLIC_KEY);
+  let subscription = await registration.pushManager.getSubscription();
+  if (subscription && !sameApplicationServerKey(subscription, applicationServerKey)) {
+    await subscription.unsubscribe();
+    subscription = null;
+  }
+  subscription = subscription || await registration.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: decodeKey(PUBLIC_KEY),
+    applicationServerKey,
   });
   const request = {
     method: 'POST',

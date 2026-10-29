@@ -4,13 +4,11 @@ const CLICK_WINDOW_MS = 2500;
 const UNLOCK_KEY = 'comic_site_unlocked_v1';
 
 /**
- * ComicGate —— 漫画站整站「伪装 403 + 三连击」门。
+ * ComicGate —— 漫画站入口，沿用主站「土豆仓」图标与三连击门。
  *
  * 设计目标（暗号式私有）：
- * - 链接永远不变，打开后看到的是一页**仿真的 403 Forbidden**，HTTP 状态码仍是 200
- *   （不能让搜索引擎/爬虫真的收到 403，那样反而标记了「这里是被封的站点」）。
- * - 页面上没有任何「点这里解锁」「这是漫画站」之类的提示文字，路人一眼就是普通报错页。
- * - 唯一的暗号：在 2.5 秒内连续点击「403」标题三次 → 解锁。
+ * - 页面显示主站的土豆仓标识，不暴露漫画站用途。
+ * - 在 2.5 秒内连续点击标题三次即可解锁。
  * - 解锁后写 sessionStorage，本次浏览器会话内刷新不再重复；关标签页即失效。
  *
  * 诚实边界：这是「防路人、防顺手转发、防爬虫」的软墙，不是密码学防线。
@@ -54,15 +52,15 @@ export const ComicGate: React.FC<{ children: React.ReactNode }> = ({ children })
       style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
     >
       <div className="w-full">
-        <h1 className="my-[0.67em] text-[2em] leading-normal font-bold">
-          403{' '}
+        <h1 className="my-[0.67em] flex items-center gap-3 text-[2em] leading-normal font-bold">
           <button
             type="button"
             onClick={handleSecretClick}
-            className="cursor-default appearance-none border-0 bg-transparent p-0 font-inherit text-inherit touch-manipulation focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#555]"
-            aria-label="Forbidden error heading"
+            className="inline-flex cursor-default items-center gap-3 appearance-none border-0 bg-transparent p-0 font-inherit text-inherit touch-manipulation focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#555]"
+            aria-label="土豆仓"
           >
-            Forbidden
+            <img src="/favicon.svg" width="36" height="36" alt="" />
+            土豆仓
           </button>
         </h1>
         <hr className="border-0 border-t border-[#999]" />
