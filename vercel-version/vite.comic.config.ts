@@ -25,6 +25,7 @@ export default defineConfig(() => {
         injectRegister: 'auto',
         manifest: false,
         includeAssets: [
+          'comic-manifest.webmanifest',
           'manifest.webmanifest',
           'favicon.svg',
           'icons/icon-192x192.png',
