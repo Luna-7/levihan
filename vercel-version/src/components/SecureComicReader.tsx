@@ -334,6 +334,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
   const [phase, setPhase] = useState<Phase>('locked');
   const [workingStage, setWorkingStage] = useState('解析中…');
   const [code, setCode] = useState('');
+  const codeEntryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [doc, setDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
@@ -344,6 +345,20 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
   if (!canvasWindowRef.current) canvasWindowRef.current = new ComicCanvasWindow();
   const autoAttemptedRef = useRef(false);
   const readerRef = useRef<HTMLDivElement | null>(null);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const handleSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    swipeStartRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  };
+  const handleSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const start = swipeStartRef.current;
+    const touch = event.changedTouches[0];
+    swipeStartRef.current = null;
+    if (!start || !touch) return;
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (deltaX > 90 && deltaX > Math.abs(deltaY) * 1.3) onClose();
+  };
 
   /* ---------------- 反爬与防手滑：只在阅读器挂载期间生效 ---------------- */
   useEffect(() => {
@@ -387,12 +402,6 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
     },
     [],
   );
-
-  /** 输入即清掉上一次的报错，避免误导 */
-  const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCode(e.target.value);
-    if (errorMsg) setErrorMsg('');
-  };
 
   /**
    * 启动解析：拉密文 → 解外层 → 用同一个密码解锁内层。
@@ -464,12 +473,29 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
     [book, onShowToast, phase],
   );
 
+  /** 输入停止后自动尝试解析，继续输入时取消上一次计时。 */
+  const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setCode(value);
+    if (errorMsg) setErrorMsg('');
+    if (codeEntryTimerRef.current) clearTimeout(codeEntryTimerRef.current);
+    if (value.trim()) {
+      codeEntryTimerRef.current = setTimeout(() => {
+        void handleUnlock(value.trim());
+      }, 650);
+    }
+  };
+
   useEffect(() => {
     if (autoAttemptedRef.current) return;
     autoAttemptedRef.current = true;
     const savedCode = getVerifiedComicCode();
     if (savedCode) void handleUnlock(savedCode, true);
   }, [handleUnlock]);
+
+  useEffect(() => () => {
+    if (codeEntryTimerRef.current) clearTimeout(codeEntryTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (phase !== 'ready') return;
@@ -485,76 +511,54 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
   /* ========================== 403 伪装界面 ========================== */
   if (phase !== 'ready') {
     return (
-      <div className="w-full min-h-[70vh] bg-[#f2f3f5] text-[#3c4043] font-mono">
+      <div className="w-full min-h-[70vh] bg-transparent text-[var(--amber-12)] font-mono" onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>
         <div className="max-w-3xl mx-auto px-5 py-6 sm:py-10">
           <button
             type="button"
             onClick={onClose}
-            className="mb-3 inline-flex min-h-11 items-center rounded-[3px] bg-[var(--green-12)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--amber-8)]"
+            aria-label="返回归档列表"
+            title="返回归档列表"
+            className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-[3px] bg-[var(--green-12)] text-xl font-semibold text-white transition-colors hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--amber-8)]"
           >
-            ← 返回归档列表
+            ←
           </button>
-          <div className="border border-[#d8dade] bg-white">
+          <div className="border border-[#E8E1CE] bg-white">
             <div className="px-5 py-6 sm:px-8 sm:py-8">
-              <h1 className="text-[30px] sm:text-[38px] font-bold text-[#1f2328] leading-none">403 Forbidden</h1>
-              <p className="mt-3 text-[13px] text-[#5f6368]">
+              <h1 className="text-[30px] sm:text-[38px] font-bold text-[#1E3A2B] leading-none">403 Forbidden</h1>
+              <p className="mt-3 text-[13px] text-[#7A6958]">
                 Requested resource is not served by this node.
               </p>
-
-              <table className="mt-6 w-full text-[12px] border-t border-[#e4e6e9]">
-                <tbody>
-                  {[
-                    ['Node ID', 'CN-NANJING-EDGE-07'],
-                    ['Resource ID', book.id],
-                    ['Access Policy', 'ARCHIVED / ISOLATED'],
-                    ['Request Time', new Date().toISOString()],
-                  ].map(([k, v]) => (
-                    <tr key={k} className="border-b border-[#eef0f2]">
-                      <td className="py-2 pr-4 w-[38%] text-[#9aa0a6] align-top">{k}</td>
-                      <td className="py-2 text-[#3c4043] break-all">{v}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <div className="mt-6 border-l-[3px] border-[#c5221f] bg-[#fce8e6] px-4 py-3 text-[12.5px] leading-6 text-[#8c1d18]">
-                ⚠️ 资源已被加密归档。由于版权或节点搬迁，该资源已移至安全隔离沙箱。
-                请输入社群专享「安全校验码」进行本地节点数据解析。
-              </div>
 
               {/* 解析表单：文案全程不提"密码""漫画" */}
               {phase === 'working' ? (
                 <div
-                  className="mt-6 min-h-40 rounded-[3px] bg-[#f5f6f7] px-5 py-8 text-center"
+                  className="mt-6 min-h-40 rounded-[3px] bg-[#FAF6EE] px-5 py-8 text-center"
                   role="status"
                   aria-live="polite"
                   aria-atomic="true"
                 >
                   <div className="secure-comic-loader mx-auto" aria-hidden="true" />
-                  <p className="mt-4 text-sm font-semibold text-[#3c4043]">{workingStage}</p>
-                  <p className="mt-1 text-xs text-[#5f6368]">解析完成后将自动进入阅读页</p>
+                  <p className="mt-4 text-sm font-semibold text-[#1E3A2B]">{workingStage}</p>
+                  <p className="mt-1 text-xs text-[#7A6958]">解析完成后将自动进入阅读页</p>
                 </div>
               ) : (
-                <form
-                  onSubmit={(event) => { event.preventDefault(); void handleUnlock(code.trim()); }}
-                  className="mt-6 flex flex-col sm:flex-row gap-2.5"
-                >
+                <div className="mt-6">
                   <input
                     type="password"
                     value={code}
                     onChange={handleCodeChange}
-                    placeholder="输入专属安全校验码"
+                    aria-label="安全校验码"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && code.trim()) {
+                        if (codeEntryTimerRef.current) clearTimeout(codeEntryTimerRef.current);
+                        void handleUnlock(code.trim());
+                      }
+                    }}
                     autoComplete="off"
                     spellCheck={false}
-                    className="flex-1 px-3.5 py-2.5 text-[13px] bg-white border border-[#c9ccd1] rounded-[3px] text-[#1f2328] placeholder:text-[#9aa0a6] focus:outline-none focus:border-[#1a73e8] focus:ring-2 focus:ring-[#1a73e8]/20"
+                    className="w-full border-0 border-b border-[#D5C9AF] bg-transparent px-1 py-2.5 text-[13px] text-[#1E3A2B] focus:outline-none focus:border-[var(--green-8)] focus:ring-0"
                   />
-                  <button
-                    type="submit"
-                    className="min-w-[92px] px-5 py-2.5 text-[13px] font-bold rounded-[3px] bg-[#1f2328] text-white hover:bg-[#33383f] transition-colors"
-                  >
-                    启动解析
-                  </button>
-                </form>
+                </div>
               )}
 
               {errorMsg && (
@@ -576,16 +580,20 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
       ref={readerRef}
       className="w-full scroll-mt-3 bg-[#15181b] pb-16 select-none"
       onContextMenu={(e) => e.preventDefault()}
+      onTouchStart={handleSwipeStart}
+      onTouchEnd={handleSwipeEnd}
     >
       {/* 阅读时保持结束会话操作置顶 */}
       <div className="sticky top-0 z-20 bg-[#1c2024]/95 backdrop-blur border-b border-[#2b3137]">
-        <div className="max-w-3xl mx-auto px-4 py-2.5 flex items-center justify-end">
+        <div className="max-w-3xl mx-auto px-4 py-1 flex items-center justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-sm border border-[#30363d] px-3 text-xs text-[#c9d1d9] hover:bg-[#262c31] transition-colors"
+            aria-label="结束会话"
+            title="结束会话"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-xl leading-none text-[#c9d1d9] hover:bg-[#262c31] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9d1d9]"
           >
-            结束会话
+            ×
           </button>
         </div>
       </div>

@@ -18,10 +18,13 @@
 @layer base {
   :root {
     --gray-11: #687076;
+    --gray-9: #8D8D8D;
     --amber-2: #FEFBE9;
     --amber-3: #FFF7C2;
     --amber-4: #FFEFAD;
+    --amber-6: #F3D673;
     --amber-8: #E2A336;
+    --amber-9: #FFC53D;
     --amber-12: #4F3422;
     --violet-3: #F4F0FE;
     --violet-4: #EBE4FF;
@@ -31,7 +34,10 @@
     --green-3: #E6F6EB;
     --green-4: #D6F1DF;
     --green-8: #5BB98B;
+    --green-9: #30A46C;
     --green-12: #193B2D;
+    --red-2: #FFEFEC;
+    --red-8: #EC5D5E;
     --red-9: #E5484D;
     --bg-parchment: #FBF7EC;
     --bg-card: #FFFBF0;
@@ -91,6 +97,9 @@
     height: auto;
     overscroll-behavior: auto;
     -webkit-overflow-scrolling: touch;
+  }
+  html.comic-site body {
+    background: rgb(253, 251, 247);
   }
   html.comic-site #root {
     overflow: visible;

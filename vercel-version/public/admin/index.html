@@ -123,6 +123,11 @@
   .admin-sidebar-footer #env-info{line-height:1.55}
   @media(max-width:860px){.admin-sidebar-footer{display:none}}
   .author-link-hint{min-height:18px;margin-top:3px}
+  .bk-search{position:relative;display:flex;align-items:center;min-height:44px;margin:0 0 10px;padding:0 12px;border:1px solid #E8E1CE;border-radius:10px;background:#fff;color:#8D8D8D}
+  .bk-search svg{width:18px;height:18px;flex:none;margin-right:9px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .bk-search input{width:100%;min-width:0;padding:8px 0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:14px;box-shadow:none}
+  .bk-search input:focus{border:0;box-shadow:none}
+  .bk-search input::placeholder{color:#8D8D8D}
   #bk-list{max-height:min(48vh,430px);overflow-y:auto;overscroll-behavior:contain;padding:2px 8px 2px 2px;
            scrollbar-width:thin;scrollbar-color:var(--green-2) #EFE8D6}
   #bk-list::-webkit-scrollbar{width:11px}
@@ -846,6 +851,10 @@
         <h2 style="margin:0" data-page-node-id="IYpnDIkGBPv287jygxdrEe"><span class="n" data-page-node-id="ytF97SP8ofKVIXvoVagowv">A</span> 已收录作品 <span class="muted" id="bk-count" data-page-node-id="PxWTykMMoRUWZ9Gw9sLeNG"></span></h2>
         <button class="btn-sm" id="btn-reload" data-page-node-id="mMzk8Q9VnoXKsVSw7LCjfl">↻ 刷新列表</button>
       </div>
+      <label class="bk-search" for="bk-search-input">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+        <input id="bk-search-input" type="text" placeholder="检索标题、作者、汉化…" autocomplete="off">
+      </label>
       <div id="bk-list" data-page-node-id="uZPExC9XTEOVGG1UVLIwpE"><p class="muted" data-page-node-id="WcJn68Mwgwvw9HUVlAI5sJ">加载中…</p></div>
     </div>
 
@@ -1889,6 +1898,37 @@ function uploadToCos(prefix, key, body, contentType, onProgress, cacheControl){
   });
 }
 
+function renderBookPreview(){
+  var box = $('bk-list');
+  var query = ($('bk-search-input').value || '').trim().toLocaleLowerCase();
+  if (!books.length) { box.innerHTML = '<p class="muted">归档还是空的，先在上面新建一本吧。</p>'; return; }
+  var matches = books.filter(function(b){
+    if (!query) return true;
+    var text = [b.id, b.titleZh, b.titleJp, b.circle, b.source, b.translator, b.typesetter].concat(b.tags || []).join(' ').toLocaleLowerCase();
+    return text.indexOf(query) !== -1;
+  });
+  if (!matches.length) { box.innerHTML = '<p class="muted">没有匹配的作品。</p>'; return; }
+  box.innerHTML = matches.map(function(b){
+    var cover = CDN + '/' + (b.bookFolder || b.id) + '/' + (b.coverFile || 'image01.webp');
+    return '<div class="bk">' +
+      '<img data-bk-cover src="' + esc(cover) + '" alt="" loading="lazy">' +
+      '<div class="info">' +
+        '<div class="row" style="gap:8px"><span class="id">' + esc(b.id) + '</span>' +
+        '<span class="t">' + esc(b.titleZh) + '</span>' +
+        (b.secure ? '<span class="tag" style="background:#7A1F1F;color:#F6E7C1;border-color:#7A1F1F">🔒 含有敏感元素</span>' : '') +
+        '</div>' +
+        '<div class="muted">' + esc(b.circle || '—') + '，' + (b.pages || 0) + ' 页' +
+          (b.tags && b.tags.length ? '，' + b.tags.map(esc).join(' / ') : '') + '</div>' +
+        '<span class="bk-image-status" data-bk-cover-status></span>' +
+      '</div>' +
+      '<button class="btn-sm" data-edit="' + esc(b.id) + '">编辑信息</button>' +
+      (b.secure ? '' : '<button class="btn-sm" data-edit-images="' + esc(b.id) + '">编辑图片</button>') +
+      '<button class="btn-sm btn-danger" data-del="' + esc(b.id) + '">删除</button>' +
+    '</div>';
+  }).join('');
+  bindBookImageStatus(box);
+}
+
 function loadBooks(){
   var box = $('bk-list');
   box.innerHTML = '<p class="muted">加载中…</p>';
@@ -1903,26 +1943,7 @@ function loadBooks(){
     renderTagUI();
     renderArtAdminList();
     $('bk-count').textContent = '共 ' + books.length + ' 本';
-    if (!books.length) { box.innerHTML = '<p class="muted">归档还是空的，先在上面新建一本吧。</p>'; return; }
-    box.innerHTML = books.map(function(b){
-      var cover = CDN + '/' + (b.bookFolder || b.id) + '/' + (b.coverFile || 'image01.webp');
-      return '<div class="bk">' +
-        '<img data-bk-cover src="' + esc(cover) + '" alt="" loading="lazy">' +
-        '<div class="info">' +
-          '<div class="row" style="gap:8px"><span class="id">' + esc(b.id) + '</span>' +
-          '<span class="t">' + esc(b.titleZh) + '</span>' +
-          (b.secure ? '<span class="tag" style="background:#7A1F1F;color:#F6E7C1;border-color:#7A1F1F">🔒 含有敏感元素</span>' : '') +
-          '</div>' +
-          '<div class="muted">' + esc(b.circle || '—') + '，' + (b.pages || 0) + ' 页' +
-            (b.tags && b.tags.length ? '，' + b.tags.map(esc).join(' / ') : '') + '</div>' +
-          '<span class="bk-image-status" data-bk-cover-status></span>' +
-        '</div>' +
-        '<button class="btn-sm" data-edit="' + esc(b.id) + '">编辑信息</button>' +
-        (b.secure ? '' : '<button class="btn-sm" data-edit-images="' + esc(b.id) + '">编辑图片</button>') +
-        '<button class="btn-sm btn-danger" data-del="' + esc(b.id) + '">删除</button>' +
-      '</div>';
-    }).join('');
-    bindBookImageStatus(box);
+    renderBookPreview();
   }).catch(function(err){
     if (onAuthFail(err)) return;
     box.innerHTML = '';
@@ -2035,11 +2056,15 @@ function nextId(){
   return 'lh-' + String(max + 1).padStart(3, '0');
 }
 
+function normalizeEnglishTitleInitial(value){
+  return String(value || '').replace(/^([a-z])/, function(letter){ return letter.toUpperCase(); });
+}
+
 function readForm(){
   return {
     id: $('f-id').value.trim(),
-    titleZh: $('f-titleZh').value.trim(),
-    titleJp: $('f-titleJp').value.trim(),
+    titleZh: normalizeEnglishTitleInitial($('f-titleZh').value.trim()),
+    titleJp: normalizeEnglishTitleInitial($('f-titleJp').value.trim()),
     circle: $('f-circle').value.trim(),
     authorUrl: $('f-authorUrl').value.trim(),
     category: '漫画本',
@@ -2059,8 +2084,8 @@ function readForm(){
 
 function fillForm(b){
   $('f-id').value = b.id || '';
-  $('f-titleZh').value = b.titleZh || '';
-  $('f-titleJp').value = b.titleJp || '';
+  $('f-titleZh').value = normalizeEnglishTitleInitial(b.titleZh || '');
+  $('f-titleJp').value = normalizeEnglishTitleInitial(b.titleJp || '');
   $('f-circle').value = b.circle || '';
   $('f-authorUrl').value = b.authorUrl || '';
   lastSuggestedAuthorUrl = '';
@@ -4839,6 +4864,12 @@ $('btn-logout').onclick = logout;
 $('btn-reload').onclick = loadBooks;
 $('btn-nextid').onclick = function(){ $('f-id').value = nextId(); syncPages(); };
 $('f-id').addEventListener('input', syncPages);
+$('f-titleZh').addEventListener('input', function(){
+  this.value = normalizeEnglishTitleInitial(this.value);
+});
+$('f-titleJp').addEventListener('input', function(){
+  this.value = normalizeEnglishTitleInitial(this.value);
+});
 $('f-circle').addEventListener('input', suggestAuthorUrl);
 $('f-authorUrl').addEventListener('input', function(){ lastSuggestedAuthorUrl = ''; $('author-link-hint').textContent = ''; });
 $('nv-author').addEventListener('input', suggestNovelAuthorUrl);
@@ -5176,6 +5207,7 @@ $('bk-list').addEventListener('click', function(e){
     }).then(function(){ setBusy(false); });
   }
 });
+$('bk-search-input').addEventListener('input', renderBookPreview);
 
 /* ============ 启动 ============ */
 var initialAdminPage = (location.hash.match(/^#admin-(manga|announcement|support|toolkit)$/) || [])[1] || 'manga';
