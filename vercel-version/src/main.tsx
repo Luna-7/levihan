@@ -6,6 +6,7 @@ import { useAuthStore } from './stores/authStore';
 import { setupIOSViewportGuard } from './utils/iosViewportGuard';
 import { setupPwaAutoUpdate } from './utils/pwaUpdate';
 import { scheduleNonCriticalTask } from './utils/scheduleNonCriticalTask';
+import { Analytics } from '@vercel/analytics/react';
 import './index.css';
 
 setupIOSViewportGuard();
@@ -24,6 +25,7 @@ if (window.location.pathname.replace(/\/$/, '') === '/comics') {
     <StrictMode>
       <AppErrorBoundary>
         <App />
+        <Analytics />
       </AppErrorBoundary>
     </StrictMode>,
   );

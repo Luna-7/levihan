@@ -7,6 +7,7 @@ import { DoujinshiArchive } from './components/DoujinshiArchive';
 import { soundManager } from './utils/audio';
 import { setupIOSViewportGuard } from './utils/iosViewportGuard';
 import { setupPwaAutoUpdate } from './utils/pwaUpdate';
+import { Analytics } from '@vercel/analytics/react';
 import './index.css';
 
 // 漫画站是普通文档流滚动（没有主站「分区内部各自滚」的外壳），
@@ -57,6 +58,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppErrorBoundary>
       <ComicApp />
+      <Analytics />
     </AppErrorBoundary>
   </StrictMode>
 );
