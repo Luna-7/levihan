@@ -84,7 +84,13 @@ export default defineConfig(() => {
         },
       }),
     ],
-    resolve: { alias: { '@': path.resolve(__dirname, '.') } },
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, '.'),
+        'react': path.resolve(__dirname, './node_modules/react'),
+        'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
+      },
+    },
     build: {
       // 输出到 dist/（与主站构建共用输出目录名）：
       // 漫画站项目只跑漫画构建，dist 里永远只有漫画产物；
