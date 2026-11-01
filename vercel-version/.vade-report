@@ -1,0 +1,74 @@
+# Vercel Web Analytics Installation Report
+
+## Summary
+Successfully installed and configured Vercel Web Analytics for this React + Vite project following the latest official documentation from https://vercel.com/docs/analytics/quickstart.
+
+## Changes Made
+
+### 1. Package Installation
+- **Installed**: `@vercel/analytics@^2.0.1` package using npm
+- **Updated**: package.json with the new dependency
+- **Updated**: package-lock.json to reflect the installation
+
+### 2. Analytics Component Integration
+
+#### Main Application Entry (src/main.tsx)
+- Added import: `import { Analytics } from '@vercel/analytics/react';`
+- Integrated `<Analytics />` component within the StrictMode wrapper
+- The component now tracks page views and visitor analytics for the main application
+
+#### Comic Application Entry (src/comic-main.tsx)
+- Added the same Analytics import and component
+- Ensures analytics tracking for the separate comic site deployment
+- Maintains consistency across both entry points
+
+### 3. Vite Configuration Updates
+
+To resolve React peer dependency resolution issues with @vercel/analytics, added explicit module aliases to all Vite configuration files:
+
+#### vite.config.ts (Main Config)
+- Added `react` and `react-dom` path aliases in resolve.alias
+- Ensures Vite properly resolves React modules for the Analytics package
+
+#### vite.comic.config.ts (Comic Site Config)
+- Applied the same alias configuration
+- Maintains build consistency for the comic subdomain deployment
+
+#### vite.save-hange.config.ts (Game Subapp Config)
+- Added path import and resolve aliases for completeness
+- Ensures future compatibility if analytics is needed in the game module
+
+### 4. Build Verification
+- Successfully ran `npm run build` - main site builds without errors
+- Successfully ran `npm run build:comic` - comic site builds without errors  
+- Successfully ran `npm run lint` - TypeScript compilation passes with no errors
+- All builds produce expected output with proper chunking
+
+## Implementation Details
+
+The Analytics component was placed inside the StrictMode wrapper alongside the main App component, as recommended by Vercel documentation. This ensures:
+
+1. **Automatic page view tracking** - The Analytics component automatically tracks route changes in the React application
+2. **Framework integration** - Uses the React-specific wrapper for seamless integration
+3. **Minimal overhead** - The component is lightweight and doesn't impact page load performance
+4. **Deployment ready** - Once deployed to Vercel, analytics will automatically start collecting data
+
+## Next Steps
+
+After deployment to Vercel:
+1. Analytics data will begin collecting automatically
+2. Verify tracking by checking browser Network tab for requests to `/<unique-path>/view`
+3. View analytics data in the Vercel dashboard under the project's Analytics section
+
+## Dependencies Updated
+- @vercel/analytics: ^2.0.1 (new)
+- @tailwindcss/vite: ^4.1.14 → ^4.3.3 (updated during dependency resolution)
+
+## Files Modified
+- src/main.tsx - Added Analytics component
+- src/comic-main.tsx - Added Analytics component
+- vite.config.ts - Added React module aliases
+- vite.comic.config.ts - Added React module aliases
+- vite.save-hange.config.ts - Added React module aliases and path import
+- package.json - Added @vercel/analytics dependency
+- package-lock.json - Updated with new dependencies
