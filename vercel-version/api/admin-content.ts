@@ -710,6 +710,7 @@ export default async function handler(request: AdminRequest, response: ServerRes
         try {
         const books = await readJsonArray('archive.json');
         const index = books.findIndex((entry) => entry && entry.id === book.id);
+        const previousBook = index >= 0 ? books[index] : null;
         const now = new Date().toISOString();
         if (index >= 0) {
           if (books[index].createdAt) book.createdAt = books[index].createdAt;
@@ -731,6 +732,42 @@ export default async function handler(request: AdminRequest, response: ServerRes
         await writeJson('tags.json', tags);
         stage = 'upsertAuthor';
         await upsertAuthor(String(book.circle || ''), String(book.authorUrl || ''));
+        let deletedPageFiles = 0;
+        let pageFileCleanupFailures = 0;
+        if (previousBook && Array.isArray(payload.book?.pageFiles) && !previousBook.secure && !book.secure) {
+          const oldFolder = String(previousBook.bookFolder || previousBook.id || '').trim();
+          const newFiles = new Set((Array.isArray(book.pageFiles) ? book.pageFiles : [])
+            .map((name: unknown) => String(name || '').trim())
+            .filter((name: string) => /^[A-Za-z0-9_-]+\.(webp|jpg|jpeg|png|gif|avif)$/i.test(name)));
+          const newCover = String(book.coverFile || '').trim();
+          if (/^[A-Za-z0-9_-]+\.(webp|jpg|jpeg|png|gif|avif)$/i.test(newCover)) newFiles.add(newCover);
+          const otherBooksUseOldFolder = books.some((entry, entryIndex) => entryIndex !== index &&
+            String(entry?.bookFolder || entry?.id || '').trim() === oldFolder);
+          if (/^[A-Za-z0-9_-]{1,64}$/.test(oldFolder) && !otherBooksUseOldFolder) {
+            const staleKeys = new Set<string>();
+            let continuationToken: string | undefined;
+            do {
+              const listed = await getCosClient().send(new ListObjectsV2Command({
+                Bucket: BUCKET, Prefix: `${oldFolder}/`, ContinuationToken: continuationToken,
+              }));
+              for (const item of listed.Contents || []) {
+                const key = String(item.Key || '');
+                const file = key.slice(oldFolder.length + 1);
+                if (/^[A-Za-z0-9_-]+\.(webp|jpg|jpeg|png|gif|avif)$/i.test(file) && !newFiles.has(file)) staleKeys.add(key);
+              }
+              continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+            } while (continuationToken);
+            for (const key of staleKeys) {
+              try {
+                await getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+                deletedPageFiles++;
+              } catch (error) {
+                pageFileCleanupFailures++;
+                console.error('[publish-page-cleanup]', { key, code: (error as any)?.Code || (error as any)?.name || 'unknown' });
+              }
+            }
+          }
+        }
         if (index < 0) {
           stage = 'sendPush';
           await sendPushUpdate({
@@ -740,7 +777,7 @@ export default async function handler(request: AdminRequest, response: ServerRes
             url: '/?tab=resources',
           });
         }
-        sendJson(response, 200, { ok: true, replaced: index >= 0, count: books.length, books });
+        sendJson(response, 200, { ok: true, replaced: index >= 0, count: books.length, books, deletedPageFiles, pageFileCleanupFailures });
         return;
         } catch (error: any) {
           console.error('[publish-stage]', { stage, code: error?.code || error?.name || 'unknown' });
@@ -758,9 +795,8 @@ export default async function handler(request: AdminRequest, response: ServerRes
         if (books.some((book) => book && book.id !== id && String(book.bookFolder || book.id) === folder)) {
           throw fail('该目录还被其他作品使用，无法删除文件。', 409);
         }
-        let deletedObjects = 0;
+        const keys: string[] = [];
         if (payload.deleteFiles !== false) {
-          const keys: string[] = [];
           let continuationToken: string | undefined;
           do {
             const listed = await getCosClient().send(new ListObjectsV2Command({
@@ -770,16 +806,29 @@ export default async function handler(request: AdminRequest, response: ServerRes
             continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
           } while (continuationToken);
           if (target.secure) keys.push(`comic_vault/${id}_secure.txt`);
-          for (let index = 0; index < keys.length; index += 10) {
-            await Promise.all(keys.slice(index, index + 10).map(async (key) => {
-              await getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
-              deletedObjects++;
-            }));
-          }
         }
         const next = books.filter((book) => book && book.id !== id);
         await writeJson('archive.json', next);
-        sendJson(response, 200, { ok: true, id, deletedObjects, count: next.length, books: next });
+        let deletedObjects = 0;
+        const failedKeys: string[] = [];
+        for (let index = 0; index < keys.length; index += 10) {
+          const results = await Promise.allSettled(keys.slice(index, index + 10).map((key) =>
+            getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))));
+          results.forEach((result, offset) => {
+            if (result.status === 'fulfilled') deletedObjects++;
+            else {
+              failedKeys.push(keys[index + offset]);
+              console.error('[remove-cos-object]', {
+                key: keys[index + offset],
+                code: (result.reason as any)?.Code || (result.reason as any)?.name || 'unknown',
+              });
+            }
+          });
+        }
+        sendJson(response, 200, {
+          ok: true, id, archiveDeleted: true, deletedObjects,
+          failedObjects: failedKeys.length, failedKeys, count: next.length, books: next,
+        });
         return;
       }
       case 'announcementList': {

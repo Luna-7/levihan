@@ -3598,10 +3598,7 @@ function saveAuthorEntry(oldName, name, url){
   name = String(name || '').trim(); url = String(url || '').trim();
   if (!name) { alert('请填写作者 / 社团名。'); return; }
   if (url && !/^https?:\/\//i.test(url)) { alert('主页链接需以 http:// 或 https:// 开头。'); return; }
-  var current = oldName ? authorLib.find(function(a){ return a.name === oldName; }) : null;
-  var changed = !current || current.name !== name || (current.url || '') !== url;
-  function commit(affected){
-    if (oldName && changed && affected && !confirm('修改作者主表后，将同步更新 ' + affected + ' 本已发布漫画的作者名和主页链接。确认保存？')) return;
+  function commit(){
     $('author-status').textContent = '正在保存并同步作者信息…';
     api({ action:'authorSave', oldName: oldName || '', name:name, url:url }).then(function(res){
       authorLib = Array.isArray(res.authors) ? res.authors : authorLib;
@@ -3614,13 +3611,7 @@ function saveAuthorEntry(oldName, name, url){
       $('author-status').textContent = '保存失败：' + (err.message || String(err));
     });
   }
-  if (oldName && changed) {
-    $('author-status').textContent = '正在统计关联漫画…';
-    api({ action:'authorImpact', name:oldName }).then(function(res){ commit(res.bookCount || 0); }).catch(function(err){
-      if (onAuthFail(err)) return;
-      $('author-status').textContent = '无法读取同步范围：' + (err.message || String(err));
-    });
-  } else commit(0);
+  commit();
 }
 $('author-reload').onclick = loadAuthorLib;
 $('author-search').addEventListener('input', renderAuthorLib);
@@ -4324,6 +4315,8 @@ function uploadAll(){
     return api({ action:'publish', book: book }).then(function(d){
       show($('main-msg'), 'ok',
         '✅ 发布成功：' + book.id + '，' + book.titleZh + '（共 ' + d.count + ' 本）\n' +
+        (d.deletedPageFiles ? '已从 COS 删除 ' + d.deletedPageFiles + ' 张移除的旧图片。\n' : '') +
+        (d.pageFileCleanupFailures ? '⚠ 有 ' + d.pageFileCleanupFailures + ' 张旧图片未能从 COS 删除，请检查 COS 权限后重试清理。\n' : '') +
         (uploadIdx.length ? '已重新上传 ' + uploadIdx.length + ' 张图片，' + (files.length - uploadIdx.length) + ' 张未改动图片沿用原文件。\n' : '没有图片改动，未重新上传图片。\n') +
         '站点刷新即可看到。\n' +
         '预览：' + CDN + '/' + (book.bookFolder || book.id) + '/' + (book.coverFile || 'image01.webp'));
@@ -4343,8 +4336,8 @@ function publishOnly(){
   hide($('main-msg'));
   setBusy(true);
   api({ action:'publish', book: form }).then(function(d){
-    show($('main-msg'), 'ok', '✅ 已更新归档信息：' + form.id + '（共 ' + d.count + ' 本）');
     resetForm();
+    show($('main-msg'), 'ok', '✅ 《' + form.titleZh + '》的信息已保存并发布，表单已清空。');
     loadBooks();
     loadAuthorLib();   // 作者链接已自动登记，刷新登记表
   }).catch(function(err){
@@ -5616,15 +5609,24 @@ $('bk-list').addEventListener('click', function(e){
   if (imageEd) {
     var imageBook = books.filter(function(x){ return x.id === imageEd.getAttribute('data-edit-images'); })[0];
     if (imageBook) {
-      fillForm(imageBook);
-      loadBookImagesForEdit(imageBook);
+      loadBookImagesForEdit(imageBook).then(function(loaded){
+        if (!loaded) return;
+        fillForm(imageBook);
+        window.scrollTo({ top:0, behavior:'smooth' });
+      });
     }
     return;
   }
   var ed = e.target.closest('[data-edit]');
   if (ed) {
     var b = books.filter(function(x){ return x.id === ed.getAttribute('data-edit'); })[0];
-    if (b) { fillForm(b); window.scrollTo({ top:0, behavior:'smooth' }); }
+    if (b) {
+      if (files.length && !confirm('当前有 ' + files.length + ' 张待处理图片。编辑作品信息会清空这些图片，继续吗？')) return;
+      if (files.length) clearFiles();
+      hide($('main-msg'));
+      fillForm(b);
+      window.scrollTo({ top:0, behavior:'smooth' });
+    }
     return;
   }
   var dl = e.target.closest('[data-del]');
@@ -5635,11 +5637,16 @@ $('bk-list').addEventListener('click', function(e){
     setBusy(true);
     hide($('main-msg'));
     api({ action:'remove', id:id, deleteFiles:true }).then(function(d){
-      show($('main-msg'), 'ok', '删除成功');
+      if (d.failedObjects) {
+        var failedFiles = Array.isArray(d.failedKeys) ? d.failedKeys.slice(0, 5).join('、') : '';
+        show($('main-msg'), 'err', '作品已从前台归档移除，但 COS 文件清理未完成：已删除 ' + d.deletedObjects + ' 个，失败 ' + d.failedObjects + ' 个。' + (failedFiles ? '失败文件：' + failedFiles + (d.failedObjects > 5 ? ' 等。' : '。') : '请检查 COS 删除权限。'));
+      } else {
+        show($('main-msg'), 'ok', '删除成功：作品已从归档移除，COS 已删除 ' + d.deletedObjects + ' 个文件。');
+      }
       loadBooks();
     }).catch(function(err){
       if (onAuthFail(err)) return;
-      show($('main-msg'), 'err', '✗ 删除失败：' + (err.message || err));
+      show($('main-msg'), 'err', '✗ 后台未能确认删除结果：' + (err.message || err) + '。请刷新作品列表核对状态。');
     }).then(function(){ setBusy(false); });
   }
 });
