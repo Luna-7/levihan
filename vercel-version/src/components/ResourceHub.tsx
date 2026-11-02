@@ -4,7 +4,8 @@ import { RESOURCE_LINKS } from '../data/initialData';
 import { soundManager } from '../utils/audio';
 import { AuNovelReader } from './AuNovelReader';
 import { CardPatternOverlay } from './CardPatternOverlay';
-import { GoodsShowcase } from './GoodsShowcase';
+
+const MerchStudio = React.lazy(() => import('./MerchStudio').then((module) => ({ default: module.MerchStudio })));
 
 interface Props {
   onCopyCode: (code: string) => void;
@@ -18,7 +19,7 @@ export const ResourceHub: React.FC<Props> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('动漫原片');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // 「周边素材」只陈列图片（清单在 COS 的 goods/manifest.json），不走网盘链接那套
+  // 「周边素材」集中展示 QQ 人和官方周边，避免首页另设重复入口。
   const allCategories = ['动漫原片', '漫画与手稿', '二创剪辑/素材', '官方AU小说', '周边素材'];
 
   const handleAutoJump = (url: string, code?: string) => {
@@ -191,10 +192,12 @@ export const ResourceHub: React.FC<Props> = ({
         )}
       </div>
 
-      {/* 🖼 周边素材：图片区块（懒加载缩略图 + 一键下载原图，图片本体放在 COS 不进包） */}
+      {/* 周边分类集中在资源中心，避免首页重复入口 */}
       {selectedCategory === '周边素材' ? (
         <div className="mb-6">
-          <GoodsShowcase onShowToast={onShowToast} />
+          <React.Suspense fallback={<div className="py-12 text-center text-sm text-[#8C7A68]">正在打开周边列表…</div>}>
+            <MerchStudio onShowToast={onShowToast} />
+          </React.Suspense>
         </div>
       ) : selectedCategory === '官方AU小说' ? (
         /* 📜 官方AU小说专区 */

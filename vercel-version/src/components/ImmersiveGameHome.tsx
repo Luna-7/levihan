@@ -13,7 +13,6 @@ const TatakaruGame = React.lazy(() => import('./TatakaruGame').then(m => ({ defa
 const GameLeaderboard = React.lazy(() => import('./GameLeaderboard').then(m => ({ default: m.GameLeaderboard })));
 const PotatoMarket = React.lazy(() => import('./PotatoMarket').then(m => ({ default: m.PotatoMarket })));
 const ResourceHub = React.lazy(() => import('./ResourceHub').then(m => ({ default: m.ResourceHub })));
-const MerchStudio = React.lazy(() => import('./MerchStudio').then(m => ({ default: m.MerchStudio })));
 import { soundManager } from '../utils/audio';
 import { GROUP_INFO } from '../data/initialData';
 import { UiSprite } from './UiSprite';
@@ -42,7 +41,7 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
     if (typeof window === 'undefined') return null;
     return new URLSearchParams(window.location.search).get('victory-preview') === 'lihan' ? 'lihan' : null;
   });
-  const [activeModal, setActiveModal] = useState<'game' | 'leaderboard' | 'rules' | 'doujinshi' | 'resources' | 'merch' | null>(null);
+  const [activeModal, setActiveModal] = useState<'game' | 'leaderboard' | 'rules' | 'doujinshi' | 'resources' | null>(null);
   const [isForumOpen, setIsForumOpen] = useState(false);
   const pendingDoujinOpen = useAppShellStore((state) => state.pendingDoujinOpen);
 
@@ -149,7 +148,6 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
 
   const openGameModal = useCallback(() => setActiveModal('game'), []);
   const openResourceModal = useCallback(() => setActiveModal('resources'), []);
-  const openMerchModal = useCallback(() => setActiveModal('merch'), []);
 
   if (isForumOpen) {
     return <React.Suspense fallback={null}><RestaurantForum onBack={() => setIsForumOpen(false)} onShowToast={onShowToast} /></React.Suspense>;
@@ -244,14 +242,13 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
           />
 
           {/* ====================================================
-              【下段】：3 个大复古羊皮纸入口 (塔塔开 + 周边 + 巨人资源)
+              【下段】：2 个大复古羊皮纸入口 (塔塔开 + 巨人资源)
              ==================================================== */}
           <section className="home-jump-section w-full shrink-0">
             <div>
               <MiniProgramJumpGrid
                 onOpenGameModal={openGameModal}
                 onOpenResourceModal={openResourceModal}
-                onOpenMerchModal={openMerchModal}
                 onPreloadTab={onPreloadTab}
               />
             </div>
@@ -786,42 +783,6 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
               /></React.Suspense>
             </div>
           </div>
-        </div>,
-        document.body
-      )}
-
-      {typeof document !== 'undefined' && activeModal === 'merch' && createPortal(
-        <div
-          className="fixed inset-0 z-[130] flex items-center justify-center bg-black/70 p-2 sm:p-4"
-          onClick={() => setActiveModal(null)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') setActiveModal(null);
-          }}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="merch-studio-title"
-            className="flex max-h-[94dvh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-[var(--amber-6)] bg-[var(--amber-2)] text-[var(--amber-12)] shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--amber-6)] px-4 py-3 sm:px-5">
-              <h2 id="merch-studio-title" className="text-base font-bold leading-tight sm:text-lg">周边</h2>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[var(--gray-11)] hover:bg-[var(--amber-3)] hover:text-[var(--amber-12)] focus-visible:outline-2 focus-visible:outline-[var(--green-8)] focus-visible:outline-offset-2"
-                aria-label="关闭周边"
-              >
-                <X size={19} />
-              </button>
-            </header>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-5">
-              <React.Suspense fallback={<div className="py-12 text-center text-sm text-[var(--gray-11)]">正在打开周边工坊…</div>}>
-                <MerchStudio onShowToast={onShowToast} />
-              </React.Suspense>
-            </div>
-          </section>
         </div>,
         document.body
       )}
