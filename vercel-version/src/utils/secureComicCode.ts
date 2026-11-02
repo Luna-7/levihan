@@ -1,6 +1,22 @@
-// 仅在当前页面内复用已验证的校验码；刷新或关闭页面即清除。
+// 仅在当前页面内存中复用已验证的校验码，30 分钟后失效。
+const VERIFIED_CODE_TTL_MS = 30 * 60 * 1000;
 let verifiedCode: string | null = null;
+let expiresAt = 0;
 
-export const getVerifiedComicCode = () => verifiedCode;
-export const setVerifiedComicCode = (code: string) => { verifiedCode = code; };
-export const clearVerifiedComicCode = () => { verifiedCode = null; };
+export const getVerifiedComicCode = () => {
+  if (!verifiedCode || Date.now() >= expiresAt) {
+    clearVerifiedComicCode();
+    return null;
+  }
+  return verifiedCode;
+};
+
+export const setVerifiedComicCode = (code: string) => {
+  verifiedCode = code;
+  expiresAt = Date.now() + VERIFIED_CODE_TTL_MS;
+};
+
+export const clearVerifiedComicCode = () => {
+  verifiedCode = null;
+  expiresAt = 0;
+};

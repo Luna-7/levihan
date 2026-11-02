@@ -26,6 +26,7 @@ import { AuthorWithLink } from '../utils/authorLink';
 import { MangaCommentSection } from './MangaCommentSection';
 import { getCommentCountByBookId } from '../data/mangaComments';
 import { useAppShellStore } from '../stores/appShellStore';
+import { useSwipeBackGesture } from '../hooks/useSwipeBackGesture';
 import { scheduleNonCriticalTask } from '../utils/scheduleNonCriticalTask';
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { getAccessToken } from '../utils/cloudbaseToken';
@@ -45,7 +46,7 @@ interface Props {
 }
 
 type ArtworkLikeItem = { id: string; likes: number; liked: boolean };
-const normalizeEnglishTitleInitial = (title: string) => title.replace(/^([a-z])/, (letter) => letter.toUpperCase());
+const normalizeEnglishTitleInitial = (title: string) => title.replace(/\b([a-z])/gi, (letter) => letter.toUpperCase());
 const normalizeBookTitles = (items: DoujinBookItem[]) => items.map((book) => ({
   ...book,
   titleZh: normalizeEnglishTitleInitial(book.titleZh || ''),
@@ -119,7 +120,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
 
   // 当前正在无缝长图阅读的书籍
   const [readingBook, setReadingBook] = useState<DoujinBookItem | null>(null);
-  const readingSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [notificationPermission, setNotificationPermission] = useState(webPushPermission);
   const [pushRegistered, setPushRegistered] = useState(false);
   const [isEnablingNotifications, setIsEnablingNotifications] = useState(false);
@@ -425,7 +425,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     // 所以不进长图画廊，改走 SecureComicReader（维护页 → 校验码 → 内存解密 → Canvas）
     if (book.secure && SecureComicReader) {
       archiveScrollYRef.current = window.scrollY;
-      onShowToast(`《${book.titleZh}》正在加载安全解析节点…`);
       if (loadSecureComicReader) {
         // 等解析器分包到位后再切换阅读器，避免列表先卸载、Suspense 再闪现。
         void loadSecureComicReader()
@@ -446,8 +445,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     archiveScrollYRef.current = window.scrollY;
     setReadingBook(book);
     setDetectedPages(book.pages || 30);
-    onShowToast(`正在开启《${book.titleZh}》无缝长图画廊 📖`);
-
     // 只在页数未知时才进行探测
     if (!book.pages || book.pages <= 0) {
       setIsDetectingPages(true);
@@ -470,6 +467,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     setReadingBook(null);
     setDetectedPages(null);
   };
+  const readingSwipeBack = useSwipeBackGesture(handleCloseReader, Boolean(readingBook));
 
   useEffect(() => {
     if (mode !== 'comic' || !sharedBookId || isLoadingArchive || autoOpenedSharedBookRef.current) return;
@@ -518,7 +516,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     const shareUrl = `${window.location.origin}/book/${encodeURIComponent(book.id)}`;
     try {
       if (typeof navigator.share === 'function') {
-        await navigator.share({ title, text: `${title} 利韩典藏`, url: shareUrl });
+        await navigator.share({ title, text: `${title} 利韩同人`, url: shareUrl });
         return;
       }
       await navigator.clipboard.writeText(shareUrl);
@@ -662,12 +660,12 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
 
     // 长图主体内容：无间隙、块级排列、消除所有图片缝隙
     const renderLongStripContent = () => (
-      <div className="w-full max-w-2xl mx-auto bg-[#F6F1E3] rounded-lg overflow-hidden border-2 border-[#1E4334] shadow-xl">
+      <div className="w-full max-w-2xl mx-auto bg-[#F6F1E3] rounded-lg overflow-hidden border-2 border-[#1E4334] shadow-xl" style={{ touchAction: 'pan-x pan-y pinch-zoom' }}>
         {pagesList.map((pageNum) => {
           const pageUrl = cosService.getPageUrl(readingBook, pageNum);
 
           return (
-            <div key={pageNum}>
+              <div key={pageNum} className="-mt-px">
               <LazyComicPage
                 pageNumber={pageNum}
                 src={pageUrl}
@@ -685,42 +683,33 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       <div
         id="seamless-doujin-reader"
         className="relative w-full select-text pb-12"
-        onTouchStart={(event) => {
-          const touch = event.touches[0];
-          readingSwipeStartRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
-        }}
-        onTouchEnd={(event) => {
-          const start = readingSwipeStartRef.current;
-          const touch = event.changedTouches[0];
-          readingSwipeStartRef.current = null;
-          if (!start || !touch) return;
-          const deltaX = touch.clientX - start.x;
-          const deltaY = touch.clientY - start.y;
-          if (deltaX > 90 && deltaX > Math.abs(deltaY) * 1.3) handleCloseReader();
-        }}
+        style={readingSwipeBack.style}
+        onTouchStart={readingSwipeBack.onTouchStart}
+        onTouchMove={readingSwipeBack.onTouchMove}
+        onTouchEnd={readingSwipeBack.onTouchEnd}
+        onTouchCancel={readingSwipeBack.onTouchCancel}
       >
         {/* 阅读信息 */}
         <div
-          className="mb-3.5 px-3.5 py-2.5 bg-[#FAF5E8] border border-[#1E4334]/50 rounded-lg shadow-md flex items-center gap-2.5"
+          className="relative z-10 -mb-4 px-3.5 py-2.5 bg-[#FAF5E8] border border-[#1E4334]/50 rounded-t-none rounded-b-xl shadow-md flex items-center gap-6"
           style={{ paddingTop: 'max(10px, env(safe-area-inset-top, 0px))' }}
         >
           <button
             type="button"
             onClick={handleCloseReader}
-            className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-md bg-[#1E4334] px-2.5 font-pixel text-xs text-[#F9E79F] transition-colors hover:bg-[#2B5E4A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"
+            aria-label="返回列表"
+            title="返回列表"
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-[#1E4334] p-0 font-pixel text-xs text-[#F9E79F] transition-colors hover:bg-[#2B5E4A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"
           >
-            <span aria-hidden="true">←</span>
-            <span>返回列表</span>
+            <span aria-hidden="true" className="text-2xl">←</span>
           </button>
           <div className="min-w-0">
-            <h2 className="font-pixel text-sm sm:text-base font-bold text-[#1E3A2B] truncate">
+            <h2 className="comic-title-font font-pixel text-sm sm:text-base font-bold text-[#1E3A2B] truncate">
               {readingBook.titleZh}
             </h2>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs font-retro-jp text-[#7A6958]">
               <span>作者：<AuthorWithLink author={readingBook.circle} customUrl={readingBook.authorUrl} defaultColorClass="text-[#7A6958]" orangeColorClass="text-[#D35400]" /></span>
               {readingBook.source && <span>来源：{readingBook.source}</span>}
-              <span>共 {totalPages} 页</span>
-              {isDetectingPages && <span>页数校准中</span>}
             </div>
             {(readingBook.translator || readingBook.typesetter) && (
               <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs font-retro-jp text-[#7A6958]">
@@ -733,19 +722,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
 
         {/* 无缝长图展示区 */}
         {renderLongStripContent()}
-
-        {/* 阅读完毕底部操作 */}
-        <div className="w-full max-w-2xl mx-auto mt-4 p-4 bg-[#FAF5E8] border border-[#D5C9AF] rounded-md text-center space-y-2 font-retro-jp">
-          <p className="text-xs text-[#5B4636] font-bold">已浏览至末尾（共 {totalPages} 页）</p>
-          <div className="flex items-center justify-center gap-3">
-            <button
-              onClick={handleCloseReader}
-              className="px-3.5 py-1.5 bg-[#1E4334] text-[#F9E79F] font-pixel text-xs rounded-xs hover:bg-[#2B5E4A] cursor-pointer shadow-xs"
-            >
-              返回{readingBook.category === '插画集' ? '插画集' : '本子'}列表 📚
-            </button>
-          </div>
-        </div>
 
         {/* 读者同好书评区：仅主站渲染。
             评论数据是 localStorage 单机占位（发出去别人看不见），漫画站隐藏以免误导群友。 */}
@@ -802,7 +778,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
               <div className="relative mb-2.5 flex min-w-0 items-center justify-between gap-2 border-b-2 border-[#C5A059] pb-2 pr-8">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="text-xl" aria-hidden="true">✨</span>
-                  <h2 id="comic-announcement-title" className="truncate font-serif-title text-sm font-bold text-[#1E4334] sm:text-base">
+                  <h2 id="comic-announcement-title" className="comic-title-font truncate font-serif-title text-sm font-bold text-[#1E4334] sm:text-base">
                     {selectedComicAnnouncement.title}
                   </h2>
                 </div>
@@ -897,11 +873,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
           </div>
           <section
             aria-labelledby="comic-announcements-heading"
-            className="overflow-hidden rounded-2xl border-[0.5px] border-[#E8E1CE] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
+            className="overflow-hidden rounded-2xl border-[0.5px] border-[#E8E1CE] bg-[var(--bg-card)] shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
           >
-            <h2 id="comic-announcements-heading" className="flex items-center justify-between gap-2 bg-[var(--green-12)] px-3.5 py-3 text-sm font-bold text-white sm:text-base">
-              <span className="flex items-center gap-2"><span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-[var(--cyan-8)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--green-12)]" /></span><span>站内公告</span><span className="rounded-full bg-[var(--green-8)] px-2 py-0.5 text-[10px] text-[var(--green-12)]">NEW</span></span>
-              <span className="text-xs font-medium text-[var(--green-3)]">展开详情 ▾</span>
+            <h2 id="comic-announcements-heading" className="flex items-center gap-2 bg-[var(--green-12)] px-3.5 py-3 text-sm font-bold text-white sm:text-base">
+              <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-[var(--cyan-8)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--green-12)]" /></span>
+              <span>站内公告</span>
             </h2>
             {comicAnnouncementState === 'loading' && (
               <p className="py-1 text-xs text-[var(--amber-12)]" role="status">公告加载中…</p>
@@ -919,12 +895,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
               <p className="py-1 text-xs text-[var(--amber-12)]">暂无公告</p>
             )}
             {comicAnnouncementState === 'ready' && comicAnnouncements.length > 0 && (
-              <ul className="divide-y divide-[#E8E1CE] bg-white">
+              <ul className="divide-y divide-[#E8E1CE] bg-[var(--bg-card)]">
                 {comicAnnouncements.slice(0, 2).map((item, index) => {
                   const character = comicAnnouncementGoods.length >= 2
                     ? comicAnnouncementGoods[(comicAnnouncementPairStart + index) % comicAnnouncementGoods.length]
                     : undefined;
-                  const specialTag = /利韩企划|网站维护|企划|维护/.test(item.tag);
                   return <li
                     key={item.id}
                     role="button"
@@ -947,9 +922,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                       {character && <img src={cosService.getGoodsThumbUrl(character.file, 240)} alt="" loading="lazy" decoding="async" />}
                     </span>
                     <div className="min-w-0 flex-1 self-center">
-                      <h3 className={`comic-announcement-title min-w-0 truncate text-base font-semibold ${index === 0 ? 'text-[var(--violet-11)]' : 'text-[var(--green-9)]'}`}>{item.title}</h3>
+                      <h3 className={`comic-title-font comic-announcement-title min-w-0 truncate text-base font-semibold ${index === 0 ? 'text-[var(--violet-11)]' : 'text-[var(--green-9)]'}`}>{item.title}</h3>
                       <div className="mt-1 flex min-w-0 items-center justify-between gap-2">
-                        <span className={`comic-announcement-character-tag min-w-0 ${specialTag ? index === 0 ? 'comic-announcement-character-tag-dark-violet' : 'comic-announcement-character-tag-dark-green' : ''}`}>{item.tag}</span>
+                        <span className="comic-announcement-character-tag min-w-0">{item.tag}</span>
                         {item.time && <time className="shrink-0 text-xs text-[var(--amber-12)]">{item.time}</time>}
                       </div>
                       {item.description && (
@@ -964,11 +939,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
         </>
       )}
       {/* 典藏公约红线轻量提示 */}
-      <div className={`mb-1 flex items-center gap-2.5 rounded-2xl px-3 py-3 font-retro-jp text-xs ${isMangaVisible ? 'border-2 border-[#C9232C] bg-[#C9232C] text-white' : 'bg-[#FBF0EE] text-[#1E4334] border-l-3 border-[#C0392B] shadow-2xs'}`}>
-        <div>
-          <span className={`mr-1 inline-grid h-6 min-w-6 place-items-center rounded px-1 font-bold ${isMangaVisible ? 'bg-white text-[#C9232C]' : 'bg-[var(--red-9)] text-white'}`}>!</span>
-          本专区由利韩同好自发分享。<b>严禁倒卖商用、严禁转传闲鱼微店</b>，请共同守护创作者的心血。
-        </div>
+      <div className={`mb-1 rounded-2xl px-3 py-3 font-retro-jp text-xs ${isMangaVisible ? 'border-2 border-[#C9232C] bg-[#C9232C] text-white' : 'bg-[#FBF0EE] text-[#1E4334] border-l-3 border-[#C0392B] shadow-2xs'}`}>
+        本专区由利韩同好自发分享。<b>严禁倒卖商用、严禁转传闲鱼微店</b>，请共同守护创作者的心血。
       </div>
 
       {/* 筛选与搜索栏 */}
@@ -1007,7 +979,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
               ) : (
                 <span className="text-xs font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">标签:</span>
               )}
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1">
                 {allTags.map((tag) => (
                   <button
                     key={tag}
@@ -1015,10 +987,10 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                       soundManager.playBlip();
                       setSelectedTag(tag);
                     }}
-                    className={`px-3 py-1.5 rounded-full ${isMangaVisible ? 'border-[0.5px] border-[var(--amber-6)]' : 'border'} ${isMangaVisible ? 'text-sm' : 'text-xs'} font-retro-jp transition-colors cursor-pointer whitespace-nowrap shrink-0 select-none active:scale-95 ${
+                    className={`px-3 py-1.5 rounded-[24px] ${isMangaVisible ? 'border-[0.5px] border-[var(--amber-6)]' : 'border'} ${isMangaVisible ? 'text-sm' : 'text-xs'} font-retro-jp transition-colors cursor-pointer whitespace-nowrap shrink-0 select-none active:scale-95 ${
                       selectedTag === tag
                         ? 'bg-[var(--green-12)] text-white border-[var(--green-12)] font-bold'
-                        : 'bg-white text-[var(--gray-12)] border-[var(--amber-6)] hover:bg-[var(--amber-3)]'
+                        : 'bg-[var(--bg-card)] text-[var(--gray-12)] border-[var(--amber-6)] hover:bg-[var(--amber-3)]'
                     }`}
                   >
                     {tag === '全部' && <span aria-hidden="true">★ </span>}
@@ -1041,7 +1013,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                 placeholder="检索标题、作者、汉化…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className={`min-h-11 w-full rounded-xl ${isMangaVisible ? 'border-[0.5px] border-[var(--amber-6)] pl-9' : 'border-[0.5px] border-[var(--amber-12)] px-3'} bg-white text-xs text-[var(--gray-12)] placeholder:text-[var(--gray-9)] ${selectedCategory === '漫画本' ? 'focus:placeholder:text-transparent' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--green-8)] ${searchQuery ? 'pr-11' : ''}`}
+                className={`min-h-11 w-full rounded-xl ${isMangaVisible ? 'border-[0.5px] border-[var(--amber-6)] pl-9' : 'border-[0.5px] border-[var(--amber-12)] px-3'} bg-[var(--bg-card)] text-xs text-[var(--gray-12)] placeholder:text-[var(--gray-9)] ${selectedCategory === '漫画本' ? 'focus:placeholder:text-transparent' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--green-8)] ${searchQuery ? 'pr-11' : ''}`}
               />
               {searchQuery && (
                 <button
@@ -1056,7 +1028,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
             </div>
 
             {selectedCategory === '漫画本' && (
-              <label className={`flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-xl px-2 text-center text-xs ${isMangaVisible ? 'w-full justify-end gap-1.5 border-[0.5px] border-[var(--amber-6)] bg-white text-[var(--gray-11)]' : 'text-[var(--amber-12)]'}`}>
+              <label className={`flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-xl px-2 text-center text-xs ${isMangaVisible ? 'w-full justify-end gap-1.5 border-[0.5px] border-[var(--amber-6)] bg-[var(--bg-card)] text-[var(--gray-11)]' : 'text-[var(--amber-12)]'}`}>
                 <span className="flex shrink-0 items-center">{isMangaVisible ? '🎨 作者:' : '作者'}</span>
                 <select
                   value={selectedAuthor}
@@ -1077,7 +1049,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                 <button type="button" onClick={() => { soundManager.playBlip(); setSortBy('new'); setSortReversed(false); }} className={`min-h-10 px-1 font-semibold ${sortBy === 'new' ? 'text-[var(--green-12)]' : 'text-[var(--gray-11)]'}`}>{sortBy === 'new' && sortReversed ? '最早发布' : '最新发布'}</button>
                 <span aria-hidden="true" className="text-[var(--amber-6)]">|</span>
                 <button type="button" onClick={() => { soundManager.playBlip(); setSortBy('pages'); setSortReversed(false); }} className={`min-h-10 px-1 font-semibold ${sortBy === 'pages' ? 'text-[var(--green-12)]' : 'text-[var(--gray-11)]'}`}>{sortBy === 'pages' && sortReversed ? '页数最少' : '页数最多'}</button>
-                <button type="button" onClick={() => { soundManager.playBlip(); setSortReversed((reversed) => !reversed); }} aria-label={sortReversed ? '恢复默认排序' : '反转当前排序'} className="ml-auto grid h-10 w-10 place-items-center rounded-lg border-[0.5px] border-[var(--amber-6)] bg-white text-[var(--gray-11)] hover:bg-[var(--amber-3)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"><ArrowUpDown size={16} /></button>
+                <button type="button" onClick={() => { soundManager.playBlip(); setSortReversed((reversed) => !reversed); }} aria-label={sortReversed ? '恢复默认排序' : '反转当前排序'} className="ml-auto grid h-10 w-10 place-items-center rounded-lg border-[0.5px] border-[var(--amber-6)] bg-[var(--bg-card)] text-[var(--gray-11)] hover:bg-[var(--amber-3)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"><ArrowUpDown size={16} /></button>
               </div>
             ) : <label className="flex min-h-11 min-w-0 items-center gap-2 text-xs text-[var(--amber-12)]">
               <span className="flex min-h-11 shrink-0 items-center">排序</span>
@@ -1111,7 +1083,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       {/* 插画集使用双列瀑布流；漫画站仍保持规整网格。 */}
       {selectedCategory !== '小说本' && (selectedCategory !== '漫画本' || isMangaVisible) && (
         <>
-        <div className={isIllustrationCategory ? 'columns-1 sm:columns-2 gap-3.5 sm:gap-4.5 w-full' : isComicMasonry ? 'grid grid-cols-1 md:grid-cols-2 gap-2.5 w-full items-stretch' : 'grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4.5 w-full items-stretch'}>
+        <div className={isIllustrationCategory ? 'columns-1 sm:columns-2 gap-3.5 sm:gap-4.5 w-full' : isComicMasonry ? 'grid grid-cols-1 md:grid-cols-2 gap-2 w-full items-stretch' : 'grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4.5 w-full items-stretch'}>
         {visibleBooks.map((book) => {
           // 通过 COS 逻辑层动态生成封面 CDN 地址
           const coverUrl = cosService.getCoverUrl(book);
@@ -1124,7 +1096,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
               id={`book-card-${book.id}`}
               key={book.id}
               onClick={() => handleOpenBookReader(book)}
-              className={`${isComicMasonry ? 'comic-manga-card' : ''} ${isMasonryCategory ? 'mb-2.5 sm:mb-4 break-inside-avoid' : ''} ${isMangaVisible ? 'grid grid-cols-[minmax(100px,0.36fr)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] items-stretch gap-x-3 gap-y-0 bg-white border-[0.5px] border-[#E8E1CE] shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_2px_6px_rgba(0,0,0,0.05)]' : 'flex flex-col justify-between space-y-2.5 bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] hover:shadow-md'} rounded-xl p-3.5 sm:p-5 transition-all group select-none cursor-pointer w-full ${isMasonryCategory ? '' : 'h-full'} ${linkedBookId === book.id ? 'border-[#E5A93C] ring-4 ring-[#E5A93C]/35 shadow-xl animate-pulse' : ''}`}
+              className={`${isComicMasonry ? 'comic-manga-card' : ''} ${isIllustrationCategory ? 'mb-2.5 sm:mb-4 break-inside-avoid' : ''} ${isMangaVisible ? 'grid grid-cols-[minmax(100px,0.36fr)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] items-stretch gap-x-3 gap-y-0 bg-[var(--bg-card)] border-[0.5px] border-[#E8E1CE] shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_2px_6px_rgba(0,0,0,0.05)]' : 'flex flex-col justify-between space-y-2.5 bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] hover:shadow-md'} rounded-xl p-3.5 sm:p-5 transition-all group select-none cursor-pointer w-full ${isMasonryCategory ? '' : 'h-full'} ${linkedBookId === book.id ? 'border-[#E5A93C] ring-4 ring-[#E5A93C]/35 shadow-xl animate-pulse' : ''}`}
               style={{ contentVisibility: 'auto', containIntrinsicSize: isComicMasonry ? undefined : '720px' }}
               title={isIllustrationCategory ? '点击打开插画集' : '点击直接打开查看无缝长图'}
             >
@@ -1193,7 +1165,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                         )}
                       </div>
                     )}
-                    {book.category !== '插画集' && <h3 className={`${isMangaVisible ? 'font-sans text-base sm:text-2xl' : 'font-pixel text-sm sm:text-base'} font-bold text-[#1E3A2B] group-hover:text-[#B7791F] break-words leading-snug transition-colors`}>
+                    {book.category !== '插画集' && <h3 className={`comic-title-font ${isMangaVisible ? 'font-sans text-base sm:text-2xl' : 'font-pixel text-sm sm:text-base'} font-bold text-[#1E3A2B] group-hover:text-[#B7791F] break-words leading-snug transition-colors`}>
                       {book.titleZh}
                     </h3>}
                     {book.secure && (
@@ -1328,7 +1300,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                         </span>
                       </div>
                     )}
-                    {book.category !== '插画集' && <h3 className="font-pixel text-sm sm:text-base font-bold text-[#1E3A2B] group-hover:text-[#B7791F] break-words leading-snug transition-colors">
+                    {book.category !== '插画集' && <h3 className="comic-title-font font-pixel text-sm sm:text-base font-bold text-[#1E3A2B] group-hover:text-[#B7791F] break-words leading-snug transition-colors">
                       {book.titleZh}
                     </h3>}
                     {book.category !== '插画集' && book.titleJp && (

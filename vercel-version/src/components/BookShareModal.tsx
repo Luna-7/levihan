@@ -41,7 +41,7 @@ export function BookShareModal({ book, onClose, onShowToast }: Props) {
     const title = `《${book.titleZh}》`;
     try {
       if (typeof navigator.share === 'function') {
-        await navigator.share({ title, text: `${title} · 利韩典藏`, url: shareUrl });
+        await navigator.share({ title, text: `${title} · 利韩同人`, url: shareUrl });
         return;
       }
       await navigator.clipboard.writeText(shareUrl);
@@ -78,7 +78,7 @@ export function BookShareModal({ book, onClose, onShowToast }: Props) {
         <div className="mx-auto w-[300px] max-w-full">
           <div ref={posterRef} className="bg-[#FAF3E3] border-2 border-[#1E4334] rounded-lg overflow-hidden shadow-xl">
             <div className="px-3 py-2 bg-[#1E4334] text-[#F9E79F] font-pixel text-[10px] flex justify-between">
-              <span>✦ 利韩 · 典藏分享</span>
+              <span>✦ 利韩同人分享</span>
               <span>{book.secure ? '🔒 解析本' : book.category === '插画集' ? '插画集' : '漫画本'}</span>
             </div>
             <div className="flex gap-3 p-3">

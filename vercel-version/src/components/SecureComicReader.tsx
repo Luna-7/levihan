@@ -6,6 +6,8 @@ import type { DoujinBookItem } from '../types/doujinArchive';
 import { cosService } from '../services/cosClient';
 import { clearVerifiedComicCode, getVerifiedComicCode, setVerifiedComicCode } from '../utils/secureComicCode';
 import { decryptOuterLayer } from '../utils/secureComicDecrypt';
+import { PinchZoomSurface } from './PinchZoomSurface';
+import { useSwipeBackGesture } from '../hooks/useSwipeBackGesture';
 
 /**
  * ============================================================================
@@ -309,22 +311,24 @@ const SecureCanvasPage: React.FC<{
   return (
     <div
       ref={holderRef}
-      className="w-full max-w-3xl mx-auto bg-white shadow-[0_1px_0_rgba(0,0,0,.08)]"
+      className="relative w-full max-w-3xl mx-auto bg-white shadow-[0_1px_0_rgba(0,0,0,.08)]"
       data-page={pageNumber}
     >
-      {!rendered && !failed && <div aria-hidden="true" style={{ paddingBottom: `${aspect * 100}%` }} />}
+      <div aria-hidden="true" style={{ paddingBottom: `${aspect * 100}%` }} />
       {failed ? (
         <div className="py-12 text-center font-mono text-xs text-[#8892a4]">
-          第 {pageNumber} 页渲染失败 · 请刷新后重试
+          第 {pageNumber} 页渲染失败，请刷新后重试
         </div>
       ) : (
-        <canvas
-          ref={canvasRef}
-          className="w-full h-auto block select-none"
-          style={{ display: rendered ? 'block' : 'none', WebkitTouchCallout: 'none' }}
-          draggable={false}
-          onContextMenu={(e) => e.preventDefault()}
-        />
+        <PinchZoomSurface>
+          <canvas
+            ref={canvasRef}
+            className="w-full h-auto block select-none"
+            style={{ display: rendered ? 'block' : 'none', WebkitTouchCallout: 'none' }}
+            draggable={false}
+            onContextMenu={(e) => e.preventDefault()}
+          />
+        </PinchZoomSurface>
       )}
     </div>
   );
@@ -338,27 +342,14 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
   const [errorMsg, setErrorMsg] = useState('');
   const [doc, setDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
+  const autoAttemptedRef = useRef(false);
   const docRef = useRef<any>(null);
   const schedulerRef = useRef<ComicRenderScheduler | null>(null);
   if (!schedulerRef.current) schedulerRef.current = new ComicRenderScheduler();
   const canvasWindowRef = useRef<ComicCanvasWindow | null>(null);
   if (!canvasWindowRef.current) canvasWindowRef.current = new ComicCanvasWindow();
-  const autoAttemptedRef = useRef(false);
   const readerRef = useRef<HTMLDivElement | null>(null);
-  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
-  const handleSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    const touch = event.touches[0];
-    swipeStartRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
-  };
-  const handleSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
-    const start = swipeStartRef.current;
-    const touch = event.changedTouches[0];
-    swipeStartRef.current = null;
-    if (!start || !touch) return;
-    const deltaX = touch.clientX - start.x;
-    const deltaY = touch.clientY - start.y;
-    if (deltaX > 90 && deltaX > Math.abs(deltaY) * 1.3) onClose();
-  };
+  const swipeBack = useSwipeBackGesture(onClose, true);
 
   /* ---------------- 反爬与防手滑：只在阅读器挂载期间生效 ---------------- */
   useEffect(() => {
@@ -404,15 +395,14 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
   );
 
   /**
-   * 启动解析：拉密文 → 解外层 → 用同一个密码解锁内层。
+   * 启动解析：拉密文 → 用 7 字符口令解外层 → 尝试打开 PDF。
    * 全程在内存里完成，不产生任何 .pdf 文件或直链。
    */
   const handleUnlock = useCallback(
     async (password: string, automatic = false) => {
       if (phase === 'working') return;
 
-      if (!password) {
-        setErrorMsg('校验码不能为空');
+      if (password.length !== 7) {
         return;
       }
 
@@ -473,25 +463,25 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
     [book, onShowToast, phase],
   );
 
-  /** 输入停止后自动尝试解析，继续输入时取消上一次计时。 */
-  const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setCode(value);
-    if (errorMsg) setErrorMsg('');
-    if (codeEntryTimerRef.current) clearTimeout(codeEntryTimerRef.current);
-    if (value.trim()) {
-      codeEntryTimerRef.current = setTimeout(() => {
-        void handleUnlock(value.trim());
-      }, 650);
-    }
-  };
-
   useEffect(() => {
     if (autoAttemptedRef.current) return;
     autoAttemptedRef.current = true;
     const savedCode = getVerifiedComicCode();
     if (savedCode) void handleUnlock(savedCode, true);
   }, [handleUnlock]);
+
+  /** 输入满 7 个字符后自动尝试解析，继续输入时取消上一次计时。 */
+  const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.slice(0, 7);
+    setCode(value);
+    if (errorMsg) setErrorMsg('');
+    if (codeEntryTimerRef.current) clearTimeout(codeEntryTimerRef.current);
+    if (value.length === 7) {
+      codeEntryTimerRef.current = setTimeout(() => {
+        void handleUnlock(value);
+      }, 650);
+    }
+  };
 
   useEffect(() => () => {
     if (codeEntryTimerRef.current) clearTimeout(codeEntryTimerRef.current);
@@ -508,23 +498,14 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
     return () => window.cancelAnimationFrame(frame);
   }, [phase]);
 
-  /* ========================== 403 伪装界面 ========================== */
+  /* ========================== 404 提示界面 ========================== */
   if (phase !== 'ready') {
     return (
-      <div className="w-full min-h-[70vh] bg-transparent text-[var(--amber-12)] font-mono" onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>
-        <div className="max-w-3xl mx-auto px-5 py-6 sm:py-10">
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="返回归档列表"
-            title="返回归档列表"
-            className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-[3px] bg-[var(--green-12)] text-xl font-semibold text-white transition-colors hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--amber-8)]"
-          >
-            ←
-          </button>
-          <div className="border border-[#E8E1CE] bg-white">
-            <div className="px-5 py-6 sm:px-8 sm:py-8">
-              <h1 className="text-[30px] sm:text-[38px] font-bold text-[#1E3A2B] leading-none">403 Forbidden</h1>
+      <div className="flex min-h-[100dvh] w-full items-center bg-transparent text-[var(--amber-12)] font-mono" {...swipeBack}>
+        <div className="w-full max-w-3xl mx-auto px-5 py-6 sm:py-10">
+          <div>
+            <div className="py-2">
+              <h1 className="text-[30px] sm:text-[38px] font-bold text-[#1E3A2B] leading-none">Error 404</h1>
               <p className="mt-3 text-[13px] text-[#7A6958]">
                 Requested resource is not served by this node.
               </p>
@@ -544,19 +525,23 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
               ) : (
                 <div className="mt-6">
                   <input
-                    type="password"
+                    type="text"
+                    name="verificationCode"
                     value={code}
                     onChange={handleCodeChange}
                     aria-label="安全校验码"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    maxLength={7}
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter' && code.trim()) {
+                      if (event.key === 'Enter' && code.length === 7) {
                         if (codeEntryTimerRef.current) clearTimeout(codeEntryTimerRef.current);
-                        void handleUnlock(code.trim());
+                        void handleUnlock(code);
                       }
                     }}
                     autoComplete="off"
                     spellCheck={false}
-                    className="w-full border-0 border-b border-[#D5C9AF] bg-transparent px-1 py-2.5 text-[13px] text-[#1E3A2B] focus:outline-none focus:border-[var(--green-8)] focus:ring-0"
+                    className="secure-comic-code w-full border-0 border-b border-[#D5C9AF] bg-transparent px-1 py-2.5 text-[13px] text-[#1E3A2B] focus:outline-none focus:border-[var(--green-8)] focus:ring-0"
                   />
                 </div>
               )}
@@ -564,6 +549,15 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
               {errorMsg && (
                 <div className="mt-4 text-[12px] text-[#c5221f]">✗ {errorMsg}</div>
               )}
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="返回归档列表"
+                title="返回归档列表"
+                className="mt-4 inline-flex h-11 w-16 items-center justify-center rounded-[3px] bg-[var(--green-12)] text-xl font-semibold text-white transition-colors hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--amber-8)]"
+              >
+                ←
+              </button>
             </div>
           </div>
         </div>
@@ -578,10 +572,13 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
     <div
       id="secure-doujin-reader"
       ref={readerRef}
-      className="w-full scroll-mt-3 bg-[#15181b] pb-16 select-none"
+      className="w-full scroll-mt-3 bg-[#15181b] pb-28 select-none"
+      style={swipeBack.style}
       onContextMenu={(e) => e.preventDefault()}
-      onTouchStart={handleSwipeStart}
-      onTouchEnd={handleSwipeEnd}
+      onTouchStart={swipeBack.onTouchStart}
+      onTouchMove={swipeBack.onTouchMove}
+      onTouchEnd={swipeBack.onTouchEnd}
+      onTouchCancel={swipeBack.onTouchCancel}
     >
       {/* 阅读时保持结束会话操作置顶 */}
       <div className="sticky top-0 z-20 bg-[#1c2024]/95 backdrop-blur border-b border-[#2b3137]">

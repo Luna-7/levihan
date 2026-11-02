@@ -57,9 +57,9 @@ export const ComicGate: React.FC<{ children: React.ReactNode }> = ({ children })
             type="button"
             onClick={handleSecretClick}
             className="cursor-default appearance-none border-0 bg-transparent p-0 font-inherit text-inherit touch-manipulation focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#555]"
-            aria-label="Forbidden error heading"
+            aria-label="Error 404"
           >
-            Forbidden
+            Error 404
           </button>
         </h1>
         <hr className="border-0 border-t border-[#999]" />

@@ -27,7 +27,10 @@
  *   novelDelete   (token) {id}                     → { id, novels }
  *   recs          (token) {items: RecommendItem[]} → { count }   // 落桶 recs.json
  *   submitContact {kind,content,...} (公开)        → 联络来信写入云端收件箱（type=contact）
- *   authorLib     (token) {authors?}              → 作者链接登记表（不传=读取；传=整表覆盖）
+ *   authorLib     (token)                           → 读取作者链接主表
+ *   authorImpact  (token) {name}                    → 统计改动将影响的已发布漫画
+ *   authorSave    (token) {oldName?,name,url}       → 新增/编辑作者，并同步已发布漫画
+ *   authorDelete  (token) {name}                   → 删除作者链接记录并清除已发布漫画中的链接
  *
  * 深度加密密文（vault）专用，全部需要 token；key 固定为 comic_vault/<标识>_secure.txt：
  *   vaultUpload   (token) {key,dataText}                        → 单次上传（密文 ≤ 4MB）
@@ -468,12 +471,20 @@ function normalizeGoodsItem(raw, fallbackFile) {
   if (!file || !FILE_RE.test(file)) throw httpError('周边图片文件名无效', 400);
   const order = Number(raw && raw.order), scale = Number(raw && raw.scale);
   const width = Number(raw && raw.width), height = Number(raw && raw.height);
+  const rawCategory = raw && raw.category;
+  const category = rawCategory === 'qq' || rawCategory === 'official' ? rawCategory : undefined;
+  if (rawCategory !== undefined && !category) throw httpError('周边分类无效', 400);
+  const issuer = String(raw && raw.issuer || '').trim().slice(0, 100);
+  if (category === 'official' && !issuer) throw httpError('官方周边必须填写发行方', 400);
+  const hasTitle = Object.prototype.hasOwnProperty.call(raw || {}, 'title');
   return { file,
-    ...(String(raw && raw.title || '').trim() ? { title: String(raw.title).trim().slice(0, 60) } : {}),
+    ...(category ? { category } : {}),
+    ...(issuer ? { issuer } : {}),
+    ...(hasTitle ? { title: String(raw && raw.title || '').trim().slice(0, 60) } : {}),
     ...(String(raw && raw.note || '').trim() ? { note: String(raw.note).trim().slice(0, 120) } : {}),
-    order: Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0,
-    scale: Number.isFinite(scale) ? Math.min(100, Math.max(60, Math.round(scale))) : 100,
-    visible: raw && raw.visible !== false,
+    ...(raw && raw.order !== undefined ? { order: Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0 } : {}),
+    ...(raw && raw.scale !== undefined ? { scale: Number.isFinite(scale) ? Math.min(100, Math.max(60, Math.round(scale))) : 100 } : {}),
+    ...(raw && raw.visible !== undefined ? { visible: raw.visible !== false } : {}),
     ...(Number.isFinite(width) && width > 0 ? { width: Math.floor(width) } : {}),
     ...(Number.isFinite(height) && height > 0 ? { height: Math.floor(height) } : {}) };
 }
@@ -1015,16 +1026,17 @@ function normalizeAuthorLib(input) {
   return out.slice(0, MAX_AUTHORS);
 }
 
-/** 自动登记：同名作者更新链接，新作者插入表头；无变化返回 false */
+/** 发布成功后自动登记新作者；已存在作者只补齐空主页链接，不覆盖主表中已有链接。 */
 async function upsertAuthor(name, url) {
   const n = String(name || '').trim().slice(0, 60);
   const u = String(url || '').trim().slice(0, 300);
-  if (!n || !u || !/^https?:\/\//i.test(u) || n === '未知') return false;
+  if (!n || n === '未知') return false;
+  if (u && !/^https?:\/\//i.test(u)) return false;
   const authors = await readAuthorLib();
   const found = authors.find((a) => a && a.name === n);
   const now = new Date().toISOString();
   if (found) {
-    if (found.url === u) return false;
+    if (found.url || !u) return false;
     found.url = u;
     found.updatedAt = now;
   } else {
@@ -2026,10 +2038,12 @@ async function submitGameScore(uid, payload) {
         item.bytes = body.length;
       }
       const next = { ...(index >= 0 ? items[index] : {}), ...item };
+      delete next.sourceUrl;
       if (index >= 0) items[index] = next; else items.push(next);
       items.sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
-      await writeGoods(items.slice(0, 300));
-      return { ok: true, item: next, items };
+      const savedItems = items.slice(-300);
+      await writeGoods(savedItems);
+      return { ok: true, item: next, items: savedItems };
     }
 
     case 'goodsDelete': {
@@ -2587,16 +2601,118 @@ async function submitGameScore(uid, payload) {
       return { ok: true, tags: next };
     }
 
-    /** 作者链接登记表：不传 authors = 读取；传 authors = 整表覆盖（供后台手工增删 + 导出 Excel） */
+    /** 已发布作品移除单个标签时只改该作品的归档字段，不改全站标签库或表单里其他未保存的标签。 */
+    case 'bookTagRemove': {
+      const id = String(payload.id || '').trim();
+      if (!ID_RE.test(id)) throw httpError('非法作品 ID', 400);
+      const tag = String(payload.tag || '').trim().slice(0, 24);
+      if (!tag) throw httpError('缺少标签名', 400);
+      const archive = await readArchive();
+      const book = archive.find((item) => item && item.id === id);
+      if (!book) throw httpError('归档中找不到该作品', 404);
+      book.tags = (Array.isArray(book.tags) ? book.tags : []).filter((item) => item !== tag);
+      book.updatedAt = new Date().toISOString();
+      await writeArchive(archive);
+      return { ok: true, book };
+    }
+
+    /** 作者链接表：读取入口。写入统一走 authorSave，确保已发布漫画同步。 */
     case 'authorLib': {
-      if (payload.authors !== undefined) {
-        if (!Array.isArray(payload.authors)) throw httpError('authors 必须是数组', 400);
-        const next = normalizeAuthorLib(payload.authors);
-        await writeAuthorLib(next);
-        return { ok: true, count: next.length, authors: next };
-      }
       const authors = await readAuthorLib();
       return { ok: true, count: authors.length, authors };
+    }
+
+    case 'authorImpact': {
+      const name = String(payload.name || '').trim().slice(0, 60);
+      if (!name) throw httpError('缺少作者名', 400);
+      const archive = await readArchive();
+      const matching = archive.filter((book) => (!book.category || book.category === '漫画本') && book.circle === name);
+      return {
+        ok: true,
+        bookCount: matching.length,
+        linkedBookCount: matching.filter((book) => Boolean(book.authorUrl)).length,
+      };
+    }
+
+    /** 新增或编辑作者主表；改名/改链接时同步精确匹配的已发布漫画。 */
+    case 'authorSave': {
+      const oldName = String(payload.oldName || '').trim().slice(0, 60);
+      const name = String(payload.name || '').trim().slice(0, 60);
+      const url = String(payload.url || '').trim().slice(0, 300);
+      if (!name) throw httpError('作者 / 社团名不能为空', 400);
+      if (url) {
+        let parsed;
+        try { parsed = new URL(url); } catch { throw httpError('主页链接不是有效网址', 400); }
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw httpError('主页链接只支持 HTTP(S)', 400);
+      }
+
+      const authors = await readAuthorLib();
+      const current = oldName ? authors.find((author) => author && author.name === oldName) : null;
+      if (oldName && !current) throw httpError('作者记录已不存在，请刷新后重试', 404);
+      const duplicate = authors.find((author) => author && author.name === name && author.name !== oldName);
+      if (duplicate) throw httpError('作者表中已存在这个名字，请编辑现有记录', 409);
+      if (!current && authors.length >= MAX_AUTHORS) throw httpError(`作者表最多保存 ${MAX_AUTHORS} 条记录`, 409);
+
+      const now = new Date().toISOString();
+      const nextAuthors = current
+        ? authors.map((author) => author === current
+          ? { name, url, createdAt: current.createdAt || now, updatedAt: now }
+          : author)
+        : [{ name, url, createdAt: now, updatedAt: now }].concat(authors);
+
+      const archive = await readArchive();
+      let updatedBookCount = 0;
+      const nextBooks = archive.map((book) => {
+        const isComic = !book.category || book.category === '漫画本';
+        if (!current || !isComic || book.circle !== oldName) return book;
+        updatedBookCount += 1;
+        const next = Object.assign({}, book, { circle: name });
+        if (url) next.authorUrl = url;
+        else delete next.authorUrl;
+        return next;
+      });
+
+      if (updatedBookCount) await writeArchive(nextBooks);
+      try {
+        await writeAuthorLib(nextAuthors);
+      } catch (err) {
+        if (updatedBookCount) {
+          try { await writeArchive(archive); }
+          catch (rollbackErr) { console.error('[authorLib] archive rollback failed', rollbackErr && rollbackErr.message); }
+        }
+        throw err;
+      }
+      return { ok: true, authors: nextAuthors, count: nextAuthors.length, updatedBookCount };
+    }
+
+    /** 删除作者链接记录；保留作品作者名，同时清除精确匹配作品中的主页链接。 */
+    case 'authorDelete': {
+      const name = String(payload.name || '').trim().slice(0, 60);
+      if (!name) throw httpError('缺少作者名', 400);
+      const authors = await readAuthorLib();
+      if (!authors.some((author) => author && author.name === name)) throw httpError('作者记录已不存在，请刷新后重试', 404);
+      const nextAuthors = authors.filter((author) => !author || author.name !== name);
+      const archive = await readArchive();
+      let updatedBookCount = 0;
+      const nextBooks = archive.map((book) => {
+        const isComic = !book.category || book.category === '漫画本';
+        if (!isComic || book.circle !== name || !book.authorUrl) return book;
+        const next = Object.assign({}, book);
+        delete next.authorUrl;
+        updatedBookCount += 1;
+        return next;
+      });
+      if (updatedBookCount) await writeArchive(nextBooks);
+      try {
+        await writeAuthorLib(nextAuthors);
+      } catch (err) {
+        if (updatedBookCount) {
+          try { await writeArchive(archive); }
+          catch (rollbackErr) { console.error('[authorLib] archive rollback failed', rollbackErr && rollbackErr.message); }
+        }
+        throw err;
+      }
+      return { ok: true, authors: nextAuthors, count: nextAuthors.length, updatedBookCount };
     }
 
     case 'upload': {
@@ -2626,6 +2742,8 @@ async function submitGameScore(uid, payload) {
 
     case 'publish': {
       const book = normalizeBook(payload.book || {});
+      const registeredAuthor = (await readAuthorLib()).find((author) => author && author.name === book.circle);
+      if (registeredAuthor && registeredAuthor.url) book.authorUrl = registeredAuthor.url;
       const books = await readArchive();
       const idx = books.findIndex((b) => b && b.id === book.id);
       const replaced = idx >= 0;
@@ -2653,8 +2771,8 @@ async function submitGameScore(uid, payload) {
       book.tags.forEach((t) => { if (lib.indexOf(t) < 0) { lib.push(t); added += 1; } });
       if (added) await writeTagLib(normalizeTagLib(lib));
 
-      // 自动登记「作者名 + 主页链接」到登记表，下次输入同名作者会自动带出链接
-      try { await upsertAuthor(book.circle, book.authorUrl); } catch (e) { console.error('[authorLib] 登记失败', e && e.message); }
+      // 新作者在发布成功后自动登记；没有主页链接也保留作者名，后续可在主表补全。
+      await upsertAuthor(book.circle, book.authorUrl);
 
       return { ok: true, replaced, count: books.length, books };
     }

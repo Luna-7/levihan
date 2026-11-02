@@ -9,5 +9,8 @@
     "build": "npm run build --workspace=vercel-version",
     "lint": "npm run lint --workspace=vercel-version",
     "test": "npm run test --workspace=vercel-version"
+  },
+  "allowScripts": {
+    "esbuild": true
   }
 }

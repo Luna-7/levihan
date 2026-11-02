@@ -44,6 +44,10 @@ export interface ResourceLink {
 export interface GoodsItem {
   /** COS 上的文件名（含扩展名），位于 goods/ 目录下 */
   file: string;
+  /** 周边分类；历史记录没有分类时按 QQ 人处理。 */
+  category?: 'qq' | 'official';
+  /** 官方周边发行方。 */
+  issuer?: string;
   /**
    * 展示名。**可选** —— 周边图往往没有名字：
    * 文件名有意义时脚本自动采用；是相机/微信/截图默认名、纯数字或纯 hash 时留空，

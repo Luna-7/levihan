@@ -27,7 +27,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import 'dotenv/config';
 
 const BUCKET = 'levihan-1325571558';
@@ -252,11 +252,27 @@ try {
     console.log(`  ✓ goods/${file}`);
   }
 
+  let cosEntries = entries;
+  try {
+    const existing = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: 'goods/manifest.json' }));
+    const existingData = JSON.parse(await existing.Body?.transformToString() || '[]');
+    const existingEntries = Array.isArray(existingData) ? existingData : Array.isArray(existingData?.items) ? existingData.items : [];
+    const localFiles = new Set(entries.map((entry) => entry.file));
+    const managedEntries = existingEntries.filter((entry) =>
+      entry && typeof entry.file === 'string' && !localFiles.has(entry.file)
+      && (entry.category === 'official' || entry.file.startsWith('admin-')),
+    );
+    cosEntries = [...entries, ...managedEntries];
+  } catch (err) {
+    if (err?.name !== 'NoSuchKey' && err?.$metadata?.httpStatusCode !== 404) throw err;
+  }
+  const cosManifest = JSON.stringify(cosEntries, null, 2);
+
   await s3.send(
     new PutObjectCommand({
       Bucket: BUCKET,
       Key: 'goods/manifest.json',
-      Body: manifest,
+      Body: cosManifest,
       ContentType: 'application/json; charset=utf-8',
       CacheControl: 'no-cache',
     }),

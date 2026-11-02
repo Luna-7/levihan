@@ -1,6 +1,5 @@
 {
   "outputDirectory": "dist",
-  "installCommand": "npm install --include=optional --package-lock=false",
   "framework": "vite",
   "functions": {
     "api/admin-content.ts": { "regions": ["iad1"] }

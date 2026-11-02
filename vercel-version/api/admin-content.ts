@@ -1,9 +1,10 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createRequire } from 'node:module';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -31,6 +32,7 @@ const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const TOKEN_TTL_SECONDS = 2 * 60 * 60;
 const PUSH_SUBSCRIPTIONS_KEY = 'push-subscriptions.json';
+const GOODS_KEY = 'goods/manifest.json';
 const PUBLIC_ACTIONS = new Set(['status', 'login', 'pushSubscribe', 'pushUnsubscribe']);
 const PUSH_SEND_TIMEOUT_MS = 2500;
 export const config = { api: { bodyParser: false } };
@@ -146,6 +148,43 @@ async function writeJson(key: string, value: unknown) {
     ContentType: 'application/json; charset=utf-8',
     CacheControl: 'no-cache',
   }));
+}
+
+async function readGoods(): Promise<JsonRecord[]> {
+  try {
+    const result = await getCosClient().send(new GetObjectCommand({ Bucket: BUCKET, Key: GOODS_KEY }));
+    const parsed = JSON.parse(await result.Body?.transformToString() || '[]');
+    return Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : [];
+  } catch (error: any) {
+    if (error?.name === 'NoSuchKey' || error?.$metadata?.httpStatusCode === 404) return [];
+    throw error;
+  }
+}
+
+function normalizeGoodsItem(raw: JsonRecord): JsonRecord {
+  const file = String(raw?.file || '').trim();
+  if (!/^[a-zA-Z0-9_.-]{1,120}$/.test(file)) throw fail('素材文件名无效。');
+  const order = Number(raw.order);
+  const scale = Number(raw.scale);
+  const width = Number(raw.width);
+  const height = Number(raw.height);
+  const category = raw.category === 'qq' || raw.category === 'official' ? raw.category : undefined;
+  if (raw.category !== undefined && !category) throw fail('周边分类无效。');
+  const issuer = String(raw.issuer || '').trim().slice(0, 100);
+  if (category === 'official' && !issuer) throw fail('官方周边必须填写发行方。');
+  const hasTitle = Object.prototype.hasOwnProperty.call(raw, 'title');
+  return {
+    file,
+    ...(category ? { category } : {}),
+    ...(issuer ? { issuer } : {}),
+    ...(hasTitle ? { title: String(raw.title || '').trim().slice(0, 60) } : {}),
+    ...(String(raw.note || '').trim() ? { note: String(raw.note).trim().slice(0, 120) } : {}),
+    ...(raw.order !== undefined ? { order: Number.isFinite(order) ? Math.max(0, Math.floor(order)) : 0 } : {}),
+    ...(raw.scale !== undefined ? { scale: Number.isFinite(scale) ? Math.min(100, Math.max(60, Math.round(scale))) : 100 } : {}),
+    ...(raw.visible !== undefined ? { visible: raw.visible !== false } : {}),
+    ...(Number.isFinite(width) && width > 0 ? { width: Math.floor(width) } : {}),
+    ...(Number.isFinite(height) && height > 0 ? { height: Math.floor(height) } : {}),
+  };
 }
 
 function configureWebPush() {
@@ -699,6 +738,53 @@ export default async function handler(request: AdminRequest, response: ServerRes
         await writeJson('announcements.json', next);
         if (imageKey) await getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: imageKey }));
         sendJson(response, 200, { ok: true, id, items: next });
+        return;
+      }
+      case 'goodsList': {
+        const items = await readGoods();
+        sendJson(response, 200, { ok: true, items: items.slice().sort((a, b) => Number(a.order || 0) - Number(b.order || 0)) });
+        return;
+      }
+      case 'goodsUploadUrl': {
+        const { mime, ext } = mimeForImage(payload.contentType);
+        const file = `admin-${Date.now()}-${randomBytes(4).toString('hex')}.${ext}`;
+        const url = await getSignedUrl(
+          getCosClient(),
+          new PutObjectCommand({ Bucket: BUCKET, Key: `goods/${file}`, ContentType: mime }),
+          { expiresIn: 600, signableHeaders: new Set(['content-type']) },
+        );
+        sendJson(response, 200, { ok: true, file, url, contentType: mime });
+        return;
+      }
+      case 'goodsSave': {
+        const item = normalizeGoodsItem(payload.item || {});
+        const items = await readGoods();
+        const index = items.findIndex((entry) => entry?.file === item.file);
+        if (index < 0 && !/^admin-\d{13}-[a-f0-9]{8}\.(?:webp|jpg|png|gif|avif)$/.test(item.file)) {
+          throw fail('素材文件尚未上传。', 404);
+        }
+        const head = await getCosClient().send(new HeadObjectCommand({ Bucket: BUCKET, Key: `goods/${item.file}` }));
+        const bytes = Number(head.ContentLength || 0);
+        if (!bytes || bytes > MAX_FILE_BYTES) throw fail('图片为空或超过 4MB。');
+        const next = { ...(index >= 0 ? items[index] : {}), ...item, bytes };
+        delete (next as JsonRecord).sourceUrl;
+        if (index >= 0) items[index] = next;
+        else items.push(next);
+        items.sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+        const savedItems = items.slice(-300);
+        await writeJson(GOODS_KEY, savedItems);
+        sendJson(response, 200, { ok: true, item: next, items: savedItems });
+        return;
+      }
+      case 'goodsDelete': {
+        const file = String(payload.file || '').trim();
+        if (!/^[a-zA-Z0-9_.-]{1,120}$/.test(file)) throw fail('素材文件名无效。');
+        const items = await readGoods();
+        const next = items.filter((entry) => entry?.file !== file);
+        if (next.length === items.length) throw fail('素材不存在。', 404);
+        await getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: `goods/${file}` }));
+        await writeJson(GOODS_KEY, next);
+        sendJson(response, 200, { ok: true, file, items: next });
         return;
       }
       default:

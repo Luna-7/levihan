@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { imageLoadQueue } from '../utils/imageLoadQueue';
 import { requestDebug } from '../utils/requestDebug';
 
@@ -10,6 +11,7 @@ type LazyComicPageProps = {
   referrerPolicy?: string;
   onLoad?: () => void;
   onError?: () => void;
+  children?: ReactNode;
 };
 
 /**
@@ -27,6 +29,7 @@ export default function LazyComicPage({
   referrerPolicy,
   onLoad,
   onError,
+  children,
 }: LazyComicPageProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
@@ -60,7 +63,6 @@ export default function LazyComicPage({
       // 下一帧又重新插入造成整块闪屏，同时仍能释放真正远离视口的图片。
       unloadTimerRef.current = window.setTimeout(() => {
         setInRange(false);
-        setDisplayReady(false);
       }, 500);
       }, { root: null, rootMargin: '150% 0px 150% 0px', threshold: 0 });
     observer.observe(element);
@@ -156,25 +158,35 @@ export default function LazyComicPage({
         <div className="relative w-full min-h-[240px] bg-[#F6F1E3]" style={{ aspectRatio }}>
           {!displayReady && <div aria-hidden="true" className="absolute inset-0 bg-[#F6F1E3]" />}
           {loaded && inRange && (
-            <img
-              src={src}
-              alt={alt || `第 ${pageNumber} 页`}
-              referrerPolicy={referrerPolicy}
-              decoding="async"
-              draggable={false}
-              onLoad={() => setDisplayReady(true)}
-              className={`absolute inset-0 w-full h-full object-contain block m-0 p-0 border-0 align-top select-none touch-pan-x touch-pan-y bg-[#F6F1E3] transition-opacity duration-150 ${displayReady ? 'opacity-100' : 'opacity-0'}`}
-              style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
-            />
+              <img
+                src={src}
+                alt={alt || `第 ${pageNumber} 页`}
+                referrerPolicy={referrerPolicy}
+                decoding="async"
+                draggable={false}
+                onLoad={() => setDisplayReady(true)}
+                className={`absolute inset-0 w-full h-full object-contain block m-0 p-0 border-0 align-top select-none bg-[#F6F1E3] transition-opacity duration-150 ${displayReady ? 'opacity-100' : 'opacity-0'}`}
+              />
           )}
+          {children}
         </div>
       ) : (
         <>
           {failed && (
-            <div className="w-full py-10 px-4 bg-[#1E2621] border-b border-dashed border-[#34483B] text-center text-[#A69C8E] font-retro-jp space-y-1 block">
+            <div
+              className="w-full min-h-[240px] px-4 bg-[#1E2621] border-b border-dashed border-[#34483B] text-center text-[#A69C8E] font-retro-jp space-y-1 flex flex-col items-center justify-center"
+              style={{ aspectRatio }}
+            >
               <div className="text-sm font-pixel text-[#F9E79F]">第 {pageNumber} 页</div>
-              <div className="text-[11px] text-[#C4B7A6] mt-0.5">图片加载失败</div>
-              <div className="text-[9px] text-[#7A6958]">请检查网络连接或存储桶配置</div>
+              <div className="text-xs text-[#C4B7A6] mt-0.5">图片加载失败</div>
+              <div className="text-xs text-[#A69C8E]">请检查网络连接或存储桶配置</div>
+              <button
+                type="button"
+                onClick={() => setFailed(false)}
+                className="mt-3 min-h-10 px-4 text-xs text-[#F9E79F] underline underline-offset-4"
+              >
+                点击重试
+              </button>
             </div>
           )}
         </>

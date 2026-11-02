@@ -24,12 +24,16 @@
 
 ## COS 跨域规则
 
-在 `levihan-1325571558` 存储桶的跨域访问配置中增加一条规则：
+`levihan-1325571558` 存储桶现有管理台上传规则：
 
 - 来源：`https://admin.levihan.asia`
-- 允许方法：`GET`、`HEAD`、`POST`、`PUT`、`DELETE`、`OPTIONS`
+- 允许方法：`PUT`
 - 允许 Header：`*`
 - 暴露 Header：`ETag`
-- 超时：`600` 秒
+- 超时：`3600` 秒
+
+保留现有公共读取规则（来源 `*`，方法 `GET`、`HEAD`）。管理台 `PUT` 预检和漫画站 `GET` 预检均已验证通过。`OPTIONS` 是浏览器预检请求，COS 控制台的允许方法中无需单独选择。
+
+不要把 `file://` 或通配来源加入 COS 白名单。管理台本地文件只用于预览，上传请使用 HTTPS 管理台。
 
 管理台登录后可上传漫画页、加密漫画和公告图片。公告文字及作品信息通过 Vercel Function 写入桶内的 `announcements.json` 与 `archive.json`；标签和作者索引仍写入 `tags.json` 与 `authors.json`。

@@ -331,10 +331,7 @@ export class COSService {
     }
   }
 
-  /**
-   * 「周边素材」清单（goods/manifest.json）。读不到 → 空数组（区块显示空状态）。
-   * 加图不改代码：把 PNG 丢进本地 goods-src/，跑一次 npm run sync:goods 即可上架。
-   */
+  /** 管理台写入 COS 的清单优先，这样新上传的周边无需重新部署就能展示。 */
   public async loadGoodsList(): Promise<GoodsItem[]> {
     if (!this.config.cdnBaseUrl) return [];
     if (this.cachedGoods && Date.now() - this.goodsFetchedAt < REMOTE_CACHE_TTL_MS) {
@@ -344,13 +341,16 @@ export class COSService {
 
     this.goodsFetchPromise = (async () => {
     try {
-      requestDebug.recordJsonRequest();
-      // 清单和缩略图随 Vercel 部署，列表页不再访问 COS。
-      const resp = await fetch(GOODS_MANIFEST_URL, { cache: 'default' });
-      if (resp.ok) {
-        const data = await resp.json();
-        const list = Array.isArray(data) ? data : data?.items;
-        if (Array.isArray(list)) {
+      // COS 是管理台上传后的即时清单；静态清单保留为 COS 暂时不可用时的回退。
+      const manifestUrls = [this.getObjectUrl('goods/manifest.json'), GOODS_MANIFEST_URL];
+      for (const url of manifestUrls) {
+        try {
+          requestDebug.recordJsonRequest();
+          const resp = await fetch(url, { mode: 'cors', cache: url === GOODS_MANIFEST_URL ? 'default' : 'no-store' });
+          if (!resp.ok) continue;
+          const data = await resp.json();
+          const list = Array.isArray(data) ? data : data?.items;
+          if (!Array.isArray(list)) continue;
           const result = list.filter(
             (it: Partial<GoodsItem> | null): it is GoodsItem =>
               Boolean(it && typeof it.file === 'string' && it.file && it.visible !== false),
@@ -358,6 +358,8 @@ export class COSService {
           this.cachedGoods = result;
           this.goodsFetchedAt = Date.now();
           return result;
+        } catch {
+          // COS 不可用时继续读取静态清单。
         }
       }
     } catch (e) {

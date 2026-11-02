@@ -11,16 +11,17 @@ import { getAccessToken } from '../utils/cloudbaseToken';
 
 interface Props {
   onShowToast: (msg: string) => void;
+  compact?: boolean;
+  categoryFilter?: 'qq' | 'official';
 }
 
 /**
  * 「周边素材」—— 巨人资源里的周边图片区块。
  *
  * 设计要点（前三条为「不占内存 / 不拖慢加载」服务）：
- * 1. **周边资源随 Vercel 部署**：清单、缩略图、预览图和原图都走同源静态文件。
- *    漫画正文仍保留在 COS；组件只在切到「周边素材」分类时才挂载。
- *    组件本身也只在切到「周边素材」分类时才挂载 —— 不进这个分类，零网络请求。
- * 2. **列表只加载缩略图**：缩略图和 1600px 预览图预先生成，**只有点「下载」才取真正的原图**。
+ * 1. **清单读取 COS**：管理员保存后即可展示；旧图片继续使用已生成的静态缩略图。
+ *    组件只在打开周边区域时才挂载，没有打开时不请求素材清单。
+ * 2. **列表只加载缩略图**：管理员上传的图片由 COS 现场缩放，**只有点「下载」才取原图**。
  * 3. **图片离开视口就卸载**：IntersectionObserver 管两件事——进视口才排队加载（并发 2，走 imageLoadQueue），
  *    出视口就把 <img> 从 DOM 摘掉（只留占位高度），长列表滚到底也不会把几十张图堆在内存里。
  *
@@ -63,10 +64,17 @@ function targetWidth(requested: number, originalWidth?: number): number {
 }
 
 function thumbUrlOf(item: GoodsItem): string {
+  if (item.staticThumbUrl) return item.staticThumbUrl;
+  if (item.category === 'official' || item.file.startsWith('admin-')) {
+    return cosService.getGoodsImageUrl(item.file, targetWidth(THUMB_WIDTH, item.width));
+  }
   return cosService.getGoodsThumbUrl(item.file, targetWidth(THUMB_WIDTH, item.width));
 }
 
 function previewUrlOf(item: GoodsItem): string {
+  if (item.category === 'official' || item.file.startsWith('admin-')) {
+    return cosService.getGoodsImageUrl(item.file, targetWidth(PREVIEW_WIDTH, item.width));
+  }
   return cosService.getGoodsPreviewUrl(item.file, targetWidth(PREVIEW_WIDTH, item.width));
 }
 
@@ -172,12 +180,12 @@ const GoodsCard: React.FC<{
         }}
         className="relative z-10 w-full rounded-xs overflow-hidden bg-[#F2ECE0] border border-[#E0D5BE] cursor-pointer"
         style={{ aspectRatio: CARD_RATIO }}
-        title={item.title ? `${item.title} · 点击看大图` : '点击看大图'}
+        title={item.title ? `${item.title}，点击看大图` : '点击看大图'}
       >
         {loaded && inRange ? (
           <img
             src={thumbUrlOf(item)}
-            alt={item.title || `周边 ${index + 1}`}
+            alt={item.title || item.issuer || `周边 ${index + 1}`}
             loading="lazy"
             decoding="async"
             draggable={false}
@@ -190,7 +198,7 @@ const GoodsCard: React.FC<{
           </div>
         )}
         {failed && (
-          <div className="absolute inset-x-0 bottom-0 px-1.5 py-1 bg-[#1E2621]/85 text-center font-retro-jp text-[9px] text-[#C4B7A6]">
+          <div className="absolute inset-x-0 bottom-0 px-1.5 py-1 bg-[#1E2621]/85 text-center font-retro-jp text-xs text-[#C4B7A6]">
             缩略图加载失败
           </div>
         )}
@@ -199,12 +207,17 @@ const GoodsCard: React.FC<{
       <div className="relative z-10 pt-1.5 space-y-1">
         {/* 没有名字就不渲染标题行 —— 纯图墙不留没用的字 */}
         {item.title && (
-          <h4 className="font-pixel text-[11px] sm:text-xs font-bold text-[#1E3A2B] leading-snug break-words">
+          <h4 className="font-pixel text-xs sm:text-sm font-bold text-[#1E3A2B] leading-snug break-words">
             {item.title}
           </h4>
         )}
+        {item.category === 'official' && item.issuer && (
+          <p className="font-retro-jp text-xs text-[var(--amber-12)] leading-tight break-words">
+            发行方：{item.issuer}
+          </p>
+        )}
         {item.note && (
-          <p className="font-retro-jp text-[10px] text-[#8C7A68] leading-tight break-words">
+          <p className="font-retro-jp text-xs text-[#8C7A68] leading-tight break-words">
             {item.note}
           </p>
         )}
@@ -216,7 +229,7 @@ const GoodsCard: React.FC<{
               onDownload(item);
             }}
             disabled={downloading}
-            className="flex-1 px-1.5 py-1 bg-[#1E4334] text-[#F9E79F] border border-[#153025] font-pixel text-[10px] font-bold rounded-xs cursor-pointer enabled:hover:bg-[#2B5E4A] disabled:opacity-60 disabled:cursor-wait whitespace-nowrap"
+            className="flex-1 px-1.5 py-1 bg-[#1E4334] text-[#F9E79F] border border-[#153025] font-pixel text-xs font-bold rounded-xs cursor-pointer enabled:hover:bg-[#2B5E4A] disabled:opacity-60 disabled:cursor-wait whitespace-nowrap"
             title="下载原图"
           >
             {downloading ? '取图中…' : '⬇ 下载'}
@@ -227,7 +240,7 @@ const GoodsCard: React.FC<{
               soundManager.playPageTurn();
               onOpen(index);
             }}
-            className="px-1.5 py-1 bg-[#FAF5E8] text-[#5B4636] border border-[#D5C9AF] font-pixel text-[10px] font-bold rounded-xs cursor-pointer hover:bg-[#F3EAD5] whitespace-nowrap"
+            className="px-1.5 py-1 bg-[#FAF5E8] text-[#5B4636] border border-[#D5C9AF] font-pixel text-xs font-bold rounded-xs cursor-pointer hover:bg-[#F3EAD5] whitespace-nowrap"
             title="看大图"
           >
             看大图
@@ -241,7 +254,7 @@ const GoodsCard: React.FC<{
 /* ------------------------------------------------------------------ */
 /* 区块本体                                                            */
 /* ------------------------------------------------------------------ */
-export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
+export const GoodsShowcase: React.FC<Props> = ({ onShowToast, compact = false, categoryFilter }) => {
   const [items, setItems] = useState<GoodsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
@@ -265,18 +278,34 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
     };
   }, []);
 
+  useEffect(() => {
+    setKeyword('');
+    setActiveIndex(-1);
+  }, [categoryFilter]);
+
   /** 只有确实存在带名字的条目时才提供搜索 —— 纯图模式下搜索框搜不出东西 */
-  const hasNamed = useMemo(() => items.some((it) => (it.title || '').trim().length > 0), [items]);
+  const categoryItems = useMemo(() => {
+    if (!categoryFilter) return items;
+    if (categoryFilter === 'official') return items.filter((item) => item.category === 'official');
+    return items.filter((item) => item.category !== 'official');
+  }, [items, categoryFilter]);
+
+  const hasNamed = useMemo(
+    () => categoryItems.some((it) => (it.title || it.issuer || '').trim().length > 0),
+    [categoryItems],
+  );
 
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    const matched = q ? items.filter((it) => (it.title || '').toLowerCase().includes(q)) : items;
+    const matched = q
+      ? categoryItems.filter((it) => `${it.title || ''} ${it.issuer || ''}`.toLowerCase().includes(q))
+      : categoryItems;
     return newestFirst ? [...matched].reverse() : [...matched];
-  }, [items, keyword, newestFirst]);
+  }, [categoryItems, keyword, newestFirst]);
 
   const activeItem = activeIndex >= 0 ? filtered[activeIndex] : undefined;
   /** 灯箱标题：没有名字时用序号定位，不留空标题 */
-  const titleOf = (it: GoodsItem, index: number) => it.title || `周边 ${index + 1}`;
+  const titleOf = (it: GoodsItem, index: number) => it.title || it.issuer || `周边 ${index + 1}`;
 
   const handleDownload = async (item: GoodsItem) => {
     setDownloading(item.file);
@@ -323,17 +352,18 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
 
   return (
     <div id="goods-showcase-root" className="space-y-2.5">
-      {/* 说明条 */}
-      <div className="p-2 px-3 bg-[#FBF3E4] border-l-3 border-[#B7791F] rounded-r-xs font-retro-jp text-[11px] text-[#5B4636] flex items-center">
-        <div>
-          <span className="font-bold">🖼 周边素材：</span>
-          陈列利韩相关的官方/同人周边原图。列表只加载缩略图，点开看大图，<b>「⬇ 下载」拿到的才是原图</b>。
+      {!compact && (
+        <div className="p-2 px-3 bg-[#FBF3E4] border-l-3 border-[#B7791F] rounded-r-xs font-retro-jp text-xs text-[#5B4636] flex items-center">
+          <div>
+            <span className="font-bold">🖼 周边素材：</span>
+            陈列利韩相关的官方/同人周边原图。列表只加载缩略图，点开看大图，<b>「⬇ 下载」拿到的才是原图</b>。
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex items-center justify-end gap-1.5">
         {/* 搜索：图多、且清单里确实有名字时才出现 */}
-        {hasNamed && items.length > 8 && (
+        {hasNamed && categoryItems.length > 8 && (
           <input
             type="text"
             placeholder="搜索素材名称…"
@@ -353,7 +383,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
         <button
           type="button"
           onClick={() => { soundManager.playWoodTap(); setNewestFirst((value) => !value); setActiveIndex(-1); }}
-          className="shrink-0 rounded-md border border-[#1E4334] bg-[#FAF5E8] px-2.5 py-1.5 font-retro-jp text-[11px] font-bold text-[#1E4334] hover:bg-[#1E4334] hover:text-[#FFF8E7] cursor-pointer"
+          className="shrink-0 rounded-md border border-[#1E4334] bg-[#FAF5E8] px-2.5 py-1.5 font-retro-jp text-xs font-bold text-[#1E4334] hover:bg-[#1E4334] hover:text-[#FFF8E7] cursor-pointer"
           aria-label="切换素材排序"
         >
           {newestFirst ? '↓ 新到旧' : '↑ 旧到新'}
@@ -389,13 +419,17 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
       ) : (
         <div className="p-6 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md font-retro-jp text-xs text-[#8C7A68] space-y-1">
           <div className="text-2xl">🖼</div>
-          {items.length === 0 ? (
+          {categoryItems.length === 0 ? (
             <>
-              <p className="font-bold text-[#5B4636]">周边素材还没有内容</p>
-              <p>把周边图放进本地 goods-src/ 目录，跑一次 npm run sync:goods 就会发布。</p>
+              <p className="font-bold text-[#5B4636]">
+                {categoryFilter === 'official' ? '官方周边合集还没有内容' : '周边图片还没有内容'}
+              </p>
+              {categoryFilter !== 'official' && (
+                <p>周边图片将在发布后显示。</p>
+              )}
             </>
           ) : (
-            <p>没有匹配「{keyword}」的周边，换个词试试～</p>
+            <p>没有匹配「{keyword}」的周边，请换个关键词。</p>
           )}
         </div>
       )}
@@ -446,23 +480,23 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
                 <span className="font-pixel text-xs sm:text-sm font-bold text-[#1E3A2B] break-words">
                   {titleOf(activeItem, activeIndex)}
                 </span>
-                <span className="font-retro-jp text-[10px] text-[#8C7A68] whitespace-nowrap shrink-0">
+                <span className="font-retro-jp text-xs text-[#8C7A68] whitespace-nowrap shrink-0">
                   {activeIndex + 1} / {filtered.length}
                   {activeItem.width && activeItem.height
-                    ? ` · ${activeItem.width}×${activeItem.height}`
+                    ? `，${activeItem.width}×${activeItem.height}`
                     : ''}
-                  {activeItem.bytes ? ` · ${formatBytes(activeItem.bytes)}` : ''}
+                  {activeItem.bytes ? `，${formatBytes(activeItem.bytes)}` : ''}
                 </span>
               </div>
               {activeItem.note && (
-                <p className="font-retro-jp text-[10px] text-[#7A6958]">{activeItem.note}</p>
+                <p className="font-retro-jp text-xs text-[#7A6958]">{activeItem.note}</p>
               )}
               <div className="flex items-center gap-1.5 pt-0.5">
                 <button
                   type="button"
                   onClick={() => handleDownload(activeItem)}
                   disabled={downloading === activeItem.file}
-                  className="flex-1 px-2 py-1.5 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-pixel text-[11px] font-bold rounded-xs cursor-pointer enabled:hover:bg-[#2B5E4A] disabled:opacity-60 disabled:cursor-wait"
+                  className="flex-1 px-2 py-1.5 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-pixel text-xs font-bold rounded-xs cursor-pointer enabled:hover:bg-[#2B5E4A] disabled:opacity-60 disabled:cursor-wait"
                 >
                   {downloading === activeItem.file ? '取图中…' : '⬇ 下载原图'}
                 </button>
@@ -472,7 +506,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast }) => {
                     soundManager.playWoodTap();
                     setActiveIndex(-1);
                   }}
-                  className="px-2 py-1.5 bg-[#FAF5E8] text-[#5B4636] border-2 border-[#D5C9AF] font-pixel text-[11px] font-bold rounded-xs cursor-pointer hover:bg-[#F3EAD5] whitespace-nowrap"
+                  className="px-2 py-1.5 bg-[#FAF5E8] text-[#5B4636] border-2 border-[#D5C9AF] font-pixel text-xs font-bold rounded-xs cursor-pointer hover:bg-[#F3EAD5] whitespace-nowrap"
                 >
                   ✕
                 </button>
