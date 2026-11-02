@@ -579,6 +579,96 @@ export default async function handler(request: AdminRequest, response: ServerRes
         sendJson(response, 200, { ok: true, count: authors.length, authors });
         return;
       }
+      case 'authorImpact': {
+        const name = String(payload.name || '').trim().slice(0, 60);
+        if (!name) throw fail('缺少作者名');
+        const books = await readJsonArray('archive.json');
+        const matching = books.filter((book) => (!book.category || book.category === '漫画本') && book.circle === name);
+        sendJson(response, 200, {
+          ok: true,
+          bookCount: matching.length,
+          linkedBookCount: matching.filter((book) => Boolean(book.authorUrl)).length,
+        });
+        return;
+      }
+      case 'authorSave': {
+        const oldName = String(payload.oldName || '').trim().slice(0, 60);
+        const name = String(payload.name || '').trim().slice(0, 60);
+        const url = String(payload.url || '').trim().slice(0, 300);
+        if (!name) throw fail('作者 / 社团名不能为空');
+        if (url) {
+          let parsed: URL;
+          try { parsed = new URL(url); }
+          catch { throw fail('主页链接不是有效网址'); }
+          if (!['http:', 'https:'].includes(parsed.protocol)) throw fail('主页链接只支持 HTTP(S)');
+        }
+
+        const authors = normalizeAuthors(await readJsonArray('authors.json'));
+        const current = oldName ? authors.find((author) => author.name === oldName) : null;
+        if (oldName && !current) throw fail('作者记录已不存在，请刷新后重试', 404);
+        if (authors.some((author) => author.name === name && author.name !== oldName)) {
+          throw fail('作者表中已存在这个名字，请编辑现有记录', 409);
+        }
+        if (!current && authors.length >= 500) throw fail('作者表最多保存 500 条记录', 409);
+
+        const now = new Date().toISOString();
+        const nextAuthors = current
+          ? authors.map((author) => author === current
+            ? { name, url, createdAt: current.createdAt || now, updatedAt: now }
+            : author)
+          : [{ name, url, createdAt: now, updatedAt: now }, ...authors];
+        const archive = await readJsonArray('archive.json');
+        let updatedBookCount = 0;
+        const nextBooks = archive.map((book) => {
+          if (!current || (book.category && book.category !== '漫画本') || book.circle !== oldName) return book;
+          updatedBookCount += 1;
+          const next = { ...book, circle: name };
+          if (url) next.authorUrl = url;
+          else delete next.authorUrl;
+          return next;
+        });
+
+        if (updatedBookCount) await writeJson('archive.json', nextBooks);
+        try {
+          await writeJson('authors.json', nextAuthors);
+        } catch (error) {
+          if (updatedBookCount) {
+            try { await writeJson('archive.json', archive); }
+            catch (rollbackError) { console.error('[authorLib] archive rollback failed', (rollbackError as Error)?.message); }
+          }
+          throw error;
+        }
+        sendJson(response, 200, { ok: true, authors: nextAuthors, count: nextAuthors.length, updatedBookCount });
+        return;
+      }
+      case 'authorDelete': {
+        const name = String(payload.name || '').trim().slice(0, 60);
+        if (!name) throw fail('缺少作者名');
+        const authors = normalizeAuthors(await readJsonArray('authors.json'));
+        if (!authors.some((author) => author.name === name)) throw fail('作者记录已不存在，请刷新后重试', 404);
+        const nextAuthors = authors.filter((author) => author.name !== name);
+        const archive = await readJsonArray('archive.json');
+        let updatedBookCount = 0;
+        const nextBooks = archive.map((book) => {
+          if ((book.category && book.category !== '漫画本') || book.circle !== name || !book.authorUrl) return book;
+          const next = { ...book };
+          delete next.authorUrl;
+          updatedBookCount += 1;
+          return next;
+        });
+        if (updatedBookCount) await writeJson('archive.json', nextBooks);
+        try {
+          await writeJson('authors.json', nextAuthors);
+        } catch (error) {
+          if (updatedBookCount) {
+            try { await writeJson('archive.json', archive); }
+            catch (rollbackError) { console.error('[authorLib] archive rollback failed', (rollbackError as Error)?.message); }
+          }
+          throw error;
+        }
+        sendJson(response, 200, { ok: true, authors: nextAuthors, count: nextAuthors.length, updatedBookCount });
+        return;
+      }
       case 'cosCredential': {
         const prefix = String(payload.prefix || '');
         await validateCosPrefix(prefix);
