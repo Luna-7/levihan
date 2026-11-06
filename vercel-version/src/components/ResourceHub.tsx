@@ -6,6 +6,7 @@ import { AuNovelReader } from './AuNovelReader';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import {
   CHARACTER_DESIGN_PREVIEW_BOOKS,
+  FORMULA_BOOK_PREVIEW_BOOKS,
   MANGA_PREVIEW_BOOKS,
   SHORT_GIANT_PREVIEW_BOOKS,
   type MangaPreviewBook,
@@ -22,7 +23,7 @@ interface Props {
 
 type ResourceGridItem =
   | { kind: 'link'; resource: ResourceLink }
-  | { kind: 'preview'; collection: 'no-regrets' | 'short-giant' | 'character-design' };
+  | { kind: 'preview'; collection: 'no-regrets' | 'short-giant' | 'character-design' | 'formula-book' };
 
 export const ResourceHub: React.FC<Props> = ({
   onShowToast,
@@ -30,7 +31,7 @@ export const ResourceHub: React.FC<Props> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('动漫原片');
   const [previewBook, setPreviewBook] = useState<MangaPreviewBook | null>(null);
 
-  const allCategories = ['动漫原片', '漫画与手稿', '设定集与分镜', '二创素材', '官方AU小说'];
+  const allCategories = ['动漫原片', '漫画', '设定集与分镜', '二创素材', '官方AU小说'];
 
   const handleAutoJump = (url: string, code?: string) => {
     if (code) {
@@ -63,7 +64,7 @@ export const ResourceHub: React.FC<Props> = ({
     switch (selectedCategory) {
       case '动漫原片':
         return animeLinks;
-      case '漫画与手稿':
+      case '漫画':
         return mangaLinks;
       case '设定集与分镜':
         return settingAndStoryboardLinks;
@@ -76,6 +77,9 @@ export const ResourceHub: React.FC<Props> = ({
 
   const currentCategoryItems = currentCategoryLinks.flatMap<ResourceGridItem>((resource) => {
     if (resource.id === 'r-9') return [{ kind: 'preview', collection: 'short-giant' }];
+    if (resource.id === 'r-18') return [{ kind: 'preview', collection: 'formula-book' }];
+    // r-19 与 r-18 同属「公式书」合集，已由 formula-book 卡片统一承载
+    if (resource.id === 'r-19') return [];
     if (resource.id === 'r-12') return [{
       kind: 'preview',
       collection: selectedCategory === '设定集与分镜' ? 'character-design' : 'no-regrets',
@@ -91,11 +95,14 @@ export const ResourceHub: React.FC<Props> = ({
         if (entry.kind === 'preview') {
           const isShortGiant = entry.collection === 'short-giant';
           const isCharacterDesign = entry.collection === 'character-design';
+          const isFormulaBook = entry.collection === 'formula-book';
           const books = isShortGiant
             ? SHORT_GIANT_PREVIEW_BOOKS
             : isCharacterDesign
               ? CHARACTER_DESIGN_PREVIEW_BOOKS
-              : MANGA_PREVIEW_BOOKS;
+              : isFormulaBook
+                ? FORMULA_BOOK_PREVIEW_BOOKS
+                : MANGA_PREVIEW_BOOKS;
           return (
             <article className={resourceCardClassName} key={entry.collection + '-preview'} style={{ contain: 'layout style paint' }}>
               <CardPatternOverlay opacity={0.10} mode="multiply" />
@@ -106,7 +113,13 @@ export const ResourceHub: React.FC<Props> = ({
                   </span>
                 </div>
                 <h3 className="resource-themed-heading font-pixel text-sm sm:text-base font-bold leading-snug break-words">
-                  {isShortGiant ? '短剧的巨人' : isCharacterDesign ? '人物设定 三视图' : '无悔的选择'}
+                  {isShortGiant
+                    ? '短剧的巨人'
+                    : isCharacterDesign
+                      ? '人物设定 三视图'
+                      : isFormulaBook
+                        ? '进击的巨人 公式书'
+                        : '无悔的选择'}
                 </h3>
               </div>
               <div className="manga-preview-volume-actions">

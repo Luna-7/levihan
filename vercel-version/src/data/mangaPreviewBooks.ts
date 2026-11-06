@@ -69,3 +69,28 @@ export const CHARACTER_DESIGN_PREVIEW_BOOKS: MangaPreviewBook[] = [
     actionLabel: '开始阅读',
   },
 ];
+
+export const FORMULA_BOOK_PREVIEW_BOOKS: MangaPreviewBook[] = [
+  {
+    id: 'formula-outside-attack',
+    title: '公式书中文版 OUTSIDE 攻',
+    volumeLabel: '全一卷',
+    pageCount: 96,
+    pageUrlPrefix:
+      COS_BASE_URL + '/' + encodeURIComponent('进击的巨人_OUTSIDE_攻_公式书'),
+    defaultRotatedPages: [],
+    pageFilePrefix: 'page-',
+    actionLabel: 'OUTSIDE 攻',
+  },
+  {
+    id: 'formula-inside-resist',
+    title: '公式书中文版 INSIDE 抗',
+    volumeLabel: '全一卷',
+    pageCount: 100,
+    pageUrlPrefix:
+      COS_BASE_URL + '/' + encodeURIComponent('进击的巨人_INSIDE_抗_公式书'),
+    defaultRotatedPages: [],
+    pageFilePrefix: 'page-',
+    actionLabel: 'INSIDE 抗',
+  },
+];
