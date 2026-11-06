@@ -30,9 +30,10 @@ export interface PixivArtist {
 export interface ResourceLink {
   id: string;
   title: string;
-  platform: '百度网盘' | '夸克网盘' | '微博' | '在线阅读' | 'AO3' | '站内独立阅读';
+  platform: '百度网盘' | '夸克网盘' | '微博' | '在线阅读' | '跳转阅读' | 'AO3' | '站内独立阅读';
   url: string;
   code?: string;
+  archivePassword?: string;
   category: 'anime' | 'cut' | 'material' | 'manga' | 'link' | 'novel' | 'creative';
   description?: string;
 }

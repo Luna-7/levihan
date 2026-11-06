@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import { MiniProgramJumpGrid } from './MiniProgramJumpGrid';
 import { HomeAnnouncementGrid } from './HomeAnnouncementGrid';
-import { HomeTodaysUpdates } from './HomeTodaysUpdates';
 import { RandomLeviHanBite } from './RandomLeviHanBite';
 import { HomeQuickSubmission } from './HomeQuickSubmission';
 const RestaurantForum = React.lazy(() => import('./RestaurantForum').then(m => ({ default: m.RestaurantForum })));
@@ -13,11 +12,13 @@ const TatakaruGame = React.lazy(() => import('./TatakaruGame').then(m => ({ defa
 const GameLeaderboard = React.lazy(() => import('./GameLeaderboard').then(m => ({ default: m.GameLeaderboard })));
 const PotatoMarket = React.lazy(() => import('./PotatoMarket').then(m => ({ default: m.PotatoMarket })));
 const ResourceHub = React.lazy(() => import('./ResourceHub').then(m => ({ default: m.ResourceHub })));
+const MerchStudio = React.lazy(() => import('./MerchStudio').then(m => ({ default: m.MerchStudio })));
 import { soundManager } from '../utils/audio';
 import { GROUP_INFO } from '../data/initialData';
 import { UiSprite } from './UiSprite';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { useAppShellStore } from '../stores/appShellStore';
+import type { GoodsItem } from '../types';
 
 interface Props {
   onNavigateTab: (tabId: string) => void;
@@ -35,13 +36,14 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
   onToggleSound,
 }) => {
   const pageRef = useRef<HTMLDivElement>(null);
-  const [quickSubmissionCharacter, setQuickSubmissionCharacter] = useState('');
+  const [quickSubmissionCharacter, setQuickSubmissionCharacter] = useState<GoodsItem | null>(null);
   // 选中的沉浸游戏（点击下方街机进入后全屏直接玩）
   const [activeGame, setActiveGame] = useState<'daxigua' | 'hange' | 'lihan' | null>(() => {
     if (typeof window === 'undefined') return null;
     return new URLSearchParams(window.location.search).get('victory-preview') === 'lihan' ? 'lihan' : null;
   });
   const [activeModal, setActiveModal] = useState<'game' | 'leaderboard' | 'rules' | 'doujinshi' | 'resources' | null>(null);
+  const [resourceInitialCategory, setResourceInitialCategory] = useState('动漫原片');
   const [isForumOpen, setIsForumOpen] = useState(false);
   const pendingDoujinOpen = useAppShellStore((state) => state.pendingDoujinOpen);
 
@@ -147,7 +149,10 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
   }, [activeModal, preloadGameAssets]);
 
   const openGameModal = useCallback(() => setActiveModal('game'), []);
-  const openResourceModal = useCallback(() => setActiveModal('resources'), []);
+  const openResourceModal = useCallback((category?: string) => {
+    setResourceInitialCategory(category ?? '动漫原片');
+    setActiveModal('resources');
+  }, []);
 
   if (isForumOpen) {
     return <React.Suspense fallback={null}><RestaurantForum onBack={() => setIsForumOpen(false)} onShowToast={onShowToast} /></React.Suspense>;
@@ -211,7 +216,7 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
 
         <div className="home-quick-actions">
           <RandomLeviHanBite onNavigateTab={onNavigateTab} onShowToast={onShowToast} onPairChange={setQuickSubmissionCharacter} />
-          <HomeQuickSubmission onShowToast={onShowToast} characterImageUrl={quickSubmissionCharacter} />
+          <HomeQuickSubmission onShowToast={onShowToast} character={quickSubmissionCharacter} />
         </div>
 
         {/* ====================================================
@@ -233,16 +238,7 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
           </section>
 
           {/* ====================================================
-              【中段】今日上新（漫画本 / 小说本 / 接力棒）
-             ==================================================== */}
-          <HomeTodaysUpdates
-            onNavigateTab={onNavigateTab}
-            onPreloadTab={onPreloadTab}
-            onShowToast={onShowToast}
-          />
-
-          {/* ====================================================
-              【下段】：2 个大复古羊皮纸入口 (塔塔开 + 巨人资源)
+              【下段】：3 个大复古羊皮纸入口 (塔塔开 + 周边 + 巨人资源)
              ==================================================== */}
           <section className="home-jump-section w-full shrink-0">
             <div>
@@ -730,57 +726,49 @@ export const ImmersiveGameHome: React.FC<Props> = React.memo(({
           }}
         >
           <div
-            className="w-full max-w-2xl max-h-[92dvh] bg-[#FAF5EA] popup-frame-border rounded-2xl shadow-2xl flex flex-col overflow-hidden relative"
+            className={`resource-modal-frame resource-modal-frame--amber ${resourceInitialCategory === '周边素材' ? '' : 'resource-modal-frame--giant'} w-full max-w-2xl max-h-[92dvh] p-px relative`}
             onClick={(e) => e.stopPropagation()}
           >
-            <CardPatternOverlay opacity={0.12} mode="multiply" />
-
-            {/* 弹窗顶部标题栏 */}
-            <div className="relative z-10 flex items-center justify-between px-3 sm:px-4 py-2.5 bg-gradient-to-r from-[#16273B] via-[#243E60] to-[#16273B] text-[#F8FAFC] border-b-2 border-[#C5A059] shrink-0 shadow-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">📚</span>
-                <div>
-                  <h3 className="font-serif-title text-sm sm:text-base font-black text-[#F8FAFC] leading-none">
-                    官方典藏 · 巨人资源
-                  </h3>
-                  <p className="font-retro-jp text-[10px] text-[#E9D5FF] mt-0.5">
-                    动漫原片 · 漫画手稿 · 二创素材 · AU官方小说 · 周边素材
-                  </p>
-                </div>
-              </div>
+            <div className="resource-modal-surface relative flex min-h-0 max-h-[calc(92dvh-2px)] flex-col overflow-hidden">
+              <CardPatternOverlay opacity={0.08} mode="multiply" />
               <button
                 type="button"
                 onClick={() => {
                   soundManager.playWoodTap();
                   setActiveModal(null);
                 }}
-                className="w-7 h-7 rounded-full bg-[#0E1A29] text-[#F8FAFC] hover:bg-[#203652] flex items-center justify-center cursor-pointer shadow-xs shrink-0 transition-colors border border-[#C5A059]/40"
-                title="关闭"
+                className="resource-modal-close absolute z-20 top-2 right-2 flex size-8 items-center justify-center rounded-full border-[0.5px] focus-visible:outline-2 focus-visible:outline-offset-2 cursor-pointer"
+                aria-label={resourceInitialCategory === '周边素材' ? '关闭周边' : '关闭巨人资源'}
               >
-                <X size={15} />
+                <X size={18} aria-hidden="true" />
               </button>
-            </div>
 
-            {/* 弹窗内容区：包含完整的 ResourceHub 组件 */}
-            <div className="relative z-10 flex-1 min-h-0 overflow-y-auto p-2 sm:p-4">
-              <React.Suspense fallback={null}><ResourceHub
-                onCopyCode={(code) => {
-                  soundManager.playCopySuccess();
-                  if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(code).then(
-                      () => onShowToast(`已复制提取码：${code} 📋`),
-                      () => onShowToast(`提取码为：${code}`)
-                    );
-                  } else {
-                    onShowToast(`提取码为：${code}`);
-                  }
-                }}
-                onShowToast={onShowToast}
-                onGoToDoujin={() => {
-                  soundManager.playPageTurn();
-                  setActiveModal('doujinshi');
-                }}
-              /></React.Suspense>
+              <div className={`relative z-10 mt-10 flex-1 min-h-0 overflow-y-auto px-2 pb-2 sm:px-4 sm:pb-4 ${resourceInitialCategory === '周边素材' ? '' : 'mb-16 pt-4 sm:pt-5'}`}>
+                <React.Suspense fallback={null}>
+                  {resourceInitialCategory === '周边素材' ? (
+                    <MerchStudio onShowToast={onShowToast} />
+                  ) : (
+                    <ResourceHub
+                      onCopyCode={(code) => {
+                        soundManager.playCopySuccess();
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                          navigator.clipboard.writeText(code).then(
+                            () => onShowToast(`已复制提取码：${code} 📋`),
+                            () => onShowToast(`提取码为：${code}`)
+                          );
+                        } else {
+                          onShowToast(`提取码为：${code}`);
+                        }
+                      }}
+                      onShowToast={onShowToast}
+                      onGoToDoujin={() => {
+                        soundManager.playPageTurn();
+                        setActiveModal('doujinshi');
+                      }}
+                    />
+                  )}
+                </React.Suspense>
+              </div>
             </div>
           </div>
         </div>,

@@ -4,8 +4,15 @@ import { RESOURCE_LINKS } from '../data/initialData';
 import { soundManager } from '../utils/audio';
 import { AuNovelReader } from './AuNovelReader';
 import { CardPatternOverlay } from './CardPatternOverlay';
+import {
+  CHARACTER_DESIGN_PREVIEW_BOOKS,
+  MANGA_PREVIEW_BOOKS,
+  SHORT_GIANT_PREVIEW_BOOKS,
+  type MangaPreviewBook,
+} from '../data/mangaPreviewBooks';
+import './MangaPageReader.css';
 
-const MerchStudio = React.lazy(() => import('./MerchStudio').then((module) => ({ default: module.MerchStudio })));
+const MangaPageReader = React.lazy(() => import('./MangaPageReader').then((module) => ({ default: module.MangaPageReader })));
 
 interface Props {
   onCopyCode: (code: string) => void;
@@ -13,14 +20,17 @@ interface Props {
   onGoToDoujin?: () => void;
 }
 
+type ResourceGridItem =
+  | { kind: 'link'; resource: ResourceLink }
+  | { kind: 'preview'; collection: 'no-regrets' | 'short-giant' | 'character-design' };
+
 export const ResourceHub: React.FC<Props> = ({
   onShowToast,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('动漫原片');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [previewBook, setPreviewBook] = useState<MangaPreviewBook | null>(null);
 
-  // 「周边素材」集中展示 QQ 人和官方周边，避免首页另设重复入口。
-  const allCategories = ['动漫原片', '漫画与手稿', '二创剪辑/素材', '官方AU小说', '周边素材'];
+  const allCategories = ['动漫原片', '漫画与手稿', '设定集与分镜', '二创素材', '官方AU小说'];
 
   const handleAutoJump = (url: string, code?: string) => {
     if (code) {
@@ -35,14 +45,18 @@ export const ResourceHub: React.FC<Props> = ({
       }
     } else {
       soundManager.playWarpJump();
-      onShowToast('正在为您打开网盘... ↗');
     }
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const animeLinks = RESOURCE_LINKS.filter((r) => r.category === 'anime');
   const creativeLinks = RESOURCE_LINKS.filter((r) => r.category === 'creative');
-  const mangaLinks = RESOURCE_LINKS.filter((r) => r.category === 'manga' || r.category === 'link');
+  const mangaLinks = RESOURCE_LINKS.filter((r) => (
+    (r.category === 'manga' || r.category === 'link') && !['r-10', 'r-17', 'r-18', 'r-19'].includes(r.id)
+  ));
+  const settingAndStoryboardLinks = RESOURCE_LINKS.filter((r) => (
+    r.category === 'manga' && ['r-10', 'r-12', 'r-17', 'r-18', 'r-19'].includes(r.id)
+  ));
 
   // 根据选中的分类过滤
   const currentCategoryLinks = (() => {
@@ -51,169 +65,180 @@ export const ResourceHub: React.FC<Props> = ({
         return animeLinks;
       case '漫画与手稿':
         return mangaLinks;
-      case '二创剪辑/素材':
+      case '设定集与分镜':
+        return settingAndStoryboardLinks;
+      case '二创素材':
         return creativeLinks;
       default:
         return [];
     }
   })();
 
-  const filteredLinks = currentCategoryLinks.filter((item) => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      item.title.toLowerCase().includes(q) ||
-      (item.description && item.description.toLowerCase().includes(q)) ||
-      item.platform.toLowerCase().includes(q)
-    );
+  const currentCategoryItems = currentCategoryLinks.flatMap<ResourceGridItem>((resource) => {
+    if (resource.id === 'r-9') return [{ kind: 'preview', collection: 'short-giant' }];
+    if (resource.id === 'r-12') return [{
+      kind: 'preview',
+      collection: selectedCategory === '设定集与分镜' ? 'character-design' : 'no-regrets',
+    }];
+    return [{ kind: 'link', resource }];
   });
 
-  const renderResourceGrid = (links: ResourceLink[]) => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 w-full">
-      {links.map((item) => (
-        <div
+  const resourceCardClassName = 'resource-themed-card relative overflow-hidden p-3.5 sm:p-4 flex flex-col justify-between group select-none space-y-2.5 w-full';
+
+  const renderResourceGrid = (entries: ResourceGridItem[]) => (
+    <div className="grid grid-cols-1 gap-2.5 w-full">
+      {entries.map((entry) => {
+        if (entry.kind === 'preview') {
+          const isShortGiant = entry.collection === 'short-giant';
+          const isCharacterDesign = entry.collection === 'character-design';
+          const books = isShortGiant
+            ? SHORT_GIANT_PREVIEW_BOOKS
+            : isCharacterDesign
+              ? CHARACTER_DESIGN_PREVIEW_BOOKS
+              : MANGA_PREVIEW_BOOKS;
+          return (
+            <article className={resourceCardClassName} key={entry.collection + '-preview'} style={{ contain: 'layout style paint' }}>
+              <CardPatternOverlay opacity={0.10} mode="multiply" />
+              <div className="relative z-10 space-y-2">
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="resource-themed-badge resource-themed-badge--preview text-xs px-2 py-0.5 font-pixel font-bold whitespace-nowrap">
+                    在线预览
+                  </span>
+                </div>
+                <h3 className="resource-themed-heading font-pixel text-sm sm:text-base font-bold leading-snug break-words">
+                  {isShortGiant ? '短剧的巨人' : isCharacterDesign ? '人物设定 三视图' : '无悔的选择'}
+                </h3>
+              </div>
+              <div className="manga-preview-volume-actions">
+                {books.map((book) => (
+                  <button
+                    className="manga-preview-open-button"
+                    key={book.id}
+                    type="button"
+                    onClick={() => setPreviewBook(book)}
+                  >
+                    {book.actionLabel ?? book.volumeLabel}
+                  </button>
+                ))}
+              </div>
+            </article>
+          );
+        }
+        const item = entry.resource;
+        const platformBadgeVariant = item.platform === '夸克网盘'
+          ? 'quark'
+          : item.platform === '百度网盘'
+            ? 'baidu'
+            : item.platform === '在线阅读' || item.platform === '跳转阅读' || item.platform === '站内独立阅读'
+              ? 'preview'
+              : 'weibo';
+        const isExternalReadingLink = item.platform === '在线阅读' || item.platform === '跳转阅读' || item.platform === '站内独立阅读';
+        return (
+        <button
+          type="button"
           key={item.id}
           onClick={() => handleAutoJump(item.url, item.code)}
           onMouseEnter={() => soundManager.playCardHover()}
-          className="relative overflow-hidden bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:shadow-md group select-none cursor-pointer space-y-2.5 w-full"
+          className={resourceCardClassName + ' cursor-pointer text-left'}
           style={{ contain: 'layout style paint' }}
-          title="点击即可自动复制提取码并打开网盘"
+          title={isExternalReadingLink ? '打开在线阅读页面' : item.platform === '微博' ? '打开微博内容' : '点击即可自动复制提取码并打开网盘'}
         >
           <CardPatternOverlay opacity={0.10} mode="multiply" />
           <div className="relative z-10 space-y-2">
             {/* Top Badges */}
             <div className="flex items-center justify-between gap-1.5 flex-wrap">
               <span
-                className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-xs font-pixel font-bold border whitespace-nowrap ${
-                  item.platform === '百度网盘'
-                    ? 'bg-[#EBF5FB] text-[#1A5276] border-[#2980B9]'
-                    : item.platform === '夸克网盘'
-                    ? 'bg-[#FEF9E7] text-[#7D6608] border-[#B7950B]'
-                    : 'bg-[#FADBD8] text-[#78281F] border-[#C0392B]'
-                }`}
+                className={`resource-themed-badge resource-themed-badge--${platformBadgeVariant} text-xs px-2 py-0.5 font-pixel font-bold whitespace-nowrap`}
               >
                 {item.platform}
               </span>
 
               {item.code ? (
-                <span className="font-pixel text-[10px] sm:text-xs text-[#7D6608] bg-[#FEF9E7] border border-[#B7950B] px-2 py-0.5 rounded-xs font-bold flex items-center gap-1 whitespace-nowrap">
+                <span className="resource-themed-badge resource-themed-badge--code font-pixel text-xs px-2 py-0.5 font-bold flex items-center gap-1 whitespace-nowrap">
                   <span>📋 提取码</span>
                   <span>{item.code}</span>
                 </span>
-              ) : (
-                <span className="font-pixel text-[10px] sm:text-xs text-[#1E8449] bg-[#E8F8F5] border border-[#27AE60] px-2 py-0.5 rounded-xs font-bold whitespace-nowrap">
+              ) : item.platform !== '微博' && !isExternalReadingLink ? (
+                <span className="resource-themed-badge resource-themed-badge--code font-pixel text-xs px-2 py-0.5 font-bold whitespace-nowrap">
                   免提取码
+                </span>
+              ) : null}
+              {item.archivePassword && (
+                <span className="resource-themed-badge resource-themed-badge--code font-pixel text-xs px-2 py-0.5 font-bold flex items-center gap-1 whitespace-nowrap">
+                  <span>解压密码</span>
+                  <span>{item.archivePassword}</span>
                 </span>
               )}
             </div>
 
             {/* Title */}
-            <h3 className="font-pixel text-sm sm:text-base font-bold text-[#1E3A2B] group-hover:text-[#B7791F] leading-snug break-words transition-colors">
+            <h3 className="resource-themed-heading font-pixel text-sm sm:text-base font-bold leading-snug break-words">
               {item.title}
             </h3>
 
-            {/* Description */}
-            {item.description && (
-              <p className="text-xs font-retro-jp text-[#7A6958] leading-relaxed line-clamp-2">
-                {item.description}
-              </p>
-            )}
           </div>
-
-          {/* Action Hint */}
-          <div className="pt-2 border-t border-dashed border-[#E0D5BE] flex items-center justify-between text-xs font-retro-jp text-[#8C7A68] group-hover:text-[#1E4334] whitespace-nowrap">
-            <span className="flex items-center gap-1.5">
-              <span>🚀</span>
-              <span>点击直达网盘</span>
-            </span>
-            <span className="font-pixel text-xs group-hover:translate-x-0.5 transition-transform font-bold text-[#1E4334]">
-              ↗
-            </span>
-          </div>
-        </div>
-      ))}
+        </button>
+        );
+      })}
     </div>
   );
 
+  const renderCategoryTab = (category: string) => (
+    <button
+      key={category}
+      onClick={() => {
+        soundManager.playFilterClick();
+        setSelectedCategory(category);
+      }}
+      onMouseEnter={() => soundManager.playCardHover()}
+      className={`resource-filter-tab px-3 py-1.5 cursor-pointer text-xs sm:text-sm whitespace-nowrap select-none ${selectedCategory === category ? 'resource-filter-tab--active font-bold' : ''}`}
+    >
+      {category}
+    </button>
+  );
+
   return (
-    <div id="official-resources-root" className="space-y-3 text-[#2C241D] select-text">
-      {/* 官方文献馆提示语 */}
-      <div className="p-2 px-3 bg-[#EAF2EE] border-l-3 border-[#1E4334] rounded-r-xs font-retro-jp text-[11px] text-[#1E4334] flex items-center">
-        <div>
-          <span className="font-bold">📚 官方资料馆：</span>
-          收录《进击的巨人》官方原片、原画分镜手稿、设定公式书、二创音画剪辑母盘与官方授权AU小说；另有「周边素材」陈列周边 PNG 原图。
-        </div>
-      </div>
-
-      {/* 筛选与搜索栏 (与土豆粮仓保持完全一致的样式) */}
-      <div className="relative overflow-hidden bg-[#FFFEEF] border border-[#D5C9AF] rounded-md p-2.5 sm:p-3 space-y-2">
-        <CardPatternOverlay opacity={0.12} mode="multiply" />
-        {/* 分类按钮栏 (多行跟随设备动态切换) */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-pixel text-[#8C7A68] mr-1 shrink-0 whitespace-nowrap">分类:</span>
-          {allCategories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => {
-                soundManager.playFilterClick();
-                setSelectedCategory(cat);
-              }}
-              onMouseEnter={() => soundManager.playCardHover()}
-              className={`px-3 py-1.5 rounded-xs border transition-all cursor-pointer text-xs sm:text-sm shrink-0 whitespace-nowrap select-none active:scale-95 ${
-                selectedCategory === cat
-                  ? 'bg-[#1E4334] text-[#F9E79F] border-[#1E4334] font-bold shadow-xs'
-                  : 'bg-[#FAF5E8] text-[#5B4636] border-[#D5C9AF] hover:bg-[#F3EAD5] active:bg-[#EAE2CE]'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        {/* 搜索框 (官方AU小说自带阅读器内置目录、周边素材自带搜索，其余分类提供搜索) */}
-        {selectedCategory !== '官方AU小说' && selectedCategory !== '周边素材' && (
-          <div className="flex items-center gap-1.5 pt-1 border-t border-dashed border-[#E0D5BE]">
-            <input
-              type="text"
-              placeholder="快速检索标题、格式、内容描述或网盘平台..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="px-2.5 py-1.5 text-xs sm:text-sm font-retro-jp bg-[#FAF5E8] border border-[#BFA985] rounded-xs w-full focus:outline-none focus:border-[#1E4334]"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="text-xs sm:text-sm text-[#8C7A68] hover:text-[#1E4334] px-1 cursor-pointer whitespace-nowrap shrink-0"
-              >
-                ✕
-              </button>
-            )}
+    <div id="official-resources-root" className="manga-preview-region space-y-3 text-[var(--resource-text)] select-text">
+      <div className="space-y-1.5">
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1.5">
+          <span className="pt-1.5 text-xs font-pixel whitespace-nowrap">分类:</span>
+          <div className="grid grid-cols-3 gap-1.5">
+            {allCategories.slice(0, 3).map(renderCategoryTab)}
           </div>
-        )}
+          <span aria-hidden="true" />
+          <div className="grid grid-cols-2 gap-1.5">
+            {allCategories.slice(3).map(renderCategoryTab)}
+          </div>
+        </div>
       </div>
 
-      {/* 周边分类集中在资源中心，避免首页重复入口 */}
-      {selectedCategory === '周边素材' ? (
-        <div className="mb-6">
-          <React.Suspense fallback={<div className="py-12 text-center text-sm text-[#8C7A68]">正在打开周边列表…</div>}>
-            <MerchStudio onShowToast={onShowToast} />
-          </React.Suspense>
-        </div>
-      ) : selectedCategory === '官方AU小说' ? (
+      {selectedCategory === '官方AU小说' ? (
         /* 📜 官方AU小说专区 */
         <div className="mb-6">
           <AuNovelReader onShowToast={onShowToast} />
         </div>
       ) : (
-        <div>
-          {filteredLinks.length > 0 ? (
-            renderResourceGrid(filteredLinks)
+        <div className="px-3 pb-8 sm:px-4 sm:pb-10">
+          {currentCategoryItems.length > 0 ? (
+            renderResourceGrid(currentCategoryItems)
           ) : (
-            <div className="p-8 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md text-xs font-retro-jp text-[#8C7A68]">
-              未找到匹配的官方资料，您可以清空搜索词重试～
+            <div className="resource-themed-card p-8 text-center text-xs font-retro-jp">
+              暂无资源
             </div>
           )}
         </div>
+      )}
+
+      {previewBook && (
+        <React.Suspense
+          fallback={(
+            <div className="manga-reader-backdrop manga-preview-ui" role="status">
+              <div className="manga-reader-loading-shell">正在打开阅读器…</div>
+            </div>
+          )}
+        >
+          <MangaPageReader key={previewBook.id} book={previewBook} onClose={() => setPreviewBook(null)} />
+        </React.Suspense>
       )}
     </div>
   );

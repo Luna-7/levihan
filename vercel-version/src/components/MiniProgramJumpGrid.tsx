@@ -3,7 +3,7 @@ import { soundManager } from '../utils/audio';
 
 interface Props {
   onOpenGameModal: () => void;
-  onOpenResourceModal: () => void;
+  onOpenResourceModal: (category?: string) => void;
   onPreloadTab?: (tabId: string) => void;
 }
 
@@ -15,11 +15,12 @@ export const MiniProgramJumpGrid: React.FC<Props> = React.memo(({
   return (
     <div className="home-jump-grid w-full select-none relative z-0 px-1 sm:px-2">
       {/* ====================================================
-          首页 2 个复古羊皮纸勋章入口
+          首页 3 个复古羊皮纸勋章入口
           1. 塔塔开 (街机训练)
-          2. 巨人资源 (官方典藏)
+          2. 周边
+          3. 巨人资源 (官方典藏)
          ==================================================== */}
-      <div className="w-full grid grid-cols-2 gap-2 sm:gap-3 max-w-md mx-auto items-end justify-items-center">
+      <div className="w-full grid grid-cols-3 gap-2 sm:gap-3 max-w-md mx-auto items-end justify-items-center">
         {/* ==================== 1: 塔塔开 (街机训练) ==================== */}
         <button
           type="button"
@@ -51,7 +52,40 @@ export const MiniProgramJumpGrid: React.FC<Props> = React.memo(({
           </div>
         </button>
 
-        {/* ==================== 2: 巨人资源 (官方典藏) ==================== */}
+        {/* ==================== 2: 周边 ==================== */}
+        <button
+          type="button"
+          onClick={() => {
+            soundManager.playScrollOpen();
+            onOpenResourceModal('周边素材');
+          }}
+          onMouseEnter={() => {
+            onPreloadTab?.('resources');
+            void import('./ResourceHub');
+          }}
+          onTouchStart={() => {
+            onPreloadTab?.('resources');
+            void import('./ResourceHub');
+          }}
+          className="group flex flex-col items-center cursor-pointer p-0"
+          id="btn-jump-merch"
+          aria-label="周边"
+          title="浏览周边"
+        >
+          <div className="home-jump-art relative w-[103px] sm:w-[137px] md:w-[154px] aspect-[681/647]">
+            <img
+              src="/images/merch-button.webp"
+              alt="周边"
+              draggable={false}
+              width={384}
+              height={365}
+              decoding="async"
+              className="absolute inset-0 w-full h-full pointer-events-none select-none transition-transform duration-200 ease-out group-hover:scale-105 group-active:scale-110"
+            />
+          </div>
+        </button>
+
+        {/* ==================== 3: 巨人资源 (官方典藏) ==================== */}
         <button
           type="button"
           onClick={() => {

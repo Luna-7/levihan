@@ -166,7 +166,7 @@ const GoodsCard: React.FC<{
   // 统一比例：所有卡片等高，网格齐整（图片用 object-contain，图本身不会被裁）
   return (
     <div
-      className="relative overflow-hidden bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] rounded-md p-2 sm:p-2.5 flex flex-col transition-all hover:shadow-md group select-none"
+      className="resource-themed-card relative overflow-hidden p-2 sm:p-2.5 flex flex-col group select-none"
       style={{ contain: 'layout style paint' }}
       onMouseEnter={() => soundManager.playCardHover()}
     >
@@ -178,7 +178,7 @@ const GoodsCard: React.FC<{
           soundManager.playPageTurn();
           onOpen(index);
         }}
-        className="relative z-10 w-full rounded-xs overflow-hidden bg-[#F2ECE0] border border-[#E0D5BE] cursor-pointer"
+        className="relative z-10 w-full rounded-xs overflow-hidden bg-[var(--resource-surface)] border-[0.5px] border-[var(--resource-card-border)] cursor-pointer"
         style={{ aspectRatio: CARD_RATIO }}
         title={item.title ? `${item.title}，点击看大图` : '点击看大图'}
       >
@@ -193,12 +193,12 @@ const GoodsCard: React.FC<{
             style={{ transform: `scale(${Math.min(1, Math.max(0.6, Number(item.scale || 100) / 100))})` }}
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-lg text-[#C4B7A6] font-pixel">
+          <div className="absolute inset-0 flex items-center justify-center text-lg text-[var(--resource-text)] font-pixel">
             {failed ? '🖼' : ''}
           </div>
         )}
         {failed && (
-          <div className="absolute inset-x-0 bottom-0 px-1.5 py-1 bg-[#1E2621]/85 text-center font-retro-jp text-xs text-[#C4B7A6]">
+          <div className="absolute inset-x-0 bottom-0 px-1.5 py-1 bg-[var(--resource-plum)] text-center font-retro-jp text-xs text-[var(--resource-cream)]">
             缩略图加载失败
           </div>
         )}
@@ -207,17 +207,17 @@ const GoodsCard: React.FC<{
       <div className="relative z-10 pt-1.5 space-y-1">
         {/* 没有名字就不渲染标题行 —— 纯图墙不留没用的字 */}
         {item.title && (
-          <h4 className="font-pixel text-xs sm:text-sm font-bold text-[#1E3A2B] leading-snug break-words">
+          <h4 className="resource-themed-heading font-pixel text-xs sm:text-sm font-bold leading-snug break-words">
             {item.title}
           </h4>
         )}
         {item.category === 'official' && item.issuer && (
-          <p className="font-retro-jp text-xs text-[var(--amber-12)] leading-tight break-words">
+          <p className="font-retro-jp text-xs text-[var(--resource-text)] leading-tight break-words">
             发行方：{item.issuer}
           </p>
         )}
         {item.note && (
-          <p className="font-retro-jp text-xs text-[#8C7A68] leading-tight break-words">
+          <p className="font-retro-jp text-xs text-[var(--resource-text)] leading-tight break-words">
             {item.note}
           </p>
         )}
@@ -229,7 +229,7 @@ const GoodsCard: React.FC<{
               onDownload(item);
             }}
             disabled={downloading}
-            className="flex-1 px-1.5 py-1 bg-[#1E4334] text-[#F9E79F] border border-[#153025] font-pixel text-xs font-bold rounded-xs cursor-pointer enabled:hover:bg-[#2B5E4A] disabled:opacity-60 disabled:cursor-wait whitespace-nowrap"
+            className="resource-primary-action flex-1 px-1.5 py-1 font-pixel text-xs font-bold rounded-xs cursor-pointer disabled:opacity-60 disabled:cursor-wait whitespace-nowrap"
             title="下载原图"
           >
             {downloading ? '取图中…' : '⬇ 下载'}
@@ -240,7 +240,7 @@ const GoodsCard: React.FC<{
               soundManager.playPageTurn();
               onOpen(index);
             }}
-            className="px-1.5 py-1 bg-[#FAF5E8] text-[#5B4636] border border-[#D5C9AF] font-pixel text-xs font-bold rounded-xs cursor-pointer hover:bg-[#F3EAD5] whitespace-nowrap"
+            className="resource-secondary-action px-1.5 py-1 font-pixel text-xs font-bold rounded-xs cursor-pointer whitespace-nowrap"
             title="看大图"
           >
             看大图
@@ -369,13 +369,13 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast, compact = false, c
             placeholder="搜索素材名称…"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            className="px-2.5 py-1.5 text-xs sm:text-sm font-retro-jp bg-[#FAF5E8] border border-[#BFA985] rounded-xs min-w-0 flex-1 focus:outline-none focus:border-[#1E4334]"
+            className="resource-filter-input px-2.5 py-1.5 text-xs sm:text-sm font-retro-jp rounded-xs min-w-0 flex-1 focus:outline-none"
           />
         )}
         {keyword && (
             <button
               onClick={() => setKeyword('')}
-              className="text-xs sm:text-sm text-[#8C7A68] hover:text-[#1E4334] px-1 cursor-pointer whitespace-nowrap shrink-0"
+              className="text-xs sm:text-sm text-[var(--resource-text)] px-1 cursor-pointer whitespace-nowrap shrink-0"
             >
               ✕
             </button>
@@ -383,7 +383,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast, compact = false, c
         <button
           type="button"
           onClick={() => { soundManager.playWoodTap(); setNewestFirst((value) => !value); setActiveIndex(-1); }}
-          className="shrink-0 rounded-md border border-[#1E4334] bg-[#FAF5E8] px-2.5 py-1.5 font-retro-jp text-xs font-bold text-[#1E4334] hover:bg-[#1E4334] hover:text-[#FFF8E7] cursor-pointer"
+          className="resource-secondary-action shrink-0 rounded-md px-2.5 py-1.5 font-retro-jp text-xs font-bold cursor-pointer"
           aria-label="切换素材排序"
         >
           {newestFirst ? '↓ 新到旧' : '↑ 旧到新'}
@@ -395,11 +395,11 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast, compact = false, c
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="bg-[#FFFEEF] border-2 border-[#D5C9AF] rounded-md p-2.5 animate-pulse"
+              className="resource-themed-card p-2.5 animate-pulse"
             >
-              <div className="w-full rounded-xs bg-[#EFE7D8]" style={{ aspectRatio: CARD_RATIO }} />
-              <div className="h-2.5 mt-2 rounded-xs bg-[#EFE7D8]" />
-              <div className="h-2.5 mt-1.5 w-2/3 rounded-xs bg-[#EFE7D8]" />
+              <div className="w-full rounded-xs bg-[var(--resource-surface)]" style={{ aspectRatio: CARD_RATIO }} />
+              <div className="h-2.5 mt-2 rounded-xs bg-[var(--resource-surface)]" />
+              <div className="h-2.5 mt-1.5 w-2/3 rounded-xs bg-[var(--resource-surface)]" />
             </div>
           ))}
         </div>
@@ -417,11 +417,11 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast, compact = false, c
           ))}
         </div>
       ) : (
-        <div className="p-6 text-center bg-[#FFFEEF] border border-dashed border-[#D5C9AF] rounded-md font-retro-jp text-xs text-[#8C7A68] space-y-1">
+        <div className="resource-themed-card p-6 text-center font-retro-jp text-xs space-y-1">
           <div className="text-2xl">🖼</div>
           {categoryItems.length === 0 ? (
             <>
-              <p className="font-bold text-[#5B4636]">
+              <p className="resource-themed-heading font-bold">
                 {categoryFilter === 'official' ? '官方周边合集还没有内容' : '周边图片还没有内容'}
               </p>
               {categoryFilter !== 'official' && (
@@ -437,7 +437,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast, compact = false, c
       {/* 灯箱：只有点开才请求预览图；关闭即卸载 DOM，图不在内存里常驻 */}
       {activeItem && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[1400] bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-3 select-none animate-in fade-in duration-150"
+          className="resource-lightbox fixed inset-0 z-[1400] bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-3 select-none animate-in fade-in duration-150"
           onClick={() => setActiveIndex(-1)}
         >
           <div
@@ -451,14 +451,14 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast, compact = false, c
                 decoding="async"
                 draggable={false}
                 onLoad={() => requestDebug.recordImageLoad()}
-                className="max-h-[74dvh] max-w-full object-contain rounded-md border-2 border-[#C5A059]/50 shadow-2xl bg-[#FFFEEF]"
+                className="max-h-[74dvh] max-w-full object-contain rounded-md border-[0.5px] border-[var(--resource-card-border)] shadow-2xl bg-[var(--resource-cream)]"
               />
               {filtered.length > 1 && (
                 <>
                   <button
                     type="button"
                     onClick={() => step(-1)}
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-8 h-12 bg-black/45 hover:bg-black/70 text-[#F9E79F] font-pixel rounded-xs cursor-pointer"
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-8 h-12 bg-[var(--resource-plum)] text-[var(--resource-cream)] font-pixel rounded-xs cursor-pointer"
                     title="上一张"
                   >
                     ‹
@@ -466,7 +466,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast, compact = false, c
                   <button
                     type="button"
                     onClick={() => step(1)}
-                    className="absolute right-0 top-1/2 -translate-y-1/2 w-8 h-12 bg-black/45 hover:bg-black/70 text-[#F9E79F] font-pixel rounded-xs cursor-pointer"
+                    className="absolute right-0 top-1/2 -translate-y-1/2 w-8 h-12 bg-[var(--resource-plum)] text-[var(--resource-cream)] font-pixel rounded-xs cursor-pointer"
                     title="下一张"
                   >
                     ›
@@ -475,12 +475,12 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast, compact = false, c
               )}
             </div>
 
-            <div className="shrink-0 bg-[#FAF5EA] border border-[#C5A059]/50 rounded-md px-3 py-2 space-y-1.5">
+            <div className="shrink-0 bg-[var(--resource-cream)] border-[0.5px] border-[var(--resource-card-border)] rounded-md px-3 py-2 space-y-1.5">
               <div className="flex items-baseline justify-between gap-2">
-                <span className="font-pixel text-xs sm:text-sm font-bold text-[#1E3A2B] break-words">
+                <span className="font-pixel text-xs sm:text-sm font-bold text-[var(--resource-heading)] break-words">
                   {titleOf(activeItem, activeIndex)}
                 </span>
-                <span className="font-retro-jp text-xs text-[#8C7A68] whitespace-nowrap shrink-0">
+                <span className="font-retro-jp text-xs text-[var(--resource-text)] whitespace-nowrap shrink-0">
                   {activeIndex + 1} / {filtered.length}
                   {activeItem.width && activeItem.height
                     ? `，${activeItem.width}×${activeItem.height}`
@@ -489,14 +489,14 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast, compact = false, c
                 </span>
               </div>
               {activeItem.note && (
-                <p className="font-retro-jp text-xs text-[#7A6958]">{activeItem.note}</p>
+                <p className="font-retro-jp text-xs text-[var(--resource-text)]">{activeItem.note}</p>
               )}
               <div className="flex items-center gap-1.5 pt-0.5">
                 <button
                   type="button"
                   onClick={() => handleDownload(activeItem)}
                   disabled={downloading === activeItem.file}
-                  className="flex-1 px-2 py-1.5 bg-[#1E4334] text-[#F9E79F] border-2 border-[#153025] font-pixel text-xs font-bold rounded-xs cursor-pointer enabled:hover:bg-[#2B5E4A] disabled:opacity-60 disabled:cursor-wait"
+                  className="resource-primary-action flex-1 px-2 py-1.5 font-pixel text-xs font-bold rounded-xs cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                 >
                   {downloading === activeItem.file ? '取图中…' : '⬇ 下载原图'}
                 </button>
@@ -506,7 +506,7 @@ export const GoodsShowcase: React.FC<Props> = ({ onShowToast, compact = false, c
                     soundManager.playWoodTap();
                     setActiveIndex(-1);
                   }}
-                  className="px-2 py-1.5 bg-[#FAF5E8] text-[#5B4636] border-2 border-[#D5C9AF] font-pixel text-xs font-bold rounded-xs cursor-pointer hover:bg-[#F3EAD5] whitespace-nowrap"
+                  className="resource-secondary-action px-2 py-1.5 font-pixel text-xs font-bold rounded-xs cursor-pointer whitespace-nowrap"
                 >
                   ✕
                 </button>

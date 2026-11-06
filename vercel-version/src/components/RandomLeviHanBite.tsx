@@ -9,6 +9,7 @@ import { soundManager } from '../utils/audio';
 import { useAppShellStore } from '../stores/appShellStore';
 import { CardPatternOverlay } from './CardPatternOverlay';
 import { scheduleNonCriticalTask } from '../utils/scheduleNonCriticalTask';
+import { handleGoodsImageError } from '../utils/goodsImageFallback';
 
 type BiteItem = {
   id: string;
@@ -60,7 +61,7 @@ const pick = <T,>(items: T[]): T | undefined => items.length ? items[Math.floor(
 export const RandomLeviHanBite: React.FC<{
   onNavigateTab: (tab: string) => void;
   onShowToast: (msg: string) => void;
-  onPairChange?: (secondCharacterUrl: string) => void;
+  onPairChange?: (secondCharacter: GoodsItem | null) => void;
 }> = React.memo(({ onNavigateTab, onShowToast, onPairChange }) => {
   const [goods, setGoods] = useState<GoodsItem[]>([]);
   const [pool, setPool] = useState<BiteItem[]>(() => TRIVIA.map((detail, index) => ({ id:`trivia-${index}`, kind:'trivia', label:'琐事', title:'LeviHan 琐事', detail, source:'LeviHan Wiki · Trivia（外链）', externalUrl:WIKI_URL })));
@@ -103,7 +104,7 @@ export const RandomLeviHanBite: React.FC<{
 
   const pair = useMemo(() => goods.length >= 2 ? [goods[pairStart % goods.length], goods[(pairStart + 1) % goods.length]] : goods.slice(0, 2), [goods, pairStart]);
   useEffect(() => {
-    onPairChange?.(pair[1] ? cosService.getGoodsThumbUrl(pair[1].file, 240) : '');
+    onPairChange?.(pair[1] || null);
   }, [onPairChange, pair]);
   const reroll = useCallback(() => {
     soundManager.playBlip();
@@ -138,7 +139,7 @@ export const RandomLeviHanBite: React.FC<{
   return <section className="home-quick-action-shell home-random-bite mx-2.5 sm:mx-4 lg:mx-6 mt-1.5">
     <button type="button" onClick={() => selected && setDetailOpen(true)} className="home-quick-card relative block h-full w-full overflow-hidden rounded-xl bg-[#FAF3E3]/95 pl-3 pr-16 shadow-[0_2px_7px_rgba(140,108,71,.18)] transition-transform hover:bg-[#FFF8E9] active:scale-[.99] cursor-pointer">
       <CardPatternOverlay opacity={0.07} mode="multiply" />
-      {pair[0] && <img src={cosService.getGoodsThumbUrl(pair[0].file, 240)} alt={pair[0].title || '随机人物'} className="home-quick-character absolute right-1 object-contain object-bottom" loading="lazy" decoding="async" />}
+      {pair[0] && <img key={pair[0].file} src={cosService.getGoodsThumbUrl(pair[0].file, 240)} onError={(event) => handleGoodsImageError(event, pair[0].file, '/images/home-bite-pair.png')} alt={pair[0].title || '随机人物'} className="home-quick-character absolute right-1 object-contain object-bottom" loading="lazy" decoding="async" />}
       <span className="relative z-10 flex h-full min-w-0 flex-col items-start justify-center text-left">
         <span className="flex items-center gap-1.5 font-serif-title text-sm sm:text-base font-black text-[#1E4334]"><Dices size={16} strokeWidth={2.5} aria-hidden="true" />嗑一口利韩</span>
         <span className="mt-0.5 flex items-center gap-1 text-[9px] text-[#8C6C47]">点击抽取今日份利韩 <b className="text-[10px]">›</b></span>

@@ -2437,6 +2437,9 @@ async function loadBookImagesForEdit(b){
     show($('main-msg'), 'err', '这本作品没有可读取的页面文件记录。');
     return false;
   }
+  var nameCounts = Object.create(null);
+  names.forEach(function(name){ nameCounts[name] = (nameCounts[name] || 0) + 1; });
+  var duplicateNameCount = Object.keys(nameCounts).filter(function(name){ return nameCounts[name] > 1; }).length;
   if (files.length && !confirm('当前图片列表会被云端原图替换，继续吗？')) return false;
 
   clearFiles();
@@ -2450,14 +2453,18 @@ async function loadBookImagesForEdit(b){
         file:file, originalFile:file,
         url:URL.createObjectURL(file), originalUrl:URL.createObjectURL(file),
         status:'idle', err:'', name:file.name,
-        edited:false, op:null, remote:true, remoteName:names[i]
+        edited:false, op:null, remote:true, remoteName:names[i],
+        remoteDuplicate:nameCounts[names[i]] > 1
       });
     }
     files = loaded;
     uploadConfig.pageFiles = names.slice();
     renderFiles();
     syncPages();
-    show($('main-msg'), 'ok', '✓ 已读取 ' + files.length + ' 张原图。编辑后点击“上传并发布”，只会重新上传新增或已修改的图片，未改动原图不会重复覆盖。');
+    show($('main-msg'), 'ok',
+      '✓ 已读取 ' + files.length + ' 张原图。' + (duplicateNameCount
+        ? '检测到 ' + duplicateNameCount + ' 个重复文件名，相关页当前读取自同一云端文件。若它们原本应是不同图片，请先替换为对应原图；保存时会为各页分配独立路径。'
+        : '编辑后只会重新上传新增或已修改的图片，未改动原图会沿用现有文件。'));
     $('images-panel').scrollIntoView({ behavior:'smooth', block:'start' });
     return true;
   } catch (err) {
@@ -3476,8 +3483,26 @@ function outputPageName(i, pad, prefix, sourceName){
     : pageName(i, pad, prefix, sourceName);
 }
 
-function fileOutputName(f, i, pad, prefix, sourceName){
-  if (f && f.remoteName && /^[A-Za-z0-9_-]+\.(webp|jpg|jpeg|png|gif|avif)$/i.test(f.remoteName)) return f.remoteName;
+function imageExtensionForUpload(contentType, sourceName){
+  var mime = String(contentType || '').toLowerCase().split(';')[0];
+  if (IMAGE_EXTENSIONS[mime]) return IMAGE_EXTENSIONS[mime];
+  var match = String(sourceName || '').match(/\.(webp|jpe?g|png|gif|avif)$/i);
+  return match ? match[1].toLowerCase().replace('jpeg', 'jpg') : 'webp';
+}
+
+function versionedPageName(i, contentType, sourceName){
+  var unique = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  return 'page-' + String(i + 1).padStart(3, '0') + '-' + unique + '.' + imageExtensionForUpload(contentType, sourceName);
+}
+
+function fileOutputName(f, i, pad, prefix, sourceName, contentType){
+  var validRemoteName = f && f.remoteName && /^[A-Za-z0-9_-]+\.(webp|jpg|jpeg|png|gif|avif)$/i.test(f.remoteName);
+  var changedRemotePage = f && f.remote && (f.edited || f.remoteDuplicate);
+  var newPageInExistingBook = editingArchiveBookId && f && !f.remote;
+  if (changedRemotePage || newPageInExistingBook) {
+    return versionedPageName(i, contentType, sourceName);
+  }
+  if (f && f.remote && validRemoteName && !f.edited && !f.remoteDuplicate) return f.remoteName;
   return outputPageName(i, pad, prefix, sourceName);
 }
 
@@ -4229,9 +4254,9 @@ function uploadAll(){
 
   hide($('main-msg'));
   files.forEach(function(f, i){
-    // 编辑已收录作品时，只有新加入或实际编辑过的图片需要重新上传。
-    // 未改动的云端图片保留原文件名与地址，不再重复覆盖。
-    var needsUpload = !f.remote || !!f.edited;
+    // 编辑已收录作品时，新增、已编辑和重复引用的页面会写入独立文件名。
+    // 未改动且文件名唯一的云端图片继续沿用原文件。
+    var needsUpload = !f.remote || !!f.edited || !!f.remoteDuplicate;
     f.status = needsUpload ? 'idle' : 'skip';
     f.err = ''; f.pct = 0;
     if (needsUpload) uploadIdx.push(i);
@@ -4242,6 +4267,7 @@ function uploadAll(){
 
   // 只把需要上传的图片转码成待上传的 blob，避免无改动图片重复处理。
   var prepared = [];
+  var outputNames = [];
   var chain = Promise.resolve();
   uploadIdx.forEach(function(i){
     var f = files[i];
@@ -4263,7 +4289,11 @@ function uploadAll(){
       }
       return p.then(function(r){
         if (r.blob.size > envMax) throw new Error('转换后仍超过 ' + fmtSize(envMax));
-        prepared[i] = { blob:r.blob, size:r.blob.size, type:r.blob.type || 'image/webp', name:r.name || f.name };
+        var type = r.blob.type || 'image/webp';
+        var name = r.name || f.name;
+        var outputName = fileOutputName(f, i, pad, prefix, name, type);
+        prepared[i] = { blob:r.blob, size:r.blob.size, type:type, name:name, outputName:outputName };
+        outputNames[i] = outputName;
         f.preparedSize = r.blob.size;
       }).catch(function(err){
         f.status = 'err'; f.err = err.message || String(err); updateFileNode(i);
@@ -4278,11 +4308,18 @@ function uploadAll(){
       throw new Error('所有图片都处理失败：' + (firstError || '请检查文件格式'));
     }
 
+    outputNames = files.map(function(f, i){
+      return outputNames[i] || fileOutputName(f, i, pad, prefix, f.file && f.file.name, f.file && f.file.type);
+    });
+    if (new Set(outputNames).size !== outputNames.length) {
+      throw new Error('页面文件名重复，已停止上传，避免多个页面覆盖同一张图片。请刷新作品后重试。');
+    }
+
     return pool(okIdx, 3, function(k){
       var i = okIdx[k], f = files[i], p = prepared[i];
       f.status = 'busy'; updateFileNode(i);
       var folder = form.bookFolder || form.id;
-      var fileName = fileOutputName(f, i, pad, prefix, p.name);
+      var fileName = outputNames[i];
       return uploadToCos(folder + '/', folder + '/' + fileName, p.blob, p.type, function(info){
         f.pct = Math.round(Math.max(0, Math.min(1, info && info.percent || 0)) * 100);
         updateFileNode(i);
@@ -4304,11 +4341,12 @@ function uploadAll(){
     var book = Object.assign({}, form);
     book.pages = files.length || form.pages;
     book.bookFolder = form.bookFolder || form.id;
-    book.pageFiles = files.map(function(f, i){
-      var p = prepared[i];
-      return fileOutputName(f, i, pad, prefix, p && p.name);
-    });
-    book.coverFile = form.coverFile || book.pageFiles[0] || pageName(0, pad, prefix, prepared[0] && prepared[0].name);
+    book.pageFiles = outputNames.slice();
+    var previousFirstFile = uploadConfig.pageFiles && uploadConfig.pageFiles[0] || uploadConfig.coverFile;
+    var coverFollowsFirstPage = !form.coverFile || !previousFirstFile || form.coverFile === previousFirstFile;
+    book.coverFile = coverFollowsFirstPage
+      ? (book.pageFiles[0] || form.coverFile || pageName(0, pad, prefix, prepared[0] && prepared[0].name))
+      : form.coverFile;
     // 走这条路径说明「含有敏感元素」没勾选：内页已被替换成普通图片，
     // 必须显式把标记清成 false，否则站点会拿着旧的 secure 标记去解一批根本不在的密文。
     book.secure = false;
@@ -4363,7 +4401,7 @@ function validate(form, needPages){
   if ($('f-warn-on').checked && !form.warning) return fail('已勾选「内容预警」，请填写预警说明（或取消勾选）。');
   var dup = books.filter(function(b){ return b.id === form.id; })[0];
   if (dup && !needPages) {
-    if (!confirm('归档中已存在 ' + form.id + '（' + dup.titleZh + '）。\n继续将覆盖它的信息和同名图片，确定吗？')) return false;
+    if (!confirm('归档中已存在 ' + form.id + '（' + dup.titleZh + '）。\n继续将覆盖作品信息，并更新本次改动的图片吗？')) return false;
   }
   return true;
 }

@@ -340,8 +340,8 @@ function normalizeBook(raw: JsonRecord) {
   if (Number.isFinite(pad) && pad >= 1 && pad <= 5 && pad !== 2) book.pagePadDigits = pad;
   if (Array.isArray(raw.pageFiles)) {
     const pageFiles = raw.pageFiles.map((name: unknown) => String(name || '').trim());
-    if (pageFiles.length !== pages || pageFiles.some((name: string) => !/^[A-Za-z0-9_-]+\.(webp|jpg|jpeg|png|gif|avif)$/i.test(name))) {
-      throw fail('页面文件列表不合法。');
+    if (pageFiles.length !== pages || pageFiles.some((name: string) => !/^[A-Za-z0-9_-]+\.(webp|jpg|jpeg|png|gif|avif)$/i.test(name)) || new Set(pageFiles).size !== pageFiles.length) {
+      throw fail('页面文件列表不合法：每页必须使用不同文件名。');
     }
     book.pageFiles = pageFiles;
   }

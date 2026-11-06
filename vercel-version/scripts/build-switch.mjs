@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync } from 'fs';
+import { copyFileSync, existsSync, rmSync } from 'fs';
 
 /**
  * 构建分流器：同一份代码，按 VITE_COMIC_ENABLED 环境变量决定构建哪个站。
@@ -44,3 +44,6 @@ if (isComic) {
   run('npx', ['vite', 'build', '--config', 'vite.save-hange.config.ts']);
   run('npx', ['vite', 'build', ...extra]);
 }
+
+// The reader fetches these pages from COS in production. Keep the local copy for development only.
+rmSync(`${outDir}/manga-preview-export`, { recursive: true, force: true });

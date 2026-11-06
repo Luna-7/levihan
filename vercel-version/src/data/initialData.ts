@@ -35,16 +35,8 @@ export const RESOURCE_LINKS: ResourceLink[] = [
     description: '高清无删减完整母盘素材'
   },
   {
-    id: 'r-2',
-    title: '进击！巨人中学 全集',
-    platform: '夸克网盘',
-    url: 'https://pan.quark.cn/s/0b024c220e44#/list/share',
-    category: 'anime',
-    description: '官方轻松搞笑番外，利韩互动满满'
-  },
-  {
     id: 'r-5',
-    title: 'AAA利韩 cut（更新至第三季 1-11 百度）',
+    title: '利韩第一季/第二季/第三季',
     platform: '百度网盘',
     url: 'https://pan.baidu.com/s/1EJm7oU_OrN6yj5xh5sFyLg',
     code: '1209',
@@ -53,7 +45,7 @@ export const RESOURCE_LINKS: ResourceLink[] = [
   },
   {
     id: 'r-6',
-    title: 'AAA利韩 cut（更新至第三季 1-11 夸克）',
+    title: '利韩第一季/第二季/第三季',
     platform: '夸克网盘',
     url: 'https://pan.quark.cn/s/c69707d7b63d',
     category: 'creative',
@@ -96,20 +88,10 @@ export const RESOURCE_LINKS: ResourceLink[] = [
     description: '珍贵动画制作分镜稿与运镜批注'
   },
   {
-    id: 'r-11',
-    title: '无悔的选择',
-    platform: '百度网盘',
-    url: 'https://pan.baidu.com/s/1CciR-_OlrNAXdaqSFUQFyw?pwd=47wp',
-    code: '47wp',
-    category: 'manga',
-    description: '利威尔外传地下街物语'
-  },
-  {
     id: 'r-12',
     title: '人物设定 三视图',
-    platform: '百度网盘',
-    url: 'https://pan.baidu.com/s/1rotloUZobJ1urACeHJPIDQ?pwd=t2kd',
-    code: 't2kd',
+    platform: '在线阅读',
+    url: 'https://levihan-1325571558.cos-website.ap-nanjing.myqcloud.com/%E4%BA%BA%E7%89%A9%E4%B8%89%E8%A7%86%E5%9B%BE/000.webp',
     category: 'manga',
     description: '官方角色正侧背三视图与装备细节'
   },
@@ -122,8 +104,40 @@ export const RESOURCE_LINKS: ResourceLink[] = [
     description: '正传繁体PDF全34卷 + 日语原画集全4卷 + 电子精修版'
   },
   {
+    id: 'r-16',
+    title: '进击的巨人漫画（简中）',
+    platform: '百度网盘',
+    url: 'https://pan.baidu.com/s/17q02v8594NuP8r_9FcTu3A?pwd=jb6v',
+    code: 'jb6v',
+    category: 'manga',
+    description: '简体中文版漫画'
+  },
+  {
+    id: 'r-17',
+    title: '公式书日文版 INSIDE抗',
+    platform: '百度网盘',
+    url: 'https://pan.baidu.com/s/1RyOc3WMaRpct40mQUM1xTw?pwd=sz6q',
+    code: 'sz6q',
+    archivePassword: 'levihan',
+    category: 'manga',
+  },
+  {
+    id: 'r-18',
+    title: '公式书中文版 OUTSIDE',
+    platform: '跳转阅读',
+    url: 'https://www.twmanga.com/comic/chapter/jinjidejurenoutsidegonggongshishu-jianshanchuangjianshanchuang/0_0.html',
+    category: 'manga',
+  },
+  {
+    id: 'r-19',
+    title: '公式书中文版 INSIDE抗',
+    platform: '跳转阅读',
+    url: 'https://www.twmanga.com/comic/chapter/jinjidejureninsidekanggongshishu-jianshanchuangjianshanchuang/0_0.html',
+    category: 'manga',
+  },
+  {
     id: 'r-14',
-    title: '微博同人 AU · 美国高中au',
+    title: '微博同人 AU：美国高中au',
     platform: '微博',
     url: 'https://m.weibo.cn/status/4533985990941242',
     category: 'link',
@@ -131,11 +145,11 @@ export const RESOURCE_LINKS: ResourceLink[] = [
   },
   {
     id: 'r-15',
-    title: '微博同人 AU · 恶童',
+    title: '微博同人 AU：恶童',
     platform: '微博',
     url: 'https://weibo.com/7016154864/OdFgOpuwu',
     category: 'link',
-    description: '氛围感极佳的经典利韩同人文'
+    description: '战后的利威尔讲述童年故事'
   }
 ];
 

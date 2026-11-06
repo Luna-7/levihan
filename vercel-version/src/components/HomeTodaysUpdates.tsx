@@ -54,6 +54,7 @@ function byLine(author: string | undefined): string {
 export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, onPreloadTab, onShowToast }) => {
   const [items, setItems] = useState<UpdateItem[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [reloadVersion, setReloadVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -161,7 +162,7 @@ export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, o
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, []);
+  }, [reloadVersion]);
 
   const handleHover = useMemo(
     () => (it: UpdateItem) => {
@@ -194,13 +195,6 @@ export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, o
     return null;
   }
 
-  if (status === 'error' && items.length === 0) {
-    return null;
-  }
-
-  // 今天没有任何上新，保持首页干净。
-  if (items.length === 0) return null;
-
   return (
     <section className="home-todays-updates w-full shrink-0 px-1">
       <div className="flex items-center gap-1.5 mb-1.5">
@@ -208,34 +202,45 @@ export const HomeTodaysUpdates: React.FC<Props> = React.memo(({ onNavigateTab, o
         <h3 className="font-pixel text-xs sm:text-sm font-bold text-[#8C7A65] tracking-wider">今日上新</h3>
       </div>
 
-      <div className="home-todays-list flex flex-col gap-1.5 no-scrollbar">
-        {items.map((it) => {
-          const meta = KIND_META[it.kind];
-          return (
-            <button
-              key={it.id}
-              type="button"
-              onClick={() => handleClick(it)}
-              onMouseEnter={() => handleHover(it)}
-              onTouchStart={() => handleHover(it)}
-              onFocus={() => handleHover(it)}
-              className="group flex items-center gap-2.5 text-left cursor-pointer transition-all active:scale-[0.99] bg-[#F8F1DE] border-[1.5px] border-[#E0D2B4] hover:border-[#C5A059] rounded-lg px-3 py-1.5 sm:py-2"
-            >
-              <span
-                className={`shrink-0 px-2 py-0.5 rounded text-xs font-pixel font-bold border whitespace-nowrap ${meta.cls}`}
-              >
-                {meta.label}
-              </span>
-              <span className="min-w-0 flex-1 font-retro-jp text-xs sm:text-sm text-[#3B2818] font-medium truncate">
-                {it.text}
-              </span>
-              <span className="shrink-0 font-retro-jp text-xs text-[#8C7A65] whitespace-nowrap">
-                {fmtTime(it.createdAt)}
-              </span>
+      {items.length === 0 ? (
+        <div className="flex items-center gap-2 px-3 py-2 font-retro-jp text-xs text-[var(--gray-11)]" role="status">
+          <span>{status === 'error' ? '今日更新暂时无法加载' : '今天暂无新投稿'}</span>
+          {status === 'error' && (
+            <button type="button" onClick={() => setReloadVersion((version) => version + 1)} className="cursor-pointer text-[var(--green-11)] underline underline-offset-2 hover:text-[var(--green-12)]">
+              重试
             </button>
-          );
-        })}
-      </div>
+          )}
+        </div>
+      ) : (
+        <div className="home-todays-list flex flex-col gap-1.5 no-scrollbar">
+          {items.map((it) => {
+            const meta = KIND_META[it.kind];
+            return (
+              <button
+                key={it.id}
+                type="button"
+                onClick={() => handleClick(it)}
+                onMouseEnter={() => handleHover(it)}
+                onTouchStart={() => handleHover(it)}
+                onFocus={() => handleHover(it)}
+                className="group flex items-center gap-2.5 text-left cursor-pointer transition-all active:scale-[0.99] bg-[#F8F1DE] border-[1.5px] border-[#E0D2B4] hover:border-[#C5A059] rounded-lg px-3 py-1.5 sm:py-2"
+              >
+                <span
+                  className={`shrink-0 px-2 py-0.5 rounded text-xs font-pixel font-bold border whitespace-nowrap ${meta.cls}`}
+                >
+                  {meta.label}
+                </span>
+                <span className="min-w-0 flex-1 font-retro-jp text-xs sm:text-sm text-[#3B2818] font-medium truncate">
+                  {it.text}
+                </span>
+                <span className="shrink-0 font-retro-jp text-xs text-[#8C7A65] whitespace-nowrap">
+                  {fmtTime(it.createdAt)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 });
