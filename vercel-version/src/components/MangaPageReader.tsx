@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ArrowRight, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, X, ZoomIn, ZoomOut } from 'lucide-react';
 import type { MangaPreviewBook } from '../data/mangaPreviewBooks';
 
 type Props = {
@@ -8,16 +8,40 @@ type Props = {
   onClose: () => void;
 };
 
+type Point = { x: number; y: number };
+type PointerPosition = { clientX: number; clientY: number };
+type ReaderGesture =
+  | { type: 'swipe'; startX: number; startY: number }
+  | { type: 'pan'; startX: number; startY: number; offset: Point }
+  | {
+      type: 'pinch';
+      distance: number;
+      zoom: number;
+      offset: Point;
+      midpoint: Point;
+    };
+
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 4;
+const ZOOM_STEP = 0.5;
+
 export const MangaPageReader: React.FC<Props> = ({ book, onClose }) => {
   const dialogRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const touchStartX = useRef<number | null>(null);
+  const pageAreaRef = useRef<HTMLDivElement>(null);
+  const pageImageRef = useRef<HTMLImageElement>(null);
+  const pointersRef = useRef<Map<number, PointerPosition>>(new Map());
+  const gestureRef = useRef<ReaderGesture | null>(null);
   const closeRef = useRef(onClose);
   const [pageNumber, setPageNumber] = useState(1);
   const pageRotated = book.defaultRotatedPages.includes(pageNumber);
   const [pageLoading, setPageLoading] = useState(true);
   const [pageError, setPageError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [zoom, setZoom] = useState(MIN_ZOOM);
+  const zoomRef = useRef(MIN_ZOOM);
+  const [imageOffset, setImageOffset] = useState<Point>({ x: 0, y: 0 });
+  const imageOffsetRef = useRef<Point>({ x: 0, y: 0 });
 
   useEffect(() => {
     closeRef.current = onClose;
@@ -40,6 +64,140 @@ export const MangaPageReader: React.FC<Props> = ({ book, onClose }) => {
     setPageLoading(true);
     setPageError(false);
     setPageNumber(boundedPage);
+    zoomRef.current = MIN_ZOOM;
+    setZoom(MIN_ZOOM);
+    imageOffsetRef.current = { x: 0, y: 0 };
+    setImageOffset({ x: 0, y: 0 });
+    pointersRef.current.clear();
+    gestureRef.current = null;
+  };
+
+  const updateImageOffset = (offset: Point, scale = zoomRef.current) => {
+    const area = pageAreaRef.current;
+    const image = pageImageRef.current;
+    let boundedOffset = offset;
+
+    if (area && image) {
+      const maxX = Math.max(0, (image.clientWidth * scale - area.clientWidth) / 2);
+      const maxY = Math.max(0, (image.clientHeight * scale - area.clientHeight) / 2);
+      boundedOffset = {
+        x: Math.min(maxX, Math.max(-maxX, offset.x)),
+        y: Math.min(maxY, Math.max(-maxY, offset.y)),
+      };
+    }
+
+    imageOffsetRef.current = boundedOffset;
+    setImageOffset(boundedOffset);
+  };
+
+  const updateZoom = (nextZoom: number) => {
+    const boundedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+    zoomRef.current = boundedZoom;
+    setZoom(boundedZoom);
+    if (boundedZoom === MIN_ZOOM) {
+      updateImageOffset({ x: 0, y: 0 }, MIN_ZOOM);
+    } else {
+      updateImageOffset(imageOffsetRef.current, boundedZoom);
+    }
+  };
+
+  const relativeMidpoint = (first: PointerPosition, second: PointerPosition) => {
+    const area = pageAreaRef.current;
+    if (!area) return { x: 0, y: 0 };
+    const rect = area.getBoundingClientRect();
+    return {
+      x: (first.clientX + second.clientX) / 2 - rect.left - rect.width / 2,
+      y: (first.clientY + second.clientY) / 2 - rect.top - rect.height / 2,
+    };
+  };
+
+  const beginPointerGesture = () => {
+    const pointers = [...pointersRef.current.values()] as PointerPosition[];
+    if (pointers.length >= 2) {
+      const [first, second] = pointers;
+      const midpoint = relativeMidpoint(first, second);
+      gestureRef.current = {
+        type: 'pinch',
+        distance: Math.max(1, Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY)),
+        zoom: zoomRef.current,
+        offset: imageOffsetRef.current,
+        midpoint,
+      };
+      return;
+    }
+
+    const [pointer] = pointers;
+    if (!pointer) return;
+    gestureRef.current = zoomRef.current > MIN_ZOOM
+      ? { type: 'pan', startX: pointer.clientX, startY: pointer.clientY, offset: imageOffsetRef.current }
+      : { type: 'swipe', startX: pointer.clientX, startY: pointer.clientY };
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    if (event.target instanceof HTMLElement && event.target.closest('.manga-reader-error')) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointersRef.current.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+    beginPointerGesture();
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointersRef.current.has(event.pointerId)) return;
+    pointersRef.current.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+    const pointers = [...pointersRef.current.values()] as PointerPosition[];
+
+    if (pointers.length >= 2) {
+      if (gestureRef.current?.type !== 'pinch') beginPointerGesture();
+      const gesture = gestureRef.current;
+      if (gesture?.type !== 'pinch') return;
+
+      const [first, second] = pointers;
+      const distance = Math.max(1, Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY));
+      const midpoint = relativeMidpoint(first, second);
+      const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, gesture.zoom * distance / gesture.distance));
+      const ratio = nextZoom / gesture.zoom;
+      updateZoom(nextZoom);
+      updateImageOffset({
+        x: midpoint.x + (gesture.offset.x - gesture.midpoint.x) * ratio,
+        y: midpoint.y + (gesture.offset.y - gesture.midpoint.y) * ratio,
+      }, nextZoom);
+      event.preventDefault();
+      return;
+    }
+
+    const gesture = gestureRef.current;
+    if (gesture?.type === 'pan' && zoomRef.current > MIN_ZOOM) {
+      updateImageOffset({
+        x: gesture.offset.x + event.clientX - gesture.startX,
+        y: gesture.offset.y + event.clientY - gesture.startY,
+      });
+      event.preventDefault();
+    }
+  };
+
+  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    pointersRef.current.delete(event.pointerId);
+
+    if (pointersRef.current.size === 0) {
+      gestureRef.current = null;
+      if (gesture?.type === 'swipe' && (event.pointerType === 'touch' || event.pointerType === 'pen')) {
+        const deltaX = event.clientX - gesture.startX;
+        const deltaY = event.clientY - gesture.startY;
+        if (Math.abs(deltaX) >= 48 && Math.abs(deltaX) > Math.abs(deltaY)) {
+          changePage(pageNumber + (deltaX < 0 ? 1 : -1));
+        }
+      }
+      return;
+    }
+
+    beginPointerGesture();
+  };
+
+  const handlePointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    pointersRef.current.delete(event.pointerId);
+    if (pointersRef.current.size > 0) beginPointerGesture();
+    else gestureRef.current = null;
   };
 
   useEffect(() => {
@@ -47,6 +205,8 @@ export const MangaPageReader: React.FC<Props> = ({ book, onClose }) => {
       if (event.key === 'Escape') closeRef.current();
       if (event.key === 'ArrowRight') changePage(pageNumber + 1);
       if (event.key === 'ArrowLeft') changePage(pageNumber - 1);
+      if (event.key === '+' || event.key === '=') updateZoom(zoomRef.current + ZOOM_STEP);
+      if (event.key === '-') updateZoom(zoomRef.current - ZOOM_STEP);
       if (event.key !== 'Tab') return;
 
       const dialog = dialogRef.current;
@@ -77,18 +237,6 @@ export const MangaPageReader: React.FC<Props> = ({ book, onClose }) => {
     + String(pageFileNumber).padStart(3, '0')
     + '.webp';
 
-  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    touchStartX.current = event.changedTouches[0]?.clientX ?? null;
-  };
-
-  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
-    const startX = touchStartX.current;
-    const endX = event.changedTouches[0]?.clientX;
-    touchStartX.current = null;
-    if (startX === null || endX === undefined || Math.abs(endX - startX) < 48) return;
-    changePage(pageNumber + (endX < startX ? 1 : -1));
-  };
-
   if (typeof document === 'undefined') return null;
 
   return createPortal(
@@ -107,6 +255,27 @@ export const MangaPageReader: React.FC<Props> = ({ book, onClose }) => {
           </div>
           <div className="manga-reader-header-actions">
             <button
+              className="manga-reader-icon-button manga-reader-zoom-button"
+              type="button"
+              onClick={() => updateZoom(zoom - ZOOM_STEP)}
+              disabled={zoom <= MIN_ZOOM}
+              aria-label="缩小图片"
+              title="缩小图片"
+            >
+              <ZoomOut size={18} aria-hidden="true" />
+            </button>
+            <span className="manga-reader-zoom-level" aria-live="polite">{Math.round(zoom * 100)}%</span>
+            <button
+              className="manga-reader-icon-button manga-reader-zoom-button"
+              type="button"
+              onClick={() => updateZoom(zoom + ZOOM_STEP)}
+              disabled={zoom >= MAX_ZOOM}
+              aria-label="放大图片"
+              title="放大图片"
+            >
+              <ZoomIn size={18} aria-hidden="true" />
+            </button>
+            <button
               ref={closeButtonRef}
               className="manga-reader-icon-button"
               type="button"
@@ -119,9 +288,12 @@ export const MangaPageReader: React.FC<Props> = ({ book, onClose }) => {
         </header>
 
         <div
+          ref={pageAreaRef}
           className="manga-reader-page-area"
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
         >
           {pageLoading && !pageError && <p className="manga-reader-status" role="status">正在载入页面…</p>}
           {pageError && (
@@ -140,12 +312,19 @@ export const MangaPageReader: React.FC<Props> = ({ book, onClose }) => {
             </div>
           )}
           <img
+            ref={pageImageRef}
             key={String(pageNumber) + '-' + String(retryKey)}
-            className={'manga-reader-page' + (pageRotated ? ' is-rotated' : '')}
+            className={'manga-reader-page' + (pageRotated ? ' is-rotated' : '') + (zoom > MIN_ZOOM ? ' is-zoomed' : '')}
             src={pageUrl}
             alt={book.title + ' ' + book.volumeLabel + '，第 ' + pageNumber + ' 页'}
             draggable={false}
             decoding="async"
+            style={{
+              transform: pageRotated
+                ? `translate(-50%, -50%) translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) rotate(90deg) scale(${zoom})`
+                : `translate3d(${imageOffset.x}px, ${imageOffset.y}px, 0) scale(${zoom})`,
+              transformOrigin: 'center',
+            }}
             aria-hidden={pageError}
             onLoad={() => {
               setPageLoading(false);

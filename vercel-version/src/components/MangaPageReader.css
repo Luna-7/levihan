@@ -105,18 +105,26 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
+  padding-right: max(14px, env(safe-area-inset-right, 0px));
+  padding-left: max(14px, env(safe-area-inset-left, 0px));
   background: var(--reader-paper);
 }
 
 .manga-reader-header {
+  padding-top: max(12px, calc(env(safe-area-inset-top, 0px) + 8px));
+  padding-bottom: 10px;
   border-bottom: 0.5px solid var(--sand-6);
+}
+
+.manga-reader-controls {
+  padding-top: 10px;
+  padding-bottom: max(10px, calc(env(safe-area-inset-bottom, 0px) + 8px));
 }
 
 .manga-reader-header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 0 0 auto;
 }
 
@@ -158,6 +166,30 @@
   background: var(--green-9);
 }
 
+.manga-reader-zoom-button {
+  border-color: var(--sand-6);
+  background: var(--reader-paper);
+  color: var(--olive-12);
+}
+
+.manga-reader-zoom-button:hover:not(:disabled) {
+  background: var(--sand-4);
+}
+
+.manga-reader-zoom-button:disabled {
+  color: var(--olive-11);
+  opacity: 0.45;
+  cursor: default;
+}
+
+.manga-reader-zoom-level {
+  min-width: 38px;
+  color: var(--olive-11);
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .manga-reader-control-button {
   border-color: var(--sand-6);
   background: var(--reader-paper);
@@ -176,7 +208,8 @@
   min-height: 0;
   overflow: hidden;
   background: var(--sand-3);
-  touch-action: pan-y;
+  touch-action: none;
+  user-select: none;
 }
 
 .manga-reader-page {
@@ -187,6 +220,15 @@
   max-height: 100%;
   object-fit: contain;
   user-select: none;
+  will-change: transform;
+}
+
+.manga-reader-page.is-zoomed {
+  cursor: grab;
+}
+
+.manga-reader-page-area:active .manga-reader-page.is-zoomed {
+  cursor: grabbing;
 }
 
 .manga-reader-page[aria-hidden="true"] {
@@ -258,7 +300,18 @@
 
   .manga-reader-header,
   .manga-reader-controls {
-    padding: 8px 10px;
+    padding-right: max(10px, env(safe-area-inset-right, 0px));
+    padding-left: max(10px, env(safe-area-inset-left, 0px));
+  }
+
+  .manga-reader-header {
+    padding-top: max(22px, calc(env(safe-area-inset-top, 0px) + 12px));
+    padding-bottom: 8px;
+  }
+
+  .manga-reader-controls {
+    padding-top: 8px;
+    padding-bottom: max(12px, calc(env(safe-area-inset-bottom, 0px) + 8px));
   }
 
   .manga-reader-heading {
