@@ -13,6 +13,8 @@ import './index.css';
 // 而 index.css 为主站锁死了 html/body/#root 的滚动——
 // 这里打上标记 class，让 CSS 只在漫画站放开滚动锁（见 index.css 的 .comic-site 规则）。
 document.documentElement.classList.add('comic-site');
+// 漫画站不使用音效；同时移除 iOS 音频解锁监听，减少每次触控的全局工作。
+soundManager.setEnabled(false);
 setupIOSViewportGuard();
 setupPwaAutoUpdate();
 
@@ -60,6 +62,3 @@ createRoot(document.getElementById('root')!).render(
     </AppErrorBoundary>
   </StrictMode>
 );
-
-// 解锁后如有音频交互，确保音频上下文就绪（soundManager 惰性初始化，无副作用）。
-void soundManager;

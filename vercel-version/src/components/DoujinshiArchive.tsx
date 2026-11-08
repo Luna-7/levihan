@@ -27,7 +27,6 @@ import { MangaCommentSection } from './MangaCommentSection';
 import { getCommentCountByBookId } from '../data/mangaComments';
 import { useAppShellStore } from '../stores/appShellStore';
 import { useSwipeBackGesture } from '../hooks/useSwipeBackGesture';
-import { scheduleNonCriticalTask } from '../utils/scheduleNonCriticalTask';
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
 import { getAccessToken } from '../utils/cloudbaseToken';
 import { useAuthStore } from '../stores/authStore';
@@ -277,13 +276,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     return () => { alive = false; };
   }, [profile?.uid]);
 
-  // 解析器是独立分包。归档首屏稳定后在后台预取，点击加密本时不再先闪
-  // 一整块 Suspense 加载页，用户只会看到稳定的解析状态。
-  useEffect(() => {
-    if (mode !== 'comic' || !loadSecureComicReader) return undefined;
-    return scheduleNonCriticalTask(() => { void loadSecureComicReader(); }, 0, 3);
-  }, [mode]);
-
   // 投稿免审直发：小说本新上架后立即刷新索引（novels.json 为 no-cache，重拉即最新）
   const novelIndexVersion = useAppShellStore((state) => state.novelIndexVersion);
   useEffect(() => {
@@ -419,29 +411,16 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
   // 点击卡片直接进入查看来源于 COS 的无缝长图
   const handleOpenBookReader = async (book: DoujinBookItem) => {
     if ((book.category || '漫画本') === '漫画本' && !isMangaVisible) return;
-    soundManager.playPageTurn();
 
-    // 加密归档的本子：正文只有 comic_vault/{id}_secure.txt，没有可读的图片，
+    // 加密归档的本子：正文只有 COS 密文文件，没有可读的图片，
     // 所以不进长图画廊，改走 SecureComicReader（维护页 → 校验码 → 内存解密 → Canvas）
     if (book.secure && SecureComicReader) {
       archiveScrollYRef.current = window.scrollY;
-      if (loadSecureComicReader) {
-        // 等解析器分包到位后再切换阅读器，避免列表先卸载、Suspense 再闪现。
-        void loadSecureComicReader()
-          .then(() => {
-            setSecureBook(book);
-            onShowToast(`《${book.titleZh}》资源已被安全隔离，需校验码解析 🔒`);
-          })
-          .catch(() => {
-            // 分包失败时仍进入原有错误边界，保留可重试路径。
-            setSecureBook(book);
-          });
-      } else {
-        setSecureBook(book);
-      }
+      setSecureBook(book);
       return;
     }
 
+    soundManager.playPageTurn();
     archiveScrollYRef.current = window.scrollY;
     setReadingBook(book);
     setDetectedPages(book.pages || 30);
@@ -461,9 +440,14 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     }
   };
 
+  const prefetchSecureComicReader = (book: DoujinBookItem) => {
+    if (!book.secure || !loadSecureComicReader) return;
+    void loadSecureComicReader().catch(() => {});
+  };
+
   // 退出阅读器
   const handleCloseReader = () => {
-    soundManager.playScrollOpen();
+    if ((readingBook?.category || '漫画本') !== '漫画本') soundManager.playScrollOpen();
     setReadingBook(null);
     setDetectedPages(null);
   };
@@ -633,18 +617,29 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     return (
       <React.Suspense
         fallback={
-          // 冷灰色，和维护页同一套视觉：加载解码器时也不露馅
-          <div className="flex flex-col items-center justify-center w-full h-full bg-[#F2F3F5] gap-2">
-            <div className="font-mono text-[11px] text-[#9AA0A6]">正在加载安全解析节点…</div>
+          <div className="flex min-h-[var(--app-h)] w-full items-center justify-center bg-[var(--amber-2)] px-5 text-[var(--amber-12)]">
+            <div className="flex flex-col items-center text-center">
+              <span
+                className="size-6 animate-spin rounded-full border-2 border-[var(--amber-6)] border-t-[var(--green-9)] motion-reduce:animate-none"
+                aria-hidden="true"
+              />
+              <p className="mt-4 text-sm font-semibold" role="status" aria-live="polite">
+                正在准备阅读器…
+              </p>
+              <button
+                type="button"
+                onClick={() => setSecureBook(null)}
+                className="mt-5 min-h-11 rounded-[3px] border-[0.5px] border-[var(--green-8)] px-4 text-xs font-semibold text-[var(--green-12)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"
+              >
+                返回归档
+              </button>
+            </div>
           </div>
         }
       >
         <SecureComicReader
           book={secureBook}
-          onClose={() => {
-            soundManager.playScrollOpen();
-            setSecureBook(null);
-          }}
+          onClose={() => setSecureBook(null)}
           onShowToast={onShowToast}
         />
       </React.Suspense>
@@ -1095,6 +1090,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
             <div
               id={`book-card-${book.id}`}
               key={book.id}
+              onPointerEnter={() => prefetchSecureComicReader(book)}
               onClick={() => handleOpenBookReader(book)}
               className={`${isComicMasonry ? 'comic-manga-card' : ''} ${isIllustrationCategory ? 'mb-2.5 sm:mb-4 break-inside-avoid' : ''} ${isMangaVisible ? 'grid grid-cols-[minmax(100px,0.36fr)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] items-stretch gap-x-3 gap-y-0 bg-[var(--bg-card)] border-[0.5px] border-[#E8E1CE] shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_2px_6px_rgba(0,0,0,0.05)]' : 'flex flex-col justify-between space-y-2.5 bg-[#FFFEEF] border-2 border-[#D5C9AF] hover:border-[#1E4334] hover:shadow-md'} rounded-xl p-3.5 sm:p-5 transition-all group select-none cursor-pointer w-full ${isMasonryCategory ? '' : 'h-full'} ${linkedBookId === book.id ? 'border-[#E5A93C] ring-4 ring-[#E5A93C]/35 shadow-xl animate-pulse' : ''}`}
               style={{ contentVisibility: 'auto', containIntrinsicSize: isComicMasonry ? undefined : '720px' }}

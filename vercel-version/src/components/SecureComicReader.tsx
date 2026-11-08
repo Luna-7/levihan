@@ -6,7 +6,6 @@ import type { DoujinBookItem } from '../types/doujinArchive';
 import { cosService } from '../services/cosClient';
 import { clearVerifiedComicCode, getVerifiedComicCode, setVerifiedComicCode } from '../utils/secureComicCode';
 import { decryptOuterLayer } from '../utils/secureComicDecrypt';
-import { PinchZoomSurface } from './PinchZoomSurface';
 import { useSwipeBackGesture } from '../hooks/useSwipeBackGesture';
 
 /**
@@ -14,7 +13,8 @@ import { useSwipeBackGesture } from '../hooks/useSwipeBackGesture';
  * SecureComicReader —— 敏感本子的「403 伪装页 + 一密双解 + Canvas 瀑布流」
  * ----------------------------------------------------------------------------
  * 与 public/admin/secure-upload.js 配套：管理台勾选「含有敏感元素」上传后，
- * COS 上留下的是 comic_vault/{id}_secure.txt（AES-256-CBC 密文，伪装成纯文本），
+ * COS 上存放 AES-256-CBC 密文，伪装成纯文本；旧作品仍使用 {id}_secure.txt 固定路径，
+ * 新上传作品通过归档中的 secureFile 指向独立版本路径。
  * 站点上不给任何图片或 .pdf 直链，必须由本组件在浏览器内存里解开才看得到。
  *
  * 解密是两层，共用一个密码（"一密双解"）：
@@ -52,6 +52,126 @@ type SecureComicReaderProps = {
 };
 
 type Phase = 'locked' | 'working' | 'ready';
+type SecureResourceFailureKind = 'offline' | 'timeout' | 'network' | 'http' | 'empty';
+
+class SecureResourceFetchError extends Error {
+  constructor(readonly kind: SecureResourceFailureKind, readonly status?: number) {
+    super(kind);
+    this.name = 'SecureResourceFetchError';
+  }
+}
+
+const SECURE_RESOURCE_TIMEOUT_MS = 60_000;
+const SECURE_CIPHER_CACHE_NAME = 'levihan-secure-cipher-v1';
+const SECURE_CIPHER_CACHE_MAX_BYTES = 96 * 1024 * 1024;
+const SECURE_CIPHER_CACHE_MAX_ENTRIES = 2;
+const SECURE_CIPHER_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const SECURE_CIPHER_CACHE_TIME_HEADER = 'x-levihan-cached-at';
+const SECURE_CIPHER_CACHE_SIZE_HEADER = 'x-levihan-cache-bytes';
+
+async function readCachedSecureResource(url: string): Promise<string | null> {
+  if (typeof caches === 'undefined') return null;
+  try {
+    const cache = await caches.open(SECURE_CIPHER_CACHE_NAME);
+    const response = await cache.match(url);
+    if (!response) return null;
+    const cachedAt = Number(response.headers.get(SECURE_CIPHER_CACHE_TIME_HEADER));
+    if (!Number.isFinite(cachedAt) || Date.now() - cachedAt > SECURE_CIPHER_CACHE_MAX_AGE_MS) {
+      await cache.delete(url);
+      return null;
+    }
+    const resource = (await response.text()).trim();
+    return resource || null;
+  } catch {
+    return null;
+  }
+}
+
+async function cacheSecureResource(url: string, response: Response, resourceSize: number): Promise<void> {
+  if (typeof caches === 'undefined' || response.status !== 200) return;
+
+  const declaredSize = Number(response.headers.get('content-length'));
+  const size = Number.isFinite(declaredSize) && declaredSize > 0 ? declaredSize : resourceSize;
+  if (size <= 0 || size > SECURE_CIPHER_CACHE_MAX_BYTES) return;
+
+  try {
+    const cache = await caches.open(SECURE_CIPHER_CACHE_NAME);
+    const requests = await cache.keys();
+    const entries = await Promise.all(requests.map(async (request) => {
+      const cached = await cache.match(request);
+      return {
+        request,
+        size: Number(cached?.headers.get(SECURE_CIPHER_CACHE_SIZE_HEADER)) || 0,
+        cachedAt: Number(cached?.headers.get(SECURE_CIPHER_CACHE_TIME_HEADER)) || 0,
+      };
+    }));
+
+    const existingIndex = entries.findIndex((entry) => entry.request.url === url);
+    let totalBytes = entries.reduce((total, entry) => total + entry.size, 0);
+    if (existingIndex >= 0) {
+      const [existing] = entries.splice(existingIndex, 1);
+      totalBytes -= existing.size;
+      await cache.delete(existing.request);
+    }
+
+    entries.sort((a, b) => a.cachedAt - b.cachedAt);
+    while (
+      entries.length >= SECURE_CIPHER_CACHE_MAX_ENTRIES ||
+      totalBytes + size > SECURE_CIPHER_CACHE_MAX_BYTES
+    ) {
+      const oldest = entries.shift();
+      if (!oldest) return;
+      totalBytes -= oldest.size;
+      await cache.delete(oldest.request);
+    }
+
+    const headers = new Headers(response.headers);
+    headers.set(SECURE_CIPHER_CACHE_TIME_HEADER, String(Date.now()));
+    headers.set(SECURE_CIPHER_CACHE_SIZE_HEADER, String(size));
+    await cache.put(url, new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    }));
+  } catch {
+    // Storage pressure or private browsing must not block opening the book.
+  }
+}
+
+async function fetchSecureResource(url: string): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), SECURE_RESOURCE_TIMEOUT_MS);
+
+  try {
+    const cachedResource = await readCachedSecureResource(url);
+    if (cachedResource) return cachedResource;
+    if (!navigator.onLine) throw new SecureResourceFetchError('offline');
+    const response = await fetch(url, {
+      mode: 'cors',
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new SecureResourceFetchError('http', response.status);
+
+    const cacheableResponse = typeof caches !== 'undefined' && response.status === 200
+      ? response.clone()
+      : null;
+    const resource = (await response.text()).trim();
+    if (!resource) throw new SecureResourceFetchError('empty');
+    if (cacheableResponse) {
+      void cacheSecureResource(url, cacheableResponse, resource.length);
+    }
+    return resource;
+  } catch (error) {
+    if (error instanceof SecureResourceFetchError) throw error;
+    if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+      throw new SecureResourceFetchError('timeout');
+    }
+    throw new SecureResourceFetchError('network');
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
 
 // PDF.js 绘制会占用主线程和大块位图内存；每个阅读器实例独立排队，
 // 关闭阅读器时可以一次性取消旧实例的任务，不让旧漫画继续占用主线程。
@@ -130,9 +250,14 @@ class ComicCanvasWindow {
   }
 }
 
-/** 密文直链：comic_vault/{id}_secure.txt */
-export const getSecureVaultUrl = (book: DoujinBookItem): string =>
-  cosService.getObjectUrl(`${VAULT_DIR}/${String(book.id).replace(/[^A-Za-z0-9_-]/g, '')}_secure.txt`);
+/** 新上传使用版本化 Key；旧归档仍回退到固定 Key。 */
+export const getSecureVaultUrl = (book: DoujinBookItem): string => {
+  const secureFile = String(book.secureFile || '').trim();
+  const key = /^comic_vault\/[A-Za-z0-9_-]{1,40}_secure\.txt$/i.test(secureFile)
+    ? secureFile
+    : `${VAULT_DIR}/${String(book.id).replace(/[^A-Za-z0-9_-]/g, '')}_secure.txt`;
+  return cosService.getObjectUrl(key);
+};
 
 /** PDF 文件头魔数：解出来必须是个 PDF，否则宁可直接失败也不要把乱码喂给 pdf.js */
 function looksLikePdf(bytes: Uint8Array): boolean {
@@ -312,6 +437,7 @@ const SecureCanvasPage: React.FC<{
     <div
       ref={holderRef}
       className="relative w-full max-w-3xl mx-auto bg-white shadow-[0_1px_0_rgba(0,0,0,.08)]"
+      style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
       data-page={pageNumber}
     >
       <div aria-hidden="true" style={{ paddingBottom: `${aspect * 100}%` }} />
@@ -320,15 +446,13 @@ const SecureCanvasPage: React.FC<{
           第 {pageNumber} 页渲染失败，请刷新后重试
         </div>
       ) : (
-        <PinchZoomSurface>
-          <canvas
-            ref={canvasRef}
-            className="w-full h-auto block select-none"
-            style={{ display: rendered ? 'block' : 'none', WebkitTouchCallout: 'none' }}
-            draggable={false}
-            onContextMenu={(e) => e.preventDefault()}
-          />
-        </PinchZoomSurface>
+        <canvas
+          ref={canvasRef}
+          className="w-full h-auto block select-none"
+          style={{ display: rendered ? 'block' : 'none', WebkitTouchCallout: 'none' }}
+          draggable={false}
+          onContextMenu={(e) => e.preventDefault()}
+        />
       )}
     </div>
   );
@@ -338,8 +462,10 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
   const [phase, setPhase] = useState<Phase>('locked');
   const [workingStage, setWorkingStage] = useState('解析中…');
   const [code, setCode] = useState('');
-  const codeEntryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [canRetry, setCanRetry] = useState(false);
+  const retryCodeRef = useRef('');
+  const retryWasAutomaticRef = useRef(false);
   const [doc, setDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
   const autoAttemptedRef = useRef(false);
@@ -409,15 +535,14 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
       setPhase('working');
       setWorkingStage('下载数据中…');
       setErrorMsg('');
+      setCanRetry(false);
+      retryCodeRef.current = '';
 
       try {
         const startedAt = performance.now();
         // ① 从 COS 取回伪装成 .txt 的密文
         const url = getSecureVaultUrl(book);
-        const res = await fetch(url, { mode: 'cors', cache: 'no-store' });
-        if (!res.ok) throw new Error(`节点返回 HTTP ${res.status}`);
-        const cipherText = (await res.text()).trim();
-        if (!cipherText) throw new Error('节点数据为空');
+        const cipherText = await fetchSecureResource(url);
         const downloadedAt = performance.now();
 
         // ② 解外层 AES-256-CBC（纯内存；解出来就是 PDF 二进制）
@@ -450,11 +575,46 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
         // 失败文案也保持在"系统页"的语境里，不暴露加密方式与文件类型
         const raw = String(err?.message || err);
         let friendly = '解析失败，请稍后重试。';
-        if (/password|校验码|Malformed|不匹配|empty/i.test(raw) || err?.name === 'PasswordException' || err?.name === 'OperationError') {
+        let retryable = false;
+        if (err instanceof SecureResourceFetchError) {
+          switch (err.kind) {
+            case 'offline':
+              friendly = '当前设备处于离线状态，连接网络后可重试。';
+              retryable = true;
+              break;
+            case 'timeout':
+              friendly = '安全节点响应超时，请检查网络后重试。';
+              retryable = true;
+              break;
+            case 'network':
+              friendly = '无法连接安全节点，请检查网络后重试。';
+              retryable = true;
+              break;
+            case 'empty':
+              friendly = '安全节点返回空文件，请稍后重试。';
+              retryable = true;
+              break;
+            case 'http':
+              if (err.status === 404) {
+                friendly = '当前节点未提供该资源，请联系管理员检查文件。';
+              } else if (err.status === 401 || err.status === 403) {
+                friendly = '安全节点拒绝了此请求。';
+              } else if (err.status === 408 || err.status === 429 || (err.status || 0) >= 500) {
+                friendly = '安全节点暂时繁忙，请稍后重试。';
+                retryable = true;
+              } else {
+                friendly = '安全节点暂时无法提供此资源。';
+              }
+              break;
+          }
+        } else if (/password|校验码|Malformed|不匹配/i.test(raw) || err?.name === 'PasswordException' || err?.name === 'OperationError') {
           friendly = '校验码无效，节点拒绝解析。';
           if (automatic && getVerifiedComicCode() === password) clearVerifiedComicCode();
-        } else if (/HTTP|Failed to fetch|NetworkError/i.test(raw)) {
-          friendly = '安全节点未响应，请检查网络后重试。';
+        }
+        setCanRetry(retryable);
+        if (retryable) {
+          retryCodeRef.current = password;
+          retryWasAutomaticRef.current = automatic;
         }
         setErrorMsg(automatic && friendly === '校验码无效，节点拒绝解析。' ? '已保存的校验码无效，请重新输入。' : friendly);
         setPhase('locked');
@@ -470,22 +630,14 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
     if (savedCode) void handleUnlock(savedCode, true);
   }, [handleUnlock]);
 
-  /** 输入满 7 个字符后自动尝试解析，继续输入时取消上一次计时。 */
+  /** 只更新输入状态；用户确认后再启动解析。 */
   const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.slice(0, 7);
     setCode(value);
     if (errorMsg) setErrorMsg('');
-    if (codeEntryTimerRef.current) clearTimeout(codeEntryTimerRef.current);
-    if (value.length === 7) {
-      codeEntryTimerRef.current = setTimeout(() => {
-        void handleUnlock(value);
-      }, 650);
-    }
+    setCanRetry(false);
+    retryCodeRef.current = '';
   };
-
-  useEffect(() => () => {
-    if (codeEntryTimerRef.current) clearTimeout(codeEntryTimerRef.current);
-  }, []);
 
   useEffect(() => {
     if (phase !== 'ready') return;
@@ -535,7 +687,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
                     maxLength={7}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' && code.length === 7) {
-                        if (codeEntryTimerRef.current) clearTimeout(codeEntryTimerRef.current);
+                        event.preventDefault();
                         void handleUnlock(code);
                       }
                     }}
@@ -543,11 +695,35 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
                     spellCheck={false}
                     className="secure-comic-code w-full border-0 border-b border-[#D5C9AF] bg-transparent px-1 py-2.5 text-[13px] text-[#1E3A2B] focus:outline-none focus:border-[var(--green-8)] focus:ring-0"
                   />
+                  <button
+                    type="button"
+                    onClick={() => void handleUnlock(code)}
+                    disabled={code.length !== 7}
+                    className="mt-5 inline-flex min-h-11 items-center justify-center rounded-[3px] border-[0.5px] border-[var(--green-8)] bg-[var(--green-12)] px-5 text-xs font-semibold text-[var(--amber-2)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"
+                  >
+                    开始解析
+                  </button>
                 </div>
               )}
 
               {errorMsg && (
-                <div className="mt-4 text-[12px] text-[#c5221f]">✗ {errorMsg}</div>
+                <div className="mt-4 text-[12px] text-[var(--red-11)]" role="alert">
+                  <p>✗ {errorMsg}</p>
+                  {canRetry && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const retryCode = code || retryCodeRef.current;
+                        if (retryCode.length === 7) {
+                          void handleUnlock(retryCode, !code && retryWasAutomaticRef.current);
+                        }
+                      }}
+                      className="mt-2 min-h-11 rounded-[3px] border-[0.5px] border-[var(--red-8)] px-3 font-semibold text-[var(--red-11)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"
+                    >
+                      重试
+                    </button>
+                  )}
+                </div>
               )}
               <button
                 type="button"

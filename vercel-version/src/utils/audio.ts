@@ -2,7 +2,10 @@
 
 let audioCtx: AudioContext | null = null;
 let isMuted = false;
+let isEnabled = true;
+let audioListenersInstalled = false;
 let lastSoundTime = 0;
+const interactionEvents = ['touchstart', 'touchend', 'pointerdown', 'mousedown', 'click', 'keydown'] as const;
 
 function markSoundPlayed() {
   lastSoundTime = Date.now();
@@ -32,20 +35,24 @@ function playSilentBuffer(ctx: AudioContext) {
 }
 
 function getAudioContext(): AudioContext | null {
-  if (isMuted) return null;
+  if (isMuted || !isEnabled) return null;
   if (typeof window === 'undefined') return null;
   
   if (!audioCtx) {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (AudioContextClass) {
-      audioCtx = new AudioContextClass();
-      
-      // 监听 WebAudio 状态变化（处理 iOS 锁屏/后台切回/中断复原）
-      audioCtx.onstatechange = () => {
-        if (audioCtx && (audioCtx.state === 'suspended' || (audioCtx.state as string) === 'interrupted') && !isMuted) {
-          void audioCtx.resume();
-        }
-      };
+    try {
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextClass) {
+        audioCtx = new AudioContextClass();
+
+        // 监听 WebAudio 状态变化（处理 iOS 锁屏/后台切回/中断复原）
+        audioCtx.onstatechange = () => {
+          if (audioCtx && (audioCtx.state === 'suspended' || (audioCtx.state as string) === 'interrupted') && !isMuted && isEnabled) {
+            void audioCtx.resume().catch(() => {});
+          }
+        };
+      }
+    } catch {
+      audioCtx = null;
     }
   }
 
@@ -56,40 +63,69 @@ function getAudioContext(): AudioContext | null {
 }
 
 // iOS WebKit 全局音频解锁器：在用户首次触控或交互时立即恢复 WebAudioContext 状态
-if (typeof window !== 'undefined') {
-  const unlockAudioContextOnUserGesture = () => {
-    if (isMuted) return;
-    const ctx = getAudioContext();
-    if (!ctx) return;
+function unlockAudioContextOnUserGesture() {
+  if (isMuted || !isEnabled) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
 
-    if (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted') {
-      void ctx.resume().then(() => {
-        if (ctx.state === 'running') {
-          playSilentBuffer(ctx);
-        }
-      }).catch(() => {});
-    } else if (ctx.state === 'running') {
-      playSilentBuffer(ctx);
-    }
-  };
+  if (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted') {
+    void ctx.resume().then(() => {
+      if (ctx.state === 'running') playSilentBuffer(ctx);
+    }).catch(() => {});
+  } else if (ctx.state === 'running') {
+    playSilentBuffer(ctx);
+  }
+}
 
-  const interactionEvents = ['touchstart', 'touchend', 'pointerdown', 'mousedown', 'click', 'keydown'];
+function resumeAudioContextWhenVisible() {
+  if (document.visibilityState !== 'visible' || !audioCtx || isMuted || !isEnabled) return;
+  if (audioCtx.state === 'suspended' || (audioCtx.state as string) === 'interrupted') {
+    void audioCtx.resume().catch(() => {});
+  }
+}
+
+function installAudioListeners() {
+  if (typeof window === 'undefined' || audioListenersInstalled) return;
   interactionEvents.forEach((eventName) => {
     window.addEventListener(eventName, unlockAudioContextOnUserGesture, { capture: true, passive: true });
   });
-
-  // 页面切回前台（iOS 切回 App）自动恢复 AudioContext
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && audioCtx && !isMuted) {
-      if (audioCtx.state === 'suspended' || (audioCtx.state as string) === 'interrupted') {
-        void audioCtx.resume();
-      }
-    }
-  });
+  document.addEventListener('visibilitychange', resumeAudioContextWhenVisible);
+  audioListenersInstalled = true;
 }
+
+function removeAudioListeners() {
+  if (typeof window === 'undefined' || !audioListenersInstalled) return;
+  interactionEvents.forEach((eventName) => {
+    window.removeEventListener(eventName, unlockAudioContextOnUserGesture, true);
+  });
+  document.removeEventListener('visibilitychange', resumeAudioContextWhenVisible);
+  audioListenersInstalled = false;
+}
+
+installAudioListeners();
 
 export const soundManager = {
   isMuted: () => isMuted,
+
+  setEnabled: (enabled: boolean) => {
+    isEnabled = enabled;
+    if (enabled) {
+      installAudioListeners();
+      return;
+    }
+
+    removeAudioListeners();
+    if (audioCtx) {
+      audioCtx.onstatechange = null;
+      const context = audioCtx;
+      audioCtx = null;
+      try {
+        void context.close().catch(() => {});
+      } catch {
+        // ignore
+      }
+    }
+  },
   
   toggleMute: () => {
     isMuted = !isMuted;

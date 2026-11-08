@@ -373,11 +373,11 @@ const doc = await pdfjsLib.getDocument({ data: pdfBytes, password }).promise;
 
 ## 八、已知限制
 
-- **Key 默认不带时间戳**（`CONFIG.VERSIONED_KEY = false`）：`comic_vault/lh-123_secure.txt`。
-  这样重传是幂等覆盖、不会留孤儿对象，而且阅读端仅凭 `bookId` 就能反推 Key
-  —— 现有云函数的 `normalizeBook()` 是字段白名单，透传不了 `vaultKey` 字段。
-  要严格按需求原文的 `comic_vault/${Date.now()}_secure.txt`，把这个开关置 `true`，
-  但同时得自己找地方存这条 Key。
+- **上传模块默认使用固定 Key**（`CONFIG.VERSIONED_KEY = false`），便于独立调用。
+  正式管理台会显式启用版本化 Key，并把实际路径写入归档的 `secureFile` 字段；同时更新固定路径兼容副本，
+  让尚未更新的 PWA 仍可读取。更新成功后清理上一版密文。旧归档没有该字段时，阅读端继续使用固定路径。
+- 阅读器优先从本机 Cache Storage 读取密文，最多保留 2 份、总量不超过 96 MiB，30 天后过期；
+  缓存满或存储不可用时仍会联网读取。缓存只包含加密文本，不包含解密后的 PDF。
 - **归档模型不匹配**：加密本没有 `pageFiles`（内页都在 PDF 里），所以站点画廊取不到逐页图，
   阅读端改走 Canvas 瀑布流（第五节）。缩略图则由 5.2 的单独封面提供 —— 没设封面的本子在
   「已收录作品」列表里显示隔离占位，这是预期行为而非故障。

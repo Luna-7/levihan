@@ -51,6 +51,16 @@
     },
     { "src": "^/comics/?$", "dest": "/?tab=resources", "statusCode": 308 },
     {
+      "src": "^/$",
+      "headers": { "Cache-Control": "no-cache, no-store, must-revalidate" },
+      "continue": true
+    },
+    {
+      "src": "^/(?:index|comic)\\.html$",
+      "headers": { "Cache-Control": "no-cache, no-store, must-revalidate" },
+      "continue": true
+    },
+    {
       "src": "^/manifest\\.webmanifest$",
       "headers": { "Content-Type": "application/manifest+json" },
       "continue": true

@@ -44,14 +44,10 @@
       })();
     </script>
     <script>
-      // ── 部署脱节自愈：防止「新版一上线，老页面切懒加载分区就白屏」────────────
-      // 本站注册了 PWA Service Worker，产物 sw.js 带 skipWaiting + clientsClaim：
-      // 新版一装好立刻接管，并（cleanupOutdatedCaches）清掉旧的预缓存。
-      // 但**正在浏览的页面不会自己刷新**，内存里还是旧代码；此时切到懒加载分区
-      // （巨树餐厅 / 茶会 / 联络）就会去网络拉「旧版 chunk 文件名」——
-      // 那个文件在新部署里已经不存在（404）→ 模块加载失败 → 整页白屏。
-      // 这不是浏览器坏了，是「页面比部署落后」。对策：拿到新版就自动刷一次，
-      // chunk 加载失败也自动刷一次（同一段脚本也内联在 comic.html，改动请同步）。
+      // ── 部署脱节自愈：处理旧页面请求已删除的哈希分包 ──────────────
+      // vite-plugin-pwa 的 autoUpdate 会在新版 Worker 激活时重载页面。
+      // 若旧页面仍遇到分包 404 或加载失败，这些监听器再自动刷新一次。
+      // 同一段脚本也内联在 comic.html，改动请同步。
       (function () {
         var FLAG = 'lh-auto-reload-version';
         var reloading = false;
@@ -97,9 +93,7 @@
           if (CHUNK_RE.test(String((e && e.message) || ''))) safeReload();
         }, true);
 
-        // controllerchange 不主动 reload：iOS 首屏刚打开时二次刷新会造成明显闪烁和卡顿。
-        // 新 HTML 由 navigation 的后台更新供下次打开使用；若旧页面真的请求到已删除
-        // chunk，上面的 preloadError/error 监听仍会立即 safeReload 自愈。
+        // 新 Service Worker 激活后的重载由 vite-plugin-pwa 的 autoUpdate 注册代码负责。
       })();
     </script>
     <title>利韩土豆仓</title>

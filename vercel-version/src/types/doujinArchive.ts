@@ -28,13 +28,15 @@ export interface DoujinBookItem {
   sensitiveLevel?: 'safe' | 'mild-r18';
   /**
    * 敏感内容标记：后台勾选「含有敏感元素」后上传的本子。
-   * 正文不是图片，而是 comic_vault/{id}_secure.txt —— AES 双重加密后的密文，
+   * 正文不是图片，而是 AES 双重加密后的密文，
    * 站点必须走 SecureComicReader（403 伪装页 + 双重解密 + Canvas 渲染）才看得到。
    *
    * 注意：标记为 secure 时，`coverFile` 指向的是后台「敏感本封面」单独上传的**明文**图
    * （{bookFolder}/cover.<ext>），是公开可读的，卡片照常显示；不填则卡片只显示隔离占位图。
    */
   secure?: boolean;
+  /** 版本化 COS 密文对象路径；旧作品缺少此字段时仍按 ID 使用旧固定路径。 */
+  secureFile?: string;
 }
 
 /** 在线小说元数据（管理台「D 在线小说」→ 云函数 → COS novels.json；正文在 novels/{id}.txt） */

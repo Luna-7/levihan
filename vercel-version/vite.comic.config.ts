@@ -34,12 +34,14 @@ export default defineConfig(() => {
         ],
         workbox: {
           importScripts: ['/push-sw.js'],
-          // 漫画站只预缓存应用壳（comic.html 兜底）；封面与正文图片走运行时缓存。
+          // 漫画站只预缓存应用壳；阅读器代码与作品资源在用户需要时再缓存。
           globPatterns: ['comic.html', 'assets/**/*.{js,css}'],
-          // 加密阅读器（pdfjs-dist）必须联网取密文，离线预缓存没有意义。
+          // 阅读器和 PDF worker 延后加载，避免增加首屏预缓存；密文不进入应用壳预缓存。
           globIgnores: [
+            'assets/cosS3Scanner-*.js',
             'assets/SecureComicReader-*.js',
             'assets/pdfjs-vendor-*.js',
+            'assets/vendor-*.js',
             'assets/pdf.worker.min-*.js',
           ],
           // Navigation 由下方 NetworkFirst 独占，避免 precache fallback 抢先返回旧 HTML。
@@ -62,17 +64,30 @@ export default defineConfig(() => {
               method: 'POST',
             },
             {
+              // 按需加载的大型模块不进入预缓存，首次取得后按内容哈希运行时缓存。
+              urlPattern: ({ url, sameOrigin }) =>
+                sameOrigin && /^\/assets\/(?:cosS3Scanner|SecureComicReader|pdfjs-vendor|vendor|pdf\.worker\.min)-[^/]+\.(?:js|mjs)$/i.test(url.pathname),
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'levihan-comic-reader-code-v1',
+                expiration: { maxEntries: 12, maxAgeSeconds: 60 * 60 * 24 * 90 },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
+            {
               urlPattern: ({ request, sameOrigin }) => request.mode === 'navigate' && sameOrigin,
-              handler: 'StaleWhileRevalidate',
+              handler: 'NetworkFirst',
               options: {
                 cacheName: 'levihan-comic-navigation-v1',
-                expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 7 },
+                expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 30 },
                 cacheableResponse: { statuses: [0, 200] },
               },
             },
             {
-              // 漫画封面：容量受限的 CacheFirst，避免无限膨胀。
-              urlPattern: /^https:\/\/levihan-1325571558\.cos-website\.ap-nanjing\.myqcloud\.com\/lh-[^/?]+\/[^?]+\.webp$/i,
+              // COS 漫画图片：按需缓存 WebP 与旧版图片格式，容量受限。
+              urlPattern: ({ url }) =>
+                url.hostname === 'levihan-1325571558.cos-website.ap-nanjing.myqcloud.com' &&
+                /^\/(?!comic_vault\/)[^/]+\/.+\.(?:webp|jpe?g|png|gif|avif)$/i.test(url.pathname),
               handler: 'CacheFirst',
               options: {
                 cacheName: 'comic-site-covers',

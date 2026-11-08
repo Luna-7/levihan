@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createRequire } from 'node:module';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -334,6 +335,13 @@ function normalizeBook(raw: JsonRecord) {
   const warning = String(raw.warning || '').trim().slice(0, 100);
   if (warning) book.warning = warning;
   if (typeof raw.secure === 'boolean') book.secure = raw.secure;
+  const secureFile = String(raw.secureFile || '').trim();
+  if (secureFile) {
+    if (!book.secure || !/^comic_vault\/[A-Za-z0-9_-]{1,40}_secure\.txt$/i.test(secureFile)) {
+      throw fail('加密文件路径无效。');
+    }
+    book.secureFile = secureFile;
+  }
   const prefix = String(raw.pagePrefix || '').trim();
   if (prefix && prefix !== 'image') book.pagePrefix = prefix;
   const pad = Number.parseInt(raw.pagePadDigits, 10);
@@ -571,6 +579,20 @@ export default async function handler(request: AdminRequest, response: ServerRes
         sendJson(response, 200, { ok: true, tags });
         return;
       }
+      case 'bookTagRemove': {
+        const id = String(payload.id || '').trim();
+        if (!/^lh-\d{1,4}$/.test(id)) throw fail('非法作品 ID');
+        const tag = String(payload.tag || '').trim().slice(0, 24);
+        if (!tag) throw fail('缺少标签名');
+        const archive = await readJsonArray('archive.json');
+        const book = archive.find((item) => item && item.id === id);
+        if (!book) throw fail('归档中找不到该作品', 404);
+        book.tags = (Array.isArray(book.tags) ? book.tags : []).filter((item) => item !== tag);
+        book.updatedAt = new Date().toISOString();
+        await writeJson('archive.json', archive);
+        sendJson(response, 200, { ok: true, book });
+        return;
+      }
       case 'authorLib': {
         const authors = payload.authors === undefined
           ? normalizeAuthors(await readJsonArray('authors.json'))
@@ -715,6 +737,9 @@ export default async function handler(request: AdminRequest, response: ServerRes
         if (index >= 0) {
           if (books[index].createdAt) book.createdAt = books[index].createdAt;
           if (books[index].uid && !book.uid) book.uid = books[index].uid;
+          if (book.secure && !book.secureFile && books[index].secureFile) {
+            book.secureFile = books[index].secureFile;
+          }
           if (!Array.isArray(payload.book?.pageFiles) && Array.isArray(books[index].pageFiles)) {
             book.pageFiles = books[index].pageFiles;
           }
@@ -732,6 +757,49 @@ export default async function handler(request: AdminRequest, response: ServerRes
         await writeJson('tags.json', tags);
         stage = 'upsertAuthor';
         await upsertAuthor(String(book.circle || ''), String(book.authorUrl || ''));
+        const legacySecureKey = `comic_vault/${book.id}_secure.txt`;
+        const previousVersionedSecureKey = typeof previousBook?.secureFile === 'string' &&
+          /^comic_vault\/[A-Za-z0-9_-]{1,40}_secure\.txt$/i.test(previousBook.secureFile) &&
+          previousBook.secureFile !== legacySecureKey
+          ? previousBook.secureFile
+          : '';
+        const currentVersionedSecureKey = typeof book.secureFile === 'string' &&
+          /^comic_vault\/[A-Za-z0-9_-]{1,40}_secure\.txt$/i.test(book.secureFile) &&
+          book.secureFile !== legacySecureKey
+          ? book.secureFile
+          : '';
+        if (book.secure && currentVersionedSecureKey) {
+          try {
+            await getCosClient().send(new CopyObjectCommand({
+              Bucket: BUCKET,
+              Key: legacySecureKey,
+              CopySource: `${BUCKET}/${currentVersionedSecureKey}`,
+              MetadataDirective: 'COPY',
+            }));
+          } catch (error) {
+            console.error('[publish-secure-legacy-copy]', {
+              key: legacySecureKey,
+              code: (error as any)?.Code || (error as any)?.name || 'unknown',
+            });
+          }
+        }
+        if (previousBook?.secure) {
+          const obsoleteSecureKeys = new Set<string>();
+          if (previousVersionedSecureKey && previousVersionedSecureKey !== currentVersionedSecureKey) {
+            obsoleteSecureKeys.add(previousVersionedSecureKey);
+          }
+          if (!book.secure) obsoleteSecureKeys.add(legacySecureKey);
+          for (const oldSecureKey of obsoleteSecureKeys) {
+            try {
+              await getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: oldSecureKey }));
+            } catch (error) {
+              console.error('[publish-secure-cleanup]', {
+                key: oldSecureKey,
+                code: (error as any)?.Code || (error as any)?.name || 'unknown',
+              });
+            }
+          }
+        }
         let deletedPageFiles = 0;
         let pageFileCleanupFailures = 0;
         if (previousBook && Array.isArray(payload.book?.pageFiles) && !previousBook.secure && !book.secure) {
@@ -805,7 +873,13 @@ export default async function handler(request: AdminRequest, response: ServerRes
             keys.push(...(listed.Contents || []).flatMap((item) => item.Key ? [item.Key] : []));
             continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
           } while (continuationToken);
-          if (target.secure) keys.push(`comic_vault/${id}_secure.txt`);
+          if (target.secure) {
+            const secureKeys = new Set([`comic_vault/${id}_secure.txt`]);
+            if (typeof target.secureFile === 'string' &&
+              /^comic_vault\/[A-Za-z0-9_-]{1,40}_secure\.txt$/i.test(target.secureFile)
+            ) secureKeys.add(target.secureFile);
+            keys.push(...secureKeys);
+          }
         }
         const next = books.filter((book) => book && book.id !== id);
         await writeJson('archive.json', next);

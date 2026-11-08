@@ -22,11 +22,9 @@
       })();
     </script>
     <script>
-      // ── 部署脱节自愈（与主站 index.html 同一段，改动请同步）───────────────
-      // 漫画站同样注册了 PWA Service Worker，sw.js 带 skipWaiting + clientsClaim：
-      // 新版一装好立刻接管并清掉旧预缓存，而正在浏览的旧页面不会自己刷新，
-      // 之后它去拉「旧版 chunk 文件名」（新部署里已 404）→ 模块加载失败 → 整页白屏。
-      // 对策：拿到新版就自动刷一次，chunk 加载失败也自动刷一次。
+      // ── 部署脱节自愈（与主站 index.html 同步）─────────────────────
+      // vite-plugin-pwa 的 autoUpdate 会在新版 Worker 激活时重载页面。
+      // 若旧页面仍遇到分包 404 或加载失败，这些监听器再自动刷新一次。
       (function () {
         var FLAG = 'lh-auto-reload-version';
         var reloading = false;
@@ -70,7 +68,7 @@
           if (CHUNK_RE.test(String((e && e.message) || ''))) safeReload();
         }, true);
 
-        // SW 接管本身不刷新首屏；旧 chunk 加载失败时仍由上方错误监听自动自愈。
+        // 新 Service Worker 激活后的重载由 vite-plugin-pwa 的 autoUpdate 注册代码负责。
       })();
     </script>
     <title>Error 404</title>

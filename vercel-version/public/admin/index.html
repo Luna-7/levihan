@@ -346,6 +346,15 @@
   .author-table td a{color:#1F5B38;word-break:break-all}
   .author-table td.muted{white-space:nowrap}
   .author-table tr:hover td{background:#FBF7EC}
+  .author-name-field{position:relative;flex:1 1 220px;width:min(100%,220px)}
+  .author-name-field>input{width:100%;max-width:none!important}
+  .author-book-name-field{width:100%;flex:none}
+  .author-book-name-field>input{width:100%}
+  .author-suggestions{position:absolute;z-index:20;top:calc(100% + 4px);left:0;width:min(360px,calc(100vw - 52px));max-height:280px;overflow:auto;padding:4px;border:.5px solid var(--line);border-radius:6px;background:var(--card)}
+  .author-suggestion{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;padding:7px 9px;border:0;border-radius:4px;background:transparent;text-align:left}
+  .author-suggestion:hover:not(:disabled),.author-suggestion:focus-visible{background:var(--paper)}
+  .author-suggestion-name{font-size:13px;color:var(--ink)}
+  .author-suggestion-url{font-size:12px;font-weight:400;color:var(--ink-3);word-break:break-all}
   /* ---- misc ---- */
   .note{border-left:3px solid var(--gold);background:#FFF9EC;padding:9px 12px;border-radius:0 6px 6px 0;
         font-size:12.5px;color:var(--ink-2);margin:12px 0}
@@ -712,6 +721,9 @@
     <!-- 作者链接登记表：发布作品时自动登记「作者名 + 主页链接」，输入同名作者自动带出链接，可导出 Excel -->
     <div class="admin-page-head hide" data-admin-page="authors"><h2>📇 作者登记</h2><div class="muted">统一维护作者、社团及主页链接。</div></div>
     <div class="panel hide" id="author-panel" data-admin-page="authors">
+      <div class="row" style="margin-bottom:10px">
+        <button type="button" class="btn-sm" id="author-back">← 返回</button>
+      </div>
       <div class="spread" style="margin-bottom:12px">
         <h2 style="margin:0">作者链接表</h2>
         <div class="row" style="gap:6px">
@@ -721,9 +733,13 @@
       </div>
       <div class="muted" id="author-status">此表是作者名和主页链接的主表。修改作者信息会同步更新已发布漫画中完全匹配的作者记录。</div>
       <div class="row" style="margin:10px 0;gap:6px;flex-wrap:wrap">
-        <input type="text" id="al-name" placeholder="作者 / 社团名" style="max-width:220px">
+        <div class="author-name-field">
+          <input type="text" id="al-name" placeholder="作者 / 社团名" autocomplete="off" aria-autocomplete="list" aria-controls="author-name-suggestions" aria-expanded="false">
+          <div class="author-suggestions hide" id="author-name-suggestions" role="group" aria-label="匹配作者"></div>
+        </div>
         <input type="url" id="al-url" placeholder="https:// 主页链接（可空）" style="max-width:320px">
         <button class="btn-sm btn-gold" id="author-add">添加作者</button>
+        <button type="button" class="btn-sm hide" id="author-selection-cancel">取消修改</button>
       </div>
       <input type="search" id="author-search" placeholder="搜索作者名或主页链接" style="width:min(100%,420px);margin-bottom:10px">
       <div id="author-list"></div>
@@ -961,7 +977,10 @@
         </div>
         <div class="f" data-page-node-id="R4fta3IQ4GS3unQuNIsVGG">
           <label for="f-circle" data-page-node-id="RV9GmZyaVcuUjrD0BVwOke">作者 / 社团 <span class="req" data-page-node-id="nSURheYqTDBAs9CMRJIXo9">*</span></label>
-          <input type="text" id="f-circle" placeholder="例如：おすし" data-page-node-id="J7EhPaOL1FED1BtvURwzy8">
+          <div class="author-name-field author-book-name-field">
+            <input type="text" id="f-circle" placeholder="例如：おすし" autocomplete="off" aria-autocomplete="list" aria-controls="book-author-suggestions" aria-expanded="false" data-page-node-id="J7EhPaOL1FED1BtvURwzy8">
+            <div class="author-suggestions hide" id="book-author-suggestions" role="group" aria-label="匹配作者"></div>
+          </div>
         </div>
         <div class="f" data-page-node-id="admin-author-homepage">
           <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
@@ -1399,6 +1418,8 @@ function onAuthFail(err){
 
 
 var authorLib = [];   // 云端作者链接登记表（authors.json），上传台自动补全的数据源
+var authorLibLoaded = false;
+var authorLibLoading = false;
 
 function pixivAliases(name){
   var raw = String(name || '').trim();
@@ -1459,6 +1480,8 @@ function suggestNovelAuthorUrl(){
   $('nv-author-link-hint').textContent = found ? '✓ 已从' + src + '匹配主页链接，可手动修改。' : '';
 }
 var activeAdminPage = 'manga';
+var authorReturnPage = 'manga';
+var authorReturnSub = 'upload';
 function switchAdminPage(page, updateHash){
   var allowed = ['manga','announcement','support','toolkit','goods','authors'];
   if (allowed.indexOf(page) < 0) page = 'manga';
@@ -2361,6 +2384,7 @@ function fillForm(b){
   $('f-titleZh').value = normalizeEnglishTitleInitial(b.titleZh || '');
   $('f-titleJp').value = normalizeEnglishTitleInitial(b.titleJp || '');
   $('f-circle').value = b.circle || '';
+  hideBookAuthorSuggestions();
   $('f-authorUrl').value = b.authorUrl || '';
   lastSuggestedAuthorUrl = '';
   $('author-link-hint').textContent = '';
@@ -2482,6 +2506,7 @@ function resetForm(){
   editingArchiveBookId = '';
   ['f-id','f-titleZh','f-titleJp','f-circle','f-authorUrl','f-tags','f-source',
    'f-translator','f-typesetter','f-pages'].forEach(function(k){ $(k).value = ''; });
+  hideBookAuthorSuggestions();
   uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'', pageFiles:[] };
   $('opt-secure').checked = false;
   lastSuggestedAuthorUrl = '';
@@ -3574,14 +3599,71 @@ $('forum-admin-list').addEventListener('click',function(e){var post=e.target.clo
 
 /* ============ 作者链接登记表 ============ */
 var authorEditingIndex = -1;
+var authorSelectedName = '';
+function hideAuthorNameSuggestions(){
+  var input = $('al-name');
+  var box = $('author-name-suggestions');
+  box.classList.add('hide');
+  input.setAttribute('aria-expanded', 'false');
+}
+function hideBookAuthorSuggestions(){
+  $('book-author-suggestions').classList.add('hide');
+  $('f-circle').setAttribute('aria-expanded', 'false');
+}
+function renderAuthorMatches(input, box, includeUrl){
+  var query = input.value.trim().toLocaleLowerCase();
+  if (!query) {
+    box.classList.add('hide');
+    input.setAttribute('aria-expanded', 'false');
+    return;
+  }
+  var matches = authorLib.map(function(author, index){ return { author:author, index:index }; }).filter(function(item){
+    return String(item.author.name || '').toLocaleLowerCase().indexOf(query) >= 0;
+  });
+  if (!matches.length) {
+    box.classList.add('hide');
+    input.setAttribute('aria-expanded', 'false');
+    return;
+  }
+  box.innerHTML = matches.map(function(item){
+    var author = item.author;
+    return '<button type="button" class="author-suggestion" data-author-suggestion="' + item.index + '"><span class="author-suggestion-name">' + esc(author.name) + '</span>' + (includeUrl ? '<span class="author-suggestion-url">' + esc(author.url || '未登记主页链接') + '</span>' : '') + '</button>';
+  }).join('');
+  box.classList.remove('hide');
+  input.setAttribute('aria-expanded', 'true');
+}
+function renderAuthorNameSuggestions(){
+  var query = $('al-name').value.trim().toLocaleLowerCase();
+  if (authorSelectedName && query === authorSelectedName.toLocaleLowerCase()) {
+    hideAuthorNameSuggestions();
+    return;
+  }
+  renderAuthorMatches($('al-name'), $('author-name-suggestions'), true);
+}
+function renderBookAuthorSuggestions(){
+  renderAuthorMatches($('f-circle'), $('book-author-suggestions'), false);
+}
+function clearAuthorSelection(){
+  authorSelectedName = '';
+  $('author-add').textContent = '添加作者';
+  $('author-selection-cancel').classList.add('hide');
+  hideAuthorNameSuggestions();
+}
 function loadAuthorLib(){
+  if (authorLibLoading) return;
+  authorLibLoading = true;
   if (LOCAL_PREVIEW) {
     $('author-status').textContent = '正在读取云端作者表…';
     fetchPublicArray('authors.json', '作者链接表', false).then(function(authors){
+      authorLibLoading = false;
+      authorLibLoaded = true;
       authorLib = authors;
-      $('author-status').textContent = '本地预览：读取到 ' + authorLib.length + ' 条云端作者记录；修改和同步请从正式管理台进入。';
+      $('author-status').textContent = '';
       renderAuthorLib();
+      renderAuthorNameSuggestions();
+      renderBookAuthorSuggestions();
     }).catch(function(err){
+      authorLibLoading = false;
       $('author-status').textContent = '本地预览无法读取作者表：' + (err.message || String(err));
       $('author-list').innerHTML = '<p class="muted">请从正式管理台打开作者表，读取和修改云端记录。</p>';
     });
@@ -3589,10 +3671,14 @@ function loadAuthorLib(){
   }
   $('author-status').textContent = '正在读取登记表…';
   api({ action:'authorLib' }).then(function(res){
+    authorLibLoading = false;
+    authorLibLoaded = true;
     authorLib = Array.isArray(res.authors) ? res.authors : [];
     $('author-status').textContent = '作者链接表共 ' + authorLib.length + ' 条记录。修改记录会同步到已发布漫画。';
     renderAuthorLib();
-  }).catch(function(err){ $('author-status').textContent = '读取失败：' + (err.message || String(err)); });
+    renderAuthorNameSuggestions();
+    renderBookAuthorSuggestions();
+  }).catch(function(err){ authorLibLoading = false; $('author-status').textContent = '读取失败：' + (err.message || String(err)); });
 }
 function renderAuthorLib(){
   var box = $('author-list');
@@ -3627,10 +3713,12 @@ function saveAuthorEntry(oldName, name, url){
     $('author-status').textContent = '正在保存并同步作者信息…';
     api({ action:'authorSave', oldName: oldName || '', name:name, url:url }).then(function(res){
       authorLib = Array.isArray(res.authors) ? res.authors : authorLib;
+      authorLibLoaded = true;
       authorEditingIndex = -1;
+      clearAuthorSelection();
       $('author-status').textContent = '✓ 已保存；已同步 ' + (res.updatedBookCount || 0) + ' 本已发布漫画。作者表共 ' + authorLib.length + ' 条。';
       $('al-name').value = ''; $('al-url').value = '';
-      renderAuthorLib(); loadBooks();
+      renderAuthorLib(); renderBookAuthorSuggestions(); loadBooks();
     }).catch(function(err){
       if (onAuthFail(err)) return;
       $('author-status').textContent = '保存失败：' + (err.message || String(err));
@@ -3640,13 +3728,63 @@ function saveAuthorEntry(oldName, name, url){
 }
 $('author-reload').onclick = loadAuthorLib;
 $('author-search').addEventListener('input', renderAuthorLib);
-$('author-table-open').onclick = function(){ switchAdminPage('authors'); };
+$('al-name').addEventListener('input', renderAuthorNameSuggestions);
+$('f-circle').addEventListener('focus', function(){
+  if (!authorLibLoaded) loadAuthorLib();
+  renderBookAuthorSuggestions();
+});
+$('f-circle').addEventListener('input', function(){
+  suggestAuthorUrl();
+  renderBookAuthorSuggestions();
+});
+$('book-author-suggestions').addEventListener('click', function(event){
+  var option = event.target.closest('[data-author-suggestion]');
+  if (!option) return;
+  var author = authorLib[Number(option.getAttribute('data-author-suggestion'))];
+  if (!author) return;
+  $('f-circle').value = author.name;
+  $('f-authorUrl').value = '';
+  lastSuggestedAuthorUrl = '';
+  suggestAuthorUrl();
+  hideBookAuthorSuggestions();
+});
+$('author-name-suggestions').addEventListener('click', function(event){
+  var option = event.target.closest('[data-author-suggestion]');
+  if (!option) return;
+  var author = authorLib[Number(option.getAttribute('data-author-suggestion'))];
+  if (!author) return;
+  authorSelectedName = author.name;
+  $('al-name').value = author.name;
+  $('al-url').value = author.url || '';
+  $('author-add').textContent = '保存修改';
+  $('author-selection-cancel').classList.remove('hide');
+  hideAuthorNameSuggestions();
+});
+$('author-selection-cancel').onclick = function(){
+  clearAuthorSelection();
+  $('al-name').value = '';
+  $('al-url').value = '';
+};
+$('author-table-open').onclick = function(){
+  authorReturnPage = activeAdminPage;
+  authorReturnSub = mangaSub;
+  switchAdminPage('authors');
+};
+$('author-back').onclick = function(){
+  if (authorReturnPage === 'manga' && authorReturnSub === 'toolkit') switchAdminPage('toolkit');
+  else switchAdminPage(authorReturnPage || 'manga');
+};
 $('author-add').onclick = function(){
   var name = $('al-name').value.trim();
   var url = $('al-url').value.trim();
   if (!name) { alert('请填写作者 / 社团名。'); return; }
   if (url && !/^https?:\/\//i.test(url)) { alert('主页链接需以 http:// 或 https:// 开头。'); return; }
-  if (authorLib.some(function(a){ return a.name === name; })) { alert('作者表中已存在这个名字，请编辑现有记录。'); return; }
+  if (authorSelectedName) {
+    if (authorLib.some(function(a){ return a.name === name && a.name !== authorSelectedName; })) { alert('作者表中已存在这个名字，请编辑现有记录。'); return; }
+    saveAuthorEntry(authorSelectedName, name, url);
+    return;
+  }
+  if (authorLib.some(function(a){ return a.name === name; })) { alert('作者表中已存在这个名字，请选择匹配项进行修改。'); return; }
   saveAuthorEntry('', name, url);
 };
 $('author-list').addEventListener('click', function(event){
@@ -3677,7 +3815,8 @@ $('author-list').addEventListener('click', function(event){
     $('author-status').textContent = '正在删除作者记录…';
     return api({ action:'authorDelete', name:row.name }).then(function(res){
       authorLib = Array.isArray(res.authors) ? res.authors : authorLib;
-      $('author-status').textContent = '✓ 已删除登记记录；已清除 ' + (res.updatedBookCount || 0) + ' 本漫画的主页链接。'; renderAuthorLib(); loadBooks();
+      authorLibLoaded = true;
+      $('author-status').textContent = '✓ 已删除登记记录；已清除 ' + (res.updatedBookCount || 0) + ' 本漫画的主页链接。'; renderAuthorLib(); renderBookAuthorSuggestions(); loadBooks();
     });
   }).catch(function(err){ if (onAuthFail(err)) return; $('author-status').textContent = '删除失败：' + (err.message || String(err)); });
 });
@@ -4199,7 +4338,7 @@ function handleSecureUpload(){
   uploadSecureCover(form.id)
     .then(function(coverName){
       if (coverName) form.coverFile = coverName;
-      return LeVihanVault.handleComicUpload(sources, { bookId: form.id, onProgress: secureProgress });
+      return LeVihanVault.handleComicUpload(sources, { bookId: form.id, versioned: true, onProgress: secureProgress });
     })
     .then(function(result){
       // 阅读端 SecureComicReader 已上线：前台点开 secure 本子 → 403 伪装页 →
@@ -4209,7 +4348,8 @@ function handleSecureUpload(){
             pages: result.pageCount || form.pages,
             bookFolder: form.bookFolder || form.id,
             // 站点据此把本子导向 403 伪装阅读器；键存在页面才会显示「🔒 含有敏感元素」
-            secure: true
+            secure: true,
+            secureFile: result.key
           }) }).then(function(d){
             show($('main-msg'), 'ok', '上传成功');
             resetForm();
@@ -5337,7 +5477,6 @@ $('f-titleZh').addEventListener('input', function(){
 $('f-titleJp').addEventListener('input', function(){
   this.value = normalizeEnglishTitleInitial(this.value);
 });
-$('f-circle').addEventListener('input', suggestAuthorUrl);
 $('f-authorUrl').addEventListener('input', function(){ lastSuggestedAuthorUrl = ''; $('author-link-hint').textContent = ''; });
 $('nv-author').addEventListener('input', suggestNovelAuthorUrl);
 $('nv-authorUrl').addEventListener('input', function(){ lastSuggestedNovelAuthorUrl = ''; $('nv-author-link-hint').textContent = ''; });
