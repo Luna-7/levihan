@@ -158,12 +158,14 @@ const { items, problems } = buildArchive(rows);
  * 表格是归档的主体信息源，但有几个字段只有后台知道：
  *   secure —— 勾了「含有敏感元素」的本子，站点要靠它走 403 伪装阅读器；
  *             丢了它，密文本子会被当成普通图片本，点开就是一片空白。
+ *   collectionId / collectionTitle / collectionOrder —— 合集归属和阅读顺序。
  * 这里从线上 archive.json 读回来按 id 合并。读不到就跳过并提示，绝不阻断同步。 */
 async function preserveFlags(list) {
   // 表格里没有的字段，全靠线上 archive.json 接住，否则每跑一次同步就会被 buildArchive 的默认值冲掉：
   //   secure    —— 敏感标记，丢了这本就退回普通图集，阅读端行为直接错
   //   coverFile —— 后台「敏感本封面 / 首图即封面」选定的真实文件名，丢了会被重置成 image01.webp
-  const KEEP = ['secure', 'coverFile'];
+  //   collection* —— 工作台维护的合集关系不在 CSV 里，必须从线上归档带回
+  const KEEP = ['secure', 'coverFile', 'collectionId', 'collectionTitle', 'collectionOrder'];
   let remote = null;
   try {
     const res = await fetch(`${CDN_BASE}/archive.json`, { cache: 'no-store' });
@@ -172,7 +174,7 @@ async function preserveFlags(list) {
     /* 网络不可达时静默降级，下面统一提示 */
   }
   if (!Array.isArray(remote)) {
-    console.warn('⚠ 读不到线上 archive.json，本次未能保全 secure / coverFile 标记（表格里没有这两个字段）。');
+    console.warn('⚠ 读不到线上 archive.json，本次未能保全后台标记（敏感标记、封面和合集顺序）。');
     return list;
   }
   const byId = new Map(remote.filter((b) => b && b.id).map((b) => [b.id, b]));
@@ -184,7 +186,7 @@ async function preserveFlags(list) {
       if (old[k] !== undefined) { item[k] = old[k]; carried += 1; }
     });
   });
-  if (carried) console.log(`✓ 已从线上 archive.json 保全 ${carried} 个后台标记（secure / coverFile）`);
+  if (carried) console.log(`✓ 已从线上 archive.json 保全 ${carried} 个后台标记（含合集归属和顺序）`);
   return list;
 }
 

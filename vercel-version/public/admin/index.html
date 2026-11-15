@@ -53,6 +53,62 @@
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px;align-items:start}
   .f{display:flex;flex-direction:column;gap:5px;min-width:0}
   .f.span2{grid-column:span 2}
+  .tag-collection-row{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.65fr) minmax(220px,.9fr);gap:12px;align-items:start}
+  .tag-collection-row>.f>label:first-child{height:36px;min-height:36px;line-height:18px;align-items:flex-start;overflow:hidden}
+  .collection-field-heading{min-height:36px}
+  .collection-field-heading label{height:36px;min-height:36px;line-height:18px;align-items:flex-start}
+  .collection-editor{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:2px}
+  .collection-editor.hide{display:none}
+  .collection-title-wrap{grid-column:1/-1}
+  .collection-panel{min-width:0;padding:10px;background:var(--card);border:0.5px solid var(--rule);border-radius:4px}
+  .collection-panel h3{margin:0 0 8px;color:var(--green-2);font-size:12px;line-height:1.4}
+  .collection-picker{position:relative;width:100%}
+  .collection-picker-trigger{display:flex;width:100%;height:40px;min-height:40px;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);font-size:13.5px;font-weight:500;text-align:left}
+  .collection-picker-trigger:hover:not(:disabled){background:var(--paper)}
+  .collection-picker-trigger:focus-visible{border-color:var(--green-2);outline:none;box-shadow:0 0 0 3px rgba(30,67,52,.08)}
+  .collection-picker-current{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .collection-picker-chevron{width:7px;height:7px;flex:none;border-right:1.5px solid var(--green-2);border-bottom:1.5px solid var(--green-2);transform:translateY(-2px) rotate(45deg);transition:transform .15s ease-out}
+  .collection-picker-trigger[aria-expanded="true"] .collection-picker-chevron{transform:translateY(2px) rotate(225deg)}
+  .collection-picker-menu{position:absolute;z-index:60;top:calc(100% + 4px);left:0;right:0;max-height:280px;overflow:auto;padding:4px;border:0.5px solid var(--line);border-radius:6px;background:var(--paper);box-shadow:3px 3px 0 rgba(30,67,52,.16)}
+  .collection-picker-menu[hidden]{display:none}
+  .collection-picker-menu-row{display:flex;min-width:0;align-items:center;gap:4px;border-bottom:0.5px solid var(--rule)}
+  .collection-picker-menu-row:last-child{border-bottom:0}
+  .collection-picker-choice{display:flex;min-width:0;min-height:40px;flex:1;align-items:center;gap:8px;padding:6px 8px;border:0;border-radius:4px;background:transparent;color:var(--ink);font-size:13px;font-weight:600;text-align:left}
+  .collection-picker-choice:hover:not(:disabled),.collection-picker-choice.is-selected{background:var(--bg);color:var(--green-2)}
+  .collection-picker-choice:disabled{opacity:.45;cursor:not-allowed}
+  .collection-picker-mark{width:16px;flex:none;color:var(--green-2);text-align:center}
+  .collection-picker-label{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .collection-picker-count{flex:none;color:var(--ink-3);font-size:12px;font-weight:400}
+  .collection-picker-delete{min-width:48px;min-height:40px;padding:4px 7px;border:0.5px solid var(--danger);border-radius:4px;background:var(--paper);color:var(--danger);font-size:12px}
+  .collection-picker-delete:hover:not(:disabled){background:var(--bg);color:var(--danger)}
+  .collection-picker-menu :is(button):focus-visible{outline:2px solid var(--green-2);outline-offset:-2px}
+  .collection-native-select{position:absolute!important;width:1px!important;height:1px!important;margin:-1px!important;padding:0!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+  #collection-title{min-height:40px}
+  .collection-search{display:block;width:100%;min-width:0;height:40px;margin-bottom:8px;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);font-family:inherit;font-size:13.5px}
+  .collection-search:focus{border-color:var(--green-2);outline:none;box-shadow:0 0 0 3px rgba(30,67,52,.08)}
+  .collection-items{display:flex;max-height:224px;min-height:56px;flex-direction:column;gap:2px;overflow:auto}
+  .collection-empty{padding:10px 4px;color:var(--ink-3);font-size:12px}
+  .collection-item{display:flex;min-height:44px;align-items:center;gap:8px;padding:4px;border-bottom:0.5px solid var(--rule);color:var(--ink);font-size:12px}
+  .collection-candidate{width:100%;border:0;background:transparent;text-align:left;cursor:pointer}
+  .collection-candidate:hover{background:var(--collection-hover)}
+  .collection-candidate.is-same-author{border:0.5px dashed var(--green-2);background:var(--paper)}
+  .collection-candidate.is-same-author:hover{background:var(--collection-hover)}
+  .collection-author-badge{flex:none;border:0.5px dashed var(--green-2);border-radius:3px;padding:2px 5px;color:var(--green-2);font-size:12px;line-height:1.2}
+  .collection-item[draggable="true"]{cursor:grab}
+  .collection-item.is-dragging{opacity:.45}
+  .collection-item.is-drop-target{background:var(--collection-surface)}
+  .collection-order{display:inline-flex;width:24px;height:24px;flex:none;align-items:center;justify-content:center;border-radius:3px;background:var(--collection-surface);color:var(--collection-text);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+  .collection-book-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .collection-item-actions{display:flex;flex:none;gap:3px}
+  .collection-item-actions button{min-width:44px;min-height:44px;border:0.5px solid var(--collection-border);border-radius:3px;background:var(--paper);color:var(--collection-text);font:inherit;cursor:pointer}
+  .collection-item-actions button:hover:not(:disabled){background:var(--collection-hover)}
+  .collection-item-actions button:disabled{opacity:.4;cursor:not-allowed}
+  .collection-editor :is(button,input,select):focus-visible{outline:2px solid var(--collection-border);outline-offset:2px}
+  .collection-help{grid-column:1/-1;margin:0;color:var(--ink-3);font-size:12px;line-height:1.5}
+  .collection-confirm-row{grid-column:1/-1;display:flex;align-items:center;gap:12px}
+  .collection-confirm-row.hide{display:none}
+  #collection-confirm{min-height:40px}
+  :root{--collection-surface:var(--paper);--collection-hover:var(--bg);--collection-border:var(--green-2);--collection-text:var(--green-2)}
   label{font-size:12px;font-weight:700;color:var(--ink);display:flex;gap:5px;align-items:baseline}
   label .tag{font-weight:400;color:var(--ink-3);font-size:11px}
   label .req{color:var(--danger);font-weight:900}
@@ -71,6 +127,8 @@
   [data-admin-page] .grid > .f > .row > button{height:40px;min-height:40px;box-sizing:border-box}
   [data-admin-page] .grid > .f > textarea{box-sizing:border-box}
   @media(max-width:760px){.grid:not(.announcement-form):not(.novel-admin-form):not(.artwork-admin-form)>.f.span2{grid-column:1/-1}}
+  @media(max-width:640px){.collection-editor{grid-template-columns:minmax(0,1fr)}.collection-title-wrap,.collection-help{grid-column:1}.collection-editor[data-mode="existing"] #collection-members-panel{grid-column:1}}
+  @media(max-width:460px){.tag-collection-row{grid-template-columns:minmax(0,1fr)}}
   /* ---- buttons ---- */
   button{font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border-radius:6px;
          padding:8px 14px;border:1.5px solid var(--green-2);background:var(--paper);color:var(--green-2);
@@ -990,15 +1048,51 @@
           <input type="url" id="f-authorUrl" placeholder="https://www.pixiv.net/users/..." autocomplete="url">
           <div class="muted author-link-hint" id="author-link-hint" aria-live="polite"></div>
         </div>
-        <div class="f span2" data-page-node-id="803zaFTDA1KllTCvk5I9C4">
-          <label for="f-tags" data-page-node-id="LYVSYwayIehtAETXJzxeTT">标签 <span class="req">*</span> <span class="tag" data-page-node-id="xF1zMWJ1zbFWiYR01tozGP">点 ▾ 选已有，输入 # 回车新建</span></label>
-          <div class="tagbox" id="tagbox">
-            <div class="tagchips" id="tag-chips"></div>
-            <input type="text" id="f-tags" class="taginput" autocomplete="off" placeholder="输入 #新标签 后回车" data-page-node-id="9AceTthj7UueDuzWf8puaJ">
-            <button type="button" class="tagcaret" id="tag-caret" title="选择已有标签">▾</button>
-            <div class="tagmenu hide" id="tag-menu"></div>
+        <div class="tag-collection-row">
+          <div class="f" data-page-node-id="803zaFTDA1KllTCvk5I9C4">
+            <label for="f-tags" data-page-node-id="LYVSYwayIehtAETXJzxeTT">标签 <span class="req">*</span> <span class="tag" data-page-node-id="xF1zMWJ1zbFWiYR01tozGP">点 ▾ 选已有，输入 # 回车新建</span></label>
+            <div class="tagbox" id="tagbox">
+              <div class="tagchips" id="tag-chips"></div>
+              <input type="text" id="f-tags" class="taginput" autocomplete="off" placeholder="输入 #新标签 后回车" data-page-node-id="9AceTthj7UueDuzWf8puaJ">
+              <button type="button" class="tagcaret" id="tag-caret" title="选择已有标签">▾</button>
+              <div class="tagmenu hide" id="tag-menu"></div>
+            </div>
+            <div class="muted" id="tag-hint" style="margin-top:3px"></div>
           </div>
-          <div class="muted" id="tag-hint" style="margin-top:3px"></div>
+          <div class="f" id="collection-field">
+            <label id="collection-label">所属合集</label>
+            <div class="collection-picker" id="collection-picker">
+              <button type="button" class="collection-picker-trigger" id="collection-picker-trigger" aria-labelledby="collection-label collection-picker-value" aria-describedby="collection-field-hint" aria-haspopup="menu" aria-expanded="false" aria-controls="collection-picker-menu">
+                <span class="collection-picker-current" id="collection-picker-value">不加入合集</span>
+                <span class="collection-picker-chevron" aria-hidden="true"></span>
+              </button>
+              <div class="collection-picker-menu" id="collection-picker-menu" role="menu" aria-labelledby="collection-label" hidden></div>
+              <select id="f-collection" class="collection-native-select" aria-hidden="true" tabindex="-1">
+                <option value="__create__">＋ 创建新的合集</option>
+                <option value="" selected>不加入合集</option>
+              </select>
+            </div>
+            <div class="muted" id="collection-field-hint">每个漫画本只能加入一个合集。已在其他合集中的本子不会出现在可选列表。</div>
+          </div>
+        </div>
+        <div class="collection-editor hide" id="collection-editor" data-mode="none">
+          <div class="f collection-title-wrap hide" id="collection-title-wrap">
+            <label for="collection-title">合集名称 <span class="req">*</span></label>
+            <input type="text" id="collection-title" maxlength="80" placeholder="填写系列名称">
+          </div>
+          <section class="collection-panel hide" id="collection-candidates-panel" aria-labelledby="collection-candidates-heading">
+            <h3 id="collection-candidates-heading">可加入的本子</h3>
+            <input type="search" id="collection-search" class="collection-search" placeholder="搜索本子名称" aria-label="搜索可加入的本子">
+            <div class="collection-items" id="collection-candidates" role="listbox" aria-label="未加入合集的本子"></div>
+          </section>
+          <section class="collection-panel" id="collection-members-panel" aria-labelledby="collection-members-heading">
+            <h3 id="collection-members-heading">合集顺序</h3>
+            <div class="collection-items" id="collection-members" aria-live="polite"></div>
+          </section>
+          <p class="collection-help hide" id="collection-remove-note">保存后会将当前本子移出该合集，其余本子的顺序会自动调整。</p>
+          <div class="collection-confirm-row hide" id="collection-confirm-row">
+            <button type="button" class="btn-primary" id="collection-confirm">确认创建</button>
+          </div>
         </div>
         <div class="f" data-page-node-id="oNxIGhtp2rvHD7td7SZvA6">
           <label for="f-source" data-page-node-id="djzFvJiUhAhAtNLEdGs4fg">来源 <span class="req">*</span></label>
@@ -1307,6 +1401,9 @@ var lastSuggestedNovelAuthorUrl = '';
 var token = sessionStorage.getItem(TOKEN_KEY) || '';
 var books = [];
 var editingArchiveBookId = '';
+var collectionDraft = { mode:'none', id:'', title:'', memberIds:[], originalId:'', originalTitle:'', currentMemberId:'', includeCurrent:false, confirmed:false };
+var collectionDragId = '';
+var collectionDeletePending = false;
 var files = [];          // { file, url, status, err, name }
 var envMax = MAX_FILE;
 var announcements = [];
@@ -2218,6 +2315,380 @@ function renderBookPreview(){
   bindBookImageStatus(box);
 }
 
+function collectionMemberOrder(a, b){
+  var orderDiff = (Number(a.collectionOrder) || Number.MAX_SAFE_INTEGER) - (Number(b.collectionOrder) || Number.MAX_SAFE_INTEGER);
+  return orderDiff || naturalSort(a.id || '', b.id || '');
+}
+function getCollectionGroups(){
+  var grouped = Object.create(null);
+  books.forEach(function(book){
+    if (!book || !book.collectionId) return;
+    var id = String(book.collectionId);
+    if (!grouped[id]) grouped[id] = { id:id, title:String(book.collectionTitle || '未命名合集'), books:[] };
+    grouped[id].books.push(book);
+  });
+  return Object.keys(grouped).map(function(id){
+    grouped[id].books.sort(collectionMemberOrder);
+    return grouped[id];
+  }).sort(function(a,b){ return naturalSort(a.title, b.title); });
+}
+function findCollectionGroup(id){
+  return getCollectionGroups().filter(function(group){ return group.id === id; })[0] || null;
+}
+function currentFormBook(){
+  var id = $('f-id').value.trim();
+  if (!id) return null;
+  var existing = books.filter(function(book){ return book && book.id === id; })[0];
+  return {
+    id:id,
+    titleZh:$('f-titleZh').value.trim() || (existing && existing.titleZh) || id,
+    category:'漫画本',
+    collectionId:existing && existing.collectionId || ''
+  };
+}
+function normalizeCollectionAuthor(author){
+  return String(author || '').trim().toLocaleLowerCase();
+}
+function collectionBookTitle(id){
+  var current = currentFormBook();
+  if (current && current.id === id) return current.titleZh;
+  var book = books.filter(function(item){ return item && item.id === id; })[0];
+  return book ? (book.titleZh || id) : id;
+}
+function renderCollectionSelect(){
+  var select = $('f-collection');
+  if (!select) return;
+  var groups = getCollectionGroups();
+  if (collectionDraft.mode === 'create' && collectionDraft.confirmed) {
+    groups.push({ id:collectionDraft.id, title:collectionDraft.title, books:collectionDraft.memberIds.map(function(id){ return {id:id}; }) });
+    groups.sort(function(a,b){ return naturalSort(a.title, b.title); });
+  }
+  var lockedToGroup = !!collectionDraft.originalId;
+  var options = ['<option value="__create__"' + (lockedToGroup ? ' disabled' : '') + '>＋ 创建新的合集</option>', '<option value="">不加入合集</option>'];
+  groups.forEach(function(group){
+    if (lockedToGroup && group.id !== collectionDraft.originalId) return;
+    options.push('<option value="' + esc(group.id) + '">' + esc(group.title) + '（' + group.books.length + ' 本）</option>');
+  });
+  select.innerHTML = options.join('');
+  if (collectionDraft.mode === 'create') select.value = collectionDraft.confirmed ? collectionDraft.id : '__create__';
+  else if (collectionDraft.mode === 'existing') select.value = collectionDraft.id;
+  else select.value = '';
+
+  var valueLabel = select.value === '__create__' ? '＋ 创建新的合集' : '不加入合集';
+  var selectedGroup = groups.filter(function(group){ return group.id === select.value; })[0];
+  if (selectedGroup) valueLabel = selectedGroup.title;
+  $('collection-picker-value').textContent = valueLabel;
+  $('collection-picker-trigger').disabled = collectionDeletePending;
+
+  var menuRows = [];
+  var createDisabled = lockedToGroup || collectionDeletePending;
+  menuRows.push('<div class="collection-picker-menu-row" role="none"><button type="button" class="collection-picker-choice' + (select.value === '__create__' ? ' is-selected' : '') + '" role="menuitemradio" aria-checked="' + (select.value === '__create__') + '" data-collection-choice="__create__"' + (createDisabled ? ' disabled' : '') + '><span class="collection-picker-mark" aria-hidden="true">' + (select.value === '__create__' ? '✓' : '') + '</span><span class="collection-picker-label">＋ 创建新的合集</span></button></div>');
+  menuRows.push('<div class="collection-picker-menu-row" role="none"><button type="button" class="collection-picker-choice' + (select.value === '' ? ' is-selected' : '') + '" role="menuitemradio" aria-checked="' + (select.value === '') + '" data-collection-choice=""' + (collectionDeletePending ? ' disabled' : '') + '><span class="collection-picker-mark" aria-hidden="true">' + (select.value === '' ? '✓' : '') + '</span><span class="collection-picker-label">不加入合集</span></button></div>');
+  groups.forEach(function(group){
+    if (lockedToGroup && group.id !== collectionDraft.originalId) return;
+    var selected = select.value === group.id;
+    menuRows.push('<div class="collection-picker-menu-row" role="none"><button type="button" class="collection-picker-choice' + (selected ? ' is-selected' : '') + '" role="menuitemradio" aria-checked="' + selected + '" data-collection-choice="' + esc(group.id) + '"' + (collectionDeletePending ? ' disabled' : '') + '><span class="collection-picker-mark" aria-hidden="true">' + (selected ? '✓' : '') + '</span><span class="collection-picker-label">' + esc(group.title) + '</span><span class="collection-picker-count">' + group.books.length + ' 本</span></button><button type="button" class="collection-picker-delete" role="menuitem" data-collection-delete-id="' + esc(group.id) + '" aria-label="删除合集《' + esc(group.title) + '》"' + (collectionDeletePending ? ' disabled' : '') + '>删除</button></div>');
+  });
+  $('collection-picker-menu').innerHTML = menuRows.join('');
+}
+function setCollectionPickerOpen(open, focusFirst){
+  var menu = $('collection-picker-menu');
+  var trigger = $('collection-picker-trigger');
+  if (!menu || !trigger) return;
+  menu.hidden = !open;
+  trigger.setAttribute('aria-expanded', String(open));
+  if (open && focusFirst) {
+    var firstChoice = menu.querySelector('[data-collection-choice]:not(:disabled)');
+    if (firstChoice) firstChoice.focus();
+  }
+}
+function chooseCollectionOption(value){
+  var select = $('f-collection');
+  if (!select || collectionDeletePending) return;
+  setCollectionPickerOpen(false, false);
+  select.value = value;
+  select.dispatchEvent(new Event('change', { bubbles:true }));
+  $('collection-picker-trigger').focus();
+}
+function moveCollectionPickerFocus(direction){
+  var menu = $('collection-picker-menu');
+  if (!menu || menu.hidden) return;
+  var actions = Array.prototype.slice.call(menu.querySelectorAll('[data-collection-choice]:not(:disabled), [data-collection-delete-id]:not(:disabled)'));
+  if (!actions.length) return;
+  var currentIndex = actions.indexOf(document.activeElement);
+  var nextIndex = currentIndex < 0 ? 0 : (currentIndex + direction + actions.length) % actions.length;
+  actions[nextIndex].focus();
+  actions[nextIndex].scrollIntoView({ block:'nearest' });
+}
+function renderCollectionCandidates(){
+  var box = $('collection-candidates');
+  if (!box) return;
+  var query = ($('collection-search').value || '').trim().toLocaleLowerCase();
+  var currentAuthor = normalizeCollectionAuthor($('f-circle').value);
+  var selected = Object.create(null);
+  collectionDraft.memberIds.forEach(function(id){ selected[id] = true; });
+  var available = books.filter(function(book){
+    if (!book || (book.category || '漫画本') !== '漫画本' || selected[book.id]) return false;
+    return !book.collectionId || book.collectionId === collectionDraft.id;
+  });
+  var current = currentFormBook();
+  if (current && !books.some(function(book){ return book && book.id === current.id; }) && !selected[current.id]) available.push(current);
+  available = available.filter(function(book){
+    var text = [book.titleZh, book.titleJp, book.circle, book.id].join(' ').toLocaleLowerCase();
+    return !query || text.indexOf(query) >= 0;
+  }).sort(function(a,b){
+    var aSameAuthor = currentAuthor && normalizeCollectionAuthor(a.circle) === currentAuthor;
+    var bSameAuthor = currentAuthor && normalizeCollectionAuthor(b.circle) === currentAuthor;
+    if (aSameAuthor !== bSameAuthor) return aSameAuthor ? -1 : 1;
+    return naturalSort(a.titleZh || a.id, b.titleZh || b.id);
+  });
+  box.innerHTML = available.length ? available.map(function(book){
+    var sameAuthor = currentAuthor && normalizeCollectionAuthor(book.circle) === currentAuthor;
+    return '<button type="button" class="collection-item collection-candidate' + (sameAuthor ? ' is-same-author' : '') + '" role="option" aria-selected="false" data-collection-add="' + esc(book.id) + '" aria-label="' + (sameAuthor ? '同作者，' : '') + '添加《' + esc(book.titleZh || book.id) + '》到合集">' +
+      '<span class="collection-order" aria-hidden="true">＋</span><span class="collection-book-name">' + esc(book.titleZh || book.id) + '</span>' +
+      (sameAuthor ? '<span class="collection-author-badge">同作者</span>' : '') + '</button>';
+  }).join('') : '<div class="collection-empty">没有可加入的本子</div>';
+}
+function renderCollectionMembers(){
+  var box = $('collection-members');
+  if (!box) return;
+  if (!collectionDraft.memberIds.length) {
+    var message = collectionDraft.mode === 'remove' ? '合集将为空，保存后会自动移除。' : '先从左侧点选本子。';
+    box.innerHTML = '<div class="collection-empty">' + message + '</div>';
+    return;
+  }
+  box.innerHTML = collectionDraft.memberIds.map(function(id, index){
+    var title = collectionBookTitle(id);
+    return '<div class="collection-item" draggable="true" data-collection-member="' + esc(id) + '">' +
+      '<span class="collection-order" aria-label="第 ' + (index + 1) + ' 本">' + (index + 1) + '</span>' +
+      '<span class="collection-book-name" title="' + esc(title) + '">' + esc(title) + '</span>' +
+      '<span class="collection-item-actions">' +
+        '<button type="button" data-collection-move="up" data-collection-id="' + esc(id) + '" aria-label="将《' + esc(title) + '》上移"' + (index === 0 ? ' disabled' : '') + '>↑</button>' +
+        '<button type="button" data-collection-move="down" data-collection-id="' + esc(id) + '" aria-label="将《' + esc(title) + '》下移"' + (index === collectionDraft.memberIds.length - 1 ? ' disabled' : '') + '>↓</button>' +
+        '<button type="button" data-collection-remove="' + esc(id) + '" aria-label="从合集移除《' + esc(title) + '》">移除</button>' +
+      '</span></div>';
+  }).join('');
+}
+function renderCollectionConfirmation(){
+  var row = $('collection-confirm-row');
+  var button = $('collection-confirm');
+  if (!row || !button) return;
+  var visible = collectionDraft.mode === 'create';
+  row.classList.toggle('hide', !visible);
+  button.disabled = !!collectionDraft.confirmed;
+  button.textContent = collectionDraft.confirmed ? '已确认' : '确认创建合集';
+}
+function renderCollectionEditor(){
+  var editor = $('collection-editor');
+  if (!editor) return;
+  var visible = collectionDraft.mode !== 'none';
+  editor.classList.toggle('hide', !visible);
+  editor.dataset.mode = collectionDraft.mode;
+  $('collection-title-wrap').classList.toggle('hide', collectionDraft.mode !== 'create');
+  $('collection-candidates-panel').classList.toggle('hide', !visible);
+  $('collection-members-panel').classList.toggle('hide', !visible);
+  $('collection-remove-note').classList.toggle('hide', collectionDraft.mode !== 'remove');
+  renderCollectionConfirmation();
+  if (document.activeElement !== $('collection-title')) $('collection-title').value = collectionDraft.title || '';
+  renderCollectionSelect();
+  if (visible) {
+    renderCollectionCandidates();
+    renderCollectionMembers();
+  }
+}
+function confirmCollectionDraft(){
+  if (collectionDraft.mode !== 'create') return;
+  var title = collectionDraft.title.trim();
+  if (!title) {
+    window.alert('请填写合集名称。');
+    $('collection-title').focus();
+    return;
+  }
+  if (!collectionDraft.memberIds.length) return fail('请至少选择一本加入合集。');
+  if (getCollectionGroups().some(function(group){ return group.title === title && group.id !== collectionDraft.id; })) {
+    return fail('已有同名合集，请修改合集名称。');
+  }
+  collectionDraft.title = title;
+  collectionDraft.confirmed = true;
+  renderCollectionConfirmation();
+  renderCollectionSelect();
+}
+function deleteCollectionDraft(collectionId){
+  var id = String(collectionId || collectionDraft.originalId || collectionDraft.id || '');
+  if (collectionDeletePending || !id) return;
+  if (collectionDraft.mode === 'create' && collectionDraft.confirmed && id === collectionDraft.id) {
+    if (!confirm('删除这个尚未发布的合集？已选作品不会被删除。')) return;
+    resetCollectionDraft();
+    show($('main-msg'), 'ok', '合集草稿已删除。');
+    return;
+  }
+
+  var group = id ? findCollectionGroup(id) : null;
+  if (!group) return;
+  if (!confirm('删除合集《' + group.title + '》？成员作品会保留，只移除合集关系。')) return;
+
+  collectionDeletePending = true;
+  setCollectionPickerOpen(false, false);
+  setBusy(true);
+  renderCollectionSelect();
+  api({ action:'collectionDelete', collectionId:id }).then(function(result){
+    books = Array.isArray(result.books) ? result.books : books.map(function(book){
+      if (!book || book.collectionId !== id) return book;
+      var next = Object.assign({}, book);
+      delete next.collectionId;
+      delete next.collectionTitle;
+      delete next.collectionOrder;
+      return next;
+    });
+    renderBookPreview();
+    var activeCollectionId = collectionDraft.originalId || collectionDraft.id;
+    if (activeCollectionId === id) resetCollectionDraft();
+    else renderCollectionEditor();
+    show($('main-msg'), 'ok', '合集已删除，成员作品已保留。');
+  }).catch(function(err){
+    if (onAuthFail(err)) return;
+    show($('main-msg'), 'err', '删除合集失败：' + (err.message || String(err)));
+  }).then(function(){
+    collectionDeletePending = false;
+    setBusy(false);
+    renderCollectionSelect();
+  });
+}
+function setCollectionDraftFromBook(book){
+  var group = book && book.collectionId ? findCollectionGroup(book.collectionId) : null;
+  if (!group) {
+    collectionDraft = { mode:'none', id:'', title:'', memberIds:[], originalId:'', originalTitle:'', currentMemberId:book && book.id || '', includeCurrent:false, confirmed:false };
+  } else {
+    collectionDraft = {
+      mode:'existing', id:group.id, title:group.title,
+      memberIds:group.books.map(function(item){ return item.id; }),
+      originalId:group.id, originalTitle:group.title,
+      currentMemberId:book.id, includeCurrent:true
+    };
+  }
+  renderCollectionEditor();
+}
+function resetCollectionDraft(){
+  collectionDraft = { mode:'none', id:'', title:'', memberIds:[], originalId:'', originalTitle:'', currentMemberId:'', includeCurrent:false, confirmed:false };
+  $('collection-search').value = '';
+  $('collection-title').value = '';
+  renderCollectionEditor();
+}
+function createCollectionId(){
+  return 'collection-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+function onCollectionSelectChange(){
+  var value = $('f-collection').value;
+  if (collectionDraft.mode === 'create' && collectionDraft.confirmed && value === collectionDraft.id) {
+    renderCollectionEditor();
+    return;
+  }
+  if (value === '__create__') {
+    if (collectionDraft.originalId) { renderCollectionEditor(); return; }
+    var current = currentFormBook();
+    collectionDraft = {
+      mode:'create', id:createCollectionId(), title:'', memberIds:current ? [current.id] : [],
+      originalId:'', originalTitle:'', currentMemberId:current && current.id || '', includeCurrent:true, confirmed:false
+    };
+    $('collection-search').value = '';
+    renderCollectionEditor();
+    $('collection-title').focus();
+    return;
+  }
+  if (!value) {
+    if (collectionDraft.originalId) {
+      var existingGroup = findCollectionGroup(collectionDraft.originalId);
+      var currentId = $('f-id').value.trim();
+      collectionDraft = {
+        mode:'remove', id:collectionDraft.originalId, title:collectionDraft.originalTitle,
+        memberIds:(existingGroup ? existingGroup.books : []).map(function(book){ return book.id; }).filter(function(id){ return id !== currentId; }),
+        originalId:collectionDraft.originalId, originalTitle:collectionDraft.originalTitle,
+        currentMemberId:currentId, includeCurrent:false
+      };
+    } else {
+      collectionDraft = { mode:'none', id:'', title:'', memberIds:[], originalId:'', originalTitle:'', currentMemberId:$('f-id').value.trim(), includeCurrent:false };
+    }
+    renderCollectionEditor();
+    return;
+  }
+  if (collectionDraft.originalId && value !== collectionDraft.originalId) { renderCollectionEditor(); return; }
+  var group = findCollectionGroup(value);
+  if (!group) { renderCollectionEditor(); return; }
+  var currentBook = currentFormBook();
+  var memberIds = group.books.map(function(book){ return book.id; });
+  if (currentBook && memberIds.indexOf(currentBook.id) < 0) memberIds.push(currentBook.id);
+  collectionDraft = {
+    mode:'existing', id:group.id, title:group.title, memberIds:memberIds,
+    originalId:collectionDraft.originalId, originalTitle:collectionDraft.originalTitle,
+    currentMemberId:currentBook && currentBook.id || '', includeCurrent:true
+  };
+  $('collection-search').value = '';
+  renderCollectionEditor();
+}
+function syncCollectionCurrentBook(){
+  var currentId = $('f-id').value.trim();
+  collectionDraft.confirmed = false;
+  if (collectionDraft.includeCurrent) {
+    var previousId = collectionDraft.currentMemberId;
+    var index = previousId ? collectionDraft.memberIds.indexOf(previousId) : -1;
+    if (index >= 0) {
+      if (currentId) collectionDraft.memberIds[index] = currentId;
+      else collectionDraft.memberIds.splice(index, 1);
+    } else if (currentId && collectionDraft.memberIds.indexOf(currentId) < 0) {
+      collectionDraft.memberIds.push(currentId);
+    }
+  }
+  collectionDraft.currentMemberId = currentId;
+  renderCollectionEditor();
+}
+function addCollectionMember(id){
+  if (!id || collectionDraft.memberIds.indexOf(id) >= 0) return;
+  collectionDraft.memberIds.push(id);
+  collectionDraft.confirmed = false;
+  if (id === $('f-id').value.trim()) {
+    collectionDraft.includeCurrent = true;
+    collectionDraft.currentMemberId = id;
+  }
+  renderCollectionEditor();
+}
+function removeCollectionMember(id){
+  var index = collectionDraft.memberIds.indexOf(id);
+  if (index < 0) return;
+  collectionDraft.memberIds.splice(index, 1);
+  collectionDraft.confirmed = false;
+  if (id === $('f-id').value.trim()) collectionDraft.includeCurrent = false;
+  renderCollectionEditor();
+}
+function moveCollectionMember(id, direction){
+  var index = collectionDraft.memberIds.indexOf(id);
+  var nextIndex = index + direction;
+  if (index < 0 || nextIndex < 0 || nextIndex >= collectionDraft.memberIds.length) return;
+  var moved = collectionDraft.memberIds.splice(index, 1)[0];
+  collectionDraft.memberIds.splice(nextIndex, 0, moved);
+  collectionDraft.confirmed = false;
+  renderCollectionEditor();
+}
+function buildCollectionPayload(){
+  if (collectionDraft.mode === 'none') return null;
+  return { id:collectionDraft.id, title:collectionDraft.title, memberIds:collectionDraft.memberIds.slice() };
+}
+function publishComicBook(book, collection){
+  var payload = { action:'publish', book:book };
+  if (collection) payload.collection = collection;
+  return api(payload);
+}
+function validateCollectionDraft(){
+  if (collectionDraft.mode === 'create' && !collectionDraft.title.trim()) {
+    window.alert('请填写合集名称。');
+    $('collection-title').focus();
+    return false;
+  }
+  if (collectionDraft.mode !== 'none' && collectionDraft.mode !== 'remove' && !collectionDraft.memberIds.length) return fail('请至少选择一本加入合集。');
+  if (collectionDraft.mode !== 'none' && !collectionDraft.title.trim()) return fail('合集名称不能为空。');
+  if (collectionDraft.mode === 'create' && !collectionDraft.confirmed) return fail('请先确认合集名称和成员。');
+  return true;
+}
+
 function loadBooks(){
   var box = $('bk-list');
   box.innerHTML = '<p class="muted">加载中…</p>';
@@ -2238,6 +2709,7 @@ function loadBooks(){
     renderBookTagFilter();
     renderTagUI();
     renderArtAdminList();
+    renderCollectionSelect();
     $('bk-count').textContent = '共 ' + books.length + ' 本';
     renderBookPreview();
   }).catch(function(err){
@@ -2406,6 +2878,7 @@ function fillForm(b){
   $('f-warn-on').checked = !!b.warning;
   $('f-warning').value = b.warning || '';
   syncWarn();
+  setCollectionDraftFromBook(b);
   syncButtons();
   refreshSecureUI();
   $('mode-hint').textContent = '（正在编辑 ' + b.id + '）';
@@ -2518,6 +2991,7 @@ function resetForm(){
   $('f-warn-on').checked = false;
   $('f-warning').value = '';
   syncWarn();
+  resetCollectionDraft();
   clearFiles();
   // 表单重置也把待传封面丢掉：不清的话下一次上传会带着上一本的封面
   clearSecureCover(true);
@@ -2806,7 +3280,7 @@ var pdfDocCache = new Map();
 /** 记住某个 file 已解锁、对应的密码，避免同一个带密码 PDF 反复弹窗 */
 var pdfPwCache = new Map();
 /** 工具箱「图片/文件转加密 PDF」的固定口令（= tools.js CONFIG.pdfPassword，两处必须同步）。
- *  命中它时上传端**不做**去密码重渲染 —— 阅读器 SecureComicReader 会把读者输入的校验码
+ *  命中它时上传端**不做**去密码重渲染 —— 阅读器会把固定口令 levihan
  *  透传给 pdf.js 解内层口令，存原始字节即可，画质零损失。 */
 var PDF_KNOWN_INNER_PW = 'levihan';
 
@@ -2993,7 +3467,7 @@ async function composeJpegsToPdfFile(jpegFiles, name){
 /**
  * 上传前对敏感本 PDF 的处置（返回真正要拿去加密上传的 File）：
  *   ① 无密码 且 无超长页          → 原样返回（画质零损失）；
- *   ② 内层口令 = levihan 且 无超长页 → 原样返回（工具箱产物）——阅读器会把读者输入的校验码
+ *   ② 内层口令 = levihan 且 无超长页 → 原样返回（工具箱产物）——阅读器会把固定口令
  *      透传给 pdf.js 解内层，存原始字节即可；重渲染反而多压一代 JPEG（糊）；
  *   ③ 有条漫长页                  → 逐页重渲染并**纵向切片**：长页按原生像素宽渲染（清晰度
  *      不损失）切成 ≈1:1.4 的段，普通页按原生尺寸 q0.92 重编码。不切的话，阅读端画布、
@@ -3736,6 +4210,7 @@ $('f-circle').addEventListener('focus', function(){
 $('f-circle').addEventListener('input', function(){
   suggestAuthorUrl();
   renderBookAuthorSuggestions();
+  renderCollectionCandidates();
 });
 $('book-author-suggestions').addEventListener('click', function(event){
   var option = event.target.closest('[data-author-suggestion]');
@@ -3747,6 +4222,7 @@ $('book-author-suggestions').addEventListener('click', function(event){
   lastSuggestedAuthorUrl = '';
   suggestAuthorUrl();
   hideBookAuthorSuggestions();
+  renderCollectionCandidates();
 });
 $('author-name-suggestions').addEventListener('click', function(event){
   var option = event.target.closest('[data-author-suggestion]');
@@ -4324,6 +4800,8 @@ function handleSecureUpload(){
 
   var form = readForm();
   if (!validate(form, false)) return;
+  if (!validateCollectionDraft()) return;
+  var collectionPayload = buildCollectionPayload();
   if (!files.length) { show($('main-msg'), 'err', '加密上传需要先选择图片或 PDF。'); return; }
   if (isMobileBrowser() && !confirmMobileVaultUpload()) return;
 
@@ -4342,15 +4820,15 @@ function handleSecureUpload(){
     })
     .then(function(result){
       // 阅读端 SecureComicReader 已上线：前台点开 secure 本子 → 403 伪装页 →
-      // 输校验码（levihan）→ 内存解密渲染，不走这条链路的话卡片不会出现在粮仓。
-      return api({ action:'publish', book: Object.assign({}, form, {
+      // 用户点击启动解析 → 使用固定口令 levihan 在内存解密渲染。
+      return publishComicBook(Object.assign({}, form, {
             // 图片合并时用实际张数；直接传 PDF 时 pageCount 为 null，沿用管理员填的「总页数」
             pages: result.pageCount || form.pages,
             bookFolder: form.bookFolder || form.id,
             // 站点据此把本子导向 403 伪装阅读器；键存在页面才会显示「🔒 含有敏感元素」
             secure: true,
             secureFile: result.key
-          }) }).then(function(d){
+          }), collectionPayload).then(function(d){
             show($('main-msg'), 'ok', '上传成功');
             resetForm();
             loadBooks();
@@ -4385,6 +4863,8 @@ function uploadAll(){
 
   var form = readForm();
   if (!validate(form, false)) return;
+  if (!validateCollectionDraft()) return;
+  var collectionPayload = buildCollectionPayload();
 
   var prefix = form.pagePrefix || 'image';
   var pad = form.pagePadDigits || (files.length > 99 ? 3 : 2);
@@ -4490,7 +4970,7 @@ function uploadAll(){
     // 走这条路径说明「含有敏感元素」没勾选：内页已被替换成普通图片，
     // 必须显式把标记清成 false，否则站点会拿着旧的 secure 标记去解一批根本不在的密文。
     book.secure = false;
-    return api({ action:'publish', book: book }).then(function(d){
+    return publishComicBook(book, collectionPayload).then(function(d){
       show($('main-msg'), 'ok',
         '✅ 发布成功：' + book.id + '，' + book.titleZh + '（共 ' + d.count + ' 本）\n' +
         (d.deletedPageFiles ? '已从 COS 删除 ' + d.deletedPageFiles + ' 张移除的旧图片。\n' : '') +
@@ -4511,9 +4991,11 @@ function uploadAll(){
 function publishOnly(){
   var form = readForm();
   if (!validate(form, true)) return;
+  if (!validateCollectionDraft()) return;
+  var collectionPayload = buildCollectionPayload();
   hide($('main-msg'));
   setBusy(true);
-  api({ action:'publish', book: form }).then(function(d){
+  publishComicBook(form, collectionPayload).then(function(d){
     resetForm();
     show($('main-msg'), 'ok', '✅ 《' + form.titleZh + '》的信息已保存并发布，表单已清空。');
     loadBooks();
@@ -5768,6 +6250,123 @@ $('ed-cancel').onclick = closeEditor;
 $('ed-done').onclick = edDone;
 
 window.addEventListener('resize', function(){ if (ed) layoutEditor(); });
+if ($('f-collection')) $('f-collection').addEventListener('change', onCollectionSelectChange);
+if ($('collection-confirm')) $('collection-confirm').addEventListener('click', confirmCollectionDraft);
+if ($('collection-picker-trigger')) {
+  $('collection-picker-trigger').addEventListener('click', function(){
+    setCollectionPickerOpen($('collection-picker-menu').hidden, false);
+  });
+  $('collection-picker-trigger').addEventListener('keydown', function(e){
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setCollectionPickerOpen(true, true);
+    } else if (e.key === 'Escape') {
+      setCollectionPickerOpen(false, false);
+    }
+  });
+}
+if ($('collection-picker-menu')) {
+  $('collection-picker-menu').addEventListener('click', function(e){
+    var deleteOption = e.target.closest('[data-collection-delete-id]');
+    if (deleteOption) {
+      e.preventDefault();
+      e.stopPropagation();
+      var collectionId = deleteOption.getAttribute('data-collection-delete-id');
+      setCollectionPickerOpen(false, false);
+      $('collection-picker-trigger').focus();
+      deleteCollectionDraft(collectionId);
+      return;
+    }
+    var choice = e.target.closest('[data-collection-choice]');
+    if (choice && !choice.disabled) chooseCollectionOption(choice.getAttribute('data-collection-choice'));
+  });
+  $('collection-picker-menu').addEventListener('keydown', function(e){
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveCollectionPickerFocus(e.key === 'ArrowDown' ? 1 : -1);
+    } else if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      var actions = $('collection-picker-menu').querySelectorAll('[data-collection-choice]:not(:disabled), [data-collection-delete-id]:not(:disabled)');
+      if (actions.length) actions[e.key === 'Home' ? 0 : actions.length - 1].focus();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setCollectionPickerOpen(false, false);
+      $('collection-picker-trigger').focus();
+    } else if (e.key === 'Tab') {
+      window.setTimeout(function(){
+        if (!$('collection-picker-menu').contains(document.activeElement)) setCollectionPickerOpen(false, false);
+      }, 0);
+    }
+  });
+}
+document.addEventListener('click', function(e){
+  if (!e.target.closest('#collection-picker')) setCollectionPickerOpen(false, false);
+});
+if ($('collection-search')) $('collection-search').addEventListener('input', renderCollectionCandidates);
+if ($('collection-title')) $('collection-title').addEventListener('input', function(){
+  collectionDraft.title = $('collection-title').value;
+  collectionDraft.confirmed = false;
+  renderCollectionSelect();
+  renderCollectionConfirmation();
+});
+if ($('f-id')) $('f-id').addEventListener('input', syncCollectionCurrentBook);
+if ($('f-titleZh')) $('f-titleZh').addEventListener('input', function(){
+  if (collectionDraft.mode === 'create') {
+    collectionDraft.confirmed = false;
+    renderCollectionConfirmation();
+  }
+  renderCollectionMembers();
+  renderCollectionCandidates();
+});
+if ($('collection-candidates')) $('collection-candidates').addEventListener('click', function(e){
+  var add = e.target.closest('[data-collection-add]');
+  if (add) addCollectionMember(add.getAttribute('data-collection-add'));
+});
+if ($('collection-members')) {
+  $('collection-members').addEventListener('click', function(e){
+    var move = e.target.closest('[data-collection-move]');
+    if (move) {
+      moveCollectionMember(move.getAttribute('data-collection-id'), move.getAttribute('data-collection-move') === 'up' ? -1 : 1);
+      return;
+    }
+    var remove = e.target.closest('[data-collection-remove]');
+    if (remove) removeCollectionMember(remove.getAttribute('data-collection-remove'));
+  });
+  $('collection-members').addEventListener('dragstart', function(e){
+    var row = e.target.closest('[data-collection-member]');
+    if (!row || !e.dataTransfer) return;
+    collectionDragId = row.getAttribute('data-collection-member');
+    row.classList.add('is-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', collectionDragId);
+  });
+  $('collection-members').addEventListener('dragover', function(e){
+    var row = e.target.closest('[data-collection-member]');
+    if (!row || !collectionDragId) return;
+    e.preventDefault();
+    row.classList.add('is-drop-target');
+  });
+  $('collection-members').addEventListener('drop', function(e){
+    var row = e.target.closest('[data-collection-member]');
+    if (!row || !collectionDragId) return;
+    e.preventDefault();
+    var from = collectionDraft.memberIds.indexOf(collectionDragId);
+    var to = collectionDraft.memberIds.indexOf(row.getAttribute('data-collection-member'));
+    if (from >= 0 && to >= 0 && from !== to) {
+      var moved = collectionDraft.memberIds.splice(from, 1)[0];
+      if (from < to) to -= 1;
+      collectionDraft.memberIds.splice(to, 0, moved);
+    }
+    collectionDragId = '';
+    renderCollectionEditor();
+  });
+  $('collection-members').addEventListener('dragend', function(){
+    collectionDragId = '';
+    $('collection-members').querySelectorAll('.is-dragging,.is-drop-target').forEach(function(row){
+      row.classList.remove('is-dragging', 'is-drop-target');
+    });
+  });
+}
 window.addEventListener('keydown', function(e){
   if (e.key === 'Escape') {
     if (ed) { closeEditor(); return; }

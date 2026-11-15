@@ -7,7 +7,7 @@
 | --- | --- |
 | `public/admin/secure-upload.js` | 上传侧核心：图片→PDF、压缩阶梯、AES 加密、伪装 Key、单次/分片上传路由 |
 | `public/admin/index.html` | 复选框、分流、进度条、卡片徽章、PDF 重渲染器（`renderPdfPagesForVault`） |
-| `src/components/SecureComicReader.tsx` | 阅读侧：403 伪装页 + 一密双解 + Canvas 瀑布流 |
+| `src/components/SecureComicReader.tsx` | 阅读侧：403 伪装页 + 手动启动、固定口令解密 + Canvas 瀑布流 |
 | `src/components/DoujinshiArchive.tsx` | 卡片徽章与路由分流 |
 | `cloudbase/functions/admin-upload/index.js` | vault 系列 5 个 action（`vaultUpload/Init/Part/Complete/Abort`）+ `normalizeBook()` 的 `secure` 字段白名单 |
 | `scripts/sync-archive.mjs` | 保全 `secure`，避免表格同步覆盖掉 |
@@ -29,7 +29,7 @@
 界面上只有一个「上传并发布」按钮，分流点在 `uploadAll()` 的第一行。
 
 上传成功后还有 **下游一读**：站点读 `archive.json` 上的 `secure` 标记 → 卡片显示徽章 →
-点开进 `SecureComicReader`（403 伪装页 → 校验码 → 一密双解 → Canvas 瀑布流）。见第五节。
+点开进 `SecureComicReader`（403 伪装页 → 用户点击启动 → 固定口令解密 → Canvas 瀑布流）。见第五节。
 
 ### 1.1 内页压缩策略（②的细则，都是"不损伤画质"优先）
 
@@ -233,7 +233,7 @@ var scale = Math.min(maxSide / Math.max(base.width, base.height), PDF_VAULT_MAX_
 
 ---
 
-## 五、阅读端：403 伪装页 + 一密双解 + Canvas 瀑布流
+## 五、阅读端：403 伪装页 + 手动启动 + Canvas 瀑布流
 
 组件在 `src/components/SecureComicReader.tsx`，由 `DoujinshiArchive.tsx` 在 `book.secure === true` 时渲染
 （分流点在 `handleOpenBookReader`，放在长图阅读模式**之前** —— 敏感本子绝不允许落到任何图片直链渲染路径上）。
@@ -285,29 +285,20 @@ var scale = Math.min(maxSide / Math.max(base.width, base.height), PDF_VAULT_MAX_
 > ⚠️ **诚实的边界**：这张封面是**明文、公开可访问**的（同目录下任何人都能直接打开）。
 > 它挡不住也不打算挡任何东西，只是让卡片有个像样的图。**别把敏感画面放封面。**
 
-### 5.3 一密双解
+### 5.3 固定口令解密
 
-用户输入的校验码同时用于两层，全程在内存里完成：
+用户点击「启动解析」后，阅读器使用上传端现有的固定口令 `levihan` 解开两层，全程在内存里完成；不再要求读者输入校验码：
 
 ```ts
-// 外层：crypto-js 解 AES-256-CBC
-const key = CryptoJS.SHA256(password);                       // 32 字节 → AES-256
-const iv  = CryptoJS.enc.Utf8.parse('levihan-vault-iv');
-const decrypted = CryptoJS.AES.decrypt(
-  CryptoJS.lib.CipherParams.create({ ciphertext: CryptoJS.enc.Base64.parse(cipherText) }),
-  key, { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 },
-);
-// ⚠ 解出来**直接就是 PDF 的二进制字节**：不要再用 Utf8 去读它（PDF 里有非 UTF-8 字节，
-//   会抛 Malformed UTF-8 data），也不要再做一次 Base64 解码
-const pdfBytes = wordArrayToBytes(decrypted);
-
-// 内层：同一个密码透传给 PDF.js，解 jsPDF 施加的 PDF 标准口令
+const password = 'levihan';
+const pdfBytes = await decryptOuterLayer(cipherText, password);
 const doc = await pdfjsLib.getDocument({ data: pdfBytes, password }).promise;
 ```
 
-- 内层只有在"先用工具箱「图片/文件转加密 PDF」做出带口令的 PDF，再勾选敏感元素上传"时才真正存在。
-  直接传图片时内层是普通 PDF，多传一个 `password` 会被 pdf.js 忽略 —— 两种情况都能跑，不需要分支。
-- 解锁后会先校验 `%PDF-` 魔数再交给 pdf.js：密码错误时宁可明确失败，也不要把乱码喂进去。
+- 按钮是为了防止进入 404 伪装页后立刻下载、解析；点击前不会请求密文，也不会创建 PDF 文档。
+- 固定口令与解密代码在前端，因此这一步是交互门槛，不是访问控制；不能把它当成对云服务商或其他访问者的机密性保证。
+- 内层 PDF 口令只有工具箱生成的加密 PDF 才有；直接上传图片时 PDF.js 会忽略多传的 `password`。
+- 解密后先校验 `%PDF-` 魔数再交给 PDF.js，避免把错误数据当成文档打开。
 - PDF.js 的 worker 走 CDN（`https://cdn.staticfile.net/pdf.js/3.11.174/pdf.worker.min.js`），
   **版本必须与 `pdfjs-dist` 完全一致**，所以 `package.json` 里它是精确版本（无 `^`）。
 
@@ -326,11 +317,9 @@ const doc = await pdfjsLib.getDocument({ data: pdfBytes, password }).promise;
 
 - 页面保留 `403 Forbidden` 和资源字段表，使用冷灰白与等宽字体的服务器报错页风格。
 - 「返回归档列表」按钮放在页面内容上方，使用深色底提高可见性。
-- 正文用社会工程学话术，全程不出现"密码""漫画""解密"等字样；
-  输入框 `placeholder` 为「输入专属安全校验码」，按钮为「启动解析」。
-- 失败文案也在同一语境里：校验码错误 → 「校验码无效，节点拒绝解析。」
-  网络失败 → 「安全节点未响应，请检查网络后重试。」（不暴露加密方式与文件类型）
-- 页面不显示节点网关页头、静态错误码、底部说明或校验码提示。
+- 正文全程不出现"密码""漫画""解密"等字样，只提供「启动解析」按钮；用户点击后才开始下载。
+- 网络错误会提示离线、超时或节点暂不可用，并提供重试；数据无法解析时提示联系管理员检查资源。
+- 页面不显示节点网关页头、底部说明或口令提示。
 
 ---
 
@@ -425,7 +414,7 @@ npm run check:admin
 | `tests/secure-pdf-merge.test.cjs` | 5 | 图片合并 PDF。用最小 DOM 桩（canvas / createImageBitmap / document）在 Node 里验页数、页面尺寸、端到端往返 |
 | `tests/secure-pdf-compress.test.cjs` | 17 | **内页压缩策略**。三块：① `readJpegHeader` 只扫标记段读宽高、非 JPEG 与截断输入安全返回 null；② `buildPageImage` 的路径判定（直通 / 降采样 / PNG 策略 / 有 alpha 保留 PNG / **JPEG 源即使降采样也不得被重编码成 PNG**）；③ 用真实 jsPDF 验直通：**在 PDF 字节流里搜到源 JPEG 的原始字节片段**（这是"零重编码"的硬证据）、体积只有源图 + 几 KB、MediaBox 来自 JPEG 头 |
 | `tests/secure-compress-ladder.test.cjs` | 18 | **两段式压缩阶梯**。假 jsPDF（产出体积 = 内嵌数据长度）+ 伪造编码长度，钉住：闸门已变成安全阀（不再按输入字节误杀）、判定看产出、无损档先跑且达标即停、降级必须在 `ladder.degraded` 里报出来、每档跑完 **CONFIG 必须原样还原**（含异常路径）、无 PNG 批次要跳过 png 档、JPEG 源降采样后仍是 JPEG、PDF 直通档不空转、没注入渲染器就跳过 PDF 档、重渲染时 `IMAGE_LONG_SIDE_MAX` 临时置 0、渲染不出页要明确报错 |
-| `tests/secure-reader-interop.test.cjs` | 7 | **一密双解**。用浏览器端同一个实现（crypto-js 解外层 + PDF.js 解内层），验跨实现能对上，并覆盖"必须给密码才能打开 / 同一密码透传即可解锁 / 密码错误明确报错" |
+| `tests/secure-reader-interop.test.cjs` | 7 | **双层解密互通**。验证固定口令能解开外层 AES 密文并传给 PDF.js 打开内层文档，错误口令会明确失败 |
 | `tests/secure-cover-contract.test.cjs` | 11 | **敏感本封面的跨文件契约**。命名规则从管理台真实实现里摘出来跑，钉住：文件名能过云函数 `FILE_RE`、固定 `cover.<ext>`、控件只在敏感模式下出现、**封面先于密文上传**、封面不进加密模块、归档载荷同时带 `secure` 与 `coverFile`、前台按 `coverFile` 判定、同步脚本保全清单含 `coverFile`。另把**封面裁切**的接线钉牢：`#secure-cover-crop` 入口存在且无封面时置灰、`openEditor` 必须把 `edTarget` 重置回 `'page'`、封面走 `idx:-1` 的合成对象、**`edDone` 的封面分支必须排在 `var f = files[i]` 之前**（排在后面会静默写错对象）、回写产物仍是 `cover.webp` 且清空 `uploadedName` 强制重传 |
 | `tests/admin-pdf-expand-contract.test.cjs` | 17 | **普通路径 PDF 拆页的接线 + 敏感路径渲染尺度**（`npm run test:admin`）。前半：页名经 `pageName()` 后必须仍是 `.webp`、页序零填充 3 位、`addFiles` 必须按模式分流且普通模式不再丢弃 PDF、拆出的项必须带 `fromPdf` 元数据、失败要摘掉占位项、画质/格式变化要触发重渲染、**先铺白底再 `page.render`**（顺序反了转 WebP 会成黑块）、长边上限与 2 倍放大封顶、worker 兜底、文档缓存失败要清。后半（4 项回归）：`renderPdfPagesForVault` 必须渲染到**真实目标像素**（不得再塌到 595×842 的页面点尺寸）、两档必须产出不同尺寸、放大受 `PDF_VAULT_MAX_SCALE` 封顶、页名与 JPEG 类型 |
 | `tests/vault-multipart-contract.test.cjs` | 19 | **vault 分片的跨端契约**（`npm run test:vault`）。云函数侧（静态）：5 个 action 都存在、都需 token、两处白名单完全一致、`VAULT_KEY_RE` 拒绝穿越与嵌套、四处 promisify 到位、分片号限 1~10000、合并前校验连续性、失败路径真的调了 `abortMultipartUpload`、ContentType/缓存策略与前端一致。前端侧：`init → part×N → complete` 的顺序、**按文本子串重组必须能还原完整密文**、分片号连续且都带 etag、每个请求都带 token、任一分片失败要 abort 且**保留原始错误**、`uploadCipher` 按体积分流、字段名是 `dataText`（不是旧的 `dataBase64`） |

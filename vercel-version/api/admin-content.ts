@@ -317,6 +317,18 @@ function normalizeBook(raw: JsonRecord) {
     bookFolder: folder,
     coverFile: String(raw.coverFile || '').trim() || 'image01.webp',
   };
+  const collectionId = String(raw.collectionId || '').trim();
+  const collectionTitle = String(raw.collectionTitle || '').trim().slice(0, 80);
+  const collectionOrder = Number.parseInt(raw.collectionOrder, 10);
+  if (collectionId || collectionTitle || raw.collectionOrder != null) {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(collectionId) || !collectionTitle ||
+      !Number.isInteger(collectionOrder) || collectionOrder < 1 || collectionOrder > 500) {
+      throw fail('合集信息无效。');
+    }
+    book.collectionId = collectionId;
+    book.collectionTitle = collectionTitle;
+    book.collectionOrder = collectionOrder;
+  }
   if (raw.uid) book.uid = String(raw.uid).trim();
   for (const field of ['titleJp', 'source', 'translator', 'typesetter']) {
     const value = String(raw[field] || '').trim();
@@ -354,6 +366,52 @@ function normalizeBook(raw: JsonRecord) {
     book.pageFiles = pageFiles;
   }
   return book;
+}
+
+function updateComicCollection(books: JsonRecord[], raw: unknown) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw fail('合集信息无效。');
+  const collection = raw as JsonRecord;
+  const id = String(collection.id || '').trim();
+  const title = String(collection.title || '').trim().slice(0, 80);
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id) || !title || !Array.isArray(collection.memberIds) || collection.memberIds.length > 500) {
+    throw fail('合集信息无效。');
+  }
+
+  const memberIds = collection.memberIds.map((value: unknown) => String(value || '').trim());
+  if (memberIds.some((memberId: string) => !/^lh-\d{1,4}$/.test(memberId)) || new Set(memberIds).size !== memberIds.length) {
+    throw fail('合集顺序无效。');
+  }
+  if (books.some((book) => book && book.collectionId && book.collectionId !== id && book.collectionTitle === title)) {
+    throw fail('已有同名合集，请修改合集名称。', 409);
+  }
+
+  const byId = new Map<string, JsonRecord>();
+  books.forEach((book) => {
+    if (book) byId.set(String(book.id || ''), book);
+  });
+  memberIds.forEach((memberId: string) => {
+    const book = byId.get(memberId);
+    if (!book) throw fail('合集中的本子已不存在，请刷新列表后重试。', 409);
+    if ((book.category || '漫画本') !== '漫画本') throw fail('合集只支持漫画本。');
+    if (book.collectionId && book.collectionId !== id) throw fail('本子已加入其他合集，请先从原合集移出。', 409);
+  });
+
+  const orderById = new Map<string, number>();
+  memberIds.forEach((memberId: string, index: number) => orderById.set(memberId, index + 1));
+  books.forEach((book) => {
+    if (!book) return;
+    const order = orderById.get(String(book.id || ''));
+    if (book.collectionId !== id && order === undefined) return;
+    if (order === undefined) {
+      delete book.collectionId;
+      delete book.collectionTitle;
+      delete book.collectionOrder;
+      return;
+    }
+    book.collectionId = id;
+    book.collectionTitle = title;
+    book.collectionOrder = order;
+  });
 }
 
 function normalizeAnnouncement(raw: JsonRecord) {
@@ -726,6 +784,23 @@ export default async function handler(request: AdminRequest, response: ServerRes
         sendJson(response, 200, { ok: true, url, contentType: mime });
         return;
       }
+      case 'collectionDelete': {
+        const collectionId = String(payload.collectionId || '').trim();
+        if (!/^[A-Za-z0-9_-]{1,64}$/.test(collectionId)) throw fail('合集 ID 无效。');
+        const books = await readJsonArray('archive.json');
+        let count = 0;
+        books.forEach((book) => {
+          if (!book || book.collectionId !== collectionId) return;
+          delete book.collectionId;
+          delete book.collectionTitle;
+          delete book.collectionOrder;
+          count += 1;
+        });
+        if (!count) throw fail('合集不存在或已删除。', 404);
+        await writeJson('archive.json', books);
+        sendJson(response, 200, { ok: true, collectionId, count, books });
+        return;
+      }
       case 'publish': {
         const book = normalizeBook(payload.book || {});
         let stage = 'readArchive';
@@ -737,6 +812,11 @@ export default async function handler(request: AdminRequest, response: ServerRes
         if (index >= 0) {
           if (books[index].createdAt) book.createdAt = books[index].createdAt;
           if (books[index].uid && !book.uid) book.uid = books[index].uid;
+          if (!Object.prototype.hasOwnProperty.call(payload, 'collection') && books[index].collectionId) {
+            book.collectionId = books[index].collectionId;
+            book.collectionTitle = books[index].collectionTitle;
+            book.collectionOrder = books[index].collectionOrder;
+          }
           if (book.secure && !book.secureFile && books[index].secureFile) {
             book.secureFile = books[index].secureFile;
           }
@@ -749,6 +829,9 @@ export default async function handler(request: AdminRequest, response: ServerRes
           books.push(book);
         }
         book.updatedAt = now;
+        if (Object.prototype.hasOwnProperty.call(payload, 'collection')) {
+          updateComicCollection(books, payload.collection);
+        }
         stage = 'writeArchive';
         await writeJson('archive.json', books);
         stage = 'readTags';

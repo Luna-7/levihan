@@ -14,6 +14,9 @@ export interface DoujinBookItem {
   updatedAt?: string; // 最近发布或更新的时间
   category?: DoujinCategory; // 分类（如未填默认为漫画本）
   tags: string[]; // 标签，如 ["自设世界观", "现代", "含R18"]
+  collectionId?: string; // 同系列合集 ID
+  collectionTitle?: string; // 同系列合集名称
+  collectionOrder?: number; // 合集内顺序，从 1 开始
   source?: string; // 来源，如 "塔比欧卡"
   translator?: string; // 汉化，如 "LG"
   typesetter?: string; // 嵌字，如 "LG"

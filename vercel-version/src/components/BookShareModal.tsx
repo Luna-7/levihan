@@ -104,7 +104,7 @@ export function BookShareModal({ book, onClose, onShowToast }: Props) {
                 <div className="font-pixel text-sm font-bold text-[#1E3A2B] leading-snug break-words">{book.titleZh}</div>
                 {book.titleJp && <div className="text-[10px] text-[#8C7A68] italic break-words">{book.titleJp}</div>}
                 <div className="text-[11px] text-[#3E342B]">作者：{book.circle || '未知'}</div>
-                <div className="text-[11px] text-[#5B4636]">共 {book.pages || 0} 页{book.secure ? ' · 需校验码解析' : ''}</div>
+                <div className="text-[11px] text-[#5B4636]">共 {book.pages || 0} 页{book.secure ? '，需点击启动解析' : ''}</div>
                 <div className="flex flex-wrap gap-1 pt-0.5">
                   {book.tags.slice(0, 4).map((tag) => (
                     <span key={tag} className="text-[9px] px-1.5 py-0.5 border border-[#DECFA9] bg-[#F4EEDF] text-[#7A6958]">#{tag}</span>

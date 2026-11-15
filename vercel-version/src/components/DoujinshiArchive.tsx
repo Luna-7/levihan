@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUpDown, ArrowUpRight, Bell, Calendar, Heart, Search, X } from 'lucide-react';
 import {
   DOUJIN_ARCHIVE_DATA,
 } from '../data/doujinArchiveData';
 import { DoujinBookItem, GroupNovel } from '../types/doujinArchive';
+import { CollectionFooterNavigation, CollectionNavigationBar, getCollectionBooks } from './CollectionNavigation';
 import type { GoodsItem } from '../types';
 import { soundManager } from '../utils/audio';
 import { cosService } from '../services/cosClient';
@@ -45,12 +46,18 @@ interface Props {
 }
 
 type ArtworkLikeItem = { id: string; likes: number; liked: boolean };
+type ComicReaderHistoryState = { comicReader?: boolean; comicBookId?: string; [key: string]: unknown };
 const normalizeEnglishTitleInitial = (title: string) => title.replace(/\b([a-z])/gi, (letter) => letter.toUpperCase());
 const normalizeBookTitles = (items: DoujinBookItem[]) => items.map((book) => ({
   ...book,
   titleZh: normalizeEnglishTitleInitial(book.titleZh || ''),
   titleJp: normalizeEnglishTitleInitial(book.titleJp || ''),
 }));
+const getDisplayBookTags = (book: DoujinBookItem) => {
+  const tags = book.tags || [];
+  if (!book.collectionId) return tags;
+  return ['合集', ...tags.filter((tag) => tag !== '合集')];
+};
 
 type ComicAnnouncement = {
   id: string;
@@ -130,8 +137,14 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     }).catch(() => setPushRegistered(false));
   }, [mode]);
   const archiveScrollYRef = useRef(0);
+  const readerHistoryActiveRef = useRef(Boolean((window.history.state as { comicReader?: boolean } | null)?.comicReader));
+  const pageDetectionBookIdRef = useRef('');
   // 加密归档本子：走独立的伪装阅读器，普通长图画廊状态完全不受影响
   const [secureBook, setSecureBook] = useState<DoujinBookItem | null>(null);
+  const activeCollectionBooks = useMemo(
+    () => getCollectionBooks(books, readingBook || secureBook),
+    [books, readingBook, secureBook],
+  );
 
   // 动态探测与检测到的内页总数
   const [detectedPages, setDetectedPages] = useState<number | null>(null);
@@ -160,7 +173,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
   // 统计所有标签（动态汇总当前数据中的所有标签）
   const allCategories = isMangaVisible ? ['漫画本'] : ['小说本', '插画集'];
   const categoryBooks = books.filter((book) => (book.category || '漫画本') === selectedCategory);
-  const dynamicTags = Array.from(new Set(categoryBooks.flatMap((b) => b.tags || [])));
+  const dynamicTags = Array.from(new Set(categoryBooks.flatMap((book) => getDisplayBookTags(book))));
   const allTags = ['全部', ...dynamicTags];
 
   // 统计所有作者（动态汇总当前分类下的 circle，去重并按作品数降序）
@@ -408,36 +421,79 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     }
   };
 
-  // 点击卡片直接进入查看来源于 COS 的无缝长图
-  const handleOpenBookReader = async (book: DoujinBookItem) => {
-    if ((book.category || '漫画本') === '漫画本' && !isMangaVisible) return;
-
-    // 加密归档的本子：正文只有 COS 密文文件，没有可读的图片，
-    // 所以不进长图画廊，改走 SecureComicReader（维护页 → 校验码 → 内存解密 → Canvas）
+  const activateReaderBook = useCallback((book: DoujinBookItem) => {
+    pageDetectionBookIdRef.current = book.id;
+    setIsDetectingPages(false);
     if (book.secure && SecureComicReader) {
-      archiveScrollYRef.current = window.scrollY;
+      setReadingBook(null);
       setSecureBook(book);
+      setDetectedPages(null);
+      return;
+    }
+    setSecureBook(null);
+    setReadingBook(book);
+    setDetectedPages(book.pages && book.pages > 0 ? book.pages : 30);
+    if (!book.pages || book.pages <= 0) {
+      setIsDetectingPages(true);
+      void cosService.detectBookPages(book, 40).then((realPages) => {
+        if (pageDetectionBookIdRef.current === book.id && realPages && realPages > 0) {
+          setDetectedPages(realPages);
+        }
+      }).catch(() => {}).finally(() => {
+        if (pageDetectionBookIdRef.current === book.id) setIsDetectingPages(false);
+      });
+    }
+  }, []);
+
+  const updateComicReaderHistory = (bookId: string, replace: boolean) => {
+    const currentState = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state as ComicReaderHistoryState
+      : {};
+    const url = new URL(window.location.href);
+    url.searchParams.set('book', bookId);
+    url.searchParams.set('open', '1');
+    const nextState = { ...currentState, comicReader: true, comicBookId: bookId };
+    if (replace) window.history.replaceState(nextState, '', url);
+    else window.history.pushState(nextState, '', url);
+    readerHistoryActiveRef.current = true;
+  };
+
+  const enterComicReaderHistory = (bookId: string) => {
+    const currentState = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state as ComicReaderHistoryState
+      : {};
+    if (readerHistoryActiveRef.current || currentState.comicReader) {
+      updateComicReaderHistory(bookId, true);
       return;
     }
 
-    soundManager.playPageTurn();
-    archiveScrollYRef.current = window.scrollY;
-    setReadingBook(book);
-    setDetectedPages(book.pages || 30);
-    // 只在页数未知时才进行探测
-    if (!book.pages || book.pages <= 0) {
-      setIsDetectingPages(true);
-      try {
-        const realPages = await cosService.detectBookPages(book, 40);
-        if (realPages && realPages > 0) {
-          setDetectedPages(realPages);
-        }
-      } catch (e) {
-        // 维持默认页数
-      } finally {
-        setIsDetectingPages(false);
-      }
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.has('book') || currentUrl.searchParams.has('open')) {
+      currentUrl.searchParams.delete('book');
+      currentUrl.searchParams.delete('open');
+      const homeState = { ...currentState };
+      delete homeState.comicReader;
+      delete homeState.comicBookId;
+      window.history.replaceState(homeState, '', currentUrl);
     }
+    updateComicReaderHistory(bookId, false);
+  };
+
+  // 点击卡片进入阅读器。漫画站把阅读器写入一条独立历史记录，返回键回到漫画书架。
+  const handleOpenBookReader = (book: DoujinBookItem) => {
+    if ((book.category || '漫画本') === '漫画本' && !isMangaVisible) return;
+    archiveScrollYRef.current = window.scrollY;
+    if (mode === 'comic' && (book.category || '漫画本') === '漫画本') enterComicReaderHistory(book.id);
+    if (!(book.secure && SecureComicReader)) soundManager.playPageTurn();
+    activateReaderBook(book);
+  };
+
+  const handleCollectionBookNavigation = (book: DoujinBookItem) => {
+    soundManager.playPageTurn();
+    if (mode === 'comic' && (book.category || '漫画本') === '漫画本') {
+      updateComicReaderHistory(book.id, true);
+    }
+    activateReaderBook(book);
   };
 
   const prefetchSecureComicReader = (book: DoujinBookItem) => {
@@ -445,13 +501,43 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     void loadSecureComicReader().catch(() => {});
   };
 
-  // 退出阅读器
+  // 退出阅读器时沿浏览器历史回到漫画书架。
   const handleCloseReader = () => {
+    const historyState = window.history.state as ComicReaderHistoryState | null;
+    if (mode === 'comic' && (readerHistoryActiveRef.current || historyState?.comicReader)) {
+      window.history.back();
+      return;
+    }
+    pageDetectionBookIdRef.current = '';
     if ((readingBook?.category || '漫画本') !== '漫画本') soundManager.playScrollOpen();
     setReadingBook(null);
+    setSecureBook(null);
     setDetectedPages(null);
+    setIsDetectingPages(false);
   };
   const readingSwipeBack = useSwipeBackGesture(handleCloseReader, Boolean(readingBook));
+
+  useEffect(() => {
+    if (mode !== 'comic') return undefined;
+    const handlePopState = (event: PopStateEvent) => {
+      const historyState = event.state as ComicReaderHistoryState | null;
+      if (!historyState?.comicReader) {
+        readerHistoryActiveRef.current = false;
+        pageDetectionBookIdRef.current = '';
+        setReadingBook(null);
+        setSecureBook(null);
+        setDetectedPages(null);
+        setIsDetectingPages(false);
+        return;
+      }
+      readerHistoryActiveRef.current = true;
+      const bookId = historyState.comicBookId || new URLSearchParams(window.location.search).get('book');
+      const book = books.find((item) => item.id === bookId);
+      if (book) activateReaderBook(book);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activateReaderBook, books, mode]);
 
   useEffect(() => {
     if (mode !== 'comic' || !sharedBookId || isLoadingArchive || autoOpenedSharedBookRef.current) return;
@@ -519,7 +605,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
   // 过滤同人本列表
   const filteredBooks = useMemo(() => books.filter((book) => {
     const matchCat = (book.category || '漫画本') === selectedCategory;
-    const matchTag = selectedTag === '全部' || book.tags.includes(selectedTag);
+    const matchTag = selectedTag === '全部' ||
+      (selectedTag === '合集' ? !!book.collectionId : book.tags.includes(selectedTag));
     const matchAuthor =
       selectedAuthor === '全部' || (book.circle || '未知').trim() === selectedAuthor;
     const q = searchQuery.trim().toLowerCase();
@@ -531,7 +618,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       (book.source && book.source.toLowerCase().includes(q)) ||
       (book.translator && book.translator.toLowerCase().includes(q)) ||
       (book.typesetter && book.typesetter.toLowerCase().includes(q)) ||
-      book.tags.some((t) => t.toLowerCase().includes(q));
+      getDisplayBookTags(book).some((t) => t.toLowerCase().includes(q));
 
     return matchCat && matchTag && matchAuthor && matchSearch;
   }), [books, searchQuery, selectedAuthor, selectedCategory, selectedTag]);
@@ -610,7 +697,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
   };
 
   // ==========================================
-  // 🔒 加密归档阅读模式（维护页 → 校验码 → 解密 → Canvas 瀑布流）
+  // 🔒 加密归档阅读模式（伪装页 → 用户启动 → 解密 → Canvas 瀑布流）
   // 放在长图模式之前：敏感本子绝不允许落到任何图片直链渲染路径上
   // ==========================================
   if (secureBook && isMangaVisible && SecureComicReader) {
@@ -628,7 +715,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
               </p>
               <button
                 type="button"
-                onClick={() => setSecureBook(null)}
+                onClick={handleCloseReader}
                 className="mt-5 min-h-11 rounded-[3px] border-[0.5px] border-[var(--green-8)] px-4 text-xs font-semibold text-[var(--green-12)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"
               >
                 返回归档
@@ -638,8 +725,11 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
         }
       >
         <SecureComicReader
+          key={secureBook.id}
           book={secureBook}
-          onClose={() => setSecureBook(null)}
+          collectionBooks={activeCollectionBooks}
+          onNavigateCollectionBook={handleCollectionBookNavigation}
+          onClose={handleCloseReader}
           onShowToast={onShowToast}
         />
       </React.Suspense>
@@ -684,6 +774,12 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
         onTouchEnd={readingSwipeBack.onTouchEnd}
         onTouchCancel={readingSwipeBack.onTouchCancel}
       >
+        <CollectionNavigationBar
+          books={activeCollectionBooks}
+          currentBookId={readingBook.id}
+          onNavigate={handleCollectionBookNavigation}
+          frameClassName="max-w-2xl"
+        />
         {/* 阅读信息 */}
         <div
           className="relative z-10 -mb-4 px-3.5 py-2.5 bg-[#FAF5E8] border border-[#1E4334]/50 rounded-t-none rounded-b-xl shadow-md flex items-center gap-6"
@@ -692,8 +788,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
           <button
             type="button"
             onClick={handleCloseReader}
-            aria-label="返回列表"
-            title="返回列表"
+            aria-label="返回主站"
+            title="返回主站"
             className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-[#1E4334] p-0 font-pixel text-xs text-[#F9E79F] transition-colors hover:bg-[#2B5E4A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"
           >
             <span aria-hidden="true" className="text-2xl">←</span>
@@ -717,6 +813,13 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
 
         {/* 无缝长图展示区 */}
         {renderLongStripContent()}
+
+        <CollectionFooterNavigation
+          books={activeCollectionBooks}
+          currentBookId={readingBook.id}
+          onNavigate={handleCollectionBookNavigation}
+          frameClassName="max-w-2xl"
+        />
 
         {/* 读者同好书评区：仅主站渲染。
             评论数据是 localStorage 单机占位（发出去别人看不见），漫画站隐藏以免误导群友。 */}
@@ -1108,7 +1211,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                       <img
                         src={coverUrl}
                         alt={book.titleZh}
-                        title="封面为公开图；正文已加密归档，需校验码解析"
+                        title="封面为公开图；正文已加密归档，需启动解析"
                         loading="lazy"
                         decoding="async"
                         referrerPolicy="no-referrer"
@@ -1123,7 +1226,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                         <div className="font-mono text-[9px] text-[#9AA0A6] mt-1 break-all px-1">
                           node://isolated/{book.id}
                         </div>
-                        <div className="text-[10px] text-[#B7791F] mt-2">需校验码解析</div>
+                        <div className="text-[10px] text-[#B7791F] mt-2">需手动启动解析</div>
                       </div>
                     )
                   ) : !failedCovers.has(book.id) ? (
@@ -1168,7 +1271,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                       <div className="mt-2">
                         <span
                           className="inline-flex rounded-md bg-[#842018] px-2.5 py-1 text-xs font-bold text-white"
-                          title="该作品为加密归档，需输入社群安全校验码才能解析"
+                          title="该作品为加密归档，点击启动解析后即可阅读"
                         >
                           🔒 含有敏感元素
                         </span>
@@ -1253,16 +1356,18 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                   </div>
                   <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-2 border-t border-[#F0EDE4] pt-3">
                     <div className="flex min-w-0 flex-1 flex-nowrap gap-1 overflow-hidden">
-                      {book.tags.map((tag, tIdx) => (
+                      {getDisplayBookTags(book).map((tag, tIdx) => (
                         <span
                           key={tIdx}
-                          className={`shrink-0 whitespace-nowrap rounded-md border px-1.5 py-0.5 font-retro-jp text-xs sm:px-3 sm:py-1 sm:text-sm ${
-                            tag === '预警' || tag === '含R18' || /体型差|占有欲|伤痛/.test(tag)
-                              ? 'border-[#F59E0B] bg-[#FEF3C7] text-[#92400E]'
-                              : 'border-[#E8E1CE] bg-[#F0EDE4] text-[#5C5546]'
+                          className={`shrink-0 whitespace-nowrap rounded-md border-[0.5px] px-1.5 py-0.5 font-retro-jp text-xs sm:px-3 sm:py-1 sm:text-sm ${
+                            book.collectionId && tag === '合集' && tIdx === 0
+                              ? 'border-[var(--violet-8)] bg-[var(--violet-3)] text-[var(--violet-11)]'
+                              : tag === '预警' || tag === '含R18' || /体型差|占有欲|伤痛/.test(tag)
+                                ? 'border-[#F59E0B] bg-[#FEF3C7] text-[#92400E]'
+                                : 'border-[#E8E1CE] bg-[#F0EDE4] text-[#5C5546]'
                           }`}
                         >
-                          #{tag}
+                          {book.collectionId && tag === '合集' && tIdx === 0 ? '合集' : `#${tag}`}
                         </span>
                       ))}
                     </div>
@@ -1290,7 +1395,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                       <div className="mb-1">
                         <span
                           className="font-pixel text-[10px] px-2 py-0.5 bg-[#842018] text-white rounded-xs font-bold whitespace-nowrap"
-                          title="该作品为加密归档，需输入社群安全校验码才能解析"
+                          title="该作品为加密归档，点击启动解析后即可阅读"
                         >
                           🔒 含有敏感元素
                         </span>
@@ -1328,7 +1433,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                       <img
                         src={coverUrl}
                         alt={book.titleZh}
-                        title="封面为公开图；正文已加密归档，需校验码解析"
+                        title="封面为公开图；正文已加密归档，需启动解析"
                         loading="lazy"
                         decoding="async"
                         referrerPolicy="no-referrer"
@@ -1343,7 +1448,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                         <div className="font-mono text-[9px] text-[#9AA0A6] mt-1 break-all px-1">
                           node://isolated/{book.id}
                         </div>
-                        <div className="text-[10px] text-[#B7791F] mt-2">需校验码解析</div>
+                        <div className="text-[10px] text-[#B7791F] mt-2">需手动启动解析</div>
                       </div>
                     )
                   ) : !failedCovers.has(book.id) ? (
@@ -1416,16 +1521,20 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
 
                 {/* 标签 tags 列表 */}
                 <div className="flex flex-wrap gap-1">
-                  {book.tags.map((tag, tIdx) => (
+                  {getDisplayBookTags(book).map((tag, tIdx) => (
                     <span
                       key={tIdx}
-                      className={`text-[10px] sm:text-[11px] font-retro-jp px-2 py-0.5 rounded-xs border ${
-                        tag === '预警' || tag === '含R18' || /体型差|占有欲|伤痛/.test(tag)
-                          ? isMangaVisible ? 'bg-[#FEF3C7] text-[#92400E] border-[#F59E0B]' : 'bg-[#FADBD8] text-[#C0392B] border-[#F1948A]'
-                          : isMangaVisible ? 'bg-[#F0EDE4] text-[#5C5546] border-[#E8E1CE]' : 'bg-[#F4EEDF] text-[#7A6958] border-[#DECFA9]'
+                      className={`font-retro-jp px-2 py-0.5 rounded-xs border-[0.5px] ${
+                        book.collectionId && tag === '合集' && tIdx === 0
+                          ? 'text-xs sm:text-[13px] bg-[var(--violet-3)] text-[var(--violet-11)] border-[var(--violet-8)]'
+                          : `text-[10px] sm:text-[11px] ${
+                              tag === '预警' || tag === '含R18' || /体型差|占有欲|伤痛/.test(tag)
+                                ? isMangaVisible ? 'bg-[#FEF3C7] text-[#92400E] border-[#F59E0B]' : 'bg-[#FADBD8] text-[#C0392B] border-[#F1948A]'
+                                : isMangaVisible ? 'bg-[#F0EDE4] text-[#5C5546] border-[#E8E1CE]' : 'bg-[#F4EEDF] text-[#7A6958] border-[#DECFA9]'
+                            }`
                       }`}
                     >
-                      #{tag}
+                      {book.collectionId && tag === '合集' && tIdx === 0 ? '合集' : `#${tag}`}
                     </span>
                   ))}
                 </div>

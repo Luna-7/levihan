@@ -18,6 +18,19 @@ export default defineConfig(() => {
   return {
     define: { global: 'globalThis' },
     plugins: [
+      {
+        name: 'comic-dev-root-redirect',
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            if (req.method !== 'GET' || !req.url) return next();
+            const [pathname, query] = req.url.split('?', 2);
+            if (pathname !== '/') return next();
+            res.statusCode = 302;
+            res.setHeader('Location', `/comic.html${query ? `?${query}` : ''}`);
+            res.end();
+          });
+        },
+      },
       react(),
       tailwindcss(),
       VitePWA({
@@ -120,6 +133,9 @@ export default defineConfig(() => {
       chunkSizeWarningLimit: 1000,
     },
     server: {
+      // 本地预览也与 tudou.levihan.asia 一致：根路径进入漫画站，
+      // 避免 Vite 默认命中同目录下主站的 index.html。
+      open: '/comic.html',
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },

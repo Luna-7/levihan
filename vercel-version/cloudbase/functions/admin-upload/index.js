@@ -1075,6 +1075,19 @@ function normalizeBook(raw) {
     coverFile: String(raw.coverFile || '').trim() || 'image01.webp',
   };
 
+  const collectionId = String(raw.collectionId || '').trim();
+  const collectionTitle = String(raw.collectionTitle || '').trim().slice(0, 80);
+  const collectionOrder = parseInt(raw.collectionOrder, 10);
+  if (collectionId || collectionTitle || raw.collectionOrder != null) {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(collectionId) || !collectionTitle ||
+      !Number.isInteger(collectionOrder) || collectionOrder < 1 || collectionOrder > 500) {
+      throw httpError('合集信息无效', 400);
+    }
+    book.collectionId = collectionId;
+    book.collectionTitle = collectionTitle;
+    book.collectionOrder = collectionOrder;
+  }
+
   // 用户投稿记录归属，前台删除时由服务端再次校验，不能只依赖按钮隐藏。
   const uid = String(raw.uid || '').trim();
   if (uid) book.uid = uid;
@@ -1121,6 +1134,50 @@ function normalizeBook(raw) {
   }
 
   return book;
+}
+
+function updateComicCollection(books, raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw httpError('合集信息无效', 400);
+  const id = String(raw.id || '').trim();
+  const title = String(raw.title || '').trim().slice(0, 80);
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id) || !title || !Array.isArray(raw.memberIds) || raw.memberIds.length > 500) {
+    throw httpError('合集信息无效', 400);
+  }
+
+  const memberIds = raw.memberIds.map((value) => String(value || '').trim());
+  if (memberIds.some((memberId) => !/^lh-\d{1,4}$/.test(memberId)) || new Set(memberIds).size !== memberIds.length) {
+    throw httpError('合集顺序无效', 400);
+  }
+  if (books.some((book) => book && book.collectionId && book.collectionId !== id && book.collectionTitle === title)) {
+    throw httpError('已有同名合集，请修改合集名称', 409);
+  }
+
+  const byId = new Map();
+  books.forEach((book) => {
+    if (book) byId.set(String(book.id || ''), book);
+  });
+  memberIds.forEach((memberId) => {
+    const book = byId.get(memberId);
+    if (!book) throw httpError('合集中的本子已不存在，请刷新列表后重试', 409);
+    if ((book.category || '漫画本') !== '漫画本') throw httpError('合集只支持漫画本', 400);
+    if (book.collectionId && book.collectionId !== id) throw httpError('本子已加入其他合集，请先从原合集移出', 409);
+  });
+
+  const orderById = new Map(memberIds.map((memberId, index) => [memberId, index + 1]));
+  books.forEach((book) => {
+    if (!book) return;
+    const order = orderById.get(String(book.id || ''));
+    if (book.collectionId !== id && order === undefined) return;
+    if (order === undefined) {
+      delete book.collectionId;
+      delete book.collectionTitle;
+      delete book.collectionOrder;
+      return;
+    }
+    book.collectionId = id;
+    book.collectionTitle = title;
+    book.collectionOrder = order;
+  });
 }
 
 /* ------------------------------ 在线小说 ------------------------------ */
@@ -2740,6 +2797,23 @@ async function submitGameScore(uid, payload) {
       return { ok: true, key, bytes: body.length };
     }
 
+    case 'collectionDelete': {
+      const collectionId = String(payload.collectionId || '').trim();
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(collectionId)) throw httpError('合集 ID 无效', 400);
+      const books = await readArchive();
+      let count = 0;
+      books.forEach((book) => {
+        if (!book || book.collectionId !== collectionId) return;
+        delete book.collectionId;
+        delete book.collectionTitle;
+        delete book.collectionOrder;
+        count += 1;
+      });
+      if (!count) throw httpError('合集不存在或已删除', 404);
+      await writeArchive(books);
+      return { ok: true, collectionId, count, books };
+    }
+
     case 'publish': {
       const book = normalizeBook(payload.book || {});
       const registeredAuthor = (await readAuthorLib()).find((author) => author && author.name === book.circle);
@@ -2751,12 +2825,20 @@ async function submitGameScore(uid, payload) {
       if (replaced) {
         if (books[idx].createdAt) book.createdAt = books[idx].createdAt;
         if (books[idx].uid && !book.uid) book.uid = books[idx].uid;
+        if (!Object.prototype.hasOwnProperty.call(payload, 'collection') && books[idx].collectionId) {
+          book.collectionId = books[idx].collectionId;
+          book.collectionTitle = books[idx].collectionTitle;
+          book.collectionOrder = books[idx].collectionOrder;
+        }
         books[idx] = book;
       } else {
         book.createdAt = now;
         books.push(book);
       }
       book.updatedAt = now;
+      if (Object.prototype.hasOwnProperty.call(payload, 'collection')) {
+        updateComicCollection(books, payload.collection);
+      }
       await writeArchive(books);
       await sendPushUpdate({
         title: replaced ? '新图又出锅了' : '新图出锅',

@@ -3,24 +3,24 @@ import * as pdfjsLib from 'pdfjs-dist';
 // ?url 让 Vite 把 1MB 的 worker 原样 emit 成 assets/ 下的一个文件并返回其 URL（同源，走站点自己的 CDN）
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 import type { DoujinBookItem } from '../types/doujinArchive';
+import { CollectionFooterNavigation, CollectionNavigationBar } from './CollectionNavigation';
 import { cosService } from '../services/cosClient';
-import { clearVerifiedComicCode, getVerifiedComicCode, setVerifiedComicCode } from '../utils/secureComicCode';
 import { decryptOuterLayer } from '../utils/secureComicDecrypt';
 import { useSwipeBackGesture } from '../hooks/useSwipeBackGesture';
 
 /**
  * ============================================================================
- * SecureComicReader —— 敏感本子的「403 伪装页 + 一密双解 + Canvas 瀑布流」
+ * SecureComicReader —— 加密作品的「403 伪装页 + 启动解析 + Canvas 瀑布流」
  * ----------------------------------------------------------------------------
  * 与 public/admin/secure-upload.js 配套：管理台勾选「含有敏感元素」上传后，
  * COS 上存放 AES-256-CBC 密文，伪装成纯文本；旧作品仍使用 {id}_secure.txt 固定路径，
  * 新上传作品通过归档中的 secureFile 指向独立版本路径。
  * 站点上不给任何图片或 .pdf 直链，必须由本组件在浏览器内存里解开才看得到。
  *
- * 解密是两层，共用一个密码（"一密双解"）：
- *   外层：Web Crypto 解 AES-256-CBC —— key = SHA-256(密码)，IV = 'levihan-vault-iv'
+ * 解密是两层，共用上传端现有的固定口令：
+ *   外层：Web Crypto 解 AES-256-CBC —— key = SHA-256('levihan')，IV = 'levihan-vault-iv'
  *         解出来**直接就是 PDF 的二进制字节**（不要再做一次 Base64 解码）
- *   内层：把同一个密码透传给 pdfjs 的 password 参数，解 jsPDF 施加的 PDF 标准口令
+ *   内层：把同一个口令透传给 pdfjs 的 password 参数，解 jsPDF 施加的 PDF 标准口令
  *         若管理台上传的是图片（内层没加口令），多传这个参数会被 pdf.js 忽略 —— 都成立
  *
  * ⚠️ 诚实的边界：这套东西挡的是"顺手另存 / 右键查看 / 简易爬虫"，
@@ -47,6 +47,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
 
 type SecureComicReaderProps = {
   book: DoujinBookItem;
+  collectionBooks?: DoujinBookItem[];
+  onNavigateCollectionBook?: (book: DoujinBookItem) => void;
   onClose: () => void;
   onShowToast?: (msg: string) => void;
 };
@@ -68,6 +70,7 @@ const SECURE_CIPHER_CACHE_MAX_ENTRIES = 2;
 const SECURE_CIPHER_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const SECURE_CIPHER_CACHE_TIME_HEADER = 'x-levihan-cached-at';
 const SECURE_CIPHER_CACHE_SIZE_HEADER = 'x-levihan-cache-bytes';
+const SECURE_COMIC_PASSWORD = 'levihan';
 
 async function readCachedSecureResource(url: string): Promise<string | null> {
   if (typeof caches === 'undefined') return null;
@@ -440,7 +443,9 @@ const SecureCanvasPage: React.FC<{
       style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
       data-page={pageNumber}
     >
-      <div aria-hidden="true" style={{ paddingBottom: `${aspect * 100}%` }} />
+      {!rendered && !failed && (
+        <div aria-hidden="true" style={{ paddingBottom: `${aspect * 100}%` }} />
+      )}
       {failed ? (
         <div className="py-12 text-center font-mono text-xs text-[#8892a4]">
           第 {pageNumber} 页渲染失败，请刷新后重试
@@ -458,17 +463,19 @@ const SecureCanvasPage: React.FC<{
   );
 };
 
-export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onClose, onShowToast }) => {
+export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
+  book,
+  collectionBooks = [],
+  onNavigateCollectionBook,
+  onClose,
+  onShowToast,
+}) => {
   const [phase, setPhase] = useState<Phase>('locked');
   const [workingStage, setWorkingStage] = useState('解析中…');
-  const [code, setCode] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [canRetry, setCanRetry] = useState(false);
-  const retryCodeRef = useRef('');
-  const retryWasAutomaticRef = useRef(false);
   const [doc, setDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
-  const autoAttemptedRef = useRef(false);
   const docRef = useRef<any>(null);
   const schedulerRef = useRef<ComicRenderScheduler | null>(null);
   if (!schedulerRef.current) schedulerRef.current = new ComicRenderScheduler();
@@ -521,22 +528,17 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
   );
 
   /**
-   * 启动解析：拉密文 → 用 7 字符口令解外层 → 尝试打开 PDF。
+   * 用户点击启动后才拉取密文，并用上传端固定口令解密。
    * 全程在内存里完成，不产生任何 .pdf 文件或直链。
    */
   const handleUnlock = useCallback(
-    async (password: string, automatic = false) => {
+    async () => {
       if (phase === 'working') return;
-
-      if (password.length !== 7) {
-        return;
-      }
 
       setPhase('working');
       setWorkingStage('下载数据中…');
       setErrorMsg('');
       setCanRetry(false);
-      retryCodeRef.current = '';
 
       try {
         const startedAt = performance.now();
@@ -547,13 +549,13 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
 
         // ② 解外层 AES-256-CBC（纯内存；解出来就是 PDF 二进制）
         setWorkingStage('解密数据中…');
-        const pdfBytes = await decryptOuterLayer(cipherText, password);
-        if (!looksLikePdf(pdfBytes)) throw new Error('校验码不匹配');
+        const pdfBytes = await decryptOuterLayer(cipherText, SECURE_COMIC_PASSWORD);
+        if (!looksLikePdf(pdfBytes)) throw new Error('节点数据无法解析');
         const decryptedAt = performance.now();
 
         // ③ 解内层 PDF 标准口令：同一个密码直接透传
         setWorkingStage('解析页面中…');
-        const task = pdfjsLib.getDocument({ data: pdfBytes, password, isEvalSupported: false });
+        const task = pdfjsLib.getDocument({ data: pdfBytes, password: SECURE_COMIC_PASSWORD, isEvalSupported: false });
         const loaded = await task.promise;
         const parsedAt = performance.now();
         console.info('[漫画解析耗时]', {
@@ -565,8 +567,6 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
         });
 
         docRef.current = loaded;
-        setVerifiedComicCode(password);
-        setCode('');
         setDoc(loaded);
         setNumPages(loaded.numPages);
         setPhase('ready');
@@ -607,37 +607,16 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
               }
               break;
           }
-        } else if (/password|校验码|Malformed|不匹配/i.test(raw) || err?.name === 'PasswordException' || err?.name === 'OperationError') {
-          friendly = '校验码无效，节点拒绝解析。';
-          if (automatic && getVerifiedComicCode() === password) clearVerifiedComicCode();
+        } else if (/password|校验码|Malformed|不匹配|节点数据无法解析/i.test(raw) || err?.name === 'PasswordException' || err?.name === 'OperationError') {
+          friendly = '节点数据无法解析，请联系管理员检查资源。';
         }
         setCanRetry(retryable);
-        if (retryable) {
-          retryCodeRef.current = password;
-          retryWasAutomaticRef.current = automatic;
-        }
-        setErrorMsg(automatic && friendly === '校验码无效，节点拒绝解析。' ? '已保存的校验码无效，请重新输入。' : friendly);
+        setErrorMsg(friendly);
         setPhase('locked');
       }
     },
     [book, onShowToast, phase],
   );
-
-  useEffect(() => {
-    if (autoAttemptedRef.current) return;
-    autoAttemptedRef.current = true;
-    const savedCode = getVerifiedComicCode();
-    if (savedCode) void handleUnlock(savedCode, true);
-  }, [handleUnlock]);
-
-  /** 只更新输入状态；用户确认后再启动解析。 */
-  const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.slice(0, 7);
-    setCode(value);
-    if (errorMsg) setErrorMsg('');
-    setCanRetry(false);
-    retryCodeRef.current = '';
-  };
 
   useEffect(() => {
     if (phase !== 'ready') return;
@@ -655,6 +634,12 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
     return (
       <div className="flex min-h-[100dvh] w-full items-center bg-transparent text-[var(--amber-12)] font-mono" {...swipeBack}>
         <div className="w-full max-w-3xl mx-auto px-5 py-6 sm:py-10">
+          <CollectionNavigationBar
+            books={collectionBooks}
+            currentBookId={book.id}
+            onNavigate={(nextBook) => onNavigateCollectionBook?.(nextBook)}
+            frameClassName="max-w-3xl"
+          />
           <div>
             <div className="py-2">
               <h1 className="text-[30px] sm:text-[38px] font-bold text-[#1E3A2B] leading-none">Error 404</h1>
@@ -662,7 +647,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
                 Requested resource is not served by this node.
               </p>
 
-              {/* 解析表单：文案全程不提"密码""漫画" */}
+              {/* 用户明确启动后才读取并解析资源。 */}
               {phase === 'working' ? (
                 <div
                   className="mt-6 min-h-40 rounded-[3px] bg-[#FAF6EE] px-5 py-8 text-center"
@@ -676,32 +661,12 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
                 </div>
               ) : (
                 <div className="mt-6">
-                  <input
-                    type="text"
-                    name="verificationCode"
-                    value={code}
-                    onChange={handleCodeChange}
-                    aria-label="安全校验码"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    maxLength={7}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && code.length === 7) {
-                        event.preventDefault();
-                        void handleUnlock(code);
-                      }
-                    }}
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="secure-comic-code w-full border-0 border-b border-[#D5C9AF] bg-transparent px-1 py-2.5 text-[13px] text-[#1E3A2B] focus:outline-none focus:border-[var(--green-8)] focus:ring-0"
-                  />
                   <button
                     type="button"
-                    onClick={() => void handleUnlock(code)}
-                    disabled={code.length !== 7}
-                    className="mt-5 inline-flex min-h-11 items-center justify-center rounded-[3px] border-[0.5px] border-[var(--green-8)] bg-[var(--green-12)] px-5 text-xs font-semibold text-[var(--amber-2)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"
+                    onClick={() => void handleUnlock()}
+                    className="mt-5 inline-flex min-h-11 items-center justify-center rounded-[3px] border-[0.5px] border-[var(--green-8)] bg-[var(--green-12)] px-5 text-xs font-semibold text-[var(--amber-2)] transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"
                   >
-                    开始解析
+                    启动解析
                   </button>
                 </div>
               )}
@@ -712,12 +677,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
                   {canRetry && (
                     <button
                       type="button"
-                      onClick={() => {
-                        const retryCode = code || retryCodeRef.current;
-                        if (retryCode.length === 7) {
-                          void handleUnlock(retryCode, !code && retryWasAutomaticRef.current);
-                        }
-                      }}
+                      onClick={() => void handleUnlock()}
                       className="mt-2 min-h-11 rounded-[3px] border-[0.5px] border-[var(--red-8)] px-3 font-semibold text-[var(--red-11)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"
                     >
                       重试
@@ -728,8 +688,8 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="返回归档列表"
-                title="返回归档列表"
+                aria-label="返回主站"
+                title="返回主站"
                 className="mt-4 inline-flex h-11 w-16 items-center justify-center rounded-[3px] bg-[var(--green-12)] text-xl font-semibold text-white transition-colors hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--amber-8)]"
               >
                 ←
@@ -756,14 +716,20 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
       onTouchEnd={swipeBack.onTouchEnd}
       onTouchCancel={swipeBack.onTouchCancel}
     >
+      <CollectionNavigationBar
+        books={collectionBooks}
+        currentBookId={book.id}
+        onNavigate={(nextBook) => onNavigateCollectionBook?.(nextBook)}
+        frameClassName="max-w-3xl"
+      />
       {/* 阅读时保持结束会话操作置顶 */}
       <div className="sticky top-0 z-20 bg-[#1c2024]/95 backdrop-blur border-b border-[#2b3137]">
         <div className="max-w-3xl mx-auto px-4 py-1 flex items-center justify-end">
           <button
             type="button"
             onClick={onClose}
-            aria-label="结束会话"
-            title="结束会话"
+            aria-label="返回主站"
+            title="返回主站"
             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-xl leading-none text-[#c9d1d9] hover:bg-[#262c31] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9d1d9]"
           >
             ×
@@ -782,6 +748,13 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({ book, onCl
           />
         ))}
       </div>
+
+      <CollectionFooterNavigation
+        books={collectionBooks}
+        currentBookId={book.id}
+        onNavigate={(nextBook) => onNavigateCollectionBook?.(nextBook)}
+        frameClassName="max-w-3xl"
+      />
 
       <p className="max-w-3xl mx-auto mt-8 px-4 text-center font-mono text-[10.5px] text-[#6e7681]">
         内容仅在本机内存中渲染。请勿截图外传。

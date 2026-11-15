@@ -18,6 +18,7 @@
 
 @layer base {
   :root {
+    --gray-6: #E6E6E6;
     --gray-11: #687076;
     --gray-9: #8D8D8D;
     --amber-2: #FEFBE9;
