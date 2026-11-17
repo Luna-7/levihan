@@ -33,6 +33,7 @@ import { getAccessToken } from '../utils/cloudbaseToken';
 import { useAuthStore } from '../stores/authStore';
 import { webPushPermission, enableWebPush } from '../utils/webPush';
 import { TeaPartyInteractiveZipline } from './TeaPartyInteractiveZipline';
+import { ComicMusicPlayer, isComicMusicFile, prepareComicMusic, stopComicMusic } from './ComicMusicPlayer';
 
 interface Props {
   onShowToast: (msg: string) => void;
@@ -194,6 +195,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     if (isMangaVisible && !wasMangaVisible.current) {
       setSelectedCategory('漫画本');
     } else if (!isMangaVisible) {
+      stopComicMusic();
       if (selectedCategory === '漫画本') setSelectedCategory('小说本');
       setReadingBook((book) => (book?.category || '漫画本') === '漫画本' ? null : book);
       setSecureBook((book) => (book?.category || '漫画本') === '漫画本' ? null : book);
@@ -423,6 +425,13 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
 
   const activateReaderBook = useCallback((book: DoujinBookItem) => {
     pageDetectionBookIdRef.current = book.id;
+    const musicFile = String(book.musicFile || '');
+    const musicFolder = String(book.bookFolder || book.id).replace(/^\/+|\/+$/g, '');
+    const musicSource = /^[A-Za-z0-9_-]{1,64}$/.test(musicFolder) && isComicMusicFile(musicFile)
+      ? cosService.getObjectUrl(`${musicFolder}/${musicFile}`)
+      : '';
+    if (musicSource) prepareComicMusic(musicSource);
+    else stopComicMusic();
     setIsDetectingPages(false);
     if (book.secure && SecureComicReader) {
       setReadingBook(null);
@@ -503,6 +512,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
 
   // 退出阅读器时沿浏览器历史回到漫画书架。
   const handleCloseReader = () => {
+    stopComicMusic();
     const historyState = window.history.state as ComicReaderHistoryState | null;
     if (mode === 'comic' && (readerHistoryActiveRef.current || historyState?.comicReader)) {
       window.history.back();
@@ -522,6 +532,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     const handlePopState = (event: PopStateEvent) => {
       const historyState = event.state as ComicReaderHistoryState | null;
       if (!historyState?.comicReader) {
+        stopComicMusic();
         readerHistoryActiveRef.current = false;
         pageDetectionBookIdRef.current = '';
         setReadingBook(null);
@@ -780,6 +791,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
           onNavigate={handleCollectionBookNavigation}
           frameClassName="max-w-2xl"
         />
+        {isComicMusicFile(readingBook.musicFile) && (
+          <ComicMusicPlayer title={readingBook.musicTitle || readingBook.titleZh} />
+        )}
         {/* 阅读信息 */}
         <div
           className="relative z-10 -mb-4 px-3.5 py-2.5 bg-[#FAF5E8] border border-[#1E4334]/50 rounded-t-none rounded-b-xl shadow-md flex items-center gap-6"

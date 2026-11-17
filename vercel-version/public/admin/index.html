@@ -143,6 +143,8 @@
   .btn-sm{padding:5px 10px;font-size:12px}
   .btn-danger{border-color:var(--danger);color:var(--danger)}
   .btn-danger:hover:not(:disabled){background:#FBEDEA}
+  #f-music-pick,#f-music-remove{min-height:40px}
+  #f-music-name{min-width:0;overflow-wrap:anywhere}
   .admin-tabs{display:flex;gap:7px;overflow-x:auto;margin:16px 0 18px;
               padding:8px;background:rgba(251,247,236,.96);backdrop-filter:blur(10px);border:2px solid var(--green-2);
               border-radius:12px;box-shadow:3px 3px 0 rgba(30,67,52,.14);scrollbar-width:thin}
@@ -1110,6 +1112,15 @@
           <label for="f-pages" data-page-node-id="dltegDArjhCdJYAnk26Bff">总页数 <span class="req" data-page-node-id="5Oy8FWiQ1pRayLMqQfKVkb">*</span></label>
           <input type="number" id="f-pages" min="1" step="1" placeholder="选择图片或 PDF 后自动填写" data-page-node-id="QLDBtbNNfgFzjSKvFl7V0V">
         </div>
+        <div class="f span2" id="book-music-field">
+          <label for="f-music-picker">本子配乐 <span class="tag" style="font-size:12px">选填，MP3 / M4A，单文件不超过 50 MB，曲名取文件名</span></label>
+          <div class="row" style="gap:8px">
+            <button type="button" class="btn-sm" id="f-music-pick">选择音乐文件</button>
+            <span class="muted" id="f-music-name" aria-live="polite">未设置音乐</span>
+            <button type="button" class="btn-sm btn-danger hide" id="f-music-remove">移除音乐</button>
+            <input type="file" id="f-music-picker" accept=".mp3,.m4a,audio/mpeg,audio/mp4" class="hide" aria-label="选择本子配乐文件">
+          </div>
+        </div>
         <div class="f span2" data-page-node-id="DwKTXrirAfM9kE6LHfyKXp">
           <label style="align-items:center" data-page-node-id="bPRLkJAcE2gMUxWmeZWUr1">
             <input type="checkbox" id="f-warn-on" style="width:auto" data-page-node-id="aTJLJNchPgfNnVy8S6vxoO">
@@ -1406,6 +1417,8 @@ var collectionDragId = '';
 var collectionDeletePending = false;
 var files = [];          // { file, url, status, err, name }
 var envMax = MAX_FILE;
+var pendingMusicFile = null;
+var musicRemovalPending = false;
 var announcements = [];
 var anEditingId = '';
 var anImageBlob = null;
@@ -1437,7 +1450,7 @@ var goodsOfficialImagePreviewUrl = '';
 var goodsOfficialImageRequestId = 0;
   var artAdminEditingId = '';
   var artAdminFiles = [];
-  var uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'', pageFiles:[] };
+  var uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'', pageFiles:[], musicFile:'', musicTitle:'' };
 
 /* ============ 小工具 ============ */
 function $(id){ return document.getElementById(id); }
@@ -2828,6 +2841,44 @@ function normalizeEnglishTitleInitial(value){
   return String(value || '');
 }
 
+function updateMusicState(){
+  var pendingName = pendingMusicFile && pendingMusicFile.name;
+  var storedName = uploadConfig.musicFile;
+  var storedTitle = uploadConfig.musicTitle;
+  var label = pendingName ? '待上传：' + pendingName
+    : storedName ? '已设置音乐' + (storedTitle ? '：' + storedTitle : '')
+    : musicRemovalPending ? '保存后移除音乐'
+    : '未设置音乐';
+  $('f-music-name').textContent = label;
+  $('f-music-remove').classList.toggle('hide', !pendingMusicFile && !storedName);
+}
+
+function musicExtension(file){
+  var match = String(file && file.name || '').match(/\.(mp3|m4a)$/i);
+  return match ? match[1].toLowerCase() : '';
+}
+
+function uploadBookMusic(form){
+  if (!pendingMusicFile) return Promise.resolve(form);
+  var extension = musicExtension(pendingMusicFile);
+  if (!extension) return Promise.reject(new Error('本子配乐只支持 MP3 或 M4A 文件。'));
+  if (pendingMusicFile.size > 50 * 1024 * 1024) return Promise.reject(new Error('音乐文件不能超过 50 MB。'));
+
+  var folder = form.bookFolder || form.id;
+  var fileName = 'music-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + extension;
+  var contentType = extension === 'mp3' ? 'audio/mpeg' : 'audio/mp4';
+  $('prog-text').textContent = '正在上传本子配乐…';
+  return uploadToCos(folder + '/', folder + '/' + fileName, pendingMusicFile, contentType, function(info){
+    if (info && Number.isFinite(info.percent)) {
+      $('prog-text').textContent = '正在上传本子配乐 ' + Math.round(info.percent * 100) + '%';
+    }
+  }).then(function(){
+    form.musicFile = fileName;
+    form.musicTitle = String(pendingMusicFile.name || '').replace(/\.(mp3|m4a)$/i, '').trim().slice(0, 120);
+    return form;
+  });
+}
+
 function readForm(){
   return {
     id: $('f-id').value.trim(),
@@ -2845,6 +2896,8 @@ function readForm(){
     pagePrefix: uploadConfig.pagePrefix,
     pagePadDigits: uploadConfig.pagePadDigits,
     coverFile: uploadConfig.coverFile || (isSecureMode() && activeCover() && activeCover().uploadedName) || '',
+    musicFile: uploadConfig.musicFile || '',
+    musicTitle: uploadConfig.musicTitle || '',
     secure: isSecureMode(),
     warning: $('f-warn-on').checked ? $('f-warning').value.trim() : ''
   };
@@ -2852,6 +2905,9 @@ function readForm(){
 
 function fillForm(b){
   editingArchiveBookId = b.id || '';
+  pendingMusicFile = null;
+  musicRemovalPending = false;
+  $('f-music-picker').value = '';
   $('f-id').value = b.id || '';
   $('f-titleZh').value = normalizeEnglishTitleInitial(b.titleZh || '');
   $('f-titleJp').value = normalizeEnglishTitleInitial(b.titleJp || '');
@@ -2873,8 +2929,11 @@ function fillForm(b){
     pagePrefix: b.pagePrefix || '',
     pagePadDigits: (b.pagePadDigits >= 1 && b.pagePadDigits <= 5) ? b.pagePadDigits : undefined,
     coverFile: b.coverFile || '',
-    pageFiles: Array.isArray(b.pageFiles) ? b.pageFiles.slice() : []
+    pageFiles: Array.isArray(b.pageFiles) ? b.pageFiles.slice() : [],
+    musicFile: b.musicFile || '',
+    musicTitle: b.musicTitle || ''
   };
+  updateMusicState();
   $('f-warn-on').checked = !!b.warning;
   $('f-warning').value = b.warning || '';
   syncWarn();
@@ -2977,10 +3036,14 @@ async function loadBookImagesForEdit(b){
 
 function resetForm(){
   editingArchiveBookId = '';
+  pendingMusicFile = null;
+  musicRemovalPending = false;
+  $('f-music-picker').value = '';
   ['f-id','f-titleZh','f-titleJp','f-circle','f-authorUrl','f-tags','f-source',
    'f-translator','f-typesetter','f-pages'].forEach(function(k){ $(k).value = ''; });
   hideBookAuthorSuggestions();
-  uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'', pageFiles:[] };
+  uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'', pageFiles:[], musicFile:'', musicTitle:'' };
+  updateMusicState();
   $('opt-secure').checked = false;
   lastSuggestedAuthorUrl = '';
   $('author-link-hint').textContent = '';
@@ -4821,7 +4884,8 @@ function handleSecureUpload(){
     .then(function(result){
       // 阅读端 SecureComicReader 已上线：前台点开 secure 本子 → 403 伪装页 →
       // 用户点击启动解析 → 使用固定口令 levihan 在内存解密渲染。
-      return publishComicBook(Object.assign({}, form, {
+      return uploadBookMusic(form).then(function(){
+        return publishComicBook(Object.assign({}, form, {
             // 图片合并时用实际张数；直接传 PDF 时 pageCount 为 null，沿用管理员填的「总页数」
             pages: result.pageCount || form.pages,
             bookFolder: form.bookFolder || form.id,
@@ -4829,11 +4893,12 @@ function handleSecureUpload(){
             secure: true,
             secureFile: result.key
           }), collectionPayload).then(function(d){
-            show($('main-msg'), 'ok', '上传成功');
-            resetForm();
-            loadBooks();
-            loadAuthorLib();
-          });
+          show($('main-msg'), 'ok', '上传成功');
+          resetForm();
+          loadBooks();
+          loadAuthorLib();
+        });
+      });
     })
     .catch(function(err){
       if (onAuthFail(err)) return;
@@ -4844,7 +4909,7 @@ function handleSecureUpload(){
 
 /* ============ 上传主流程 ============ */
 function setBusy(on){
-  ['btn-upload','btn-publish-only','btn-logout','btn-reload','btn-nextid','btn-clear','btn-sort'].forEach(function(id){
+  ['btn-upload','btn-publish-only','btn-logout','btn-reload','btn-nextid','btn-clear','btn-sort','f-music-pick','f-music-remove','f-music-picker'].forEach(function(id){
     $(id).disabled = on;
   });
   if (!on) syncButtons();
@@ -4970,7 +5035,7 @@ function uploadAll(){
     // 走这条路径说明「含有敏感元素」没勾选：内页已被替换成普通图片，
     // 必须显式把标记清成 false，否则站点会拿着旧的 secure 标记去解一批根本不在的密文。
     book.secure = false;
-    return publishComicBook(book, collectionPayload).then(function(d){
+    return uploadBookMusic(book).then(function(){ return publishComicBook(book, collectionPayload); }).then(function(d){
       show($('main-msg'), 'ok',
         '✅ 发布成功：' + book.id + '，' + book.titleZh + '（共 ' + d.count + ' 本）\n' +
         (d.deletedPageFiles ? '已从 COS 删除 ' + d.deletedPageFiles + ' 张移除的旧图片。\n' : '') +
@@ -4995,7 +5060,7 @@ function publishOnly(){
   var collectionPayload = buildCollectionPayload();
   hide($('main-msg'));
   setBusy(true);
-  publishComicBook(form, collectionPayload).then(function(d){
+  uploadBookMusic(form).then(function(){ return publishComicBook(form, collectionPayload); }).then(function(d){
     resetForm();
     show($('main-msg'), 'ok', '✅ 《' + form.titleZh + '》的信息已保存并发布，表单已清空。');
     loadBooks();
@@ -6095,6 +6160,33 @@ $('opt-secure').onchange = refreshSecureUI;
 refreshSecureUI();   // 首屏同步一次按钮文案 / 拖拽区说明
 $('btn-upload').onclick = uploadAll;
 $('btn-publish-only').onclick = publishOnly;
+$('f-music-pick').onclick = function(){ $('f-music-picker').click(); };
+$('f-music-picker').onchange = function(){
+  var file = this.files && this.files[0];
+  if (!file) return;
+  if (!musicExtension(file)) {
+    show($('main-msg'), 'err', '本子配乐只支持 MP3 或 M4A 文件。');
+    this.value = '';
+    return;
+  }
+  if (file.size > 50 * 1024 * 1024) {
+    show($('main-msg'), 'err', '音乐文件不能超过 50 MB。');
+    this.value = '';
+    return;
+  }
+  pendingMusicFile = file;
+  musicRemovalPending = false;
+  updateMusicState();
+};
+$('f-music-remove').onclick = function(){
+  var hadExistingMusic = !!uploadConfig.musicFile;
+  pendingMusicFile = null;
+  uploadConfig.musicFile = '';
+  uploadConfig.musicTitle = '';
+  musicRemovalPending = hadExistingMusic;
+  $('f-music-picker').value = '';
+  updateMusicState();
+};
 
 /* ---- 内容预警 ---- */
 function syncWarn(){

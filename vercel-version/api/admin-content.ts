@@ -31,6 +31,7 @@ const APP_ID = process.env.COS_APP_ID || BUCKET.match(/-(\d+)$/)?.[1] || '';
 const CDN = `https://${BUCKET}.cos-website.${REGION}.myqcloud.com`;
 const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
+const MUSIC_FILE_RE = /^music-[A-Za-z0-9_-]{1,64}\.(mp3|m4a)$/i;
 const TOKEN_TTL_SECONDS = 2 * 60 * 60;
 const PUSH_SUBSCRIPTIONS_KEY = 'push-subscriptions.json';
 const GOODS_KEY = 'goods/manifest.json';
@@ -317,6 +318,13 @@ function normalizeBook(raw: JsonRecord) {
     bookFolder: folder,
     coverFile: String(raw.coverFile || '').trim() || 'image01.webp',
   };
+  const musicFile = String(raw.musicFile || '').trim();
+  if (musicFile) {
+    if (book.category !== '漫画本' || !MUSIC_FILE_RE.test(musicFile)) throw fail('本子配乐文件名无效。');
+    book.musicFile = musicFile;
+    const musicTitle = String(raw.musicTitle || '').trim().slice(0, 120);
+    if (musicTitle) book.musicTitle = musicTitle;
+  }
   const collectionId = String(raw.collectionId || '').trim();
   const collectionTitle = String(raw.collectionTitle || '').trim().slice(0, 80);
   const collectionOrder = Number.parseInt(raw.collectionOrder, 10);
@@ -810,6 +818,14 @@ export default async function handler(request: AdminRequest, response: ServerRes
         const previousBook = index >= 0 ? books[index] : null;
         const now = new Date().toISOString();
         if (index >= 0) {
+          if (!Object.prototype.hasOwnProperty.call(payload.book || {}, 'musicTitle') &&
+              previousBook?.musicTitle && book.musicFile === previousBook.musicFile) {
+            book.musicTitle = previousBook.musicTitle;
+          }
+          if (!Object.prototype.hasOwnProperty.call(payload.book || {}, 'musicFile') && previousBook?.musicFile) {
+            book.musicFile = previousBook.musicFile;
+            if (previousBook.musicTitle) book.musicTitle = previousBook.musicTitle;
+          }
           if (books[index].createdAt) book.createdAt = books[index].createdAt;
           if (books[index].uid && !book.uid) book.uid = books[index].uid;
           if (!Object.prototype.hasOwnProperty.call(payload, 'collection') && books[index].collectionId) {
@@ -881,6 +897,27 @@ export default async function handler(request: AdminRequest, response: ServerRes
                 code: (error as any)?.Code || (error as any)?.name || 'unknown',
               });
             }
+          }
+        }
+        const previousMusicFile = String(previousBook?.musicFile || '').trim();
+        const previousMusicFolder = String(previousBook?.bookFolder || previousBook?.id || '').trim();
+        const currentMusicFolder = String(book.bookFolder || book.id || '').trim();
+        const previousMusicKey = `${previousMusicFolder}/${previousMusicFile}`;
+        const currentMusicKey = book.musicFile ? `${currentMusicFolder}/${book.musicFile}` : '';
+        const oldMusicFileStillReferenced = books.some((entry, entryIndex) =>
+          entryIndex !== index &&
+          String(entry?.bookFolder || entry?.id || '').trim() === previousMusicFolder &&
+          String(entry?.musicFile || '').trim() === previousMusicFile,
+        );
+        if (previousBook && MUSIC_FILE_RE.test(previousMusicFile) && previousMusicKey !== currentMusicKey &&
+            /^[A-Za-z0-9_-]{1,64}$/.test(previousMusicFolder) && !oldMusicFileStillReferenced) {
+          try {
+            await getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: previousMusicKey }));
+          } catch (error) {
+            console.error('[publish-music-cleanup]', {
+              key: previousMusicKey,
+              code: (error as any)?.Code || (error as any)?.name || 'unknown',
+            });
           }
         }
         let deletedPageFiles = 0;

@@ -7,6 +7,7 @@ import { CollectionFooterNavigation, CollectionNavigationBar } from './Collectio
 import { cosService } from '../services/cosClient';
 import { decryptOuterLayer } from '../utils/secureComicDecrypt';
 import { useSwipeBackGesture } from '../hooks/useSwipeBackGesture';
+import { ComicMusicPlayer, isComicMusicFile } from './ComicMusicPlayer';
 
 /**
  * ============================================================================
@@ -640,6 +641,9 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
             onNavigate={(nextBook) => onNavigateCollectionBook?.(nextBook)}
             frameClassName="max-w-3xl"
           />
+          {isComicMusicFile(book.musicFile) && (
+            <ComicMusicPlayer title={book.musicTitle || book.titleZh} />
+          )}
           <div>
             <div className="py-2">
               <h1 className="text-[30px] sm:text-[38px] font-bold text-[#1E3A2B] leading-none">Error 404</h1>
@@ -722,6 +726,9 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
         onNavigate={(nextBook) => onNavigateCollectionBook?.(nextBook)}
         frameClassName="max-w-3xl"
       />
+      {isComicMusicFile(book.musicFile) && (
+        <ComicMusicPlayer title={book.musicTitle || book.titleZh} />
+      )}
       {/* 阅读时保持结束会话操作置顶 */}
       <div className="sticky top-0 z-20 bg-[#1c2024]/95 backdrop-blur border-b border-[#2b3137]">
         <div className="max-w-3xl mx-auto px-4 py-1 flex items-center justify-end">

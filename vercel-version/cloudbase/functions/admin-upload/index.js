@@ -225,6 +225,7 @@ function verifyToken(token) {
 
 const ID_RE = /^lh-\d{1,4}$/;
 const FILE_RE = /^[A-Za-z0-9_-]+\.(webp|jpg|jpeg|png|gif|avif)$/i;
+const MUSIC_FILE_RE = /^music-[A-Za-z0-9_-]{1,64}\.(mp3|m4a)$/i;
 
 const httpError = (message, status) => Object.assign(new Error(message), { httpStatus: status });
 
@@ -1074,6 +1075,13 @@ function normalizeBook(raw) {
     bookFolder: String(raw.bookFolder || '').trim() || id,
     coverFile: String(raw.coverFile || '').trim() || 'image01.webp',
   };
+  const musicFile = String(raw.musicFile || '').trim();
+  if (musicFile) {
+    if (book.category !== '漫画本' || !MUSIC_FILE_RE.test(musicFile)) throw httpError('本子配乐文件名无效', 400);
+    book.musicFile = musicFile;
+    const musicTitle = String(raw.musicTitle || '').trim().slice(0, 120);
+    if (musicTitle) book.musicTitle = musicTitle;
+  }
 
   const collectionId = String(raw.collectionId || '').trim();
   const collectionTitle = String(raw.collectionTitle || '').trim().slice(0, 80);
@@ -2821,8 +2829,17 @@ async function submitGameScore(uid, payload) {
       const books = await readArchive();
       const idx = books.findIndex((b) => b && b.id === book.id);
       const replaced = idx >= 0;
+      const previousBook = replaced ? books[idx] : null;
       const now = new Date().toISOString();
       if (replaced) {
+        if (!Object.prototype.hasOwnProperty.call(payload.book || {}, 'musicTitle') &&
+            previousBook.musicTitle && book.musicFile === previousBook.musicFile) {
+          book.musicTitle = previousBook.musicTitle;
+        }
+        if (!Object.prototype.hasOwnProperty.call(payload.book || {}, 'musicFile') && books[idx].musicFile) {
+          book.musicFile = books[idx].musicFile;
+          if (books[idx].musicTitle) book.musicTitle = books[idx].musicTitle;
+        }
         if (books[idx].createdAt) book.createdAt = books[idx].createdAt;
         if (books[idx].uid && !book.uid) book.uid = books[idx].uid;
         if (!Object.prototype.hasOwnProperty.call(payload, 'collection') && books[idx].collectionId) {
@@ -2840,6 +2857,21 @@ async function submitGameScore(uid, payload) {
         updateComicCollection(books, payload.collection);
       }
       await writeArchive(books);
+      const oldMusicFile = String(previousBook && previousBook.musicFile || '').trim();
+      const oldMusicFolder = String(previousBook && (previousBook.bookFolder || previousBook.id) || '').trim();
+      const oldMusicKey = `${oldMusicFolder}/${oldMusicFile}`;
+      const newMusicKey = book.musicFile ? `${book.bookFolder || book.id}/${book.musicFile}` : '';
+      const oldMusicStillReferenced = books.some((entry, entryIndex) => entryIndex !== idx &&
+        String(entry && (entry.bookFolder || entry.id) || '').trim() === oldMusicFolder &&
+        String(entry && entry.musicFile || '').trim() === oldMusicFile);
+      if (previousBook && MUSIC_FILE_RE.test(oldMusicFile) && oldMusicKey !== newMusicKey &&
+          /^[A-Za-z0-9_-]{1,64}$/.test(oldMusicFolder) && !oldMusicStillReferenced) {
+        try {
+          await deleteMultipleObject({ Bucket: BUCKET, Region: REGION, Objects: [{ Key: oldMusicKey }] });
+        } catch (error) {
+          console.error('[publish-music-cleanup]', { key: oldMusicKey, message: error && error.message });
+        }
+      }
       await sendPushUpdate({
         title: replaced ? '新图又出锅了' : '新图出锅',
         body: String(book.titleZh || '插画集有新的内容').slice(0, 120),

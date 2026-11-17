@@ -92,26 +92,28 @@ export const CollectionFooterNavigation: React.FC<CollectionNavigationProps> = (
       aria-label="合集篇目翻页"
       className={`mx-auto grid w-full ${frameClassName} grid-cols-1 px-3 py-3`}
     >
-      <button
-        type="button"
-        className={`${buttonClass} border-t-[0.5px]`}
-        onClick={() => previous && onNavigate(previous)}
-        disabled={!previous}
-        aria-label={previous ? `上一篇：${previous.titleZh}` : '已经是第一篇'}
-      >
-        <span className="font-semibold">上一篇</span>
-        <span className={`truncate ${previous ? '' : 'text-[var(--gray-9)]'}`}>{previous?.titleZh || '已经是第一篇'}</span>
-      </button>
-      <button
-        type="button"
-        className={buttonClass}
-        onClick={() => next && onNavigate(next)}
-        disabled={!next}
-        aria-label={next ? `下一篇：${next.titleZh}` : '已经是最后一篇'}
-      >
-        <span className="font-semibold">下一篇</span>
-        <span className={`truncate ${next ? '' : 'text-[var(--gray-9)]'}`}>{next?.titleZh || '已经是最后一篇'}</span>
-      </button>
+      {previous && (
+        <button
+          type="button"
+          className={`${buttonClass} border-t-[0.5px]`}
+          onClick={() => onNavigate(previous)}
+          aria-label={`上一篇：${previous.titleZh}`}
+        >
+          <span className="font-semibold">上一篇</span>
+          <span className="truncate">{previous.titleZh}</span>
+        </button>
+      )}
+      {next && (
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={() => onNavigate(next)}
+          aria-label={`下一篇：${next.titleZh}`}
+        >
+          <span className="font-semibold">下一篇</span>
+          <span className="truncate">{next.titleZh}</span>
+        </button>
+      )}
     </nav>
   );
 };

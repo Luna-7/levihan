@@ -24,7 +24,8 @@
     "test:secure": "node --test tests/secure-vault.test.cjs tests/secure-pdf-merge.test.cjs tests/secure-pdf-compress.test.cjs tests/secure-compress-ladder.test.cjs tests/secure-reader-interop.test.cjs tests/secure-native-decrypt.test.cjs tests/secure-cover-contract.test.cjs tests/secure-canvas-safety.test.cjs tests/secure-reader-no-cdn.test.cjs",
     "test:ui": "node --test tests/user-entry-credentials.test.cjs tests/auth-store.test.cjs",
     "test:forum": "node --test tests/restaurant-forum-attribution.test.cjs",
-    "test": "npm run check:admin && npm run test:admin && npm run test:vault && npm run test:secure && npm run test:ui && npm run test:forum && npm run lint && npm run test:auth",
+    "test": "npm run check:admin && npm run test:admin && npm run test:vault && npm run test:comic-music && npm run test:secure && npm run test:ui && npm run test:forum && npm run lint && npm run test:auth",
+    "test:comic-music": "node --test tests/comic-music-contract.test.cjs",
     "verify:levels": "node scripts/verify-save-hange-levels.ts",
     "prebuild": "node scripts/generate-admin-pixiv.mjs"
   },
