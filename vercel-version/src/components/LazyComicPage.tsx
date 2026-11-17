@@ -6,6 +6,7 @@ import { requestDebug } from '../utils/requestDebug';
 type LazyComicPageProps = {
   pageNumber: number;
   src: string;
+  srcCandidates?: string[];
   className?: string;
   alt?: string;
   referrerPolicy?: string;
@@ -24,6 +25,7 @@ type LazyComicPageProps = {
 export default function LazyComicPage({
   pageNumber,
   src,
+  srcCandidates,
   className,
   alt,
   referrerPolicy,
@@ -36,10 +38,13 @@ export default function LazyComicPage({
   const [loaded, setLoaded] = useState(false);
   const [displayReady, setDisplayReady] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [candidateIndex, setCandidateIndex] = useState(0);
   const [inRange, setInRange] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(2 / 3);
   const mountedRef = useRef(true);
   const unloadTimerRef = useRef<number | null>(null);
+  const candidateUrls = srcCandidates?.length ? srcCandidates : [src];
+  const activeSrc = candidateUrls[candidateIndex] || src;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -108,7 +113,7 @@ export default function LazyComicPage({
     // 预加载图片到浏览器缓存
     const loadImage = (): Promise<void> => {
       return new Promise((resolve, reject) => {
-        requestDebug.recordImageRequest(src);
+        requestDebug.recordImageRequest(activeSrc);
 
         const image = new Image();
 
@@ -122,11 +127,11 @@ export default function LazyComicPage({
 
         image.onerror = () => {
           requestDebug.recordImageError();
-          reject(new Error(`Failed to load image: ${src}`));
+          reject(new Error(`Failed to load image: ${activeSrc}`));
         };
 
         image.decoding = 'async';
-        image.src = src;
+        image.src = activeSrc;
       });
     };
 
@@ -142,10 +147,15 @@ export default function LazyComicPage({
       .catch(() => {
         if (!mountedRef.current) return;
 
+        if (candidateIndex + 1 < candidateUrls.length) {
+          setCandidateIndex((current) => current + 1);
+          return;
+        }
+
         setFailed(true);
         onError?.();
       });
-  }, [shouldLoad, loaded, failed, src, onLoad, onError]);
+  }, [shouldLoad, loaded, failed, activeSrc, candidateIndex, candidateUrls.length, onLoad, onError]);
 
   return (
     <div
@@ -159,7 +169,7 @@ export default function LazyComicPage({
           {!displayReady && <div aria-hidden="true" className="absolute inset-0 bg-[#F6F1E3]" />}
           {loaded && inRange && (
               <img
-                src={src}
+                src={activeSrc}
                 alt={alt || `第 ${pageNumber} 页`}
                 referrerPolicy={referrerPolicy}
                 decoding="async"
@@ -182,7 +192,12 @@ export default function LazyComicPage({
               <div className="text-xs text-[#A69C8E]">请检查网络连接或存储桶配置</div>
               <button
                 type="button"
-                onClick={() => setFailed(false)}
+                onClick={() => {
+                  setCandidateIndex(0);
+                  setLoaded(false);
+                  setDisplayReady(false);
+                  setFailed(false);
+                }}
                 className="mt-3 min-h-10 px-4 text-xs text-[#F9E79F] underline underline-offset-4"
               >
                 点击重试

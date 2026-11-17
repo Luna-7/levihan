@@ -1148,8 +1148,8 @@
       <div id="drop" class="drop" data-page-node-id="Yp41KTlO6nmxGWFDQDZMFA">
         <div style="font-size:26px" data-page-node-id="0CXPLFXaYBJFxkbkoimAIk">📥</div>
         <div style="font-weight:700;color:var(--ink);margin-top:6px" data-page-node-id="AEMMCYfxKRB9gvnXwOKrbT">把图片拖到这里，或点击选择</div>
-        <div class="muted" style="margin-top:4px" data-page-node-id="DS3VtKrUGoOvm7u3dTZqWF">支持 jpg / png / webp，将按顺序自动命名为 image01、image02…</div>
-        <input type="file" id="picker" accept="image/*" multiple class="hide" data-page-node-id="zRsfgGHcP6KOaUe7eq9hcW">
+        <div class="muted" style="margin-top:4px" data-page-node-id="DS3VtKrUGoOvm7u3dTZqWF">支持 JPG / PNG / WebP / GIF / AVIF；可选自动转为 WebP</div>
+        <input type="file" id="picker" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,application/pdf" multiple class="hide" data-page-node-id="zRsfgGHcP6KOaUe7eq9hcW">
       </div>
 
       <div class="files" id="files" data-page-node-id="uDbZMEpNzQ1eNxG61AgUWA"></div>
@@ -2880,7 +2880,7 @@ function uploadBookMusic(form){
 }
 
 function readForm(){
-  return {
+  var form = {
     id: $('f-id').value.trim(),
     titleZh: normalizeEnglishTitleInitial($('f-titleZh').value.trim()),
     titleJp: normalizeEnglishTitleInitial($('f-titleJp').value.trim()),
@@ -2901,6 +2901,10 @@ function readForm(){
     secure: isSecureMode(),
     warning: $('f-warn-on').checked ? $('f-warning').value.trim() : ''
   };
+  if (!isSecureMode() && Array.isArray(uploadConfig.pageFiles) && uploadConfig.pageFiles.length === form.pages) {
+    form.pageFiles = uploadConfig.pageFiles.slice();
+  }
+  return form;
 }
 
 function fillForm(b){
@@ -2943,18 +2947,32 @@ function fillForm(b){
   $('mode-hint').textContent = '（正在编辑 ' + b.id + '）';
 }
 
-function bookPageFiles(b){
-  if (Array.isArray(b.pageFiles) && b.pageFiles.length) return b.pageFiles.slice();
+function bookPageCandidates(b){
   var count = Math.max(0, parseInt(b.pages, 10) || 0);
   if (!count) return [];
   var prefix = b.pagePrefix || 'image';
   var pad = (b.pagePadDigits >= 1 && b.pagePadDigits <= 5) ? b.pagePadDigits : (count > 99 ? 3 : 2);
-  var cover = b.coverFile || 'image01.webp';
-  var names = [];
+  var supportedExtensions = ['webp', 'jpg', 'jpeg', 'png', 'gif', 'avif'];
+  var storedNames = Array.isArray(b.pageFiles) ? b.pageFiles : [];
+  var cover = String(b.coverFile || '').split('/').pop();
+  var firstStem = prefix + String(1).padStart(pad, '0');
+  var coverMatch = cover.match(/\.([^.]+)$/);
+  var coverExtension = coverMatch && coverMatch[1].toLowerCase();
+  var coverIsPageOne = coverMatch && cover.slice(0, -coverMatch[0].length) === firstStem;
+  var preferredExtension = coverIsPageOne && supportedExtensions.indexOf(coverExtension) >= 0 ? coverExtension : '';
+  var extensions = preferredExtension
+    ? [preferredExtension].concat(supportedExtensions.filter(function(ext){ return ext !== preferredExtension; }))
+    : supportedExtensions;
+  var pages = [];
   for (var i = 0; i < count; i++) {
-    names.push(i === 0 ? cover : pageName(i, pad, prefix, cover));
+    if (storedNames[i]) {
+      pages.push([storedNames[i]]);
+      continue;
+    }
+    var pageNumber = String(i + 1).padStart(pad, '0');
+    pages.push(extensions.map(function(ext){ return prefix + pageNumber + '.' + ext; }));
   }
-  return names;
+  return pages;
 }
 
 function bookImageUrl(b, fileName){
@@ -2983,36 +3001,52 @@ function fetchBookImage(b, fileName){
   });
 }
 
+async function fetchBookImageCandidates(b, candidates){
+  var lastError = null;
+  for (var i = 0; i < candidates.length; i++) {
+    try {
+      return { file: await fetchBookImage(b, candidates[i]), name: candidates[i] };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('没有找到可读取的页面图片');
+}
+
 async function loadBookImagesForEdit(b){
   if (b.secure) {
     show($('main-msg'), 'err', '敏感本图片为加密文件，不能直接载入普通图片编辑器；请重新选择原图后再编辑。');
     return false;
   }
-  var names = bookPageFiles(b);
-  if (!names.length) {
+  var pageCandidates = bookPageCandidates(b);
+  if (!pageCandidates.length) {
     show($('main-msg'), 'err', '这本作品没有可读取的页面文件记录。');
     return false;
   }
-  var nameCounts = Object.create(null);
-  names.forEach(function(name){ nameCounts[name] = (nameCounts[name] || 0) + 1; });
-  var duplicateNameCount = Object.keys(nameCounts).filter(function(name){ return nameCounts[name] > 1; }).length;
   if (files.length && !confirm('当前图片列表会被云端原图替换，继续吗？')) return false;
 
   clearFiles();
   setBusy(true);
   var loaded = [];
+  var names = [];
   try {
-    for (var i = 0; i < names.length; i++) {
-      show($('main-msg'), 'info', '正在读取原图：' + (i + 1) + ' / ' + names.length + '（' + names[i] + '）');
-      var file = await fetchBookImage(b, names[i]);
+    for (var i = 0; i < pageCandidates.length; i++) {
+      show($('main-msg'), 'info', '正在读取原图：' + (i + 1) + ' / ' + pageCandidates.length + '（' + pageCandidates[i][0] + '）');
+      var result = await fetchBookImageCandidates(b, pageCandidates[i]);
+      var file = result.file;
+      names.push(result.name);
       loaded.push({
         file:file, originalFile:file,
         url:URL.createObjectURL(file), originalUrl:URL.createObjectURL(file),
         status:'idle', err:'', name:file.name,
         edited:false, op:null, remote:true, remoteName:names[i],
-        remoteDuplicate:nameCounts[names[i]] > 1
+        remoteDuplicate:false
       });
     }
+    var nameCounts = Object.create(null);
+    names.forEach(function(name){ nameCounts[name] = (nameCounts[name] || 0) + 1; });
+    var duplicateNameCount = Object.keys(nameCounts).filter(function(name){ return nameCounts[name] > 1; }).length;
+    loaded.forEach(function(item){ item.remoteDuplicate = nameCounts[item.remoteName] > 1; });
     files = loaded;
     uploadConfig.pageFiles = names.slice();
     renderFiles();
@@ -3331,7 +3365,7 @@ function isPdfFile(f){
   return /^application\/pdf$/i.test((f && f.type) || '') || /\.pdf$/i.test((f && f.name) || '');
 }
 function isImageFile(f){
-  return /^image\//.test((f && f.type) || '') || /\.(jpe?g|png|webp|gif|avif|bmp)$/i.test((f && f.name) || '');
+  return /^image\/(jpeg|png|webp|gif|avif)$/i.test((f && f.type) || '') || /\.(jpe?g|png|webp|gif|avif)$/i.test((f && f.name) || '');
 }
 
 /* ============ PDF 拆页（普通上传路径：每一页转成一张图片） ============ */
@@ -4733,12 +4767,12 @@ function refreshSecureUI(){
   if ($('opt-webp') && $('opt-webp').parentNode) $('opt-webp').parentNode.style.opacity = on ? '0.45' : '';
 
   // 两条路径都收 PDF，只是处理方式不同：敏感模式原样加密，普通模式每页转成 WebP 图片
-  if ($('picker')) $('picker').accept = 'image/*,application/pdf';
+  if ($('picker')) $('picker').accept = 'image/jpeg,image/png,image/webp,image/gif,image/avif,application/pdf';
   var dropHint = $('drop') && $('drop').querySelector('.muted');
   if (dropHint) {
     dropHint.textContent = on
       ? '支持多张图片（按文件名顺序在本地合并成 PDF；高宽比超 2.2 的长图自动切成正常页），或直接拖入一个 PDF 文件'
-      : '支持 jpg / png / webp；拖入 PDF 会按页转成 WebP 图片后逐页上传；高宽比超 2.2 的长图自动切成正常页';
+      : '支持 JPG / PNG / WebP / GIF / AVIF；拖入 PDF 会按页转成 WebP 图片后逐页上传；高宽比超 2.2 的长图自动切成正常页';
   }
 
   // 从敏感模式切回普通模式时，列表里可能还躺着"整份 PDF"的条目（敏感模式下它是原样交给加密流程的）。

@@ -17,6 +17,7 @@ const GOODS_MANIFEST_URL = '/goods/manifest.json';
 const GOODS_THUMB_BASE = '/goods/thumbs';
 const GOODS_PREVIEW_BASE = '/goods/previews';
 const REMOTE_CACHE_TTL_MS = 5 * 60 * 1000;
+const COMIC_PAGE_EXTENSIONS = ['webp', 'jpg', 'jpeg', 'png', 'gif', 'avif'] as const;
 // 旧 Cloudflare R2 配置的本地存储键，迁移时清理
 const LEGACY_R2_STORAGE_KEY = 'lh_r2_custom_config_v1';
 
@@ -95,15 +96,31 @@ export class COSService {
   /**
    * 获取某本书指定页码的无缝长图 URL
    */
-  public getPageUrl(book: DoujinBookItem, pageIndex: number): string {
+  public getPageUrlCandidates(book: DoujinBookItem, pageIndex: number): string[] {
     const folder = (book.bookFolder || book.id).replace(/^\/|\/$/g, '');
     const actualName = book.pageFiles?.[pageIndex - 1];
-    if (actualName) return this.getObjectUrl(`${folder}/${actualName.replace(/^\//, '')}`);
+    if (actualName) return [this.getObjectUrl(`${folder}/${actualName.replace(/^\//, '')}`)];
     const prefix = book.pagePrefix ?? 'image';
     const padDigits = book.pagePadDigits ?? 2;
     const pageNumStr = pageIndex.toString().padStart(padDigits, '0');
-    const ext = book.coverFile?.match(/\.(webp|jpe?g|png|gif|avif)$/i)?.[1] || 'webp';
-    return this.getObjectUrl(`${folder}/${prefix}${pageNumStr}.${ext}`);
+    const coverName = (book.coverFile || '').split('/').pop() || '';
+    const firstPageStem = `${prefix}${'1'.padStart(padDigits, '0')}`;
+    const coverPageMatch = coverName.match(/\.([^.]+)$/);
+    const coverExtension = coverPageMatch?.[1].toLowerCase();
+    const coverIsPageOne = coverName.slice(0, coverPageMatch ? -(coverPageMatch[0].length) : undefined) === firstPageStem;
+    const preferredExtension = coverIsPageOne && COMIC_PAGE_EXTENSIONS.some((extension) => extension === coverExtension)
+      ? coverExtension
+      : undefined;
+    const extensions = preferredExtension
+      ? [preferredExtension, ...COMIC_PAGE_EXTENSIONS.filter((extension) => extension !== preferredExtension)]
+      : [...COMIC_PAGE_EXTENSIONS];
+
+    return extensions.map((extension) => this.getObjectUrl(`${folder}/${prefix}${pageNumStr}.${extension}`));
+  }
+
+  /** 获取某页的首选文件 URL。阅读器会使用候选列表兼容旧记录。 */
+  public getPageUrl(book: DoujinBookItem, pageIndex: number): string {
+    return this.getPageUrlCandidates(book, pageIndex)[0];
   }
 
   /**
@@ -150,9 +167,12 @@ export class COSService {
       const chunk = Array.from({ length: Math.min(concurrency, maxProbe - i + 1) }, (_, idx) => i + idx);
       const results = await Promise.all(
         chunk.map(async (pageIdx) => {
-          const url = this.getPageUrl(book, pageIdx);
-          const probe = await this.probeResource(url);
-          return { pageIdx, ok: probe.ok };
+          const urls = this.getPageUrlCandidates(book, pageIdx);
+          for (const url of urls) {
+            const probe = await this.probeResource(url);
+            if (probe.ok) return { pageIdx, ok: true };
+          }
+          return { pageIdx, ok: false };
         })
       );
 

@@ -161,8 +161,10 @@ test('PDF 文档按文件缓存，重渲染不会重新解析一遍', () => {
 /* ---------------- 选择器契约 ---------------- */
 
 test('文件选择器在两种模式下都收 PDF', () => {
-  assert.match(ADMIN, /\$\('picker'\)\.accept = 'image\/\*\/?\s*,\s*application\/pdf'|accept = 'image\/\*,application\/pdf'/,
-    'accept 不能再按模式二选一 —— 两条路径都支持 PDF 了');
+  assert.match(ADMIN, /\$\('picker'\)\.accept = 'image\/jpeg,image\/png,image\/webp,image\/gif,image\/avif,application\/pdf'/,
+    '两种模式都应接受后端支持的图片格式和 PDF');
+  assert.match(ADMIN, /id="picker" accept="image\/jpeg,image\/png,image\/webp,image\/gif,image\/avif,application\/pdf"/,
+    '页面首次渲染时也应显示一致的可选格式');
 });
 
 test('从敏感模式切回普通模式时，整份 PDF 会被补拆页', () => {

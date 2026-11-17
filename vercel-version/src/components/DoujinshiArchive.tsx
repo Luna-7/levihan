@@ -758,13 +758,15 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     const renderLongStripContent = () => (
       <div className="w-full max-w-2xl mx-auto bg-[#F6F1E3] rounded-lg overflow-hidden border-2 border-[#1E4334] shadow-xl" style={{ touchAction: 'pan-x pan-y pinch-zoom' }}>
         {pagesList.map((pageNum) => {
-          const pageUrl = cosService.getPageUrl(readingBook, pageNum);
+          const pageUrls = cosService.getPageUrlCandidates(readingBook, pageNum);
+          const pageUrl = pageUrls[0];
 
           return (
-              <div key={pageNum} className="-mt-px">
+              <div key={`${readingBook.id}-${pageNum}-${pageUrl}`} className="-mt-px">
               <LazyComicPage
                 pageNumber={pageNum}
                 src={pageUrl}
+                srcCandidates={pageUrls}
                 alt={`${readingBook.titleZh} 第 ${pageNum} 页`}
                 className="relative w-full block m-0 p-0 leading-none"
                 referrerPolicy="no-referrer"

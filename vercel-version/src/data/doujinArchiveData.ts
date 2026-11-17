@@ -53,7 +53,13 @@ export const getCosPageUrl = (
   const prefix = book.pagePrefix ?? 'image';
   const padDigits = book.pagePadDigits ?? 2;
   const pageNumStr = pageIndex.toString().padStart(padDigits, '0');
-  const ext = book.coverFile?.match(/\.(webp|jpe?g|png|gif|avif)$/i)?.[1] || 'webp';
+  const coverName = (book.coverFile || '').split('/').pop() || '';
+  const firstPageStem = `${prefix}${'1'.padStart(padDigits, '0')}`;
+  const coverMatch = coverName.match(/\.([^.]+)$/);
+  const coverIsPageOne = coverName.slice(0, coverMatch ? -coverMatch[0].length : undefined) === firstPageStem;
+  const ext = coverIsPageOne && /\.(webp|jpe?g|png|gif|avif)$/i.test(coverName)
+    ? coverMatch?.[1] || 'webp'
+    : 'webp';
 
   return `${base}/${folder}/${prefix}${pageNumStr}.${ext}`;
 };
