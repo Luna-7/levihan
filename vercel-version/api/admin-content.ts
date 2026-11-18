@@ -25,6 +25,7 @@ interface AdminRequest extends IncomingMessage {
 }
 
 const ADMIN_ORIGIN = 'https://admin.levihan.asia';
+const COMIC_ORIGIN = 'https://tudou.levihan.asia';
 const BUCKET = process.env.COS_BUCKET || 'levihan-1325571558';
 const REGION = process.env.COS_REGION || 'ap-nanjing';
 const APP_ID = process.env.COS_APP_ID || BUCKET.match(/-(\d+)$/)?.[1] || '';
@@ -634,11 +635,11 @@ export default async function handler(request: AdminRequest, response: ServerRes
   const forwardedProto = String(request.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
   const forwardedHost = String(request.headers['x-forwarded-host'] || request.headers.host || '').split(',')[0].trim();
   const requestOrigin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : '';
-  if (origin && origin !== ADMIN_ORIGIN && origin !== requestOrigin) {
+  if (origin && origin !== ADMIN_ORIGIN && origin !== COMIC_ORIGIN && origin !== requestOrigin) {
     sendJson(response, 403, { ok: false, error: '请求来源无效' });
     return;
   }
-  if (origin && (origin === ADMIN_ORIGIN || origin === requestOrigin)) {
+  if (origin && (origin === ADMIN_ORIGIN || origin === COMIC_ORIGIN || origin === requestOrigin)) {
     response.setHeader('Access-Control-Allow-Origin', origin);
   }
   if (request.method === 'OPTIONS') {

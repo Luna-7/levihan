@@ -17,7 +17,10 @@ type ComicCommentResponse = {
   comment?: Pick<ComicComment, 'id' | 'body' | 'createdAt'>;
 };
 
-const COMIC_COMMENTS_ENDPOINT = '/api/admin-content';
+const COMIC_COMMENTS_ENDPOINT = typeof window !== 'undefined'
+  && window.location.hostname === 'tudou.levihan.asia'
+  ? 'https://www.levihan.asia/api/admin-content'
+  : '/api/admin-content';
 
 async function callComicComments(payload: Record<string, unknown>, signal?: AbortSignal) {
   const response = await fetch(COMIC_COMMENTS_ENDPOINT, {
