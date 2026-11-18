@@ -113,3 +113,7 @@ test('阅读器在当前格式加载失败后会继续尝试其他格式', () =>
   assert.match(LAZY_PAGE_SOURCE, /candidateIndex \+ 1 < candidateUrls\.length/);
   assert.match(LAZY_PAGE_SOURCE, /src=\{activeSrc\}/);
 });
+
+test('窄屏漫画页不被固定最小高度撑出页间空白', () => {
+  assert.doesNotMatch(LAZY_PAGE_SOURCE, /<div className="relative w-full min-h-\[240px\]/);
+});

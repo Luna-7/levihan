@@ -165,7 +165,7 @@ export default function LazyComicPage({
       style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
     >
       {!failed ? (
-        <div className="relative w-full min-h-[240px] bg-[#F6F1E3]" style={{ aspectRatio }}>
+        <div className="relative w-full bg-[#F6F1E3]" style={{ aspectRatio }}>
           {!displayReady && <div aria-hidden="true" className="absolute inset-0 bg-[#F6F1E3]" />}
           {loaded && inRange && (
               <img
