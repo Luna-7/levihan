@@ -103,6 +103,9 @@
     overscroll-behavior: auto;
     -webkit-overflow-scrolling: touch;
   }
+  html.comic-site {
+    --comic-reader-content-width: 42rem;
+  }
   html.comic-site body {
     background: rgb(253, 251, 247);
   }
@@ -150,9 +153,13 @@
     contain-intrinsic-size: 460px;
   }
 
+  .comic-reader-content {
+    width: min(100%, var(--comic-reader-content-width, 42rem));
+    margin-inline: auto;
+  }
+
   .comic-book-music {
     display: grid;
-    width: min(100%, 48rem);
     align-items: center;
     grid-template-columns: 9rem minmax(0, 1fr);
     gap: 1rem;
@@ -165,19 +172,103 @@
   }
 
   .comic-book-music-art {
+    position: relative;
     overflow: hidden;
     width: 9rem;
     height: 9rem;
     border-radius: 8px;
     background: var(--green-3);
+    box-shadow: 3px 3px 0 var(--amber-12);
   }
 
-  .comic-book-music-art img {
-    display: block;
+  .comic-turntable-stage {
+    position: relative;
+    display: grid;
     width: 100%;
     height: 100%;
-    object-fit: cover;
-    transform: scale(1.25);
+    place-items: center;
+  }
+
+  .comic-vinyl-disc {
+    position: relative;
+    display: grid;
+    width: 84%;
+    aspect-ratio: 1;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--amber-12);
+    animation: comic-vinyl-rotation 2s infinite linear;
+    animation-play-state: paused;
+  }
+
+  .comic-book-music-art.is-playing .comic-vinyl-disc {
+    animation-play-state: running;
+  }
+
+  .comic-vinyl-rim,
+  .comic-vinyl-label,
+  .comic-vinyl-center {
+    display: grid;
+    aspect-ratio: 1;
+    place-items: center;
+    border-radius: 50%;
+  }
+
+  .comic-vinyl-rim {
+    width: 74%;
+    border: 2px solid var(--amber-3);
+    border-right-color: var(--amber-12);
+    border-left-color: var(--amber-12);
+  }
+
+  .comic-vinyl-label {
+    width: 52%;
+    background: var(--amber-3);
+  }
+
+  .comic-vinyl-center {
+    width: 28%;
+    background: var(--amber-12);
+  }
+
+  .comic-turntable-arm {
+    position: absolute;
+    z-index: 1;
+    right: 19%;
+    bottom: 20%;
+    width: 5%;
+    height: 40%;
+    transform: rotate(-45deg);
+    transform-origin: 50% 100%;
+    border-radius: 999px;
+    background: var(--amber-3);
+  }
+
+  .comic-turntable-arm::before,
+  .comic-turntable-arm::after {
+    position: absolute;
+    left: 50%;
+    aspect-ratio: 1;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: var(--amber-3);
+    content: '';
+  }
+
+  .comic-turntable-arm::before {
+    top: -4%;
+    width: 150%;
+  }
+
+  .comic-turntable-arm::after {
+    bottom: -14%;
+    width: 240%;
+  }
+
+  @keyframes comic-vinyl-rotation {
+    to {
+      transform: rotate(1turn);
+    }
   }
 
   .comic-book-music-main {
@@ -328,6 +419,12 @@
 
     .comic-book-music-progress input {
       height: 44px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .comic-vinyl-disc {
+      animation: none;
     }
   }
 

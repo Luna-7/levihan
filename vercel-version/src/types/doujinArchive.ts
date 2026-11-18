@@ -21,9 +21,10 @@ export interface DoujinBookItem {
   translator?: string; // 汉化，如 "LG"
   typesetter?: string; // 嵌字，如 "LG"
   pages: number; // 总页数，如 30
+  uploaderNote?: string; // 上传者匿名留言，显示在阅读页标题栏下方
   coverFile?: string; // 封面文件名，若不填默认自动映射为 "image01.webp"；也允许直接写 http(s) 绝对地址
   musicFile?: string; // 本子配乐文件名，位于 bookFolder 目录
-  musicTitle?: string; // 管理台上传时取原始文件名，用作播放器曲名
+  musicTitle?: string; // 管理台中可编辑的播放器曲名
   bookFolder?: string; // 存储桶子目录，若不填默认自动映射为 id (如 "lh-001")
   pagePrefix?: string; // 图片前缀，默认为 "image"
   pagePadDigits?: number; // 页码位数，默认为 2 (如 image01.webp)

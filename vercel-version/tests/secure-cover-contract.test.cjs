@@ -25,8 +25,8 @@ const SYNC_MJS = read('scripts/sync-archive.mjs');
 
 /** 从真实实现里摘出封面命名规则，避免测试里重写一份「看起来一样」的副本 */
 function loadCoverNamer() {
-  const start = ADMIN.indexOf('var SECURE_COVER_STEM');
-  const end = ADMIN.indexOf('function syncCoverFileField');
+  const start = ADMIN.indexOf("var SECURE_COVER_STEM = 'cover';");
+  const end = ADMIN.indexOf('function activeCover()', start);
   assert.ok(start >= 0 && end > start, '管理台里找不到封面命名规则的实现片段');
   const src = ADMIN.slice(start, end);
   const sandbox = { URL: { createObjectURL: () => 'blob:x' } };
@@ -82,7 +82,8 @@ test('管理台：封面先传、密文后传（顺序反了会留下指向不�
 test('管理台：封面走普通 upload 通道，不掺进加密流水线', () => {
   const start = ADMIN.indexOf('function uploadSecureCover');
   const body = ADMIN.slice(start, ADMIN.indexOf('function handleSecureUpload'));
-  assert.match(body, /action:'upload'/, '封面应走 api({action:\'upload\'})');
+  assert.match(body, /action:'secureCoverUploadUrl'/, '封面应从管理接口获取限时签名链接');
+  assert.match(body, /method:'PUT'/, '封面文件应通过签名链接直传 COS');
   assert.ok(!/LeVihanVault/.test(body), '封面不应调用加密模块');
 });
 

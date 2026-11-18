@@ -131,9 +131,18 @@ export function ComicMusicPlayer({ title = '本子配乐' }: ComicMusicPlayerPro
   const progress = duration ? Math.min(currentTime, duration) : 0;
 
   return (
-    <section className="comic-book-music" aria-label="本子配乐播放器">
-      <div className="comic-book-music-art" aria-hidden="true">
-        <img src="/images/comic-turntable.jpg" width="144" height="144" alt="" />
+    <section className="comic-reader-content comic-book-music" aria-label="本子配乐播放器">
+      <div className={`comic-book-music-art${isPlaying ? ' is-playing' : ''}`} aria-hidden="true">
+        <div className="comic-turntable-stage">
+          <div className="comic-vinyl-disc">
+            <div className="comic-vinyl-rim">
+              <div className="comic-vinyl-label">
+                <div className="comic-vinyl-center" />
+              </div>
+            </div>
+          </div>
+          <div className="comic-turntable-arm" />
+        </div>
       </div>
       <div className="comic-book-music-main">
         <div className="comic-book-music-head">

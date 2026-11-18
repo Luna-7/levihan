@@ -138,6 +138,24 @@ export default defineConfig(() => {
       open: '/comic.html',
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      proxy: {
+        '/api/admin-content': {
+          target: 'https://www.levihan.asia',
+          changeOrigin: true,
+          secure: true,
+          timeout: 15000,
+          proxyTimeout: 15000,
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => proxyReq.removeHeader('origin'));
+            proxy.on('error', (err, _req, res) => {
+              if (res && 'writeHead' in res && !res.headersSent) {
+                res.writeHead(502, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: '评论 API 代理连接失败：' + (err.message || 'socket error') }));
+              }
+            });
+          },
+        },
+      },
     },
   };
 });

@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUpDown, ArrowUpRight, Bell, Calendar, Heart, Search, X } from 'lucide-react';
+import { ArrowUpDown, ArrowUpRight, Bell, Calendar, Heart, MessageCircle, Search, X } from 'lucide-react';
 import {
   DOUJIN_ARCHIVE_DATA,
 } from '../data/doujinArchiveData';
@@ -25,7 +25,7 @@ const SecureComicReader = loadSecureComicReader
   : null;
 import { AuthorWithLink } from '../utils/authorLink';
 import { MangaCommentSection } from './MangaCommentSection';
-import { getCommentCountByBookId } from '../data/mangaComments';
+import { loadComicCommentCounts } from '../services/comicComments';
 import { useAppShellStore } from '../stores/appShellStore';
 import { useSwipeBackGesture } from '../hooks/useSwipeBackGesture';
 import { ADMIN_UPLOAD_ENDPOINT, fetchBackend } from '../utils/cloudbaseEndpoint';
@@ -34,6 +34,7 @@ import { useAuthStore } from '../stores/authStore';
 import { webPushPermission, enableWebPush } from '../utils/webPush';
 import { TeaPartyInteractiveZipline } from './TeaPartyInteractiveZipline';
 import { ComicMusicPlayer, isComicMusicFile, prepareComicMusic, stopComicMusic } from './ComicMusicPlayer';
+import { CardPatternOverlay } from './CardPatternOverlay';
 
 interface Props {
   onShowToast: (msg: string) => void;
@@ -106,7 +107,29 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     () => COMIC_ANNOUNCEMENT_HANGE_LINES[Math.floor(Math.random() * COMIC_ANNOUNCEMENT_HANGE_LINES.length)],
     [selectedComicAnnouncement]
   );
-  const [, setCommentVersion] = useState<number>(0);
+  const [comicCommentCounts, setComicCommentCounts] = useState<Record<string, number>>({});
+  const commentPreviewMode = import.meta.env.DEV
+    && typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('previewComments') === '1';
+  const refreshComicCommentCounts = useCallback(() => {
+    void loadComicCommentCounts()
+      .then(setComicCommentCounts)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (mode !== 'comic') {
+      setComicCommentCounts({});
+      return undefined;
+    }
+    const controller = new AbortController();
+    loadComicCommentCounts(controller.signal)
+      .then((counts) => setComicCommentCounts(counts))
+      .catch(() => {
+        if (!controller.signal.aborted) setComicCommentCounts({});
+      });
+    return () => controller.abort();
+  }, [mode]);
 
   // 搜索与多维筛选
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -634,20 +657,27 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     return matchCat && matchTag && matchAuthor && matchSearch;
   }), [books, searchQuery, selectedAuthor, selectedCategory, selectedTag]);
 
-  // 排序：默认「从新到旧」；按 updatedAt/createdAt 降序。
-  // 早期归档没有日期，以递增的 lh-NNN ID 代表收录顺序，因此兜底必须倒序。
+  // 漫画站的 ID 按 lh-NNN 递增，数字越大收录越新；主站内容仍按更新时间排序。
   const sortedBooks = useMemo(() => {
     const getTime = (b: DoujinBookItem) =>
       new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
     const arr = [...filteredBooks];
     if (sortBy === 'new') {
-      arr.sort((a, b) => {
-        const diff = getTime(b) - getTime(a);
-        if (diff !== 0) return diff;
-        const pageDiff = (b.pages || 0) - (a.pages || 0);
-        if (pageDiff !== 0) return pageDiff;
-        return String(b.id).localeCompare(String(a.id), 'zh-CN', { numeric: true });
-      });
+      if (isMangaVisible) {
+        const getComicNumber = (id: string) => {
+          const match = id.match(/^lh-(\d+)$/i);
+          return match ? Number(match[1]) : -1;
+        };
+        arr.sort((a, b) => getComicNumber(b.id) - getComicNumber(a.id));
+      } else {
+        arr.sort((a, b) => {
+          const diff = getTime(b) - getTime(a);
+          if (diff !== 0) return diff;
+          const pageDiff = (b.pages || 0) - (a.pages || 0);
+          if (pageDiff !== 0) return pageDiff;
+          return String(b.id).localeCompare(String(a.id), 'zh-CN', { numeric: true });
+        });
+      }
     } else {
       arr.sort((a, b) => {
         const diff = (b.pages || 0) - (a.pages || 0);
@@ -658,7 +688,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       });
     }
     return sortReversed ? arr.reverse() : arr;
-  }, [filteredBooks, sortBy, sortReversed]);
+  }, [filteredBooks, isMangaVisible, sortBy, sortReversed]);
 
   const visibleBooks = useMemo(
     () => sortedBooks.slice(0, visibleBookCount),
@@ -742,6 +772,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
           onNavigateCollectionBook={handleCollectionBookNavigation}
           onClose={handleCloseReader}
           onShowToast={onShowToast}
+          onCommentCountChange={refreshComicCommentCounts}
+          commentPreviewMode={commentPreviewMode}
         />
       </React.Suspense>
     );
@@ -752,11 +784,19 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
   // ==========================================
   if (readingBook && ((readingBook.category || '漫画本') !== '漫画本' || isMangaVisible)) {
     const totalPages = detectedPages || readingBook.pages || 30;
+    const hasComicMusic = isComicMusicFile(readingBook.musicFile);
+    const uploaderNote = readingBook.uploaderNote?.trim() || (
+      import.meta.env.DEV && new URLSearchParams(window.location.search).get('previewNote') === '1'
+        ? '感谢你打开这本漫画。希望这段故事能陪你度过一段轻松的时光。'
+        : ''
+    );
+    const hasUploaderNote = Boolean(uploaderNote);
+    const hasReaderIntro = hasComicMusic || hasUploaderNote;
     const pagesList = Array.from({ length: totalPages }, (_, i) => i + 1);
 
     // 长图主体内容：无间隙、块级排列、消除所有图片缝隙
     const renderLongStripContent = () => (
-      <div className="w-full max-w-2xl mx-auto bg-[#F6F1E3] rounded-lg overflow-hidden border-2 border-[#1E4334] shadow-xl" style={{ touchAction: 'pan-x pan-y pinch-zoom' }}>
+      <div className="comic-reader-content bg-[#F6F1E3] rounded-lg overflow-hidden border-2 border-[#1E4334] shadow-xl" style={{ touchAction: 'pan-x pan-y pinch-zoom' }}>
         {pagesList.map((pageNum) => {
           const pageUrls = cosService.getPageUrlCandidates(readingBook, pageNum);
           const pageUrl = pageUrls[0];
@@ -793,12 +833,9 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
           onNavigate={handleCollectionBookNavigation}
           frameClassName="max-w-2xl"
         />
-        {isComicMusicFile(readingBook.musicFile) && (
-          <ComicMusicPlayer title={readingBook.musicTitle || readingBook.titleZh} />
-        )}
         {/* 阅读信息 */}
         <div
-          className="relative z-10 -mb-4 px-3.5 py-2.5 bg-[#FAF5E8] border border-[#1E4334]/50 rounded-t-none rounded-b-xl shadow-md flex items-center gap-6"
+          className={`relative z-10 ${hasReaderIntro ? '' : '-mb-4'} px-3.5 py-2.5 bg-[#FAF5E8] border border-[#1E4334]/50 rounded-t-none rounded-b-xl shadow-md flex items-center gap-6`}
           style={{ paddingTop: 'max(10px, env(safe-area-inset-top, 0px))' }}
         >
           <button
@@ -827,6 +864,18 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
           </div>
         </div>
 
+        {hasUploaderNote && (
+          <section className="comic-reader-content relative isolate mb-2 overflow-hidden rounded-lg border-[0.5px] border-[var(--amber-6)] bg-[var(--amber-2)] px-3.5 py-3 text-[var(--green-12)]">
+            <CardPatternOverlay opacity={0.08} mode="multiply" />
+            <h3 className="relative z-10 mb-1 text-xs font-semibold">想说的话</h3>
+            <p className="relative z-10 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--amber-12)]">{uploaderNote}</p>
+          </section>
+        )}
+
+        {hasComicMusic && (
+          <ComicMusicPlayer title={readingBook.musicTitle || readingBook.titleZh} />
+        )}
+
         {/* 无缝长图展示区 */}
         {renderLongStripContent()}
 
@@ -837,14 +886,13 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
           frameClassName="max-w-2xl"
         />
 
-        {/* 读者同好书评区：仅主站渲染。
-            评论数据是 localStorage 单机占位（发出去别人看不见），漫画站隐藏以免误导群友。 */}
-        {mode === 'main' && (
+        {mode === 'comic' && (
           <MangaCommentSection
             bookId={readingBook.id}
             bookTitle={readingBook.titleZh}
             onShowToast={onShowToast}
-            onCommentCountChange={() => setCommentVersion((v) => v + 1)}
+            onCommentCountChange={refreshComicCommentCounts}
+            previewMode={commentPreviewMode}
           />
         )}
 
@@ -1202,7 +1250,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
           // 通过 COS 逻辑层动态生成封面 CDN 地址
           const coverUrl = cosService.getCoverUrl(book);
           const isMangaBook = (book.category || '漫画本') === '漫画本';
-          const commentCount = getCommentCountByBookId(book.id);
+          const commentCount = comicCommentCounts[book.id] || 0;
           const like = artworkLikes[book.id] || { id: book.id, likes: book.likes || 0, liked: Boolean(book.liked) };
 
           return (
@@ -1554,6 +1602,15 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                     </span>
                   ))}
                 </div>
+                {isMangaVisible && (
+                  <div className="mt-auto flex items-center justify-between gap-2 border-t-[0.5px] border-[var(--gray-6)] pt-2 text-xs text-[var(--gray-11)]">
+                    <span>{book.pages || 30} 页</span>
+                    <span className="inline-flex items-center gap-1 tabular-nums" aria-label={`${commentCount} 条评论`}>
+                      <MessageCircle size={14} aria-hidden="true" />
+                      {commentCount} 条评论
+                    </span>
+                  </div>
+                )}
                   </div>
                 </div>
               )}
@@ -1593,11 +1650,6 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
                       </button>
                     )}
                   </div>
-                ) : mode === 'main' && commentCount > 0 ? (
-                  <span className="flex items-center gap-1 text-[#5B4636] font-medium">
-                    <span>💬</span>
-                    <span>共 {commentCount} 条评论</span>
-                  </span>
                 ) : (
                   <span>共 {book.pages || 30} 页</span>
                 )}

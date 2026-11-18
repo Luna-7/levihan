@@ -28,7 +28,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const MODULE_PATH = path.join(__dirname, '..', 'public', 'admin', 'secure-upload.js');
-const SAMPLE_JPEG = path.join(__dirname, '..', 'public', 'daxigua', 'res', 'share.jpg');
+const SAMPLE_JPEG = path.join(__dirname, '..', 'public', 'images', 'comic-turntable.jpg');
 const JPEG_BYTES = fs.readFileSync(SAMPLE_JPEG);
 const JPEG_SIZE = JPEG_BYTES.length;
 
@@ -331,7 +331,7 @@ test('批量里没有 PNG 源时跳过 PNG 档，并记录跳过原因', async (
 });
 
 test('降无可降时不谎报降过画质：小图跑遍长边档体积不变，如实报"未达标"', async () => {
-  // 样图长边仅 418，低于所有长边档，因此每个长边档都不会触发降采样
+  // 样图长边为 512，低于所有长边档，因此每个长边档都不会触发降采样
   vault.configure({ MAX_OUTPUT_BYTES: 1 });
   const out = await vault.runCompressLadder([jpegFile()]);
 
@@ -349,7 +349,7 @@ test('降无可降时不谎报降过画质：小图跑遍长边档体积不变�
 });
 
 test('JPEG 源被强制降采样时必须走 canvas，且不得被 PNG 策略拐成无损 PNG', async () => {
-  // 用一个极端长边档把 418 的样图也逼进 canvas 路径
+  // 用一个极端长边档把 512 的样图也逼进 canvas 路径
   vault.configure({
     MAX_OUTPUT_BYTES: 1,
     COMPRESS_LADDER: [
@@ -374,7 +374,7 @@ test('JPEG 源在长边合格时走原字节直通，体积由真实源图决定
   const out = await vault.runCompressLadder([jpegFile()]);
 
   assert.equal(out.ladder.chosenId, 'lossless');
-  assert.equal(out.stats.passthrough, 1, '418×208 的源图长边远小于任何档，必须直通');
+  assert.equal(out.stats.passthrough, 1, '512×512 的源图长边远小于任何档，必须直通');
   assert.equal(out.stats.reencoded, 0);
   // 直通体积 = 源 JPEG 的 base64 + PDF 头部开销，量级应贴近源图
   assert.ok(

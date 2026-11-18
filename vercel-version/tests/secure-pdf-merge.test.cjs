@@ -24,7 +24,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const MODULE_PATH = path.join(__dirname, '..', 'public', 'admin', 'secure-upload.js');
-const SAMPLE_JPEG = path.join(__dirname, '..', 'public', 'daxigua', 'res', 'share.jpg');
+const SAMPLE_JPEG = path.join(__dirname, '..', 'public', 'images', 'comic-turntable.jpg');
 
 /* ---------------- 最小 DOM 桩：只覆盖流水线真正用到的 API ---------------- */
 function fakeElement() {
@@ -62,6 +62,7 @@ function firstExisting(candidates) {
 
 const JSPDF_UMD_PATH = firstExisting([
   process.env.LH_JSPDF_UMD,
+  path.join(__dirname, '..', 'public', 'admin', 'vendor', 'jspdf.umd.min.js'),
   path.join(__dirname, '..', 'node_modules', 'jspdf', 'dist', 'jspdf.umd.min.js'),
   '/tmp/jspdf.umd.min.js',
 ]);

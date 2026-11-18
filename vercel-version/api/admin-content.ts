@@ -35,7 +35,16 @@ const MUSIC_FILE_RE = /^music-[A-Za-z0-9_-]{1,64}\.(mp3|m4a)$/i;
 const TOKEN_TTL_SECONDS = 2 * 60 * 60;
 const PUSH_SUBSCRIPTIONS_KEY = 'push-subscriptions.json';
 const GOODS_KEY = 'goods/manifest.json';
-const PUBLIC_ACTIONS = new Set(['status', 'login', 'pushSubscribe', 'pushUnsubscribe']);
+const COMIC_COMMENT_PREFIX = 'comic-comments/';
+const COMIC_COMMENT_RATE_PREFIX = 'comic-comment-rate/';
+const COMIC_COMMENT_ID_RE = /^cc-\d{13}-[a-f0-9]{12}$/i;
+const MAX_COMIC_COMMENT_LENGTH = 2000;
+const MAX_COMIC_COMMENT_LIST = 100;
+const MAX_COMIC_COMMENT_TIMESTAMP = 9_999_999_999_999;
+const PUBLIC_ACTIONS = new Set([
+  'status', 'login', 'pushSubscribe', 'pushUnsubscribe',
+  'comicCommentList', 'comicCommentCounts', 'comicCommentSubmit', 'comicCommentDeleteOwn',
+]);
 const PUSH_SEND_TIMEOUT_MS = 2500;
 export const config = { api: { bodyParser: false } };
 const IMAGE_EXTENSIONS: Record<string, string> = {
@@ -150,6 +159,95 @@ async function writeJson(key: string, value: unknown) {
     ContentType: 'application/json; charset=utf-8',
     CacheControl: 'no-cache',
   }));
+}
+
+async function readJsonRecord(key: string): Promise<JsonRecord | null> {
+  try {
+    const result = await getCosClient().send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+    const parsed = JSON.parse(await result.Body?.transformToString() || 'null');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch (error: any) {
+    if (error?.name === 'NoSuchKey' || error?.$metadata?.httpStatusCode === 404) return null;
+    throw error;
+  }
+}
+
+async function listCosKeys(prefix: string, maxKeys = 1000, continuationToken?: string) {
+  const result = await getCosClient().send(new ListObjectsV2Command({
+    Bucket: BUCKET,
+    Prefix: prefix,
+    MaxKeys: Math.min(1000, Math.max(1, maxKeys)),
+    ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+  }));
+  return {
+    keys: (result.Contents || []).map((item) => String(item.Key || '')).filter(Boolean),
+    isTruncated: Boolean(result.IsTruncated),
+    nextToken: result.NextContinuationToken,
+  };
+}
+
+async function listAllCosKeys(prefix: string): Promise<string[]> {
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const page = await listCosKeys(prefix, 1000, continuationToken);
+    keys.push(...page.keys);
+    continuationToken = page.isTruncated ? page.nextToken : undefined;
+  } while (continuationToken);
+  return keys.sort();
+}
+
+function comicCommentObjectKey(bookId: string, commentId: string) {
+  if (!/^lh-\d{1,4}$/.test(bookId)) throw fail('漫画 ID 无效。');
+  if (!COMIC_COMMENT_ID_RE.test(commentId)) throw fail('评论 ID 无效。');
+  return `${COMIC_COMMENT_PREFIX}${bookId}/${commentId}.json`;
+}
+
+function comicCommentOwnerKey(visitorHash: string, commentId: string) {
+  if (!/^[a-f0-9]{64}$/i.test(visitorHash) || !COMIC_COMMENT_ID_RE.test(commentId)) {
+    throw fail('评论索引无效。');
+  }
+  return `comic-comment-owners/${visitorHash}/${commentId}.json`;
+}
+
+async function assertComicBookExists(bookId: string) {
+  if (!/^lh-\d{1,4}$/.test(bookId)) throw fail('漫画 ID 无效。');
+  const books = await readJsonArray('archive.json');
+  if (!books.some((book) => book && book.id === bookId && (!book.category || book.category === '漫画本'))) {
+    throw fail('漫画不存在或已被删除。', 404);
+  }
+}
+
+function comicCommentHash(kind: string, value: string) {
+  const secret = String(process.env.COS_SECRET_KEY || '').trim();
+  if (!secret) throw fail('Vercel 尚未配置匿名评论校验密钥。', 503);
+  return createHmac('sha256', `comic-comments-v1|${secret}`).update(`${kind}:${value}`).digest('hex');
+}
+
+function comicCommentKeyTimestamp(key: string) {
+  const match = key.match(/(?:cc|rl)-(\d{13})-[a-f0-9]{12}\.json$/i);
+  return match ? MAX_COMIC_COMMENT_TIMESTAMP - Number(match[1]) : 0;
+}
+
+function newComicCommentId(now: number) {
+  const inverseTimestamp = String(MAX_COMIC_COMMENT_TIMESTAMP - now).padStart(13, '0');
+  return `cc-${inverseTimestamp}-${randomBytes(6).toString('hex')}`;
+}
+
+async function assertComicCommentRateAllowed(visitorHash: string, ipHash: string, now: number) {
+  const visitorKeys = await listCosKeys(`${COMIC_COMMENT_RATE_PREFIX}visitor/${visitorHash}/`, 1);
+  if (visitorKeys.keys[0] && now - comicCommentKeyTimestamp(visitorKeys.keys[0]) < 30_000) {
+    throw fail('提交太快了，请稍后再试。', 429);
+  }
+  const ipKeys = await listCosKeys(`${COMIC_COMMENT_RATE_PREFIX}ip/${ipHash}/`, 20);
+  const recentIpComments = ipKeys.keys.filter((key) => now - comicCommentKeyTimestamp(key) < 60 * 60 * 1000);
+  if (recentIpComments.length >= 20) throw fail('该网络的评论提交次数已达上限，请稍后再试。', 429);
+}
+
+function comicCommentRateKey(kind: 'visitor' | 'ip', identityHash: string, now: number) {
+  const inverseTimestamp = String(MAX_COMIC_COMMENT_TIMESTAMP - now).padStart(13, '0');
+  const nonce = randomBytes(6).toString('hex');
+  return `${COMIC_COMMENT_RATE_PREFIX}${kind}/${identityHash}/rl-${inverseTimestamp}-${nonce}.json`;
 }
 
 async function readGoods(): Promise<JsonRecord[]> {
@@ -344,6 +442,8 @@ function normalizeBook(raw: JsonRecord) {
   }
   const text = String(raw.text || '').trim().slice(0, 2000);
   if (text) book.text = text;
+  const uploaderNote = String(raw.uploaderNote || '').trim().slice(0, 2000);
+  if (uploaderNote) book.uploaderNote = uploaderNote;
   const authorUrl = String(raw.authorUrl || '').trim();
   if (authorUrl) {
     let parsed: URL;
@@ -559,6 +659,9 @@ export default async function handler(request: AdminRequest, response: ServerRes
   try {
     const payload = await readPayload(request);
     action = String(payload.action || '').trim();
+    payload.__clientIp = String(request.headers['x-forwarded-for'] || request.socket.remoteAddress || '')
+      .split(',')[0]
+      .trim();
     if (!action) throw fail('缺少操作类型。');
     if (!PUBLIC_ACTIONS.has(action) && !verifyToken(payload.token || request.headers['x-admin-token'])) {
       throw fail('未授权或登录已过期，请重新登录。', 401);
@@ -626,7 +729,136 @@ export default async function handler(request: AdminRequest, response: ServerRes
       return;
     }
 
+    if (action === 'comicCommentCounts') {
+      const counts: Record<string, number> = Object.create(null);
+      const keys = await listAllCosKeys(COMIC_COMMENT_PREFIX);
+      keys.forEach((key) => {
+        const match = key.match(/^comic-comments\/(lh-\d{1,4})\/(cc-\d{13}-[a-f0-9]{12})\.json$/i);
+        if (match) counts[match[1]] = (counts[match[1]] || 0) + 1;
+      });
+      sendJson(response, 200, { ok: true, counts });
+      return;
+    }
+
+    if (action === 'comicCommentList') {
+      const bookId = String(payload.bookId || '').trim();
+      await assertComicBookExists(bookId);
+      const visitorId = String(payload.visitorId || '').trim();
+      const visitorHash = /^[A-Za-z0-9_-]{16,80}$/.test(visitorId)
+        ? comicCommentHash('visitor', visitorId)
+        : '';
+      const allKeys = await listAllCosKeys(`${COMIC_COMMENT_PREFIX}${bookId}/`);
+      const ownedKeys = visitorHash
+        ? await listAllCosKeys(`comic-comment-owners/${visitorHash}/`)
+        : [];
+      const ownedRows = await Promise.all(ownedKeys.slice(0, MAX_COMIC_COMMENT_LIST).map(readJsonRecord));
+      const ownCommentKeys = ownedRows
+        .filter((row) => row && row.bookId === bookId && COMIC_COMMENT_ID_RE.test(String(row.commentId || '')))
+        .map((row) => comicCommentObjectKey(bookId, String(row!.commentId)));
+      const commentKeys = Array.from(new Set([...allKeys.slice(0, MAX_COMIC_COMMENT_LIST), ...ownCommentKeys]));
+      const rows = await Promise.all(commentKeys.map(readJsonRecord));
+      const comments = rows.filter((row) => row && COMIC_COMMENT_ID_RE.test(String(row.id || '')))
+        .map((row) => ({
+          id: String(row!.id),
+          body: String(row!.body || ''),
+          createdAt: String(row!.createdAt || ''),
+          canDelete: Boolean(visitorHash && row!.visitorHash === visitorHash),
+        }))
+        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+      sendJson(response, 200, { ok: true, comments, count: allKeys.length });
+      return;
+    }
+
+    if (action === 'comicCommentSubmit') {
+      const bookId = String(payload.bookId || '').trim();
+      await assertComicBookExists(bookId);
+      const body = String(payload.body || '')
+        .replace(/\r\n?/g, '\n')
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+        .trim()
+        .slice(0, MAX_COMIC_COMMENT_LENGTH);
+      if (!body) throw fail('请填写评论内容。');
+      const visitorId = String(payload.visitorId || '').trim();
+      if (!/^[A-Za-z0-9_-]{16,80}$/.test(visitorId)) throw fail('评论会话无效，请刷新页面后重试。', 400);
+
+      const now = Date.now();
+      const visitorHash = comicCommentHash('visitor', visitorId);
+      const clientIp = String(payload.__clientIp || request.socket.remoteAddress || '').split(',')[0].trim();
+      const ipHash = comicCommentHash('ip', clientIp || `visitor:${visitorId}`);
+      await assertComicCommentRateAllowed(visitorHash, ipHash, now);
+
+      const id = newComicCommentId(now);
+      const createdAt = new Date(now).toISOString();
+      const comment = { id, bookId, body, createdAt, visitorHash };
+      await writeJson(comicCommentObjectKey(bookId, id), comment);
+      const rateMarkers = await Promise.allSettled([
+        writeJson(comicCommentOwnerKey(visitorHash, id), { bookId, commentId: id, createdAt }),
+        writeJson(comicCommentRateKey('visitor', visitorHash, now), { createdAt }),
+        writeJson(comicCommentRateKey('ip', ipHash, now), { createdAt }),
+      ]);
+      if (rateMarkers.some((result) => result.status === 'rejected')) {
+        console.error('[comic-comment-rate-marker] write failed');
+      }
+      sendJson(response, 200, {
+        ok: true,
+        comment: { id, body, createdAt, canDelete: true },
+      });
+      return;
+    }
+
+    if (action === 'comicCommentDeleteOwn') {
+      const bookId = String(payload.bookId || '').trim();
+      const commentId = String(payload.commentId || '').trim();
+      const key = comicCommentObjectKey(bookId, commentId);
+      const visitorId = String(payload.visitorId || '').trim();
+      if (!/^[A-Za-z0-9_-]{16,80}$/.test(visitorId)) throw fail('评论会话无效，请刷新页面后重试。', 400);
+      const comment = await readJsonRecord(key);
+      if (!comment) throw fail('评论不存在或已删除。', 404);
+      if (comment.visitorHash !== comicCommentHash('visitor', visitorId)) {
+        throw fail('只能删除自己发布的评论。', 403);
+      }
+      await Promise.all([
+        getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key })),
+        getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: comicCommentOwnerKey(comment.visitorHash, commentId) })),
+      ]);
+      sendJson(response, 200, { ok: true, commentId });
+      return;
+    }
+
     switch (action) {
+      case 'comicCommentAdminList': {
+        const bookId = String(payload.bookId || '').trim();
+        await assertComicBookExists(bookId);
+        const allKeys = await listAllCosKeys(`${COMIC_COMMENT_PREFIX}${bookId}/`);
+        const rows = await Promise.all(allKeys.slice(0, 100).map(readJsonRecord));
+        const items = rows.filter((row) => row && COMIC_COMMENT_ID_RE.test(String(row.id || '')))
+          .map((row) => ({
+            id: String(row!.id),
+            bookId,
+            body: String(row!.body || ''),
+            createdAt: String(row!.createdAt || ''),
+          }))
+          .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+        sendJson(response, 200, { ok: true, items, total: allKeys.length });
+        return;
+      }
+      case 'comicCommentAdminDelete': {
+        const bookId = String(payload.bookId || '').trim();
+        const commentId = String(payload.commentId || '').trim();
+        const key = comicCommentObjectKey(bookId, commentId);
+        const comment = await readJsonRecord(key);
+        if (!comment) throw fail('评论不存在或已删除。', 404);
+        const deletes = [getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))];
+        if (typeof comment.visitorHash === 'string' && /^[a-f0-9]{64}$/i.test(comment.visitorHash)) {
+          deletes.push(getCosClient().send(new DeleteObjectCommand({
+            Bucket: BUCKET,
+            Key: comicCommentOwnerKey(comment.visitorHash, commentId),
+          })));
+        }
+        await Promise.all(deletes);
+        sendJson(response, 200, { ok: true, commentId });
+        return;
+      }
       case 'catalog': {
         const books = await readJsonArray('archive.json');
         let tags = normalizeTags(await readJsonArray('tags.json'));
@@ -818,6 +1050,9 @@ export default async function handler(request: AdminRequest, response: ServerRes
         const previousBook = index >= 0 ? books[index] : null;
         const now = new Date().toISOString();
         if (index >= 0) {
+          if (!Object.prototype.hasOwnProperty.call(payload.book || {}, 'uploaderNote') && previousBook?.uploaderNote) {
+            book.uploaderNote = previousBook.uploaderNote;
+          }
           if (!Object.prototype.hasOwnProperty.call(payload.book || {}, 'musicTitle') &&
               previousBook?.musicTitle && book.musicFile === previousBook.musicFile) {
             book.musicTitle = previousBook.musicTitle;

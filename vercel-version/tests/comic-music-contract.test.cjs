@@ -39,7 +39,7 @@ test('上传成功后保存安全文件名和原始曲名', async () => {
       uploads.push(args);
       return Promise.resolve({ ok: true });
     },
-    $(id) { return { textContent: '', id }; },
+    $(id) { return { textContent: '', id, value: id === 'f-music-title' ? '夜行列车' : '' }; },
     Date: { now: () => 1234 },
     Math: { random: () => 0.5 },
   };

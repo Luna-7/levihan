@@ -46,6 +46,7 @@ function firstExisting(candidates) {
 
 const JSPDF_UMD = firstExisting([
   process.env.LH_JSPDF_UMD,
+  path.join(PROJECT, 'public', 'admin', 'vendor', 'jspdf.umd.min.js'),
   path.join(PROJECT, 'node_modules', 'jspdf', 'dist', 'jspdf.umd.min.js'),
   '/tmp/jspdf.umd.min.js',
 ]);

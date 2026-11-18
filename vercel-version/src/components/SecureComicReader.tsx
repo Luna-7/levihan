@@ -4,6 +4,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 import type { DoujinBookItem } from '../types/doujinArchive';
 import { CollectionFooterNavigation, CollectionNavigationBar } from './CollectionNavigation';
+import { MangaCommentSection } from './MangaCommentSection';
 import { cosService } from '../services/cosClient';
 import { decryptOuterLayer } from '../utils/secureComicDecrypt';
 import { useSwipeBackGesture } from '../hooks/useSwipeBackGesture';
@@ -52,6 +53,8 @@ type SecureComicReaderProps = {
   onNavigateCollectionBook?: (book: DoujinBookItem) => void;
   onClose: () => void;
   onShowToast?: (msg: string) => void;
+  onCommentCountChange?: () => void;
+  commentPreviewMode?: boolean;
 };
 
 type Phase = 'locked' | 'working' | 'ready';
@@ -470,6 +473,8 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
   onNavigateCollectionBook,
   onClose,
   onShowToast,
+  onCommentCountChange,
+  commentPreviewMode = false,
 }) => {
   const [phase, setPhase] = useState<Phase>('locked');
   const [workingStage, setWorkingStage] = useState('解析中…');
@@ -713,7 +718,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
       id="secure-doujin-reader"
       ref={readerRef}
       className="w-full scroll-mt-3 bg-[#15181b] pb-28 select-none"
-      style={swipeBack.style}
+      style={{ ...swipeBack.style, '--comic-reader-content-width': '48rem' } as React.CSSProperties}
       onContextMenu={(e) => e.preventDefault()}
       onTouchStart={swipeBack.onTouchStart}
       onTouchMove={swipeBack.onTouchMove}
@@ -756,6 +761,10 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
         ))}
       </div>
 
+      <p className="max-w-3xl mx-auto mt-8 px-4 text-center font-mono text-[10.5px] text-[#6e7681]">
+        内容仅在本机内存中渲染。请勿截图外传。
+      </p>
+
       <CollectionFooterNavigation
         books={collectionBooks}
         currentBookId={book.id}
@@ -763,9 +772,13 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
         frameClassName="max-w-3xl"
       />
 
-      <p className="max-w-3xl mx-auto mt-8 px-4 text-center font-mono text-[10.5px] text-[#6e7681]">
-        内容仅在本机内存中渲染。请勿截图外传。
-      </p>
+      <MangaCommentSection
+        bookId={book.id}
+        bookTitle={book.titleZh}
+        onShowToast={onShowToast || (() => {})}
+        onCommentCountChange={onCommentCountChange}
+        previewMode={commentPreviewMode}
+      />
     </div>
   );
 };

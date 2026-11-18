@@ -62,6 +62,14 @@
   .collection-title-wrap{grid-column:1/-1}
   .collection-panel{min-width:0;padding:10px;background:var(--card);border:0.5px solid var(--rule);border-radius:4px}
   .collection-panel h3{margin:0 0 8px;color:var(--green-2);font-size:12px;line-height:1.4}
+  .book-comments-manager{grid-column:1/-1;margin-top:4px;padding-top:12px;border-top:0.5px solid var(--rule)}
+  .book-comments-list{margin-top:6px}
+  .book-comment-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:0.5px solid var(--rule)}
+  .book-comment-row:last-child{border-bottom:0}
+  .book-comment-copy{min-width:0;overflow-wrap:anywhere;white-space:pre-wrap;color:var(--ink);font-size:13px;line-height:1.55}
+  .book-comment-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;color:var(--ink-3);font-size:12px}
+  .book-comment-actions{display:flex;flex:none;align-items:center;gap:6px;flex-wrap:wrap}
+  @media(max-width:520px){.book-comment-row{display:grid;grid-template-columns:minmax(0,1fr)}.book-comment-actions{justify-content:flex-start}}
   .collection-picker{position:relative;width:100%}
   .collection-picker-trigger{display:flex;width:100%;height:40px;min-height:40px;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);font-size:13.5px;font-weight:500;text-align:left}
   .collection-picker-trigger:hover:not(:disabled){background:var(--paper)}
@@ -1112,8 +1120,16 @@
           <label for="f-pages" data-page-node-id="dltegDArjhCdJYAnk26Bff">总页数 <span class="req" data-page-node-id="5Oy8FWiQ1pRayLMqQfKVkb">*</span></label>
           <input type="number" id="f-pages" min="1" step="1" placeholder="选择图片或 PDF 后自动填写" data-page-node-id="QLDBtbNNfgFzjSKvFl7V0V">
         </div>
+        <div class="f" style="grid-column:1/-1">
+          <label for="f-uploader-note">想说的话</label>
+          <textarea id="f-uploader-note" rows="5" maxlength="2000" style="min-height:120px" placeholder="写下想对读者说的话"></textarea>
+        </div>
         <div class="f span2" id="book-music-field">
-          <label for="f-music-picker">本子配乐 <span class="tag" style="font-size:12px">选填，MP3 / M4A，单文件不超过 50 MB，曲名取文件名</span></label>
+          <div class="f hide" id="f-music-title-field">
+            <label for="f-music-title">音乐名称 <span class="tag" style="font-size:12px">自动填入，可修改</span></label>
+            <input type="text" id="f-music-title" maxlength="120" placeholder="音乐名称">
+          </div>
+          <label for="f-music-picker" style="margin-top:8px">配乐 <span class="tag" style="font-size:12px">选填，MP3 / M4A，单文件不超过 50 MB</span></label>
           <div class="row" style="gap:8px">
             <button type="button" class="btn-sm" id="f-music-pick">选择音乐文件</button>
             <span class="muted" id="f-music-name" aria-live="polite">未设置音乐</span>
@@ -1132,6 +1148,15 @@
           </div>
         </div>
       </div>
+
+      <section class="book-comments-manager hide" id="book-comments-manager" aria-labelledby="book-comments-title">
+        <div class="spread" style="margin-bottom:8px">
+          <h3 id="book-comments-title">评论管理 <span class="muted" id="book-comments-count"></span></h3>
+          <button type="button" class="btn-sm" id="book-comments-reload">刷新</button>
+        </div>
+        <div class="book-comments-list" id="book-comments-list" aria-live="polite"><p class="muted">编辑已有作品后载入评论。</p></div>
+        <div class="msg" id="book-comments-msg"></div>
+      </section>
 
     </div>
 
@@ -1450,7 +1475,7 @@ var goodsOfficialImagePreviewUrl = '';
 var goodsOfficialImageRequestId = 0;
   var artAdminEditingId = '';
   var artAdminFiles = [];
-  var uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'', pageFiles:[], musicFile:'', musicTitle:'' };
+  var uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'', pageFiles:[], musicFile:'' };
 
 /* ============ 小工具 ============ */
 function $(id){ return document.getElementById(id); }
@@ -2844,7 +2869,8 @@ function normalizeEnglishTitleInitial(value){
 function updateMusicState(){
   var pendingName = pendingMusicFile && pendingMusicFile.name;
   var storedName = uploadConfig.musicFile;
-  var storedTitle = uploadConfig.musicTitle;
+  var storedTitle = $('f-music-title').value.trim();
+  $('f-music-title-field').classList.toggle('hide', !pendingMusicFile && !storedName);
   var label = pendingName ? '待上传：' + pendingName
     : storedName ? '已设置音乐' + (storedTitle ? '：' + storedTitle : '')
     : musicRemovalPending ? '保存后移除音乐'
@@ -2874,7 +2900,7 @@ function uploadBookMusic(form){
     }
   }).then(function(){
     form.musicFile = fileName;
-    form.musicTitle = String(pendingMusicFile.name || '').replace(/\.(mp3|m4a)$/i, '').trim().slice(0, 120);
+    form.musicTitle = $('f-music-title').value.trim().slice(0, 120);
     return form;
   });
 }
@@ -2892,12 +2918,13 @@ function readForm(){
     translator: $('f-translator').value.trim(),
     typesetter: $('f-typesetter').value.trim(),
     pages: parseInt($('f-pages').value, 10) || 0,
+    uploaderNote: $('f-uploader-note').value.trim().slice(0, 2000),
     bookFolder: uploadConfig.bookFolder,
     pagePrefix: uploadConfig.pagePrefix,
     pagePadDigits: uploadConfig.pagePadDigits,
     coverFile: uploadConfig.coverFile || (isSecureMode() && activeCover() && activeCover().uploadedName) || '',
     musicFile: uploadConfig.musicFile || '',
-    musicTitle: uploadConfig.musicTitle || '',
+    musicTitle: (pendingMusicFile || uploadConfig.musicFile) ? $('f-music-title').value.trim().slice(0, 120) : '',
     secure: isSecureMode(),
     warning: $('f-warn-on').checked ? $('f-warning').value.trim() : ''
   };
@@ -2912,6 +2939,7 @@ function fillForm(b){
   pendingMusicFile = null;
   musicRemovalPending = false;
   $('f-music-picker').value = '';
+  $('f-music-title').value = b.musicTitle || '';
   $('f-id').value = b.id || '';
   $('f-titleZh').value = normalizeEnglishTitleInitial(b.titleZh || '');
   $('f-titleJp').value = normalizeEnglishTitleInitial(b.titleJp || '');
@@ -2927,6 +2955,7 @@ function fillForm(b){
   $('f-translator').value = b.translator || '';
   $('f-typesetter').value = b.typesetter || '';
   $('f-pages').value = b.pages || '';
+  $('f-uploader-note').value = b.uploaderNote || '';
   $('opt-secure').checked = !!b.secure;
   uploadConfig = {
     bookFolder: b.bookFolder && b.bookFolder !== b.id ? b.bookFolder : '',
@@ -2935,7 +2964,6 @@ function fillForm(b){
     coverFile: b.coverFile || '',
     pageFiles: Array.isArray(b.pageFiles) ? b.pageFiles.slice() : [],
     musicFile: b.musicFile || '',
-    musicTitle: b.musicTitle || ''
   };
   updateMusicState();
   $('f-warn-on').checked = !!b.warning;
@@ -2945,6 +2973,13 @@ function fillForm(b){
   syncButtons();
   refreshSecureUI();
   $('mode-hint').textContent = '（正在编辑 ' + b.id + '）';
+  activeBookCommentId = b.id || '';
+  bookCommentItems = [];
+  bookCommentTotal = 0;
+  $('book-comments-count').textContent = '';
+  $('book-comments-manager').classList.toggle('hide', !activeBookCommentId);
+  $('book-comments-list').innerHTML = '<p class="muted">正在载入评论…</p>';
+  loadBookComments();
 }
 
 function bookPageCandidates(b){
@@ -3070,13 +3105,19 @@ async function loadBookImagesForEdit(b){
 
 function resetForm(){
   editingArchiveBookId = '';
+  activeBookCommentId = '';
+  bookCommentItems = [];
+  bookCommentTotal = 0;
+  $('book-comments-manager').classList.add('hide');
+  $('book-comments-count').textContent = '';
+  $('book-comments-list').innerHTML = '<p class="muted">编辑已有作品后载入评论。</p>';
   pendingMusicFile = null;
   musicRemovalPending = false;
   $('f-music-picker').value = '';
   ['f-id','f-titleZh','f-titleJp','f-circle','f-authorUrl','f-tags','f-source',
-   'f-translator','f-typesetter','f-pages'].forEach(function(k){ $(k).value = ''; });
+   'f-translator','f-typesetter','f-pages','f-uploader-note','f-music-title'].forEach(function(k){ $(k).value = ''; });
   hideBookAuthorSuggestions();
-  uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'', pageFiles:[], musicFile:'', musicTitle:'' };
+  uploadConfig = { bookFolder:'', pagePrefix:'', pagePadDigits:undefined, coverFile:'', pageFiles:[], musicFile:'' };
   updateMusicState();
   $('opt-secure').checked = false;
   lastSuggestedAuthorUrl = '';
@@ -4168,6 +4209,52 @@ function renderForumAdmin(){var box=$('forum-admin-list');if(!forumPosts.length)
 $('forum-reload').onclick=loadForumAdmin;
 $('forum-admin-list').addEventListener('click',function(e){var post=e.target.closest('[data-forum-post-del]'),comment=e.target.closest('[data-forum-comment-del]');if(post){if(!confirm('删除整篇帖子及其评论？'))return;api({action:'forumDelete',id:post.getAttribute('data-forum-post-del')}).then(function(res){forumPosts=res.posts||[];renderForumAdmin();});}else if(comment){if(!confirm('删除这条言论？'))return;api({action:'forumCommentDelete',postId:comment.getAttribute('data-post-id'),commentId:comment.getAttribute('data-forum-comment-del')}).then(function(res){forumPosts=res.posts||[];renderForumAdmin();});}});
 
+var bookCommentItems=[];
+var bookCommentTotal=0;
+var activeBookCommentId='';
+function loadBookComments(){
+  var box=$('book-comments-list');
+  if(!activeBookCommentId)return;
+  if(LOCAL_PREVIEW){box.innerHTML='<p class="muted">本地文件预览不连接评论服务，请在管理台网页中查看。</p>';return;}
+  box.innerHTML='<p class="muted">正在载入评论…</p>';
+  hide($('book-comments-msg'));
+  api({action:'comicCommentAdminList',bookId:activeBookCommentId}).then(function(res){
+    bookCommentItems=res.items||[];
+    bookCommentTotal=Math.max(bookCommentItems.length,Number(res.total)||0);
+    renderBookComments();
+  }).catch(function(err){
+    if(onAuthFail(err))return;
+    box.innerHTML='';
+    show($('book-comments-msg'),'err',err.message||String(err));
+  });
+}
+function renderBookComments(){
+  var box=$('book-comments-list');
+  $('book-comments-count').textContent=bookCommentTotal?'（'+bookCommentTotal+' 条）':'';
+  if(!bookCommentItems.length){box.innerHTML='<p class="muted">还没有评论。</p>';return;}
+  box.innerHTML=bookCommentItems.map(function(item){
+    var date=new Date(item.createdAt);
+    var createdAt=Number.isNaN(date.getTime())?'':date.toLocaleString('zh-CN');
+    return '<article class="book-comment-row"><div class="book-comment-copy"><div class="book-comment-meta">'+(createdAt?'<time>'+esc(createdAt)+'</time>':'')+'</div>'+esc(item.body)+'</div><div class="book-comment-actions"><button type="button" class="btn-sm btn-danger" data-comic-comment-admin-delete="'+esc(item.id)+'">删除</button></div></article>';
+  }).join('');
+}
+$('book-comments-reload').onclick=loadBookComments;
+$('book-comments-list').addEventListener('click',function(e){
+  var deleteButton=e.target.closest('[data-comic-comment-admin-delete]');
+  if(deleteButton){
+    if(!confirm('永久删除这条匿名评论？'))return;
+    deleteButton.disabled=true;
+    hide($('book-comments-msg'));
+    api({action:'comicCommentAdminDelete',bookId:activeBookCommentId,commentId:deleteButton.getAttribute('data-comic-comment-admin-delete')}).then(function(){
+      loadBookComments();
+    }).catch(function(err){
+      deleteButton.disabled=false;
+      if(onAuthFail(err))return;
+      show($('book-comments-msg'),'err',err.message||String(err));
+    });
+  }
+});
+
 /* ============ 作者链接登记表 ============ */
 var authorEditingIndex = -1;
 var authorSelectedName = '';
@@ -4943,7 +5030,7 @@ function handleSecureUpload(){
 
 /* ============ 上传主流程 ============ */
 function setBusy(on){
-  ['btn-upload','btn-publish-only','btn-logout','btn-reload','btn-nextid','btn-clear','btn-sort','f-music-pick','f-music-remove','f-music-picker'].forEach(function(id){
+  ['btn-upload','btn-publish-only','btn-logout','btn-reload','btn-nextid','btn-clear','btn-sort','f-music-pick','f-music-remove','f-music-picker','f-music-title','f-uploader-note'].forEach(function(id){
     $(id).disabled = on;
   });
   if (!on) syncButtons();
@@ -6210,13 +6297,17 @@ $('f-music-picker').onchange = function(){
   }
   pendingMusicFile = file;
   musicRemovalPending = false;
+  $('f-music-title').value = String(file.name || '').replace(/\.(mp3|m4a)$/i, '').trim().slice(0, 120);
   updateMusicState();
 };
+$('f-music-title').addEventListener('input', function(){
+  updateMusicState();
+});
 $('f-music-remove').onclick = function(){
   var hadExistingMusic = !!uploadConfig.musicFile;
   pendingMusicFile = null;
   uploadConfig.musicFile = '';
-  uploadConfig.musicTitle = '';
+  $('f-music-title').value = '';
   musicRemovalPending = hadExistingMusic;
   $('f-music-picker').value = '';
   updateMusicState();

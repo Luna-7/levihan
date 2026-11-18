@@ -22,8 +22,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const MODULE_PATH = path.join(__dirname, '..', 'public', 'admin', 'secure-upload.js');
-// 真实 JPEG：418×208 · 3 分量 · 73,387 字节（与 secure-pdf-merge 用的是同一张）
-const SAMPLE_JPEG = path.join(__dirname, '..', 'public', 'daxigua', 'res', 'share.jpg');
+// 仓库现有 JPEG：512×512 · 3 分量（也供 PDF 合并测试复用）
+const SAMPLE_JPEG = path.join(__dirname, '..', 'public', 'images', 'comic-turntable.jpg');
 const JPEG_BYTES = fs.readFileSync(SAMPLE_JPEG);
 const JPEG_SIZE = JPEG_BYTES.length;
 
@@ -108,8 +108,8 @@ const resetStubs = () => { lastEncode = null; compositeOps = []; pngBytesRead = 
 test('readJpegHeader：从真实 JPEG 读出宽高与分量数', () => {
   const head = vault.readJpegHeader(new Uint8Array(JPEG_BYTES));
   assert.ok(head, '必须识别出 SOF');
-  assert.equal(head.width, 418);
-  assert.equal(head.height, 208);
+  assert.equal(head.width, 512);
+  assert.equal(head.height, 512);
   assert.equal(head.components, 3, '这张样本是 RGB JPEG');
 });
 
@@ -137,8 +137,8 @@ test('JPEG 源 + 未限制长边 → 走原字节直通，尺寸取自 JPEG 头�
   assert.equal(placed.passthrough, true, '必须走直通');
   assert.equal(placed.downscaled, false);
   assert.equal(placed.format, 'JPEG');
-  assert.equal(placed.width, 418, '宽必须来自 JPEG SOF 头');
-  assert.equal(placed.height, 208);
+  assert.equal(placed.width, 512, '宽必须来自 JPEG SOF 头');
+  assert.equal(placed.height, 512);
   assert.equal(lastEncode, null, '直通路径绝不能碰 canvas 编码器');
   assert.match(placed.data, /^data:image\/jpeg;base64,/);
   // 直通必须原样搬运字节：解开 base64 后应与源文件逐字节相同
@@ -255,6 +255,7 @@ function firstExisting(candidates) {
 
 const JSPDF_UMD_PATH = firstExisting([
   process.env.LH_JSPDF_UMD,
+  path.join(__dirname, '..', 'public', 'admin', 'vendor', 'jspdf.umd.min.js'),
   path.join(__dirname, '..', 'node_modules', 'jspdf', 'dist', 'jspdf.umd.min.js'),
   '/tmp/jspdf.umd.min.js',
 ]);
@@ -303,11 +304,11 @@ if (!JsPDF) {
       '若这个数暴涨，说明走了 canvas 重编码（旧行为会膨胀约 15%）');
   });
 
-  test('直通：页面尺寸按 JPEG 真实像素 × 0.75 换算（418×208 → 313.5×156pt）', async () => {
+  test('直通：页面尺寸按 JPEG 真实像素 × 0.75 换算（512×512 → 384×384pt）', async () => {
     const bytes = Buffer.from(await vault.imagesToPdfBytes([jpegFile()]));
     assert.match(
       bytes.toString('latin1'),
-      /MediaBox\s*\[\s*0\s+0\s+313\.5\d*\s+156\.?\d*\s*\]/,
+      /MediaBox\s*\[\s*0\s+0\s+384\.?\d*\s+384\.?\d*\s*\]/,
       'MediaBox 必须来自 JPEG 头的真实尺寸，而不是 canvas 解码结果'
     );
   });
