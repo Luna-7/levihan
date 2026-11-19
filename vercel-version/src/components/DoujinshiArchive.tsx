@@ -145,8 +145,8 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
   );
   const [selectedTag, setSelectedTag] = useState<string>('全部');
   const [selectedAuthor, setSelectedAuthor] = useState<string>('全部');
-  // 排序方式：'pages' = 从页数多到页数少（默认），'new' = 从新到旧
-  const [sortBy, setSortBy] = useState<'pages' | 'new'>('new');
+  // 漫画站支持按新旧、页数和评论数排序。
+  const [sortBy, setSortBy] = useState<'pages' | 'new' | 'comments'>('new');
   const [sortReversed, setSortReversed] = useState(false);
   const wasMangaVisible = useRef(isMangaVisible);
 
@@ -664,7 +664,15 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
     const getTime = (b: DoujinBookItem) =>
       new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
     const arr = [...filteredBooks];
-    if (sortBy === 'new') {
+    if (isMangaVisible && sortBy === 'comments') {
+      arr.sort((a, b) => {
+        const countDiff = (Number(comicCommentCounts[b.id]) || 0) - (Number(comicCommentCounts[a.id]) || 0);
+        if (countDiff !== 0) return countDiff;
+        const timeDiff = getTime(b) - getTime(a);
+        if (timeDiff !== 0) return timeDiff;
+        return String(b.id).localeCompare(String(a.id), 'zh-CN', { numeric: true });
+      });
+    } else if (sortBy === 'new') {
       if (isMangaVisible) {
         const getComicNumber = (id: string) => {
           const match = id.match(/^lh-(\d+)$/i);
@@ -690,7 +698,7 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
       });
     }
     return sortReversed ? arr.reverse() : arr;
-  }, [filteredBooks, isMangaVisible, sortBy, sortReversed]);
+  }, [comicCommentCounts, filteredBooks, isMangaVisible, sortBy, sortReversed]);
 
   const visibleBooks = useMemo(
     () => sortedBooks.slice(0, visibleBookCount),
@@ -1171,12 +1179,14 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
             )}
 
             {isMangaVisible ? (
-              <div className="col-span-full flex min-h-10 items-center gap-2 text-sm text-[var(--gray-9)]">
+              <div className="col-span-full flex min-h-11 items-center gap-2 text-sm text-[var(--gray-9)]">
                 <span className="shrink-0">排序</span>
-                <button type="button" onClick={() => { soundManager.playBlip(); setSortBy('new'); setSortReversed(false); }} className={`min-h-10 px-1 font-semibold ${sortBy === 'new' ? 'text-[var(--green-12)]' : 'text-[var(--gray-11)]'}`}>{sortBy === 'new' && sortReversed ? '最早发布' : '最新发布'}</button>
+                <button type="button" aria-pressed={sortBy === 'new'} onClick={() => { soundManager.playBlip(); setSortBy('new'); setSortReversed(false); }} className={`min-h-11 px-1 font-semibold ${sortBy === 'new' ? 'text-[var(--green-12)]' : 'text-[var(--gray-11)]'}`}>{sortBy === 'new' && sortReversed ? '最早发布' : '最新发布'}</button>
                 <span aria-hidden="true" className="text-[var(--amber-6)]">|</span>
-                <button type="button" onClick={() => { soundManager.playBlip(); setSortBy('pages'); setSortReversed(false); }} className={`min-h-10 px-1 font-semibold ${sortBy === 'pages' ? 'text-[var(--green-12)]' : 'text-[var(--gray-11)]'}`}>{sortBy === 'pages' && sortReversed ? '页数最少' : '页数最多'}</button>
-                <button type="button" onClick={() => { soundManager.playBlip(); setSortReversed((reversed) => !reversed); }} aria-label={sortReversed ? '恢复默认排序' : '反转当前排序'} className="ml-auto grid h-10 w-10 place-items-center rounded-lg border-[0.5px] border-[var(--amber-6)] bg-[var(--bg-card)] text-[var(--gray-11)] hover:bg-[var(--amber-3)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"><ArrowUpDown size={16} /></button>
+                <button type="button" aria-pressed={sortBy === 'pages'} onClick={() => { soundManager.playBlip(); setSortBy('pages'); setSortReversed(false); }} className={`min-h-11 px-1 font-semibold ${sortBy === 'pages' ? 'text-[var(--green-12)]' : 'text-[var(--gray-11)]'}`}>{sortBy === 'pages' && sortReversed ? '页数最少' : '页数最多'}</button>
+                <span aria-hidden="true" className="text-[var(--amber-6)]">|</span>
+                <button type="button" aria-pressed={sortBy === 'comments'} onClick={() => { soundManager.playBlip(); setSortBy('comments'); setSortReversed(false); }} className={`min-h-11 px-1 font-semibold ${sortBy === 'comments' ? 'text-[var(--green-12)]' : 'text-[var(--gray-11)]'}`}>{sortBy === 'comments' && sortReversed ? '评论最少' : '评论最多'}</button>
+                <button type="button" onClick={() => { soundManager.playBlip(); setSortReversed((reversed) => !reversed); }} aria-label={sortReversed ? '恢复默认排序' : '反转当前排序'} className="ml-auto grid h-11 w-11 shrink-0 place-items-center rounded-lg border-[0.5px] border-[var(--amber-6)] bg-[var(--bg-card)] text-[var(--gray-11)] hover:bg-[var(--amber-3)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"><ArrowUpDown size={16} /></button>
               </div>
             ) : <label className="flex min-h-11 min-w-0 items-center gap-2 text-xs text-[var(--amber-12)]">
               <span className="flex min-h-11 shrink-0 items-center">排序</span>
@@ -1383,7 +1393,16 @@ export const DoujinshiArchive: React.FC<Props> = ({ onShowToast, mode = 'main' }
 
                     </div>
                   </div>
-                  <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-2 border-t border-[#F0EDE4] pt-3">
+                  <div
+                    className="col-start-1 row-start-2 flex min-w-0 items-center justify-start gap-1 border-t-[0.5px] border-[var(--gray-6)] pt-3 text-xs text-[var(--gray-11)]"
+                    role="img"
+                    aria-label={`${commentCount} 条评论`}
+                    title={`${commentCount} 条评论`}
+                  >
+                    <MessageCircle size={14} aria-hidden="true" className="shrink-0 text-[var(--green-11)]" />
+                    <span className="tabular-nums">{commentCount}</span>
+                  </div>
+                  <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-2 border-t-[0.5px] border-[var(--gray-6)] pt-3">
                     <div className="flex min-w-0 flex-1 flex-nowrap gap-1 overflow-hidden">
                       {getDisplayBookTags(book).map((tag, tIdx) => (
                         <span
