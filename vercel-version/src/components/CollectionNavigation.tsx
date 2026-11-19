@@ -8,6 +8,10 @@ type CollectionNavigationProps = {
   frameClassName?: string;
 };
 
+type CollectionFooterNavigationProps = CollectionNavigationProps & {
+  className?: string;
+};
+
 export function getCollectionBooks(books: DoujinBookItem[], currentBook: DoujinBookItem | null) {
   if (!currentBook?.collectionId) return [];
   const members = books.filter((book) => book.collectionId === currentBook.collectionId);
@@ -73,11 +77,12 @@ export const CollectionNavigationBar: React.FC<CollectionNavigationProps> = ({
   );
 };
 
-export const CollectionFooterNavigation: React.FC<CollectionNavigationProps> = ({
+export const CollectionFooterNavigation: React.FC<CollectionFooterNavigationProps> = ({
   books,
   currentBookId,
   onNavigate,
   frameClassName = 'max-w-2xl',
+  className = '',
 }) => {
   if (books.length < 2) return null;
   const index = books.findIndex((book) => book.id === currentBookId);
@@ -90,7 +95,7 @@ export const CollectionFooterNavigation: React.FC<CollectionNavigationProps> = (
   return (
     <nav
       aria-label="合集篇目翻页"
-      className={`mx-auto grid w-full ${frameClassName} grid-cols-1 px-3 py-3`}
+      className={`mx-auto grid w-full ${frameClassName} grid-cols-1 px-3 py-3 ${className}`}
     >
       {previous && (
         <button

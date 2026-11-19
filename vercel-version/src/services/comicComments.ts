@@ -2,7 +2,10 @@ export interface ComicComment {
   id: string;
   body: string;
   createdAt: string;
+  parentId?: string;
   canDelete?: boolean;
+  deleted?: boolean;
+  unavailable?: boolean;
 }
 
 const VISITOR_ID_KEY = 'levihan_comic_comment_visitor_v1';
@@ -14,13 +17,12 @@ type ComicCommentResponse = {
   comments?: ComicComment[];
   count?: number;
   counts?: Record<string, number>;
-  comment?: Pick<ComicComment, 'id' | 'body' | 'createdAt'>;
+  hasMore?: boolean;
+  nextCursor?: string;
+  comment?: Pick<ComicComment, 'id' | 'body' | 'createdAt' | 'parentId'>;
 };
 
-const COMIC_COMMENTS_ENDPOINT = typeof window !== 'undefined'
-  && window.location.hostname === 'tudou.levihan.asia'
-  ? 'https://www.levihan.asia/api/admin-content'
-  : '/api/admin-content';
+const COMIC_COMMENTS_ENDPOINT = '/api/admin-content';
 
 async function callComicComments(payload: Record<string, unknown>, signal?: AbortSignal) {
   const response = await fetch(COMIC_COMMENTS_ENDPOINT, {
@@ -52,14 +54,20 @@ export function getAnonymousVisitorId() {
   }
 }
 
-export async function loadComicComments(bookId: string, signal?: AbortSignal) {
+export async function loadComicComments(bookId: string, signal?: AbortSignal, cursor?: string) {
   const data = await callComicComments({
     action: 'comicCommentList',
     bookId,
     visitorId: getAnonymousVisitorId(),
+    ...(cursor ? { cursor } : {}),
   }, signal);
   const comments = Array.isArray(data.comments) ? data.comments : [];
-  return { comments, count: Math.max(comments.length, Number(data.count) || 0) };
+  return {
+    comments,
+    count: Math.max(comments.filter((comment) => !comment.deleted && !comment.unavailable).length, Number(data.count) || 0),
+    hasMore: Boolean(data.hasMore && data.nextCursor),
+    nextCursor: data.nextCursor || '',
+  };
 }
 
 export async function loadComicCommentCounts(signal?: AbortSignal) {
@@ -67,10 +75,16 @@ export async function loadComicCommentCounts(signal?: AbortSignal) {
   return data.counts || {};
 }
 
-export async function submitComicComment(bookId: string, body: string) {
+export async function submitComicComment(bookId: string, body: string, parentId?: string) {
   const visitorId = getAnonymousVisitorId();
   if (!visitorId) throw new Error('无法创建匿名评论会话，请刷新页面后重试');
-  const data = await callComicComments({ action: 'comicCommentSubmit', bookId, body, visitorId });
+  const data = await callComicComments({
+    action: 'comicCommentSubmit',
+    bookId,
+    body,
+    visitorId,
+    ...(parentId ? { parentId } : {}),
+  });
   if (!data.comment) throw new Error('评论提交结果无效，请刷新页面后重试');
   return data.comment;
 }

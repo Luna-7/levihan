@@ -17,6 +17,7 @@ const UNLOCK_KEY = 'comic_site_unlocked_v1';
  */
 export const ComicGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [unlocked, setUnlocked] = useState<boolean>(() => {
+    if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('previewComments') === '1') return true;
     try {
       return window.sessionStorage.getItem(UNLOCK_KEY) === 'true';
     } catch {

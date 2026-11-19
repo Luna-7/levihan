@@ -37,11 +37,15 @@ const TOKEN_TTL_SECONDS = 2 * 60 * 60;
 const PUSH_SUBSCRIPTIONS_KEY = 'push-subscriptions.json';
 const GOODS_KEY = 'goods/manifest.json';
 const COMIC_COMMENT_PREFIX = 'comic-comments/';
+const COMIC_COMMENT_TOMBSTONE_PREFIX = 'comic-comment-deleted/';
 const COMIC_COMMENT_RATE_PREFIX = 'comic-comment-rate/';
 const COMIC_COMMENT_ID_RE = /^cc-\d{13}-[a-f0-9]{12}$/i;
 const MAX_COMIC_COMMENT_LENGTH = 2000;
 const MAX_COMIC_COMMENT_LIST = 100;
 const MAX_COMIC_COMMENT_TIMESTAMP = 9_999_999_999_999;
+const COMIC_COMMENT_ACTIONS = new Set([
+  'comicCommentList', 'comicCommentCounts', 'comicCommentSubmit', 'comicCommentDeleteOwn',
+]);
 const PUBLIC_ACTIONS = new Set([
   'status', 'login', 'pushSubscribe', 'pushUnsubscribe',
   'comicCommentList', 'comicCommentCounts', 'comicCommentSubmit', 'comicCommentDeleteOwn',
@@ -202,6 +206,22 @@ function comicCommentObjectKey(bookId: string, commentId: string) {
   if (!/^lh-\d{1,4}$/.test(bookId)) throw fail('漫画 ID 无效。');
   if (!COMIC_COMMENT_ID_RE.test(commentId)) throw fail('评论 ID 无效。');
   return `${COMIC_COMMENT_PREFIX}${bookId}/${commentId}.json`;
+}
+
+function comicCommentTombstoneKey(bookId: string, commentId: string) {
+  return comicCommentObjectKey(bookId, commentId).replace(COMIC_COMMENT_PREFIX, COMIC_COMMENT_TOMBSTONE_PREFIX);
+}
+
+async function writeComicCommentTombstone(bookId: string, comment: JsonRecord) {
+  const id = String(comment.id || '');
+  const parentId = String(comment.parentId || '');
+  await writeJson(comicCommentTombstoneKey(bookId, id), {
+    id,
+    bookId,
+    createdAt: String(comment.createdAt || ''),
+    ...(COMIC_COMMENT_ID_RE.test(parentId) ? { parentId } : {}),
+    deleted: true,
+  });
 }
 
 function comicCommentOwnerKey(visitorHash: string, commentId: string) {
@@ -668,15 +688,22 @@ export default async function handler(request: AdminRequest, response: ServerRes
       throw fail('未授权或登录已过期，请重新登录。', 401);
     }
 
-    if (String(request.headers.host || '').split(':')[0] === 'tudou.levihan.asia' &&
-        (action === 'pushSubscribe' || action === 'pushUnsubscribe')) {
+    const requestHost = String(request.headers.host || '').split(':')[0];
+    if (requestHost === 'tudou.levihan.asia' &&
+        (COMIC_COMMENT_ACTIONS.has(action) || action === 'pushSubscribe' || action === 'pushUnsubscribe')) {
+      const relayHeaders: Record<string, string> = { 'Content-Type': 'text/plain;charset=UTF-8' };
+      const clientIp = String(request.headers['x-forwarded-for'] || '').split(',')[0].trim();
+      if (clientIp) relayHeaders['x-forwarded-for'] = clientIp;
       const upstream = await fetch('https://www.levihan.asia/api/admin-content', {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        headers: relayHeaders,
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(10000),
       });
-      const result = await upstream.json().catch(() => ({ ok: false, error: '通知服务响应无效。' }));
+      const fallbackMessage = COMIC_COMMENT_ACTIONS.has(action)
+        ? '评论服务响应无效。'
+        : '通知服务响应无效。';
+      const result = await upstream.json().catch(() => ({ ok: false, error: fallbackMessage }));
       sendJson(response, upstream.status, result);
       return;
     }
@@ -748,31 +775,70 @@ export default async function handler(request: AdminRequest, response: ServerRes
       const visitorHash = /^[A-Za-z0-9_-]{16,80}$/.test(visitorId)
         ? comicCommentHash('visitor', visitorId)
         : '';
-      const allKeys = await listAllCosKeys(`${COMIC_COMMENT_PREFIX}${bookId}/`);
-      const ownedKeys = visitorHash
+      const cursor = String(payload.cursor || '').trim();
+      if (cursor && !COMIC_COMMENT_ID_RE.test(cursor)) throw fail('评论分页位置无效。', 400);
+      const allKeys = (await listAllCosKeys(`${COMIC_COMMENT_PREFIX}${bookId}/`))
+        .filter((key) => {
+          const id = key.split('/').pop()?.replace(/\.json$/, '') || '';
+          return COMIC_COMMENT_ID_RE.test(id) && key === `${COMIC_COMMENT_PREFIX}${bookId}/${id}.json`;
+        });
+      const cursorKey = cursor ? comicCommentObjectKey(bookId, cursor) : '';
+      const remainingKeys = cursorKey ? allKeys.filter((key) => key > cursorKey) : allKeys;
+      const pageKeys = remainingKeys.slice(0, MAX_COMIC_COMMENT_LIST);
+      const ownedKeys = visitorHash && !cursor
         ? await listAllCosKeys(`comic-comment-owners/${visitorHash}/`)
         : [];
       const ownedRows = await Promise.all(ownedKeys.slice(0, MAX_COMIC_COMMENT_LIST).map(readJsonRecord));
       const ownCommentKeys = ownedRows
         .filter((row) => row && row.bookId === bookId && COMIC_COMMENT_ID_RE.test(String(row.commentId || '')))
         .map((row) => comicCommentObjectKey(bookId, String(row!.commentId)));
-      const commentKeys = Array.from(new Set([...allKeys.slice(0, MAX_COMIC_COMMENT_LIST), ...ownCommentKeys]));
-      const rows = await Promise.all(commentKeys.map(readJsonRecord));
-      const comments = rows.filter((row) => row && COMIC_COMMENT_ID_RE.test(String(row.id || '')))
-        .map((row) => ({
-          id: String(row!.id),
-          body: String(row!.body || ''),
-          createdAt: String(row!.createdAt || ''),
-          canDelete: Boolean(visitorHash && row!.visitorHash === visitorHash),
-        }))
+      const commentKeys = Array.from(new Set([...pageKeys, ...ownCommentKeys]));
+      const rows = (await Promise.all(commentKeys.map(readJsonRecord)))
+        .filter((row): row is JsonRecord => Boolean(row && row.bookId === bookId && COMIC_COMMENT_ID_RE.test(String(row.id || ''))));
+      const loadedIds = new Set(rows.map((row) => String(row.id)));
+      const attemptedIds = new Set(loadedIds);
+      for (let depth = 0; depth < 64; depth++) {
+        const parentIds = Array.from(new Set(rows.map((row) => String(row.parentId || ''))))
+          .filter((id) => COMIC_COMMENT_ID_RE.test(id) && !attemptedIds.has(id));
+        if (!parentIds.length) break;
+        parentIds.forEach((id) => attemptedIds.add(id));
+        const parents = await Promise.all(parentIds.map(async (id) => {
+          const parent = await readJsonRecord(comicCommentObjectKey(bookId, id));
+          if (parent && parent.bookId === bookId) return parent;
+          const tombstone = await readJsonRecord(comicCommentTombstoneKey(bookId, id));
+          if (tombstone && tombstone.bookId === bookId) return tombstone;
+          return { id, bookId, createdAt: '', unavailable: true };
+        }));
+        rows.push(...parents);
+      }
+      const comments = rows
+        .map((row) => {
+          const parentId = String(row.parentId || '');
+          return {
+            id: String(row.id),
+            body: String(row.body || ''),
+            createdAt: String(row.createdAt || ''),
+            ...(COMIC_COMMENT_ID_RE.test(parentId) ? { parentId } : {}),
+            ...(row.deleted ? { deleted: true } : {}),
+            ...(row.unavailable ? { unavailable: true } : {}),
+            canDelete: Boolean(visitorHash && row.visitorHash === visitorHash),
+          };
+        })
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-      sendJson(response, 200, { ok: true, comments, count: allKeys.length });
+      const hasMore = remainingKeys.length > pageKeys.length;
+      const nextCursor = hasMore ? pageKeys[pageKeys.length - 1]?.split('/').pop()?.replace(/\.json$/, '') : undefined;
+      sendJson(response, 200, { ok: true, comments, count: allKeys.length, hasMore, ...(nextCursor ? { nextCursor } : {}) });
       return;
     }
 
     if (action === 'comicCommentSubmit') {
       const bookId = String(payload.bookId || '').trim();
       await assertComicBookExists(bookId);
+      const parentId = String(payload.parentId || '').trim();
+      if (parentId) {
+        const parent = await readJsonRecord(comicCommentObjectKey(bookId, parentId));
+        if (!parent || parent.bookId !== bookId) throw fail('原评论不存在或已删除。', 404);
+      }
       const body = String(payload.body || '')
         .replace(/\r\n?/g, '\n')
         .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
@@ -790,7 +856,7 @@ export default async function handler(request: AdminRequest, response: ServerRes
 
       const id = newComicCommentId(now);
       const createdAt = new Date(now).toISOString();
-      const comment = { id, bookId, body, createdAt, visitorHash };
+      const comment = { id, bookId, body, createdAt, visitorHash, ...(parentId ? { parentId } : {}) };
       await writeJson(comicCommentObjectKey(bookId, id), comment);
       const rateMarkers = await Promise.allSettled([
         writeJson(comicCommentOwnerKey(visitorHash, id), { bookId, commentId: id, createdAt }),
@@ -802,7 +868,7 @@ export default async function handler(request: AdminRequest, response: ServerRes
       }
       sendJson(response, 200, {
         ok: true,
-        comment: { id, body, createdAt, canDelete: true },
+        comment: { id, body, createdAt, ...(parentId ? { parentId } : {}), canDelete: true },
       });
       return;
     }
@@ -818,6 +884,7 @@ export default async function handler(request: AdminRequest, response: ServerRes
       if (comment.visitorHash !== comicCommentHash('visitor', visitorId)) {
         throw fail('只能删除自己发布的评论。', 403);
       }
+      await writeComicCommentTombstone(bookId, comment);
       await Promise.all([
         getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key })),
         getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: comicCommentOwnerKey(comment.visitorHash, commentId) })),
@@ -849,6 +916,7 @@ export default async function handler(request: AdminRequest, response: ServerRes
         const key = comicCommentObjectKey(bookId, commentId);
         const comment = await readJsonRecord(key);
         if (!comment) throw fail('评论不存在或已删除。', 404);
+        await writeComicCommentTombstone(bookId, comment);
         const deletes = [getCosClient().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))];
         if (typeof comment.visitorHash === 'string' && /^[a-f0-9]{64}$/i.test(comment.visitorHash)) {
           deletes.push(getCosClient().send(new DeleteObjectCommand({

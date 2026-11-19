@@ -35,7 +35,7 @@ export interface DoujinBookItem {
   /**
    * 敏感内容标记：后台勾选「含有敏感元素」后上传的本子。
    * 正文不是图片，而是 AES 双重加密后的密文，
-   * 站点必须走 SecureComicReader（403 伪装页 + 双重解密 + Canvas 渲染）才看得到。
+   * 站点必须走 SecureComicReader（双重解密 + Canvas 渲染）才看得到。
    *
    * 注意：标记为 secure 时，`coverFile` 指向的是后台「敏感本封面」单独上传的**明文**图
    * （{bookFolder}/cover.<ext>），是公开可读的，卡片照常显示；不填则卡片只显示隔离占位图。

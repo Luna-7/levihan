@@ -9,10 +9,13 @@ import { cosService } from '../services/cosClient';
 import { decryptOuterLayer } from '../utils/secureComicDecrypt';
 import { useSwipeBackGesture } from '../hooks/useSwipeBackGesture';
 import { ComicMusicPlayer, isComicMusicFile } from './ComicMusicPlayer';
+import { SecureComicLoadingDialog } from './SecureComicLoadingDialog';
+import { ComicReaderHeader } from './ComicReaderHeader';
+import { CardPatternOverlay } from './CardPatternOverlay';
 
 /**
  * ============================================================================
- * SecureComicReader —— 加密作品的「403 伪装页 + 启动解析 + Canvas 瀑布流」
+ * SecureComicReader —— 加密作品的「自动解析弹窗 + Canvas 瀑布流」
  * ----------------------------------------------------------------------------
  * 与 public/admin/secure-upload.js 配套：管理台勾选「含有敏感元素」上传后，
  * COS 上存放 AES-256-CBC 密文，伪装成纯文本；旧作品仍使用 {id}_secure.txt 固定路径，
@@ -185,6 +188,7 @@ async function fetchSecureResource(url: string): Promise<string> {
 type QueuedRender = {
   cancelled: boolean;
   draw: () => Promise<void>;
+  priority: () => number;
 };
 
 class ComicRenderScheduler {
@@ -192,8 +196,8 @@ class ComicRenderScheduler {
   private active: QueuedRender | null = null;
   private running = false;
 
-  schedule(draw: () => Promise<void>): () => void {
-    const item: QueuedRender = { cancelled: false, draw };
+  schedule(draw: () => Promise<void>, priority: () => number): () => void {
+    const item: QueuedRender = { cancelled: false, draw, priority };
     this.queue.push(item);
     this.pump();
     return () => {
@@ -210,6 +214,7 @@ class ComicRenderScheduler {
 
   private pump() {
     if (this.running) return;
+    this.queue.sort((a, b) => a.priority() - b.priority());
     const item = this.queue.shift();
     if (!item) return;
     this.running = true;
@@ -285,9 +290,10 @@ function looksLikePdf(bytes: Uint8Array): boolean {
 const SecureCanvasPage: React.FC<{
   doc: any;
   pageNumber: number;
+  aspect: number;
   scheduler: ComicRenderScheduler;
   canvasWindow: ComicCanvasWindow;
-}> = ({ doc, pageNumber, scheduler, canvasWindow }) => {
+}> = ({ doc, pageNumber, aspect, scheduler, canvasWindow }) => {
   const OBSERVER_ROOT_MARGIN = '100% 0px 100% 0px';
   const LEAVE_GRACE_MS = 1800;
   // 移动端惯性滚动会让观察区边缘短暂反复进出，延长保留时间，避免
@@ -296,7 +302,6 @@ const SecureCanvasPage: React.FC<{
   const holderRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [visible, setVisible] = useState(false);
-  const [aspect, setAspect] = useState(1.4); // 占位高度，避免滚动条乱跳
   const [failed, setFailed] = useState(false);
   const [rendered, setRendered] = useState(false);
   const leaveTimerRef = useRef<number | null>(null);
@@ -305,9 +310,10 @@ const SecureCanvasPage: React.FC<{
   const pageRef = useRef<any>(null);
   const visibleRef = useRef(false);
   const releaseRequestedRef = useRef(false);
+  const releaseAfterRef = useRef(0);
 
   const releaseCanvasIfSafe = () => {
-    if (visibleRef.current || renderingRef.current) {
+    if (visibleRef.current || renderingRef.current || performance.now() < releaseAfterRef.current) {
       releaseRequestedRef.current = true;
       return false;
     }
@@ -341,6 +347,8 @@ const SecureCanvasPage: React.FC<{
         if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
         leaveTimerRef.current = null;
         visibleRef.current = true;
+        releaseAfterRef.current = 0;
+        releaseRequestedRef.current = false;
         setVisible(true);
         canvasWindow.touch(pageNumber);
         return;
@@ -348,6 +356,7 @@ const SecureCanvasPage: React.FC<{
       if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
       leaveTimerRef.current = window.setTimeout(() => {
         visibleRef.current = false;
+        releaseAfterRef.current = performance.now() + RELEASE_DELAY_MS;
         setVisible(false);
       }, LEAVE_GRACE_MS);
     }, { root: null, rootMargin: OBSERVER_ROOT_MARGIN, threshold: 0 });
@@ -364,7 +373,7 @@ const SecureCanvasPage: React.FC<{
   }, [canvasWindow, pageNumber]);
 
   useEffect(() => {
-    if (!doc || !visible || renderedRef.current || renderingRef.current) return undefined;
+    if (!doc || !visible || renderedRef.current) return undefined;
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
 
@@ -389,8 +398,6 @@ const SecureCanvasPage: React.FC<{
 
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
-        // 先确定占位比例，再开始绘制；Canvas 显示前尺寸不会再从默认值跳变。
-        setAspect((current) => current === 1.4 ? viewport.height / viewport.width : current);
 
         task = page.render({ canvasContext: ctx, viewport });
         await task.promise;
@@ -409,7 +416,13 @@ const SecureCanvasPage: React.FC<{
       }
     };
 
-    const cancelQueued = scheduler.schedule(draw);
+    const getViewportDistance = () => {
+      const element = holderRef.current;
+      if (!element) return Number.POSITIVE_INFINITY;
+      const rect = element.getBoundingClientRect();
+      return Math.abs((rect.top + rect.bottom) / 2 - window.innerHeight / 2);
+    };
+    const cancelQueued = scheduler.schedule(draw, getViewportDistance);
 
     return () => {
       cancelled = true;
@@ -425,19 +438,16 @@ const SecureCanvasPage: React.FC<{
   // 只有真正离开滑动窗口一段时间后才释放；快速反向滚动会保留已画好的 Canvas。
   useEffect(() => {
     if (visible) return;
-    if (renderedRef.current || renderingRef.current) {
-      if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
-      leaveTimerRef.current = window.setTimeout(() => {
-        if (renderingRef.current || visible || !renderedRef.current) return;
-        releaseCanvasIfSafe();
-      }, RELEASE_DELAY_MS);
-      return () => {
-        if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
-      };
-    }
     const canvas = canvasRef.current;
-    if (!canvas || !canvas.width) return undefined;
-    return undefined;
+    if (!renderedRef.current && !renderingRef.current && !canvas?.width) return undefined;
+    if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
+    leaveTimerRef.current = window.setTimeout(() => {
+      if (renderingRef.current || visible) return;
+      if (canvasRef.current?.width) releaseCanvasIfSafe();
+    }, RELEASE_DELAY_MS);
+    return () => {
+      if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
+    };
   }, [visible]);
 
   return (
@@ -447,18 +457,16 @@ const SecureCanvasPage: React.FC<{
       style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
       data-page={pageNumber}
     >
-      {!rendered && !failed && (
-        <div aria-hidden="true" style={{ paddingBottom: `${aspect * 100}%` }} />
-      )}
+      <div aria-hidden="true" style={{ paddingBottom: `${aspect * 100}%` }} />
       {failed ? (
-        <div className="py-12 text-center font-mono text-xs text-[#8892a4]">
+        <div className="absolute inset-0 grid place-items-center px-4 py-12 text-center font-mono text-xs text-[#8892a4]">
           第 {pageNumber} 页渲染失败，请刷新后重试
         </div>
       ) : (
         <canvas
           ref={canvasRef}
-          className="w-full h-auto block select-none"
-          style={{ display: rendered ? 'block' : 'none', WebkitTouchCallout: 'none' }}
+          className="absolute inset-0 h-full w-full select-none transition-opacity duration-150 ease-out motion-reduce:transition-none"
+          style={{ opacity: rendered ? 1 : 0, WebkitTouchCallout: 'none' }}
           draggable={false}
           onContextMenu={(e) => e.preventDefault()}
         />
@@ -482,6 +490,8 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
   const [canRetry, setCanRetry] = useState(false);
   const [doc, setDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
+  const [pageAspects, setPageAspects] = useState<number[]>([]);
+  const autoStartRef = useRef(false);
   const docRef = useRef<any>(null);
   const schedulerRef = useRef<ComicRenderScheduler | null>(null);
   if (!schedulerRef.current) schedulerRef.current = new ComicRenderScheduler();
@@ -489,6 +499,15 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
   if (!canvasWindowRef.current) canvasWindowRef.current = new ComicCanvasWindow();
   const readerRef = useRef<HTMLDivElement | null>(null);
   const swipeBack = useSwipeBackGesture(onClose, true);
+  const uploaderNote = book.uploaderNote?.trim() || '';
+  const hasComicMusic = isComicMusicFile(book.musicFile);
+  const renderUploaderNote = () => uploaderNote ? (
+    <section className="comic-reader-content relative isolate mb-2 mt-3 overflow-hidden rounded-lg border-[0.5px] border-[var(--amber-6)] bg-[var(--amber-2)] px-3.5 py-3 text-[var(--green-12)]">
+      <CardPatternOverlay opacity={0.08} mode="multiply" />
+      <h3 className="relative z-10 mb-1 text-xs font-semibold">想说的话</h3>
+      <p className="relative z-10 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--amber-12)]">{uploaderNote}</p>
+    </section>
+  ) : null;
 
   /* ---------------- 反爬与防手滑：只在阅读器挂载期间生效 ---------------- */
   useEffect(() => {
@@ -534,7 +553,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
   );
 
   /**
-   * 用户点击启动后才拉取密文，并用上传端固定口令解密。
+   * 打开加密作品后自动拉取密文，并用上传端固定口令解密。
    * 全程在内存里完成，不产生任何 .pdf 文件或直链。
    */
   const handleUnlock = useCallback(
@@ -563,18 +582,29 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
         setWorkingStage('解析页面中…');
         const task = pdfjsLib.getDocument({ data: pdfBytes, password: SECURE_COMIC_PASSWORD, isEvalSupported: false });
         const loaded = await task.promise;
-        const parsedAt = performance.now();
+        const pdfParsedAt = performance.now();
+        setWorkingStage('准备页面布局中…');
+        const aspects = await Promise.all(
+          Array.from({ length: loaded.numPages }, async (_, index) => {
+            const page = await loaded.getPage(index + 1);
+            const viewport = page.getViewport({ scale: 1 });
+            return viewport.height / viewport.width;
+          }),
+        );
+        const readerReadyAt = performance.now();
         console.info('[漫画解析耗时]', {
           bookId: book.id,
           downloadMs: Math.round(downloadedAt - startedAt),
           decryptMs: Math.round(decryptedAt - downloadedAt),
-          pdfParseMs: Math.round(parsedAt - decryptedAt),
-          totalMs: Math.round(parsedAt - startedAt),
+          pdfParseMs: Math.round(pdfParsedAt - decryptedAt),
+          pageLayoutMs: Math.round(readerReadyAt - pdfParsedAt),
+          totalMs: Math.round(readerReadyAt - startedAt),
         });
 
         docRef.current = loaded;
         setDoc(loaded);
         setNumPages(loaded.numPages);
+        setPageAspects(aspects);
         setPhase('ready');
         onShowToast?.(`《${book.titleZh}》节点解析完成，共 ${loaded.numPages} 页`);
       } catch (err: any) {
@@ -625,88 +655,33 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
   );
 
   useEffect(() => {
+    if (autoStartRef.current) return;
+    autoStartRef.current = true;
+    void handleUnlock();
+  }, [handleUnlock]);
+
+  useEffect(() => {
     if (phase !== 'ready') return;
     const frame = window.requestAnimationFrame(() => {
       readerRef.current?.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        behavior: 'auto',
         block: 'start',
       });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [phase]);
 
-  /* ========================== 404 提示界面 ========================== */
+  /* ========================== 自动解析弹窗 ========================== */
   if (phase !== 'ready') {
     return (
-      <div className="flex min-h-[100dvh] w-full items-center bg-transparent text-[var(--amber-12)] font-mono" {...swipeBack}>
-        <div className="w-full max-w-3xl mx-auto px-5 py-6 sm:py-10">
-          <CollectionNavigationBar
-            books={collectionBooks}
-            currentBookId={book.id}
-            onNavigate={(nextBook) => onNavigateCollectionBook?.(nextBook)}
-            frameClassName="max-w-3xl"
-          />
-          {isComicMusicFile(book.musicFile) && (
-            <ComicMusicPlayer title={book.musicTitle || book.titleZh} />
-          )}
-          <div>
-            <div className="py-2">
-              <h1 className="text-[30px] sm:text-[38px] font-bold text-[#1E3A2B] leading-none">Error 404</h1>
-              <p className="mt-3 text-[13px] text-[#7A6958]">
-                Requested resource is not served by this node.
-              </p>
-
-              {/* 用户明确启动后才读取并解析资源。 */}
-              {phase === 'working' ? (
-                <div
-                  className="mt-6 min-h-40 rounded-[3px] bg-[#FAF6EE] px-5 py-8 text-center"
-                  role="status"
-                  aria-live="polite"
-                  aria-atomic="true"
-                >
-                  <div className="secure-comic-loader mx-auto" aria-hidden="true" />
-                  <p className="mt-4 text-sm font-semibold text-[#1E3A2B]">{workingStage}</p>
-                  <p className="mt-1 text-xs text-[#7A6958]">解析完成后将自动进入阅读页</p>
-                </div>
-              ) : (
-                <div className="mt-6">
-                  <button
-                    type="button"
-                    onClick={() => void handleUnlock()}
-                    className="mt-5 inline-flex min-h-11 items-center justify-center rounded-[3px] border-[0.5px] border-[var(--green-8)] bg-[var(--green-12)] px-5 text-xs font-semibold text-[var(--amber-2)] transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"
-                  >
-                    启动解析
-                  </button>
-                </div>
-              )}
-
-              {errorMsg && (
-                <div className="mt-4 text-[12px] text-[var(--red-11)]" role="alert">
-                  <p>✗ {errorMsg}</p>
-                  {canRetry && (
-                    <button
-                      type="button"
-                      onClick={() => void handleUnlock()}
-                      className="mt-2 min-h-11 rounded-[3px] border-[0.5px] border-[var(--red-8)] px-3 font-semibold text-[var(--red-11)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-8)]"
-                    >
-                      重试
-                    </button>
-                  )}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="返回主站"
-                title="返回主站"
-                className="mt-4 inline-flex h-11 w-16 items-center justify-center rounded-[3px] bg-[var(--green-12)] text-xl font-semibold text-white transition-colors hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--amber-8)]"
-              >
-                ←
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SecureComicLoadingDialog
+        title={`正在解析《${book.titleZh}》`}
+        message={workingStage}
+        error={errorMsg || undefined}
+        canRetry={canRetry}
+        onRetry={() => void handleUnlock()}
+        onClose={onClose}
+      />
     );
   }
 
@@ -717,7 +692,7 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
     <div
       id="secure-doujin-reader"
       ref={readerRef}
-      className="w-full scroll-mt-3 bg-[#15181b] pb-28 select-none"
+      className="comic-paper-surface w-full scroll-mt-3 pb-28 select-none"
       style={{ ...swipeBack.style, '--comic-reader-content-width': '48rem' } as React.CSSProperties}
       onContextMenu={(e) => e.preventDefault()}
       onTouchStart={swipeBack.onTouchStart}
@@ -731,23 +706,11 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
         onNavigate={(nextBook) => onNavigateCollectionBook?.(nextBook)}
         frameClassName="max-w-3xl"
       />
-      {isComicMusicFile(book.musicFile) && (
+      <ComicReaderHeader book={book} onClose={onClose} hasReaderIntro={Boolean(uploaderNote) || hasComicMusic} />
+      {renderUploaderNote()}
+      {hasComicMusic && (
         <ComicMusicPlayer title={book.musicTitle || book.titleZh} />
       )}
-      {/* 阅读时保持结束会话操作置顶 */}
-      <div className="sticky top-0 z-20 bg-[#1c2024]/95 backdrop-blur border-b border-[#2b3137]">
-        <div className="max-w-3xl mx-auto px-4 py-1 flex items-center justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="返回主站"
-            title="返回主站"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-xl leading-none text-[#c9d1d9] hover:bg-[#262c31] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9d1d9]"
-          >
-            ×
-          </button>
-        </div>
-      </div>
 
       <div className="pt-3 space-y-3">
         {pages.map((n) => (
@@ -755,21 +718,19 @@ export const SecureComicReader: React.FC<SecureComicReaderProps> = ({
             key={n}
             doc={doc}
             pageNumber={n}
+            aspect={pageAspects[n - 1] || 1.4}
             scheduler={schedulerRef.current!}
             canvasWindow={canvasWindowRef.current!}
           />
         ))}
       </div>
 
-      <p className="max-w-3xl mx-auto mt-8 px-4 text-center font-mono text-[10.5px] text-[#6e7681]">
-        内容仅在本机内存中渲染。请勿截图外传。
-      </p>
-
       <CollectionFooterNavigation
         books={collectionBooks}
         currentBookId={book.id}
         onNavigate={(nextBook) => onNavigateCollectionBook?.(nextBook)}
         frameClassName="max-w-3xl"
+        className="comic-navigation-before-comments"
       />
 
       <MangaCommentSection

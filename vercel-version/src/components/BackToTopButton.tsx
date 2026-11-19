@@ -4,6 +4,7 @@ import { UiSprite } from './UiSprite';
 
 export const BackToTopButton: React.FC = () => {
   const [isVisible, setIsVisible] = useState(false);
+  const [isCommentEditorFocused, setIsCommentEditorFocused] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -37,12 +38,22 @@ export const BackToTopButton: React.FC = () => {
         handleScroll();
       });
     };
+    const updateEditorFocus = () => {
+      setIsCommentEditorFocused(Boolean(
+        document.activeElement?.closest('[data-hide-back-to-top-on-focus]'),
+      ));
+    };
+    const onFocusOut = () => requestAnimationFrame(updateEditorFocus);
     // 捕获内部滚动容器的 scroll，每帧最多读一次位置。
     window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    document.addEventListener('focusin', updateEditorFocus);
+    document.addEventListener('focusout', onFocusOut);
     handleScroll();
 
     return () => {
       window.removeEventListener('scroll', onScroll, { capture: true });
+      document.removeEventListener('focusin', updateEditorFocus);
+      document.removeEventListener('focusout', onFocusOut);
       if (frame) cancelAnimationFrame(frame);
     };
   }, []);
@@ -66,7 +77,7 @@ export const BackToTopButton: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  if (!isVisible) return null;
+  if (!isVisible || isCommentEditorFocused) return null;
 
   return (
     <button
@@ -74,7 +85,7 @@ export const BackToTopButton: React.FC = () => {
       onMouseEnter={() => soundManager.playCardHover()}
       aria-label="回到页面顶部"
       title="回到顶部"
-      className="fixed right-2 sm:right-4 top-1/2 -translate-y-1/2 z-50 bg-transparent border-0 shadow-none flex items-center justify-center active:scale-90 hover:scale-105 transition-all cursor-pointer select-none animate-in fade-in zoom-in duration-200"
+      className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-2 sm:right-4 z-50 flex items-center justify-center border-0 bg-transparent shadow-none transition-transform duration-200 ease-out hover:scale-105 active:scale-95 cursor-pointer select-none animate-in fade-in zoom-in duration-200 motion-reduce:animate-none motion-reduce:transition-none"
     >
       <UiSprite name="back-to-top" width={52} role="img" label="回到顶部" className="drop-shadow-lg" />
     </button>
